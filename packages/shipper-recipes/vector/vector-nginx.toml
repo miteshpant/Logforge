@@ -1,0 +1,120 @@
+# Vector Nginx Configuration for Logforge
+# Optimized for Nginx access log parsing and shipping
+
+[sources.nginx_access]
+type = "file"
+include = [
+  "/var/log/nginx/access.log",
+  "/var/log/nginx/*access*.log"
+]
+ignore_older_secs = 300
+
+[sources.nginx_error]
+type = "file"
+include = [
+  "/var/log/nginx/error.log",
+  "/var/log/nginx/*error*.log"
+]
+ignore_older_secs = 300
+
+# Parse Nginx access logs - send to native Nginx endpoint
+[transforms.nginx_access_parse]
+type = "remap"
+inputs = ["nginx_access"]
+source = '''
+  # Keep original log line for Logforge Nginx parser
+  .log_line = string!(.message)
+  
+  # Set metadata
+  .timestamp = now()
+  .host = get_hostname!()
+  .service = "nginx"
+  .log_type = "access"
+  
+  # Clean up
+  del(.message)
+  del(.file)
+'''
+
+# Parse Nginx error logs - convert to JSON format
+[transforms.nginx_error_parse]
+type = "remap"
+inputs = ["nginx_error"]
+source = '''
+  # Parse error log format: 2023/12/25 10:00:00 [error] 12345#0: message
+  parsed = parse_regex(.message, r'(?P<timestamp>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \[(?P<level>\w+)\] \d+#\d+: (?P<msg>.*)')
+  
+  if parsed != null {
+    .timestamp = parse_timestamp!(parsed.timestamp, "%Y/%m/%d %H:%M:%S")
+    .level = parsed.level
+    .msg = parsed.msg
+  } else {
+    .timestamp = now()
+    .level = "error"
+    .msg = .message
+  }
+  
+  .host = get_hostname!()
+  .service = "nginx"
+  .log_type = "error"
+  
+  # Clean up
+  del(.message)
+  del(.file)
+'''
+
+# Send access logs to Nginx endpoint
+[sinks.logforge_nginx_access]
+type = "http"
+inputs = ["nginx_access_parse"]
+uri = "http://localhost:7080/v1/ingest/nginx"
+method = "post"
+encoding.codec = "text"
+encoding.only_fields = ["log_line"]
+
+[sinks.logforge_nginx_access.headers]
+Content-Type = "text/plain"
+User-Agent = "Vector-Nginx-Access/1.0"
+
+# Send error logs to JSON endpoint
+[sinks.logforge_nginx_error]
+type = "http"
+inputs = ["nginx_error_parse"]
+uri = "http://localhost:7080/v1/ingest/logs"
+method = "post"
+encoding.codec = "json"
+
+[sinks.logforge_nginx_error.headers]
+Content-Type = "application/json"
+User-Agent = "Vector-Nginx-Error/1.0"
+
+# Shared configuration for both sinks
+[sinks.logforge_nginx_access.buffer]
+type = "memory"
+max_events = 5000
+when_full = "block"
+
+[sinks.logforge_nginx_error.buffer]
+type = "memory"
+max_events = 5000
+when_full = "block"
+
+[sinks.logforge_nginx_access.batch]
+max_bytes = 524288  # 512KB
+max_events = 500
+timeout_secs = 3
+
+[sinks.logforge_nginx_error.batch]
+max_bytes = 524288
+max_events = 500
+timeout_secs = 3
+
+[sinks.logforge_nginx_access.request]
+timeout_secs = 30
+rate_limit_num = 5000
+retry_attempts = 3
+
+[sinks.logforge_nginx_error.request]
+timeout_secs = 30
+rate_limit_num = 5000
+retry_attempts = 3

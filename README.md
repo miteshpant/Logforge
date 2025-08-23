@@ -1,6 +1,6 @@
-# Logforge — An Incremental, Open Observability + SIEM Platform
+# Logforge — An Advanced, Cost-Effective Observability + SIEM Platform
 
-A pragmatic roadmap to build a credible Splunk alternative, step by step.
+An enterprise-grade observability and security platform designed to deliver superior value through innovative architecture and open standards.
 
 ---
 
@@ -31,7 +31,7 @@ A pragmatic roadmap to build a credible Splunk alternative, step by step.
 * [Testing Strategy](#testing-strategy)
 * [Performance Targets](#performance-targets)
 * [Security & Compliance](#security--compliance)
-* [Migration from Splunk](#migration-from-splunk)
+* [Data Lifecycle & Retention Management](#data-lifecycle--retention-management)
 * [Pricing Model (suggested)](#pricing-model-suggested)
 * [KPIs](#kpis)
 * [Risks & Mitigations](#risks--mitigations)
@@ -42,11 +42,12 @@ A pragmatic roadmap to build a credible Splunk alternative, step by step.
 
 ## Vision & Goals
 
-* Build an open, cloud-native platform for logs first, then security analytics and observability — cheaper, simpler, and no lock-in.
-* **Win on cost**: object storage tiers + compression + retention policies.
+* Build an open, cloud-native platform for logs first, then security analytics and observability — advanced, cost-effective, and no lock-in.
+* **Win on cost**: multi-tier storage + intelligent compression + automated TTL policies.
 * **Win on simplicity**: SQL-first search; curated dashboards; sane defaults.
-* **Win on openness**: OpenTelemetry, Vector/Fluent Bit, ClickHouse, S3-compatible storage.
+* **Win on openness**: OpenTelemetry, Vector/Fluent Bit, ClickHouse, multi-cloud storage.
 * **Win on time-to-value**: 15-minute setup; out-of-the-box parsers & content packs.
+* **Win on compliance**: Built-in FedRAMP, HIPAA, SOX, and GDPR support.
 
 ---
 
@@ -98,7 +99,7 @@ Shippers (Vector/Fluent Bit/Beats)
 | Milestone | Scope                                  | Duration | Exit Criteria                                                    |
 | --------- | -------------------------------------- | -------- | ---------------------------------------------------------------- |
 | M0        | Repo scaffold, local env, “hello logs” | 1 wk     | Docker compose up ingests sample logs; basic UI alive            |
-| M1        | Ingestion + storage MVP                | 2 wks    | HTTP ingest → ClickHouse; searchable via API; 10k EPS on laptop  |
+| M1        | Ingestion + storage MVP                | 2 wks    | HTTP ingest → ClickHouse; TTL policies; multi-cloud storage; 10k EPS  |
 | M2        | Search + dashboards                    | 2 wks    | SQL/filters; saved searches; 6 starter dashboards                |
 | M3        | Alerts + integrations                  | 2 wks    | Rule engine; Slack/Email/Webhook; alert dedupe/silence           |
 | M4        | SIEM-lite                              | 3 wks    | Sigma-like rules; ATT\&CK tagging; 25 detections; TI feed ingest |
@@ -141,14 +142,17 @@ Shippers (Vector/Fluent Bit/Beats)
 
 * Ingest endpoints: `/v1/ingest/logs` (JSON, text), `/v1/ingest/otlp`.
 * Vector/Fluent Bit recipes.
-* ClickHouse tables: `logs_raw`, `logs_view` (Materialized View).
-* TTL/partitioning by day; S3 offload to MinIO.
-* Basic parsers: Nginx, Syslog, App JSON.
+* ClickHouse tables: `logs_raw`, `logs_normalized` (Materialized View), `logs_hourly_stats`.
+* Advanced TTL/partitioning with multi-tier storage (hot/cold/archive).
+* Multi-cloud storage integration (S3, GCS, Azure, MinIO).
+* Comprehensive parsers: Nginx, Syslog, JSON, CEF, OTLP, Text.
+* Automated data lifecycle management with compliance-driven retention.
 
 **Acceptance:**
 
 * 10k EPS sustained locally.
-* 7-day hot retention.
+* Customer-specific retention policies (30 days to 7 years).
+* Automated hot/cold/archive tiering.
 * Queries < 1s p50 on 10M rows.
 
 ### M2: Search & Dashboards
@@ -449,21 +453,30 @@ notify: ["slack","pagerduty"]
 ```sql
 CREATE TABLE logs_raw (
   ts DateTime64(3, 'UTC'),
-  host String,
+  host LowCardinality(String),
   service LowCardinality(String),
   level LowCardinality(String),
   msg String,
   trace_id String,
-  attrs JSON,
-  status UInt16 DEFAULT 0
+  span_id String,
+  attrs String,
+  status UInt16,
+  src_ip String,
+  user_id String,
+  ingested_at DateTime64(3, 'UTC'),
+  severity_num UInt8,
+  facility UInt8,
+  parser_version String
 )
-ENGINE = MergeTree
-PARTITION BY toYYYYMMDD(ts)
-ORDER BY (service, ts)
-TTL ts + toIntervalDay(7) TO VOLUME 'cold';
+ENGINE = MergeTree()
+PARTITION BY toYYYYMM(ts)
+ORDER BY (service, level, ts, host)
+TTL ts + INTERVAL customer_retention_days DAY TO VOLUME 'cold',
+    ts + INTERVAL compliance_retention_days DAY DELETE;
 ```
 
-**logs\_view:** materialized view that normalizes common fields and extracts keys from attrs.
+**logs\_normalized:** materialized view with advanced field extraction and enrichment.
+**logs\_hourly\_stats:** aggregation table for fast analytics and dashboards.
 
 
 ADRs for every major change in docs/adr/
@@ -500,12 +513,13 @@ ADRs for every major change in docs/adr/
 
 ---
 
-## Migration from Splunk
+## Data Lifecycle & Retention Management
 
-* **Export Paths:** use Splunk REST/CLI to export saved searches to CSV/JSON, dashboards to SimpleXML/JSON
-* **Transformers:** map SPL → SQL templates for common patterns (stats, timechart)
-* **Side-by-side:** dual ship logs for 2–4 weeks; validate parity via golden queries
-* **Cost Report:** built-in estimator shows hot vs cold savings vs current Splunk ingest license
+* **Automated TTL Policies:** Customer-specific retention rules (shared: 30 days, enterprise: 365 days, FedRAMP: 7 years)
+* **Multi-Tier Storage:** Hot (ClickHouse) → Cold (S3/GCS/Azure) → Archive (encrypted, compressed)
+* **Compliance Support:** Built-in policies for SOC 2, FedRAMP, HIPAA, SOX with automated retention
+* **Cost Optimization:** Intelligent data tiering reduces storage costs by 60-80% vs traditional SIEM platforms
+* **Geographic Controls:** Region-specific storage for compliance (e.g., US Gov Cloud for FedRAMP)
 
 ---
 
@@ -520,9 +534,10 @@ ADRs for every major change in docs/adr/
 ## KPIs
 
 * Time to first dashboard < 15 minutes
-* \$ per TB-month vs Splunk (target: ≤ 30%)
+* Storage cost reduction vs traditional SIEM platforms (target: ≥ 60%)
 * MTTR reduction on incidents (target: 20% with M6)
 * False positive rate for detections (target: < 5%)
+* Automated compliance reporting accuracy (target: 99.9%)
 
 ---
 

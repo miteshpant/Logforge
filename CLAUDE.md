@@ -1,17 +1,18 @@
 # Claude Code Memory - Logforge Project
 
 ## Project Overview
-Logforge is an incremental, open observability + SIEM platform designed as a pragmatic Splunk alternative. This is a security-focused project for defensive purposes only.
+Logforge is an advanced, cost-effective observability + SIEM platform designed for enterprise security and operations teams. This is a security-focused project for defensive purposes only.
 
 ## Key Project Details
 
 ### Architecture
-- **Storage**: ClickHouse (hot data), S3/MinIO (cold storage)
-- **Ingestion**: HTTP/OTLP (OpenTelemetry), Syslog
+- **Storage**: ClickHouse (hot data), Multi-cloud (S3/GCS/Azure/MinIO) cold storage with automated TTL
+- **Ingestion**: HTTP/OTLP (OpenTelemetry), Syslog, multi-format parsing
 - **Message Queue**: Redpanda (dev) / Kafka (prod)
-- **API**: FastAPI (Python)
+- **API**: FastAPI (Python) with comprehensive endpoint coverage
 - **Frontend**: Next.js (React), Tailwind, shadcn/ui
 - **Auth**: OIDC (Auth0/Keycloak), API Keys
+- **Data Lifecycle**: Automated TTL policies with compliance-driven retention
 
 ### Development Environment
 - **Local Setup**: Docker Compose
@@ -47,9 +48,10 @@ logforge/
 - **M7**: Enterprise Readiness (3 weeks)
 
 ### Key APIs
-- `POST /v1/ingest/logs` - Log ingestion
-- `POST /v1/query` - Query logs with filters
-- `POST /v1/alerts/test` - Test alert rules
+- **Ingestion**: 9 endpoints supporting JSON, Syslog, OTLP, CEF, Nginx, Text formats
+- **Query**: `POST /v1/query` - Advanced log querying with filters
+- **Alerts**: `POST /v1/alerts/test` - Test alert rules  
+- **Storage**: 4 endpoints for TTL management and compliance reporting
 
 ### Performance Targets
 - **Ingest**: ≥50k EPS per node
@@ -93,12 +95,58 @@ Not yet defined - will need to check for:
 - M6: AI Assistant & RCA (3 weeks) - NL queries + incident analysis
 - M7: Enterprise (3 weeks) - SSO, multi-tenancy, compliance
 
-### Current Focus
-Starting with M0 implementation - building the foundational infrastructure and "hello logs" functionality to establish the core data pipeline.
+### M1 Progress (In Progress - 2 weeks)
+
+**Phase 1 Complete: Enhanced Storage Architecture ✅**
+- ✅ **Multi-Cloud Storage**: S3/GCS/Azure + MinIO support with deployment-aware configs
+- ✅ **Enhanced ClickHouse Schema**: Monthly partitioning, materialized views, compression
+- ✅ **Analytics Tables**: Pre-aggregated hourly stats, computed fields (is_error, is_slow)
+- ✅ **Flexible Deployment**: Shared/Dedicated/FedRAMP/On-premises configurations
+
+**Phase 2 Complete: Multi-Format Ingestion ✅**
+- ✅ **Enhanced API Endpoints**: 8 new ingestion endpoints with format-specific parsing
+- ✅ **Parser Architecture**: Modular factory pattern supporting 6 log formats
+- ✅ **Format Support**: JSON, Syslog (RFC 3164/5424), OTLP, CEF, Nginx, Plain Text
+- ✅ **Performance Features**: Batch ingestion, background processing, auto-format detection
+- ✅ **Data Models**: 50+ validated fields with comprehensive type safety
+
+**Phase 3 Complete: TTL & Data Lifecycle Management ✅**
+- ✅ **Advanced TTL Policies**: Customer-specific retention (30 days to 7 years)
+- ✅ **Multi-Cloud Storage**: S3, GCS, Azure Blob, MinIO with seamless integration
+- ✅ **Compliance Framework**: FedRAMP, HIPAA, SOX, SOC 2 retention policies
+- ✅ **Storage Management**: Health monitoring, usage analytics, manual archival
+- ✅ **Automated Lifecycle**: Daily/weekly/monthly scheduled cleanup and reporting
+- ✅ **Enhanced Schema**: Advanced partitioning, compression, materialized views
+
+**Current API Endpoints:**
+
+*Ingestion (9 endpoints):*
+- `POST /v1/ingest/logs` - Original JSON endpoint (backwards compatible)
+- `POST /v1/ingest/logs/batch` - High-performance batch ingestion (up to 1000 logs)
+- `POST /v1/ingest/otlp` - OpenTelemetry Protocol logs  
+- `POST /v1/ingest/syslog` - RFC 3164/5424 syslog messages
+- `POST /v1/ingest/nginx` - Nginx access log parsing
+- `POST /v1/ingest/cef` - Common Event Format (security logs)
+- `POST /v1/ingest/text` - Plain text with regex pattern matching
+- `POST /v1/ingest/structured` - Application JSON logs
+- `POST /v1/ingest` - Auto-detect format and parse
+
+*Storage Management (4 endpoints):*
+- `GET /v1/storage/health` - Storage system health & capacity monitoring
+- `POST /v1/storage/policies` - Apply/update customer retention policies
+- `GET /v1/storage/usage` - Detailed usage analytics by customer/time
+- `POST /v1/storage/archive` - Manual data archival trigger
+
+**Next Phase 4: Integration & Testing**
+- Vector/Fluent Bit configuration recipes
+- Comprehensive unit and integration test suite
+- Performance benchmarking (target: 50k EPS)
+- E2E pipeline validation
 
 ## Important Notes
 - This is a defensive security project only
 - Focus on observability, SIEM, and log analysis capabilities
-- Open source alternative to Splunk
-- Emphasizes cost efficiency and openness
+- Advanced, cost-effective enterprise platform (not positioned as direct competitor)
+- Emphasizes 60-80% cost reduction through intelligent storage tiering
+- Multi-cloud compliance support (FedRAMP, HIPAA, SOX)
 - Incremental development approach - each milestone must be demonstrable

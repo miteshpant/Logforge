@@ -1,0 +1,58 @@
+# Dedicated S3 Deployment Configuration
+# For enterprise customers who want dedicated storage infrastructure
+
+storage:
+  deployment:
+    type: "dedicated"
+    region: "us-west-2"  # Customer-specific region
+    compliance_tier: "soc2"
+    
+  hot:
+    retention_days: 14  # Extended hot storage for enterprise
+    compression: "zstd"
+    partition_strategy: "monthly"
+    replica_count: 2  # HA configuration
+    
+  cold:
+    enabled: true
+    backend: "s3"
+    retention_days: 2555  # 7 years for SOC2
+    
+    backends:
+      s3:
+        dedicated:
+          enabled: true
+          bucket: "enterprise-customer-logforge-cold"
+          region: "us-west-2"
+          # Customer provides their own AWS credentials/role
+          role_arn: "arn:aws:iam::123456789012:role/LogforgeAccess"
+          external_id: "unique-external-id-12345"
+          
+  backup:
+    enabled: true
+    backend: "s3"
+    cross_region_replication: true  # Enterprise backup to different region
+    retention_days: 90
+    
+  lifecycle:
+    hot_to_cold_days: 14
+    cold_to_archive_days: 90
+    delete_after_days: 2555  # SOC2 compliance
+    
+  encryption:
+    at_rest:
+      enabled: true
+      algorithm: "AES-256"
+      key_management: "customer"  # Customer-managed keys
+      
+    customer_keys:
+      enabled: true
+      kms_key_id: "arn:aws:kms:us-west-2:123456789012:key/customer-key-id"
+      
+  tenancy:
+    model: "dedicated"
+    namespace_strategy: "separate_bucket"
+    isolation:
+      compute: "dedicated"    # Dedicated ClickHouse instances
+      storage: "dedicated"    # Customer's own S3 bucket
+      network: "isolated"     # VPC peering or PrivateLink

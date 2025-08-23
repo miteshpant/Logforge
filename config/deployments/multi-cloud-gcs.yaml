@@ -1,0 +1,64 @@
+# Multi-Cloud GCS Deployment Configuration
+# For customers preferring Google Cloud Platform
+
+storage:
+  deployment:
+    type: "dedicated"
+    region: "us-east1"
+    compliance_tier: "hipaa"  # Healthcare customer
+    
+  hot:
+    retention_days: 14
+    compression: "zstd" 
+    partition_strategy: "monthly"
+    replica_count: 2
+    
+  cold:
+    enabled: true
+    backend: "gcs"
+    retention_days: 2190  # 6 years for HIPAA
+    
+    backends:
+      gcs:
+        dedicated:
+          enabled: true
+          bucket: "healthcare-customer-logforge-cold"
+          region: "us-east1"
+          project_id: "healthcare-customer-project"
+          service_account_key: "${GCS_SERVICE_ACCOUNT_KEY}"
+          
+  backup:
+    enabled: true
+    backend: "gcs"
+    cross_region_replication: true  # Backup to us-west1
+    retention_days: 180
+    
+  lifecycle:
+    hot_to_cold_days: 14
+    cold_to_archive_days: 90
+    delete_after_days: 2190  # HIPAA compliance
+    
+  encryption:
+    at_rest:
+      enabled: true
+      algorithm: "AES-256"
+      key_management: "customer"
+      
+    customer_keys:
+      enabled: true
+      kms_key_id: "projects/healthcare-customer-project/locations/us-east1/keyRings/logforge/cryptoKeys/cold-storage"
+      
+  tenancy:
+    model: "dedicated"
+    namespace_strategy: "separate_bucket"
+    isolation:
+      compute: "dedicated"
+      storage: "dedicated" 
+      network: "isolated"
+      
+  # HIPAA-specific requirements
+  hipaa:
+    encryption_required: true
+    audit_logs_enabled: true
+    access_logging: true
+    data_integrity_monitoring: true

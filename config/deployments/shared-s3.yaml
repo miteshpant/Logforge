@@ -1,0 +1,44 @@
+# Shared S3 Deployment Configuration
+# Default configuration for most customers using Logforge-managed S3
+
+storage:
+  deployment:
+    type: "shared"
+    region: "us-east-1"
+    compliance_tier: "standard"
+    
+  hot:
+    retention_days: 7
+    compression: "zstd"
+    partition_strategy: "monthly"
+    
+  cold:
+    enabled: true
+    backend: "s3"
+    retention_days: 365
+    
+    backends:
+      s3:
+        shared:
+          enabled: true
+          bucket_prefix: "logforge-shared"
+          region: "us-east-1"
+          # Uses Logforge AWS credentials - no customer credentials needed
+          
+  lifecycle:
+    hot_to_cold_days: 7
+    delete_after_days: 365
+    
+  encryption:
+    at_rest:
+      enabled: true
+      algorithm: "AES-256"
+      key_management: "managed"  # Logforge-managed keys
+      
+  tenancy:
+    model: "shared"
+    namespace_strategy: "prefix"  # Customer data isolated by bucket prefix
+    isolation:
+      compute: "shared"
+      storage: "shared" 
+      network: "shared"

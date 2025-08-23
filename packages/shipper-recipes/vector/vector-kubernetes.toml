@@ -1,0 +1,121 @@
+# Vector Kubernetes Configuration for Logforge
+# Collects logs from all Kubernetes pods and enriches with metadata
+
+[sources.kubernetes_logs]
+type = "kubernetes_logs"
+# Automatically discovers all pods
+auto_partial_merge = true
+pod_annotation_fields.namespace = "kubernetes.pod_namespace"
+pod_annotation_fields.pod_name = "kubernetes.pod_name"
+pod_annotation_fields.container_name = "kubernetes.container_name"
+
+[transforms.kubernetes_enrich]
+type = "remap"
+inputs = ["kubernetes_logs"]
+source = '''
+  # Set required fields for Logforge
+  .timestamp = .timestamp ?? now()
+  .msg = string!(.message)
+  .host = .kubernetes.pod_node_name ?? get_hostname!()
+  .service = .kubernetes.pod_labels."app.kubernetes.io/name" ?? 
+             .kubernetes.pod_labels."app" ?? 
+             .kubernetes.container_name ?? 
+             "kubernetes"
+  
+  # Set log level based on stream
+  .level = if .stream == "stderr" { "error" } else { "info" }
+  
+  # Add Kubernetes metadata to attrs
+  .attrs = {
+    "kubernetes.namespace": .kubernetes.pod_namespace,
+    "kubernetes.pod_name": .kubernetes.pod_name,
+    "kubernetes.container_name": .kubernetes.container_name,
+    "kubernetes.node_name": .kubernetes.pod_node_name,
+    "kubernetes.pod_uid": .kubernetes.pod_uid,
+    "stream": .stream
+  }
+  
+  # Add labels if available
+  if exists(.kubernetes.pod_labels) {
+    for_each(object!(.kubernetes.pod_labels)) -> |key, value| {
+      .attrs["kubernetes.labels." + key] = value
+    }
+  }
+  
+  # Clean up original fields
+  del(.message)
+  del(.kubernetes)
+  del(.stream)
+  del(.file)
+'''
+
+# Filter out noisy logs (optional)
+[transforms.filter_noise]
+type = "filter"
+inputs = ["kubernetes_enrich"]
+condition = '''
+  # Skip empty messages
+  length(.msg) > 0 &&
+  # Skip health check logs (customize as needed)
+  !contains(.msg, "health check") &&
+  !contains(.msg, "/healthz") &&
+  # Skip debug logs from system namespaces
+  !(.attrs."kubernetes.namespace" == "kube-system" && .level == "debug")
+'''
+
+[sinks.logforge]
+type = "http"
+inputs = ["filter_noise"]
+uri = "http://logforge-api:8080/v1/ingest/logs"
+method = "post"
+encoding.codec = "json"
+
+[sinks.logforge.headers]
+Content-Type = "application/json"
+User-Agent = "Vector-Kubernetes/1.0"
+X-Logforge-Source = "kubernetes"
+
+# High-performance buffer configuration
+[sinks.logforge.buffer]
+type = "memory"
+max_events = 20000
+when_full = "drop_newest"
+
+# Aggressive batching for Kubernetes environments
+[sinks.logforge.batch]
+max_bytes = 2097152  # 2MB
+max_events = 2000
+timeout_secs = 2
+
+[sinks.logforge.request]
+timeout_secs = 60
+rate_limit_num = 20000
+retry_attempts = 3
+retry_max_duration_secs = 600
+
+# Health check
+[sinks.logforge.healthcheck]
+enabled = true
+
+# Optional: Route logs to different endpoints based on namespace
+[transforms.route_by_namespace]
+type = "route"
+inputs = ["filter_noise"]
+
+[transforms.route_by_namespace.route]
+production = '.attrs."kubernetes.namespace" == "production"'
+staging = '.attrs."kubernetes.namespace" == "staging"'
+system = 'includes(["kube-system", "kube-public", "kube-node-lease"], .attrs."kubernetes.namespace")'
+default = "true"
+
+# Separate sink for production logs (if needed)
+[sinks.logforge_production]
+type = "http"
+inputs = ["route_by_namespace.production"]
+uri = "http://logforge-api:8080/v1/ingest/logs"
+method = "post"
+encoding.codec = "json"
+
+[sinks.logforge_production.headers]
+Content-Type = "application/json"
+X-Logforge-Environment = "production"

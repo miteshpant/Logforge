@@ -1,0 +1,83 @@
+# On-Premises MinIO Deployment Configuration
+# For customers requiring air-gapped or on-premises deployments
+
+storage:
+  deployment:
+    type: "private"
+    region: "on-premises"
+    compliance_tier: "private"
+    
+  hot:
+    retention_days: 30  # More hot storage for on-premises
+    compression: "zstd"
+    partition_strategy: "daily"  # More granular partitioning
+    replica_count: 3  # High availability
+    
+  cold:
+    enabled: true
+    backend: "minio"
+    retention_days: 1825  # 5 years default
+    
+    backends:
+      minio:
+        enabled: true
+        endpoint: "https://minio.internal.company.com:9000"
+        bucket: "logforge-cold-storage"
+        access_key: "${MINIO_ACCESS_KEY}"
+        secret_key: "${MINIO_SECRET_KEY}"
+        secure: true  # HTTPS enabled
+        
+      # Optional secondary MinIO for DR
+      minio_dr:
+        enabled: false
+        endpoint: "https://minio-dr.internal.company.com:9000"
+        bucket: "logforge-dr-storage"
+        access_key: "${MINIO_DR_ACCESS_KEY}"
+        secret_key: "${MINIO_DR_SECRET_KEY}"
+        secure: true
+        
+  backup:
+    enabled: true
+    backend: "minio"
+    schedule: "0 2 * * *"  # Nightly backups
+    retention_days: 90
+    
+  lifecycle:
+    hot_to_cold_days: 30
+    cold_to_archive_days: 365
+    delete_after_days: 1825
+    
+  encryption:
+    at_rest:
+      enabled: true
+      algorithm: "AES-256"
+      key_management: "customer"  # Customer manages keys on-premises
+      
+    in_transit:
+      enabled: true
+      tls_version: "1.3"
+      
+  tenancy:
+    model: "isolated"
+    namespace_strategy: "separate_bucket"
+    isolation:
+      compute: "isolated"     # Dedicated on-premises hardware
+      storage: "isolated"     # Private MinIO cluster
+      network: "isolated"     # Air-gapped network
+      
+  # On-premises specific configuration
+  on_premises:
+    air_gapped: true
+    local_certificate_authority: true
+    custom_ca_cert: "/etc/ssl/certs/company-ca.pem"
+    
+  # Resource limits for on-premises deployment
+  resources:
+    clickhouse:
+      cpu_cores: 16
+      memory_gb: 64
+      storage_gb: 1000
+    minio:
+      cpu_cores: 8
+      memory_gb: 32
+      storage_gb: 10000  # 10TB cold storage

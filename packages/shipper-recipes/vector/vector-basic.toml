@@ -1,0 +1,65 @@
+# Vector Basic Configuration for Logforge
+# This configuration monitors log files and sends them to Logforge
+
+[sources.file_logs]
+type = "file"
+include = ["/var/log/**/*.log"]
+ignore_older_secs = 600
+
+[transforms.parse_logs]
+type = "remap"
+inputs = ["file_logs"]
+source = '''
+  # Parse timestamp if available
+  .timestamp = now()
+  
+  # Extract host information
+  .host = get_hostname!()
+  
+  # Set service from file path
+  .service = replace(string!(.file), r'/var/log/([^/]+)/', "$1") ?? "unknown"
+  
+  # Set message field (required by Logforge)
+  .msg = .message
+  
+  # Set default level
+  .level = "info"
+  
+  # Clean up
+  del(.message)
+  del(.file)
+'''
+
+[sinks.logforge]
+type = "http"
+inputs = ["parse_logs"]
+uri = "http://localhost:7080/v1/ingest/logs"
+method = "post"
+encoding.codec = "json"
+
+[sinks.logforge.headers]
+Content-Type = "application/json"
+User-Agent = "Vector-Logforge/1.0"
+
+# Buffer configuration for performance
+[sinks.logforge.buffer]
+type = "memory"
+max_events = 10000
+when_full = "block"
+
+# Batch configuration
+[sinks.logforge.batch]
+max_bytes = 1048576  # 1MB
+max_events = 1000
+timeout_secs = 5
+
+# Request configuration
+[sinks.logforge.request]
+timeout_secs = 30
+rate_limit_num = 10000
+retry_attempts = 3
+retry_max_duration_secs = 300
+
+# Health check
+[sinks.logforge.healthcheck]
+enabled = true

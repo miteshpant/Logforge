@@ -1,0 +1,179 @@
+# Logforge Storage Configuration Schema
+# Supports multi-cloud, multi-tenant, and compliance-specific deployments
+
+storage:
+  # Deployment model configuration
+  deployment:
+    type: "shared"  # shared | dedicated | fedramp | private
+    region: "us-east-1"
+    compliance_tier: "standard"  # standard | fedramp | hipaa | pci | soc2
+    
+  # Hot storage (ClickHouse) configuration
+  hot:
+    retention_days: 7
+    compression: "zstd"
+    partition_strategy: "monthly"  # daily | monthly | yearly
+    replica_count: 1  # For HA deployments
+    
+  # Cold storage configuration - flexible backend support
+  cold:
+    enabled: true
+    backend: "s3"  # s3 | gcs | azure | minio | shared_s3 | shared_gcs | shared_azure
+    retention_days: 365
+    
+    # Multi-cloud backend configurations
+    backends:
+      # AWS S3 Configuration
+      s3:
+        # Shared Logforge-managed S3 (default for most customers)
+        shared:
+          enabled: true
+          bucket_prefix: "logforge-shared"
+          region: "us-east-1"
+          # Uses Logforge's AWS credentials
+          
+        # Customer-dedicated S3 (for enterprise/compliance)
+        dedicated:
+          enabled: false
+          bucket: "${CUSTOMER_ID}-logforge-cold"
+          region: "us-east-1" 
+          access_key: "${CUSTOMER_S3_ACCESS_KEY}"
+          secret_key: "${CUSTOMER_S3_SECRET_KEY}"
+          role_arn: "${CUSTOMER_S3_ROLE_ARN}"  # For cross-account access
+          external_id: "${CUSTOMER_EXTERNAL_ID}"
+          
+        # FedRAMP-compliant S3 (GovCloud)
+        fedramp:
+          enabled: false
+          bucket: "${CUSTOMER_ID}-logforge-fedramp"
+          region: "us-gov-east-1"
+          access_key: "${FEDRAMP_S3_ACCESS_KEY}"
+          secret_key: "${FEDRAMP_S3_SECRET_KEY}"
+          endpoint: "https://s3.us-gov-east-1.amazonaws.com"
+          
+      # Google Cloud Storage Configuration  
+      gcs:
+        shared:
+          enabled: false
+          bucket_prefix: "logforge-shared-gcs"
+          region: "us-east1"
+          
+        dedicated:
+          enabled: false
+          bucket: "${CUSTOMER_ID}-logforge-cold"
+          region: "us-east1"
+          service_account_key: "${CUSTOMER_GCS_SERVICE_ACCOUNT_KEY}"
+          project_id: "${CUSTOMER_GCS_PROJECT_ID}"
+          
+      # Azure Blob Storage Configuration
+      azure:
+        shared:
+          enabled: false
+          container_prefix: "logforge-shared"
+          region: "East US"
+          
+        dedicated:
+          enabled: false
+          container: "${CUSTOMER_ID}-logforge-cold"
+          region: "East US"
+          account_name: "${CUSTOMER_AZURE_ACCOUNT_NAME}"
+          account_key: "${CUSTOMER_AZURE_ACCOUNT_KEY}"
+          connection_string: "${CUSTOMER_AZURE_CONNECTION_STRING}"
+          
+      # MinIO Configuration (for on-premises)
+      minio:
+        enabled: false
+        endpoint: "${MINIO_ENDPOINT}"
+        bucket: "${CUSTOMER_ID}-logforge-cold"
+        access_key: "${MINIO_ACCESS_KEY}"
+        secret_key: "${MINIO_SECRET_KEY}"
+        secure: true
+        
+  # Backup and disaster recovery
+  backup:
+    enabled: true
+    backend: "s3"  # Uses same backend as cold storage
+    schedule: "0 2 * * *"  # Daily at 2 AM
+    retention_days: 30
+    cross_region_replication: false
+    
+  # Data lifecycle policies
+  lifecycle:
+    hot_to_cold_days: 7
+    cold_to_archive_days: 90  # Move to cheaper archive tier
+    delete_after_days: 2555   # 7 years for compliance
+    
+    # Compliance-specific retention
+    compliance_retention:
+      fedramp: 2555    # 7 years
+      hipaa: 2190      # 6 years  
+      pci: 365         # 1 year minimum
+      sox: 2555        # 7 years
+      
+  # Encryption configuration
+  encryption:
+    at_rest:
+      enabled: true
+      algorithm: "AES-256"
+      key_management: "managed"  # managed | customer | hsm
+      
+    in_transit:
+      enabled: true
+      tls_version: "1.3"
+      
+    # Customer-managed encryption keys
+    customer_keys:
+      enabled: false
+      kms_key_id: "${CUSTOMER_KMS_KEY_ID}"
+      hsm_partition: "${CUSTOMER_HSM_PARTITION}"
+      
+  # Multi-tenancy and isolation
+  tenancy:
+    model: "shared"  # shared | dedicated | isolated
+    namespace_strategy: "prefix"  # prefix | separate_bucket | separate_account
+    
+    # Data isolation levels
+    isolation:
+      compute: "shared"     # shared | dedicated | isolated
+      storage: "shared"     # shared | dedicated | isolated  
+      network: "shared"     # shared | dedicated | isolated
+      
+# Customer-specific overrides (loaded per tenant)
+customers:
+  example_enterprise:
+    deployment:
+      type: "dedicated"
+      region: "us-west-2"
+    cold:
+      backend: "s3"
+      backends:
+        s3:
+          dedicated:
+            enabled: true
+            bucket: "enterprise-logs-cold"
+            role_arn: "arn:aws:iam::123456789012:role/LogforgeAccess"
+            
+  example_fedramp:
+    deployment:
+      type: "fedramp"
+      region: "us-gov-east-1" 
+      compliance_tier: "fedramp"
+    cold:
+      backend: "s3"
+      backends:
+        s3:
+          fedramp:
+            enabled: true
+            bucket: "fedramp-customer-logs"
+            
+  example_gcs_customer:
+    deployment:
+      type: "dedicated"
+    cold:
+      backend: "gcs"
+      backends:
+        gcs:
+          dedicated:
+            enabled: true
+            bucket: "customer-logs-gcs"
+            project_id: "customer-gcp-project"
