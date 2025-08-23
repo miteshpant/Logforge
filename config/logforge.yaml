@@ -1,0 +1,116 @@
+# Logforge Configuration
+# This file contains the main configuration for the Logforge platform
+
+# Authentication and Authorization
+auth:
+  oidc:
+    enabled: false
+    issuer: ""
+    client_id: ""
+    client_secret: ""
+  api_keys:
+    enabled: true
+    default_scopes: ["read", "write"]
+
+# Log Ingestion Settings
+ingest:
+  max_body_mb: 10
+  rate_limit_rps: 2000
+  batch_size: 1000
+  flush_interval_seconds: 5
+  parsers:
+    - nginx
+    - syslog
+    - json
+
+# Storage Configuration
+storage:
+  clickhouse_url: "http://clickhouse:8123"
+  clickhouse_user: "logforge"
+  clickhouse_password: "logforge123"
+  clickhouse_database: "logforge"
+  hot_retention_days: 7
+  warm_to_s3_after_days: 7
+  cold_retention_days: 365
+  s3:
+    endpoint: "http://minio:9000"
+    bucket: "logforge"
+    access_key: "minio"
+    secret_key: "minio123"
+    region: "us-east-1"
+
+# Message Queue (Redpanda/Kafka)
+messaging:
+  bootstrap_servers: "redpanda:9092"
+  topics:
+    logs: "logs"
+    alerts: "alerts"
+    metrics: "metrics"
+  consumer_group: "logforge"
+
+# Alerting Configuration
+alerts:
+  scheduler: "*/2 * * * *"  # Every 2 minutes
+  evaluation_timeout_seconds: 30
+  max_concurrent_evaluations: 10
+  sinks:
+    slack_webhook: ""
+    email_smtp:
+      host: ""
+      port: 587
+      username: ""
+      password: ""
+      from_address: "alerts@logforge.local"
+    webhook:
+      timeout_seconds: 10
+      retry_attempts: 3
+
+# Security Settings
+security:
+  pii_redaction:
+    enabled: true
+    patterns:
+      - "(?i)password=\\S+"
+      - "\\b\\d{16}\\b"  # Credit card numbers
+      - "\\b\\d{3}-\\d{2}-\\d{4}\\b"  # SSN
+      - "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b"  # Email (optional)
+  encryption:
+    enabled: false
+    key_path: "/etc/logforge/encryption.key"
+  audit:
+    enabled: true
+    log_all_queries: false
+    log_admin_actions: true
+
+# Performance Tuning
+performance:
+  max_query_rows: 1000000
+  query_timeout_seconds: 30
+  max_concurrent_queries: 50
+  cache:
+    enabled: true
+    ttl_seconds: 300
+    max_size_mb: 512
+
+# Monitoring and Observability
+monitoring:
+  metrics:
+    enabled: true
+    port: 9090
+    path: "/metrics"
+  tracing:
+    enabled: false
+    jaeger_endpoint: ""
+    sample_rate: 0.1
+  logging:
+    level: "info"
+    format: "json"
+    output: "stdout"
+
+# Feature Flags
+features:
+  experimental_ai: false
+  sigma_rules: true
+  threat_intel: true
+  multi_tenant: false
+  audit_trails: true
