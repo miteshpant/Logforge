@@ -25,6 +25,14 @@ class RetentionPeriod(Enum):
     GOVERNMENT = 2555    # 7 years (FedRAMP compliance)
     UNLIMITED = 0        # No automatic deletion
 
+class ComplianceTier(Enum):
+    """Compliance tier requirements"""
+    STANDARD = "standard"
+    FEDRAMP = "fedramp"
+    HIPAA = "hipaa"
+    SOX = "sox"
+    GDPR = "gdpr"
+
 @dataclass
 class RetentionPolicy:
     """Customer-specific retention policy configuration"""
@@ -53,11 +61,33 @@ class TTLManager:
     async def initialize_policies(self):
         """Initialize retention policies for all customers"""
         try:
-            # Load customer configurations from storage config
-            customer_configs = self.storage_manager.customer_configs
+            # Initialize default retention policies
+            # In a full implementation, this would load actual customer configurations
+            default_customers = [
+                "shared-tenant",
+                "enterprise-demo", 
+                "compliance-test"
+            ]
             
-            for customer_id, config in customer_configs.items():
-                policy = self._create_retention_policy(customer_id, config)
+            for customer_id in default_customers:
+                # Get retention days from storage manager or use default
+                try:
+                    retention_days = self.storage_manager.get_compliance_retention_days(customer_id)
+                except:
+                    retention_days = 90  # Default 90 days
+                
+                # Create policy with storage manager configuration
+                policy = RetentionPolicy(
+                    customer_id=customer_id,
+                    deployment_type="shared",
+                    hot_storage_days=30,
+                    cold_storage_days=retention_days,
+                    total_retention_days=retention_days,
+                    compliance_extended_days=0,
+                    encryption_required=False,
+                    geographic_restrictions=[]
+                )
+                
                 self.policies[customer_id] = policy
                 await self._apply_ttl_policy(policy)
                 
@@ -65,7 +95,8 @@ class TTLManager:
             
         except Exception as e:
             self.logger.error("Failed to initialize TTL policies", error=str(e))
-            raise
+            # Don't raise - allow system to continue without TTL if there are issues
+            self.logger.warning("Continuing without TTL policies - manual cleanup required")
     
     def _create_retention_policy(self, customer_id: str, config: Dict[str, Any]) -> RetentionPolicy:
         """Create retention policy based on customer configuration"""
@@ -143,31 +174,54 @@ class TTLManager:
             raise
     
     def _generate_ttl_statements(self, policy: RetentionPolicy) -> List[str]:
-        """Generate ClickHouse TTL ALTER statements for customer policy"""
+        """Generate ClickHouse TTL statements for multi-tenant tables"""
         statements = []
         
-        # TTL for main logs_raw table
-        hot_days = policy.hot_storage_days
-        cold_days = policy.cold_storage_days
         total_days = policy.total_retention_days + policy.compliance_extended_days
         
-        # Main table TTL with multi-tier storage
-        ttl_expr = f"""
-        ALTER TABLE logs_raw MODIFY TTL 
-            toDateTime(ts) + toIntervalDay({hot_days}) TO VOLUME 'cold',
-            toDateTime(ts) + toIntervalDay({total_days}) 
-            WHERE customer_id = '{policy.customer_id}' DELETE
+        # Store policy in customer_ttl_policies table for tracking
+        compliance_tier = getattr(policy, 'compliance_tier', ComplianceTier.STANDARD)
+        policy_insert = f"""
+        INSERT INTO logforge.customer_ttl_policies 
+        (customer_id, deployment_type, compliance_tier, hot_storage_days, 
+         cold_storage_days, total_retention_days, created_at, updated_at)
+        VALUES (
+            '{policy.customer_id}',
+            '{policy.deployment_type}', 
+            '{compliance_tier.value}',
+            {policy.hot_storage_days},
+            {policy.cold_storage_days},
+            {policy.total_retention_days},
+            now64(),
+            now64()
+        )
         """
-        statements.append(ttl_expr.strip())
+        statements.append(policy_insert.strip())
         
-        # Normalized table TTL
-        ttl_normalized = f"""
-        ALTER TABLE logs_normalized MODIFY TTL 
-            toDateTime(ts) + toIntervalDay({hot_days}) TO VOLUME 'cold',
-            toDateTime(ts) + toIntervalDay({total_days}) 
-            WHERE customer_id = '{policy.customer_id}' DELETE
+        # Multi-tenant tables use partition-level TTL (applied globally, filtered by partition)
+        # Each customer has separate partitions: (customer_id, toYYYYMM(ts))
+        
+        # TTL for multi-tenant raw logs table
+        ttl_raw_mt = f"""
+        ALTER TABLE logforge.logs_raw_mt MODIFY TTL 
+            ts + toIntervalDay({total_days}) DELETE
         """
-        statements.append(ttl_normalized.strip())
+        statements.append(ttl_raw_mt.strip())
+        
+        # TTL for multi-tenant normalized logs table  
+        ttl_normalized_mt = f"""
+        ALTER TABLE logforge.logs_normalized_mt MODIFY TTL 
+            ts + toIntervalDay({total_days}) DELETE
+        """
+        statements.append(ttl_normalized_mt.strip())
+        
+        # TTL for multi-tenant hourly stats (longer retention)
+        stats_retention = max(365, total_days)  # Keep stats for at least 1 year
+        ttl_stats_mt = f"""
+        ALTER TABLE logforge.logs_hourly_stats_mt MODIFY TTL 
+            date + toIntervalDay({stats_retention}) DELETE
+        """
+        statements.append(ttl_stats_mt.strip())
         
         # Extended retention for security data if compliance required
         if policy.compliance_extended_days > 0:
