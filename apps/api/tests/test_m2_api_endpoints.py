@@ -26,7 +26,7 @@ def client():
     return TestClient(app)
 
 
-@pytest.fixture 
+@pytest.fixture
 def mock_query_engine():
     """Mock query engine for testing"""
     mock = Mock()
@@ -48,7 +48,7 @@ def mock_dashboard_engine():
     mock.get_dashboard_list.return_value = [
         {
             "id": "security",
-            "name": "Security Operations Center", 
+            "name": "Security Operations Center",
             "type": "security",
             "description": "Real-time security monitoring",
             "widget_count": 5,
@@ -86,7 +86,7 @@ def mock_dashboard_engine():
 
 class TestAdvancedQueryEndpoints:
     """Test advanced query API endpoints"""
-    
+
     @patch('main.query_engine')
     def test_advanced_query_endpoint(self, mock_engine, client):
         """Test POST /v1/query/advanced"""
@@ -98,7 +98,7 @@ class TestAdvancedQueryEndpoints:
             has_more=False,
             query_info={"sql_query": "SELECT * FROM logs_raw"}
         )
-        
+
         query_data = {
             "start_time": "2023-12-01T00:00:00Z",
             "end_time": "2023-12-01T23:59:59Z",
@@ -108,14 +108,14 @@ class TestAdvancedQueryEndpoints:
             ],
             "limit": 1000
         }
-        
+
         response = client.post("/v1/query/advanced", json=query_data)
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "execution_time_ms" in data
         assert "total_count" in data
-    
+
     @patch('main.query_engine')
     def test_aggregate_query_endpoint(self, mock_engine, client):
         """Test POST /v1/query/aggregate"""
@@ -127,7 +127,7 @@ class TestAdvancedQueryEndpoints:
             has_more=False,
             query_info={}
         )
-        
+
         query_params = {
             "start_time": "2023-12-01T00:00:00Z",
             "end_time": "2023-12-01T23:59:59Z",
@@ -138,13 +138,13 @@ class TestAdvancedQueryEndpoints:
             "group_by": ["service"],
             "time_series": False
         }
-        
+
         response = client.post("/v1/query/aggregate", json=query_params)
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "aggregations" in data
-    
+
     @patch('main.query_engine')
     def test_timeseries_query_endpoint(self, mock_engine, client):
         """Test POST /v1/query/timeseries"""
@@ -161,20 +161,20 @@ class TestAdvancedQueryEndpoints:
             has_more=False,
             query_info={}
         )
-        
+
         query_params = {
             "start_time": "2023-12-01T00:00:00Z",
             "end_time": "2023-12-01T23:59:59Z",
             "aggregations": [{"type": "count", "field": "*"}],
             "granularity": "hour"
         }
-        
+
         response = client.post("/v1/query/timeseries", json=query_params)
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "aggregations" in data
-    
+
     def test_query_engine_not_initialized(self, client):
         """Test error when query engine not initialized"""
         # Mock query_engine as None
@@ -183,39 +183,39 @@ class TestAdvancedQueryEndpoints:
                 "start_time": "2023-12-01T00:00:00Z",
                 "end_time": "2023-12-01T23:59:59Z"
             }
-            
+
             response = client.post("/v1/query/advanced", json=query_data)
             assert response.status_code == 503
             assert "Query engine not initialized" in response.json()["detail"]
-    
+
     @patch('main.query_engine')
     def test_query_error_handling(self, mock_engine, client):
         """Test query error handling"""
         mock_engine.execute_query.side_effect = Exception("Database connection failed")
-        
+
         query_data = {
-            "start_time": "2023-12-01T00:00:00Z", 
+            "start_time": "2023-12-01T00:00:00Z",
             "end_time": "2023-12-01T23:59:59Z"
         }
-        
+
         response = client.post("/v1/query/advanced", json=query_data)
-        
+
         assert response.status_code == 500
         assert "Advanced query failed" in response.json()["detail"]
 
 
 class TestSavedQueryEndpoints:
     """Test saved query management endpoints"""
-    
+
     def test_get_saved_queries(self, client):
         """Test GET /v1/query/saved"""
         response = client.get("/v1/query/saved")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "saved_queries" in data
         assert "message" in data
-    
+
     def test_save_query(self, client):
         """Test POST /v1/query/saved"""
         saved_query_data = {
@@ -230,18 +230,18 @@ class TestSavedQueryEndpoints:
             },
             "tags": ["test", "errors"]
         }
-        
+
         response = client.post("/v1/query/saved", json=saved_query_data)
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "message" in data
         assert "id" in data
-    
+
     def test_get_saved_query_by_id(self, client):
         """Test GET /v1/query/saved/{query_id}"""
         response = client.get("/v1/query/saved/test-query-123")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "message" in data
@@ -250,7 +250,7 @@ class TestSavedQueryEndpoints:
 
 class TestDataExportEndpoints:
     """Test data export endpoints"""
-    
+
     @patch('main.query_engine')
     def test_export_json_format(self, mock_engine, client):
         """Test POST /v1/export with JSON format"""
@@ -265,7 +265,7 @@ class TestDataExportEndpoints:
             has_more=False,
             query_info={}
         )
-        
+
         export_request = {
             "query": {
                 "start_time": "2023-12-01T00:00:00Z",
@@ -274,21 +274,21 @@ class TestDataExportEndpoints:
             "format": "json",
             "filename": "test_export.json"
         }
-        
+
         response = client.post("/v1/export", json=export_request)
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "data" in data
         assert "metadata" in data
         assert data["metadata"]["export_format"] == "json"
         assert data["metadata"]["filename"] == "test_export.json"
-    
+
     @patch('main.query_engine')
     def test_export_csv_format_placeholder(self, mock_engine, client):
         """Test POST /v1/export with CSV format (placeholder)"""
         mock_engine.execute_query.return_value = Mock(logs=[], aggregations={})
-        
+
         export_request = {
             "query": {
                 "start_time": "2023-12-01T00:00:00Z",
@@ -296,35 +296,35 @@ class TestDataExportEndpoints:
             },
             "format": "csv"
         }
-        
+
         response = client.post("/v1/export", json=export_request)
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "CSV export coming in next update" in data["message"]
-    
+
     def test_export_unsupported_format(self, client):
         """Test export with unsupported format"""
         with patch('main.query_engine') as mock_engine:
             mock_engine.execute_query.return_value = Mock(logs=[], aggregations={})
-            
+
             export_request = {
                 "query": {
-                    "start_time": "2023-12-01T00:00:00Z", 
+                    "start_time": "2023-12-01T00:00:00Z",
                     "end_time": "2023-12-01T23:59:59Z"
                 },
                 "format": "xml"
             }
-            
+
             response = client.post("/v1/export", json=export_request)
-            
+
             assert response.status_code == 400
             assert "Unsupported export format" in response.json()["detail"]
 
 
 class TestDashboardEndpoints:
     """Test enterprise dashboard endpoints"""
-    
+
     @patch('main.dashboard_engine')
     def test_get_dashboards_list(self, mock_engine, client):
         """Test GET /v1/dashboards"""
@@ -332,7 +332,7 @@ class TestDashboardEndpoints:
             {
                 "id": "security",
                 "name": "Security Operations Center",
-                "type": "security", 
+                "type": "security",
                 "description": "Real-time security monitoring",
                 "widget_count": 5,
                 "tags": ["security", "soc"]
@@ -346,23 +346,23 @@ class TestDashboardEndpoints:
                 "tags": ["performance", "apm"]
             }
         ]
-        
+
         response = client.get("/v1/dashboards")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "dashboards" in data
         assert "total" in data
         assert data["total"] == 2
         assert len(data["dashboards"]) == 2
-        
+
         # Check dashboard structure
         dashboard = data["dashboards"][0]
         assert "id" in dashboard
         assert "name" in dashboard
         assert "type" in dashboard
         assert "widget_count" in dashboard
-    
+
     @patch('main.dashboard_engine')
     def test_get_dashboard_definition(self, mock_engine, client):
         """Test GET /v1/dashboards/{dashboard_id}"""
@@ -380,23 +380,23 @@ class TestDashboardEndpoints:
                 },
                 {
                     "id": "failed_logins",
-                    "title": "Failed Login Attempts", 
+                    "title": "Failed Login Attempts",
                     "type": "line_chart",
                     "position": {"x": 3, "y": 0, "w": 9, "h": 4}
                 }
             ]
         }
         mock_engine.get_dashboard_definition.return_value = mock_dashboard
-        
+
         response = client.get("/v1/dashboards/security")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == "security"
         assert "widgets" in data
         assert len(data["widgets"]) == 2
-    
-    @patch('main.dashboard_engine') 
+
+    @patch('main.dashboard_engine')
     def test_get_dashboard_data(self, mock_engine, client):
         """Test GET /v1/dashboards/{dashboard_id}/data"""
         mock_dashboard_data = {
@@ -405,7 +405,7 @@ class TestDashboardEndpoints:
             "widgets": {
                 "security_alerts_count": {
                     "title": "Security Alerts (24h)",
-                    "type": "metric", 
+                    "type": "metric",
                     "data": {"value": 25, "label": "alerts"},
                     "execution_time_ms": 15.2,
                     "last_updated": datetime.utcnow().isoformat()
@@ -435,38 +435,38 @@ class TestDashboardEndpoints:
                 "dashboard_name": "Security Operations Center"
             }
         }
-        
+
         mock_engine.get_dashboard_data.return_value = mock_dashboard_data
-        
+
         response = client.get("/v1/dashboards/security/data")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["dashboard_id"] == "security"
         assert "widgets" in data
         assert "metadata" in data
         assert len(data["widgets"]) == 2
-    
+
     @patch('main.dashboard_engine')
     def test_get_dashboard_data_with_time_range(self, mock_engine, client):
         """Test GET /v1/dashboards/{dashboard_id}/data with custom time range"""
         mock_engine.get_dashboard_data.return_value = {"dashboard_id": "security", "widgets": {}}
-        
+
         params = {
             "start_time": "2023-12-01T00:00:00Z",
             "end_time": "2023-12-01T12:00:00Z"
         }
-        
+
         response = client.get("/v1/dashboards/security/data", params=params)
-        
+
         assert response.status_code == 200
-        
+
         # Verify that dashboard_engine.get_dashboard_data was called with time_range
         mock_engine.get_dashboard_data.assert_called_once()
         call_args = mock_engine.get_dashboard_data.call_args
         assert call_args[0][0] == "security"  # dashboard_id
         assert call_args[0][1] is not None   # time_range parameter
-    
+
     @patch('main.dashboard_engine')
     def test_get_widget_data(self, mock_engine, client):
         """Test GET /v1/dashboards/{dashboard_id}/widgets/{widget_id}/data"""
@@ -482,26 +482,26 @@ class TestDashboardEndpoints:
             }
         }
         mock_engine.get_dashboard_data.return_value = mock_dashboard_data
-        
+
         response = client.get("/v1/dashboards/security/widgets/security_alerts_count/data")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["dashboard_id"] == "security"
         assert data["widget_id"] == "security_alerts_count"
         assert "widget_data" in data
         assert data["widget_data"]["type"] == "metric"
-    
+
     def test_get_nonexistent_dashboard(self, client):
         """Test GET /v1/dashboards/{dashboard_id} with nonexistent dashboard"""
         with patch('main.dashboard_engine') as mock_engine:
             mock_engine.get_dashboard_definition.return_value = None
-            
+
             response = client.get("/v1/dashboards/nonexistent")
-            
+
             assert response.status_code == 404
             assert "Dashboard nonexistent not found" in response.json()["detail"]
-    
+
     @patch('main.dashboard_engine')
     def test_get_nonexistent_widget(self, mock_engine, client):
         """Test GET /v1/dashboards/{dashboard_id}/widgets/{widget_id}/data with nonexistent widget"""
@@ -510,19 +510,19 @@ class TestDashboardEndpoints:
             "widgets": {}  # No widgets
         }
         mock_engine.get_dashboard_data.return_value = mock_dashboard_data
-        
+
         response = client.get("/v1/dashboards/security/widgets/nonexistent_widget/data")
-        
+
         assert response.status_code == 404
         assert "Widget nonexistent_widget not found" in response.json()["detail"]
-    
+
     def test_dashboard_engine_not_initialized(self, client):
         """Test dashboard endpoints when engine not initialized"""
         with patch('main.dashboard_engine', None):
             response = client.get("/v1/dashboards")
             assert response.status_code == 503
             assert "Dashboard engine not initialized" in response.json()["detail"]
-    
+
     @patch('main.dashboard_engine')
     def test_create_custom_dashboard_placeholder(self, mock_engine, client):
         """Test POST /v1/dashboards (placeholder implementation)"""
@@ -533,29 +533,29 @@ class TestDashboardEndpoints:
             "description": "A custom dashboard",
             "widgets": []
         }
-        
+
         response = client.post("/v1/dashboards", json=dashboard_data)
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "Custom dashboard creation coming in next update" in data["message"]
-    
+
     @patch('main.dashboard_engine')
     def test_update_dashboard_placeholder(self, mock_engine, client):
         """Test PUT /v1/dashboards/{dashboard_id} (placeholder implementation)"""
         update_data = {"name": "Updated Dashboard Name"}
-        
+
         response = client.put("/v1/dashboards/security", json=update_data)
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "Dashboard update coming in next update" in data["message"]
-    
+
     @patch('main.dashboard_engine')
     def test_delete_dashboard_placeholder(self, mock_engine, client):
         """Test DELETE /v1/dashboards/{dashboard_id} (placeholder implementation)"""
         response = client.delete("/v1/dashboards/security")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "Dashboard deletion coming in next update" in data["message"]
@@ -563,7 +563,7 @@ class TestDashboardEndpoints:
 
 class TestErrorHandling:
     """Test error handling across all endpoints"""
-    
+
     @patch('main.query_engine')
     def test_query_validation_error(self, mock_engine, client):
         """Test query validation errors"""
@@ -572,25 +572,25 @@ class TestErrorHandling:
             "start_time": "2023-12-01T00:00:00Z"
             # Missing end_time
         }
-        
+
         response = client.post("/v1/query/advanced", json=invalid_query)
-        
+
         assert response.status_code == 422  # Validation error
-    
+
     @patch('main.dashboard_engine')
     def test_dashboard_generation_error(self, mock_engine, client):
         """Test dashboard generation errors"""
         mock_engine.get_dashboard_data.side_effect = Exception("Query execution failed")
-        
+
         response = client.get("/v1/dashboards/security/data")
-        
+
         assert response.status_code == 500
         assert "Failed to get dashboard data" in response.json()["detail"]
 
 
 class TestRealWorldScenarios:
     """Test realistic usage scenarios"""
-    
+
     @patch('main.query_engine')
     @patch('main.dashboard_engine')
     def test_security_dashboard_workflow(self, mock_dashboard_engine, mock_query_engine, client):
@@ -599,23 +599,23 @@ class TestRealWorldScenarios:
         mock_dashboard_engine.get_dashboard_list.return_value = [
             {"id": "security", "name": "Security Operations Center", "type": "security"}
         ]
-        
+
         response = client.get("/v1/dashboards")
         assert response.status_code == 200
         dashboards = response.json()["dashboards"]
         security_dashboard = next(d for d in dashboards if d["id"] == "security")
-        
+
         # Step 2: Get security dashboard definition
         mock_dashboard_engine.get_dashboard_definition.return_value = {
             "id": "security",
             "name": "Security Operations Center",
             "widgets": [{"id": "security_alerts_count", "title": "Security Alerts"}]
         }
-        
+
         response = client.get(f"/v1/dashboards/{security_dashboard['id']}")
         assert response.status_code == 200
         dashboard_def = response.json()
-        
+
         # Step 3: Get real-time dashboard data
         mock_dashboard_data = {
             "dashboard_id": "security",
@@ -627,14 +627,14 @@ class TestRealWorldScenarios:
             }
         }
         mock_dashboard_engine.get_dashboard_data.return_value = mock_dashboard_data
-        
+
         response = client.get(f"/v1/dashboards/{security_dashboard['id']}/data")
         assert response.status_code == 200
         dashboard_data = response.json()
-        
+
         assert dashboard_data["dashboard_id"] == "security"
         assert "security_alerts_count" in dashboard_data["widgets"]
-    
+
     @patch('main.query_engine')
     def test_performance_analysis_workflow(self, mock_query_engine, client):
         """Test performance analysis using query endpoints"""
@@ -647,7 +647,7 @@ class TestRealWorldScenarios:
             has_more=False,
             query_info={}
         )
-        
+
         # Step 1: Get average response times by service
         aggregation_query = {
             "start_time": "2023-12-01T00:00:00Z",
@@ -662,10 +662,10 @@ class TestRealWorldScenarios:
                 {"field": "attrs.response_time", "operator": "gt", "value": 0}
             ]
         }
-        
+
         response = client.post("/v1/query/aggregate", json=aggregation_query)
         assert response.status_code == 200
-        
+
         # Step 2: Get response time trend over time
         timeseries_query = {
             "start_time": "2023-12-01T00:00:00Z",
@@ -675,10 +675,10 @@ class TestRealWorldScenarios:
             ],
             "granularity": "hour"
         }
-        
+
         response = client.post("/v1/query/timeseries", json=timeseries_query)
         assert response.status_code == 200
-        
+
         # Step 3: Export results for further analysis
         export_query = {
             "query": {
@@ -690,7 +690,7 @@ class TestRealWorldScenarios:
             "format": "json",
             "filename": "performance_analysis.json"
         }
-        
+
         response = client.post("/v1/export", json=export_query)
         assert response.status_code == 200
 
@@ -700,6 +700,6 @@ if __name__ == "__main__":
     pytest.main([
         __file__,
         "-v",  # verbose output
-        "-s",  # don't capture print statements  
+        "-s",  # don't capture print statements
         "--tb=short"  # shorter traceback format
     ])

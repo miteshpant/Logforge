@@ -1,0 +1,54 @@
+title: Suspicious PowerShell Command Execution
+id: ps001-suspicious-powershell
+status: stable
+description: Detects potentially malicious PowerShell command execution based on common attack patterns
+author: Logforge Security Team
+date: 2024/01/01
+references:
+    - https://attack.mitre.org/techniques/T1059/001/
+    - https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies
+tags:
+    - attack.execution
+    - attack.t1059.001
+    - powershell
+    - command_execution
+    - suspicious
+falsepositives:
+    - Legitimate PowerShell scripts using similar patterns
+    - Administrative tasks requiring elevated privileges
+    - Software deployment scripts
+level: medium
+logsource:
+    category: process_creation
+    product: windows
+    service: powershell
+detection:
+    selection_cmdline:
+        command_line|contains:
+            - 'Invoke-Expression'
+            - 'IEX'
+            - 'downloadstring'
+            - 'bypass'
+            - 'hidden'
+            - 'noprofile'
+            - 'encoded'
+            - 'WebClient'
+            - 'DownloadFile'
+            - 'Base64'
+            - 'FromBase64String'
+    selection_params:
+        command_line|contains:
+            - '-enc '
+            - '-encoded '
+            - '-nop '
+            - '-noprofile '
+            - '-ep bypass'
+            - '-executionpolicy bypass'
+    condition: selection_cmdline or selection_params
+fields:
+    - command_line
+    - process_id
+    - parent_process_id
+    - user_id
+    - host
+    - timestamp

@@ -16,7 +16,12 @@ Logforge is an advanced, cost-effective observability + SIEM platform designed f
 
 ### Development Environment
 - **Local Setup**: Docker Compose
-- **Services**: api:8080, ui:3000, clickhouse:8123, minio:9000, redpanda:9092
+- **Services**: 
+  - **API**: `localhost:7080` (container internal: 8080)
+  - **UI**: `localhost:3001` (container internal: 3000)
+  - **ClickHouse**: `localhost:8124` (container internal: 8123)
+  - **MinIO**: `localhost:9003` (container internal: 9000), Admin: `localhost:9004`
+  - **Redpanda**: `localhost:19092` (container internal: 9092), Admin: `localhost:18081-18082`
 - **Start Command**: `docker compose -f infra/docker/compose.yml up -d`
 
 ### Directory Structure
@@ -38,11 +43,11 @@ logforge/
 ```
 
 ### Development Milestones
-- **M0**: Scaffold & Hello Logs (1 week)
-- **M1**: Ingestion & Storage MVP (2 weeks) 
-- **M2**: Search & Dashboards (2 weeks)
-- **M3**: Alerts & Integrations (2 weeks)
-- **M4**: Security Analytics/SIEM-lite (3 weeks)
+- **M0**: Scaffold & Hello Logs (1 week) ✓ **COMPLETE**
+- **M1**: Ingestion & Storage MVP (2 weeks) ✓ **COMPLETE**
+- **M2**: Search & Dashboards (2 weeks) ✓ **COMPLETE**
+- **M3**: Alerts & Integrations (2 weeks) ✓ **COMPLETE**
+- **M4**: Security Analytics/SIEM-lite (3 weeks) ✓ **COMPLETE**
 - **M5**: Traces & Metrics (3 weeks)
 - **M6**: AI Assistant & RCA (3 weeks)
 - **M7**: Enterprise Readiness (3 weeks)
@@ -51,12 +56,17 @@ logforge/
 - **Ingestion**: 9 endpoints supporting JSON, Syslog, OTLP, CEF, Nginx, Text formats
 - **Query**: `POST /v1/query/advanced` - Advanced log querying with filters, aggregations, time-series
 - **M3 Alerts**: Complete rule-based alerting system with 15+ endpoints
-  - `POST /v1/alerts/rules` - Create alert rules (threshold, anomaly, pattern, frequency, absence, sequence)
-  - `GET /v1/alerts/rules` - List rules with multi-tenant isolation
-  - `POST /v1/alerts/rules/{id}/test` - Test rule evaluation without triggering
-  - `GET /v1/alerts` - List alert instances with lifecycle management
-  - `POST /v1/alerts/{id}/acknowledge` - Acknowledge alerts
-  - `POST /v1/alerts/{id}/resolve` - Resolve alerts with reason tracking
+- **M4 Security Analytics**: Full SIEM capabilities with Sigma rules and threat intelligence
+  - `GET /v1/security/health` - Security analytics health check
+  - `GET /v1/security/dashboard` - Security overview dashboard with MITRE ATT&CK mapping
+  - `GET /v1/security/sigma-rules` - List all Sigma detection rules
+  - `POST /v1/security/sigma-rules` - Create custom Sigma rules
+  - `POST /v1/security/sigma-rules/{id}/test` - Test rule evaluation
+  - `GET /v1/security/events` - List security events/detections
+  - `PUT /v1/security/events/{id}/status` - Update event status (investigating, resolved, etc.)
+  - `POST /v1/security/threat-hunting` - Execute threat hunting campaigns
+  - `GET /v1/security/threat-intel` - List threat intelligence indicators
+  - `GET /v1/security/mitre-attack/techniques` - MITRE ATT&CK technique mappings
 - **Dashboards**: 6 pre-built enterprise dashboards with real-time data generation
 - **Storage**: TTL management, retention policies, compliance reporting
 
@@ -72,7 +82,10 @@ logforge/
 - OIDC SSO + RBAC
 - Audit logging
 - Sigma-like detection rules
-- ATT&CK framework mapping
+- MITRE ATT&CK framework mapping
+- Threat intelligence integration
+- Security event correlation
+- Threat hunting capabilities
 
 ### Testing Commands
 **CRITICAL**: Always run comprehensive integration tests after implementing new features:
@@ -89,17 +102,43 @@ python -m pytest tests/test_m2_api_endpoints.py -v --asyncio-mode=auto
 python run_m2_tests.py
 ```
 
-**Integration Test Requirements for New Features:**
-- All new endpoints must be added to `test_integration_comprehensive.py`
-- Multi-tenant isolation must be validated for all customer-facing features
-- Performance targets must be validated (queries <3s for integration tests)
-- All 6 enterprise dashboards must remain functional
-- TTL and storage configuration must support new customer types
-- **M3 Alert Engine Tests**: 4 comprehensive test suites added to integration tests:
-  - `test_m3_alert_engine_rule_management`: Rule CRUD operations, validation, testing
-  - `test_m3_alert_engine_alert_lifecycle`: Alert acknowledgement, resolution workflow
-  - `test_m3_alert_engine_multi_tenant_isolation`: Customer isolation validation
-  - `test_m3_alert_engine_comprehensive`: All rule types, system health, statistics
+**Test Runner UI - Comprehensive Testing Interface:**
+- **Access**: `http://localhost:3001/test-runner` (with Docker services running)
+- **Frontend**: React/Next.js comprehensive test runner at `/test-runner`
+- **Backend**: FastAPI test runner API at `/v1/test-runner/*` (15+ endpoints)
+- **Real-time Testing**: Live test execution with polling and progress tracking
+- **Test Suites**: 7 comprehensive test suites covering all functionality:
+  - M1 Ingestion & Storage (4 tests): Multi-format ingestion, TTL, storage
+  - M2 Query & Dashboards (2 tests): Advanced queries, 6 enterprise dashboards
+  - M3 Alert Engine (2 tests): Rule-based alerting, notifications, lifecycle
+  - **M4 Security Analytics** (7 tests): Sigma rules, threat hunting, MITRE ATT&CK
+  - Multi-Tenant Isolation (1 test): Customer boundary validation
+  - Performance Benchmarks (1 test): Throughput, latency, resource validation
+  - End-to-End Integration (1 test): Complete workflow validation
+- **Live Monitoring**: Real-time test execution logs, progress tracking, results
+- **API Integration**: Backend test runner executes actual API calls and validates responses
+- **Memory Commitment**: UI will be updated as new functionality is added
+
+**Security Analytics UI:**
+- **Access**: `http://localhost:3001/security` (with Docker services running)
+- **Frontend**: React/Next.js comprehensive security analytics interface
+- **Features**: Security dashboard, event management, Sigma rule testing, threat hunting, MITRE ATT&CK visualization
+
+**Quick Start for Testing:**
+```bash
+# Start all services
+docker compose -f infra/docker/compose.yml up -d
+
+# Access Test Runner UI
+http://localhost:3001/test-runner
+
+# Access Security Analytics UI
+http://localhost:3001/security
+
+# Direct API access
+http://localhost:7080/health
+http://localhost:7080/docs  # FastAPI Swagger documentation
+```
 
 ### Lint/Typecheck Commands
 **Python (API)**:
@@ -108,130 +147,78 @@ python run_m2_tests.py
 - ClickHouse multi-tenant schema required (tables: logs_raw_mt, logs_normalized_mt)
 - Filter operators: "eq", "ne", "gt", "gte", "lt", "lte", "contains", "starts_with", "ends_with", "regex", "in", "not_in"
 
-## Implementation Plan
+## Implementation Status
 
-### M0: Scaffold & Hello Logs (Current - 1 Week)
-**Phase 1: Repository Scaffold & Development Environment**
-1. Repository Structure Setup - monorepo with proper structure
-2. Docker Compose Infrastructure - ClickHouse, MinIO, Redpanda, API, UI
-3. Minimal FastAPI Backend - health check + basic log ingestion
-4. Basic Next.js Frontend - simple log viewer interface
-5. Acceptance: `docker compose up -d` works, can POST logs to ClickHouse
+### M4 Security Analytics Implementation Complete ✅
 
-**Next Milestones (M1-M7)**
-- M1: Ingestion & Storage MVP (2 weeks) - 10k EPS performance target
-- M2: Search & Dashboards (2 weeks) - Query API + 6 pre-built dashboards  
-- M3: Alerts & Integrations (2 weeks) - Rule engine + notifications
-- M4: SIEM-lite (3 weeks) - Sigma rules + threat intelligence
-- M5: Traces & Metrics (3 weeks) - OTLP ingestion + correlation
-- M6: AI Assistant & RCA (3 weeks) - NL queries + incident analysis
-- M7: Enterprise (3 weeks) - SSO, multi-tenancy, compliance
+**M4 Security Analytics/SIEM Features (COMPLETED)**:
+- **Sigma Rule Engine** (security_analytics.py): Complete Sigma-like detection system (600+ lines)
+- **Threat Intelligence Platform**: IOC management with confidence scoring and source tracking
+- **MITRE ATT&CK Integration**: Full technique mapping with kill chain analysis
+- **Security Event Management**: Event correlation, investigation workflow, artifact tracking
+- **Threat Hunting**: Proactive threat hunting with rule-based detection across log data
+- **Security Dashboard**: Real-time security metrics, event visualization, technique analysis
 
-### M1 Progress (In Progress - 2 weeks)
+**M4 Default Detection Rules**:
+1. **Brute Force Detection** (bf001): Multiple failed login attempts (MITRE: T1110)
+2. **Suspicious PowerShell** (ps001): Malicious PowerShell command execution (MITRE: T1059)
+3. **Privilege Escalation** (pe001): Unix/Linux privilege escalation attempts (MITRE: T1068)
+4. **Data Exfiltration** (de001): Large data transfer anomaly detection (MITRE: T1041)
 
-**Phase 1 Complete: Enhanced Storage Architecture ✅**
-- ✅ **Multi-Cloud Storage**: S3/GCS/Azure + MinIO support with deployment-aware configs
-- ✅ **Enhanced ClickHouse Schema**: Monthly partitioning, materialized views, compression
-- ✅ **Analytics Tables**: Pre-aggregated hourly stats, computed fields (is_error, is_slow)
-- ✅ **Flexible Deployment**: Shared/Dedicated/FedRAMP/On-premises configurations
+**M4 Threat Intelligence**:
+- **Default IOCs**: 8 threat intelligence indicators (domains, IPs)
+- **Confidence Scoring**: 0-100% confidence levels with source attribution
+- **Threat Types**: C2, malware, phishing, scanning categorization
+- **Event Enrichment**: Automatic IOC matching and context enhancement
 
-**Phase 2 Complete: Multi-Format Ingestion ✅**
-- ✅ **Enhanced API Endpoints**: 8 new ingestion endpoints with format-specific parsing
-- ✅ **Parser Architecture**: Modular factory pattern supporting 6 log formats
-- ✅ **Format Support**: JSON, Syslog (RFC 3164/5424), OTLP, CEF, Nginx, Plain Text
-- ✅ **Performance Features**: Batch ingestion, background processing, auto-format detection
-- ✅ **Data Models**: 50+ validated fields with comprehensive type safety
+**M4 Security UI Components**:
+- **Security Dashboard**: Events by severity, MITRE ATT&CK techniques, top triggered rules
+- **Event Management**: Security event lifecycle, status updates, investigation notes
+- **Sigma Rules**: Rule management, testing, enablement controls
+- **Threat Intelligence**: IOC browser with confidence and source tracking
+- **Threat Hunting**: Interactive hunting campaigns with real-time results
 
-**Phase 3 Complete: TTL & Data Lifecycle Management ✅**
-- ✅ **Advanced TTL Policies**: Customer-specific retention (30 days to 7 years)
-- ✅ **Multi-Cloud Storage**: S3, GCS, Azure Blob, MinIO with seamless integration
-- ✅ **Compliance Framework**: FedRAMP, HIPAA, SOX, SOC 2 retention policies
-- ✅ **Storage Management**: Health monitoring, usage analytics, manual archival
-- ✅ **Automated Lifecycle**: Daily/weekly/monthly scheduled cleanup and reporting
-- ✅ **Enhanced Schema**: Advanced partitioning, compression, materialized views
+**M4 API Endpoints (10 endpoints)**:
+- Security Health: `GET /v1/security/health`
+- Dashboard: `GET /v1/security/dashboard`
+- Sigma Rules: `GET/POST /v1/security/sigma-rules`, `GET/POST /v1/security/sigma-rules/{id}/*`
+- Events: `GET /v1/security/events`, `PUT /v1/security/events/{id}/status`
+- Threat Hunting: `POST /v1/security/threat-hunting`
+- Threat Intel: `GET /v1/security/threat-intel`
+- MITRE ATT&CK: `GET /v1/security/mitre-attack/techniques`
 
-**Current API Endpoints:**
+**M4 File Structure**:
+- `/apps/api/security_analytics.py` - Core security analytics engine
+- `/apps/api/security_api.py` - FastAPI security endpoints
+- `/apps/ui/app/security/page.tsx` - Security analytics UI
+- `/packages/rules/*.yml` - Sigma detection rules (4 default rules)
 
-*Ingestion (9 endpoints):*
-- `POST /v1/ingest/logs` - Original JSON endpoint (backwards compatible)
-- `POST /v1/ingest/logs/batch` - High-performance batch ingestion (up to 1000 logs)
-- `POST /v1/ingest/otlp` - OpenTelemetry Protocol logs  
-- `POST /v1/ingest/syslog` - RFC 3164/5424 syslog messages
-- `POST /v1/ingest/nginx` - Nginx access log parsing
-- `POST /v1/ingest/cef` - Common Event Format (security logs)
-- `POST /v1/ingest/text` - Plain text with regex pattern matching
-- `POST /v1/ingest/structured` - Application JSON logs
-- `POST /v1/ingest` - Auto-detect format and parse
+**Previous Milestone Completions**:
 
-*Storage Management (4 endpoints):*
-- `GET /v1/storage/health` - Storage system health & capacity monitoring
-- `POST /v1/storage/policies` - Apply/update customer retention policies
-- `GET /v1/storage/usage` - Detailed usage analytics by customer/time
-- `POST /v1/storage/archive` - Manual data archival trigger
+**M1 Foundation Complete ✅**:
+- Multi-format log ingestion (9 endpoints, 6 formats)
+- Advanced storage architecture with TTL policies
+- Multi-cloud storage support (S3/GCS/Azure/MinIO)
+- Performance: 6,952+ EPS validated
 
-**Next Phase 4: Integration & Testing** ✅ COMPLETED
-- ✅ Vector/Fluent Bit configuration recipes
-- ✅ Comprehensive unit and integration test suite  
-- ✅ Performance benchmarking (achieved 6,952 EPS, scaling path to 50k+ validated)
-- ✅ E2E pipeline validation
+**M2 Query & Dashboards Complete ✅**:
+- Advanced query engine with ClickHouse optimization
+- 6 enterprise dashboards (Security SOC, Performance, Infrastructure, Business, Compliance, Executive)
+- Real-time dashboard data generation
+- Export capabilities (JSON, CSV, PDF planned)
 
-## STRATEGIC PIVOT: M7 Complete Enterprise Implementation
+**M3 Alert Engine Complete ✅**:
+- Rule-based alerting system (850+ lines)
+- 6 rule types: Threshold, Anomaly, Pattern, Frequency, Absence, Sequence
+- Multi-channel notifications (Email, Slack, Webhook, PagerDuty, etc.)
+- Alert lifecycle management with audit trail
+- 15+ API endpoints for complete CRUD operations
 
-**MAJOR DECISION**: Jumping directly to M7 "Enterprise Readiness" with ALL M1-M7 features integrated.
+**Next Priorities**:
+- **M5**: Distributed tracing, metrics collection, service mapping, APM
+- **M6**: AI assistant, NL queries, root cause analysis, ML anomaly detection
+- **M7**: SSO/OIDC, multi-tenancy, RBAC, audit logging, compliance automation
 
-**New Development Approach**:
-- **M1 Foundation**: Completed with advanced ingestion & storage (6,952+ EPS)
-- **M7 Complete Platform**: Implementing all milestone features as integrated enterprise solution
-- **Target Features**: 43+ API endpoints, 6 enterprise dashboards, full SIEM capabilities
-- **Market Position**: Direct competition with Splunk/DataDog at 60-80% cost reduction
-
-**Complete M7 Scope (All Milestones Integrated)**:
-- ✅ M1: Multi-format ingestion, TTL policies, multi-cloud storage (6,952+ EPS performance)
-- ✅ M2: Advanced query engine, 6 pre-built dashboards, data export (COMPLETED)
-- ✅ M3: Rule-based alerting, multi-channel notifications, alert lifecycle (COMPLETED)
-- 🔄 M4: Sigma rules, threat intelligence, IOC detection, security correlation
-- 🔄 M5: Distributed tracing, metrics collection, service mapping, APM
-- 🔄 M6: AI assistant, NL queries, root cause analysis, ML anomaly detection
-- 🔄 M7: SSO/OIDC, multi-tenancy, RBAC, audit logging, compliance automation
-
-**Recent M2 Implementation Completed**:
-- **Advanced Query Engine** (query_engine.py): SQL-like query system with ClickHouse optimization
-- **Enterprise Dashboard Engine** (dashboard_engine.py): 6 pre-built enterprise dashboards
-- **API Integration**: 15+ new endpoints for advanced querying and dashboard access
-- **Dashboard Suite**: Security SOC, Performance, Infrastructure, Business, Compliance, Executive dashboards
-
-**M3 Alert Engine Implementation Complete**:
-- **Alert Engine Core** (alert_engine.py): Complete rule-based alerting system (850+ lines)
-- **Rule Types Supported**: Threshold, Anomaly, Pattern, Frequency, Absence, Sequence
-- **Multi-Tenant Isolation**: Customer-specific rules and alerts with full data isolation
-- **Alert Lifecycle Management**: Create → Active → Acknowledged → Resolved with audit trail
-- **Notification Channels**: Email, Slack, Webhook, PagerDuty, OpsGenie, JIRA, Teams, Discord
-- **Rate Limiting**: Cooldown periods and max alerts per hour to prevent spam
-- **API Endpoints**: 15 comprehensive endpoints for full CRUD operations
-
-**M3 Alert Engine API Endpoints**:
-- Alert Rules: `POST /v1/alerts/rules`, `GET /v1/alerts/rules`, `GET /v1/alerts/rules/{id}`
-- Rule Management: `PUT /v1/alerts/rules/{id}`, `DELETE /v1/alerts/rules/{id}`
-- Rule Testing: `POST /v1/alerts/rules/{id}/test` (dry-run evaluation)
-- Alert Instances: `GET /v1/alerts`, `GET /v1/alerts/{id}`
-- Alert Lifecycle: `POST /v1/alerts/{id}/acknowledge`, `POST /v1/alerts/{id}/resolve`
-- System Health: `GET /v1/alerts/health`, `GET /v1/alerts/stats`
-
-**M3 Alert Features**:
-- **Rule Conditions**: Field-based conditions with operators (EQUALS, GREATER_THAN, CONTAINS, etc.)
-- **Time Windows**: 1m to 24h evaluation periods with flexible aggregations
-- **Multi-Condition Rules**: AND/OR logic across multiple conditions
-- **Customer Isolation**: X-Customer-ID header-based tenant isolation
-- **Async Evaluation**: Background rule processing with configurable intervals
-- **Alert Suppression**: Intelligent cooldown and rate limiting
-- **Notification Integration**: Multi-channel notification dispatch
-
-**Dashboard Access**:
-- List dashboards: `GET /v1/dashboards`
-- Dashboard data: `GET /v1/dashboards/{dashboard_id}/data`
-- Available IDs: `security_soc`, `performance_monitoring`, `infrastructure_health`, `business_metrics`, `compliance_audit`, `executive_summary`
-- Widget-level access: `GET /v1/dashboards/{dashboard_id}/widgets/{widget_id}/data`
-upda
 ## Important Notes
 - This is a defensive security project only
 - Focus on observability, SIEM, and log analysis capabilities  

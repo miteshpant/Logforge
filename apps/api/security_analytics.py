@@ -1,0 +1,555 @@
+"""
+M4 Security Analytics - Sigma-like Detection Rules and Security Intelligence
+SIEM-lite functionality for threat detection and incident response
+"""
+
+import asyncio
+import json
+import yaml
+import re
+import uuid
+from datetime import datetime, timedelta
+from typing import Dict, List, Any, Optional, Union, Literal
+from dataclasses import dataclass, asdict
+from enum import Enum
+import structlog
+from pydantic import BaseModel, Field
+
+# Import query engine for rule evaluation
+from query_engine import AdvancedQueryEngine, AdvancedQueryRequest, QueryFilter
+
+logger = structlog.get_logger(__name__)
+
+
+class DetectionSeverity(str, Enum):
+    """Detection severity levels aligned with MITRE ATT&CK"""
+    CRITICAL = "critical"  # APT, data exfiltration
+    HIGH = "high"         # Privilege escalation, lateral movement
+    MEDIUM = "medium"     # Suspicious activity, reconnaissance
+    LOW = "low"           # Anomalous behavior
+    INFO = "info"         # Informational
+
+
+class DetectionStatus(str, Enum):
+    """Detection status states"""
+    TRIGGERED = "triggered"
+    INVESTIGATING = "investigating"
+    FALSE_POSITIVE = "false_positive"
+    TRUE_POSITIVE = "true_positive"
+    RESOLVED = "resolved"
+
+
+class AttackTechnique(str, Enum):
+    """MITRE ATT&CK Technique mappings (subset)"""
+    # Initial Access
+    T1190 = "T1190"  # Exploit Public-Facing Application
+    T1078 = "T1078"  # Valid Accounts
+    
+    # Execution
+    T1059 = "T1059"  # Command and Scripting Interpreter
+    T1053 = "T1053"  # Scheduled Task/Job
+    
+    # Persistence
+    T1543 = "T1543"  # Create or Modify System Process
+    T1136 = "T1136"  # Create Account
+    
+    # Privilege Escalation
+    T1068 = "T1068"  # Exploitation for Privilege Escalation
+    T1055 = "T1055"  # Process Injection
+    
+    # Defense Evasion
+    T1562 = "T1562"  # Impair Defenses
+    T1070 = "T1070"  # Indicator Removal
+    
+    # Credential Access
+    T1110 = "T1110"  # Brute Force
+    T1003 = "T1003"  # OS Credential Dumping
+    
+    # Discovery
+    T1083 = "T1083"  # File and Directory Discovery
+    T1057 = "T1057"  # Process Discovery
+    
+    # Lateral Movement
+    T1021 = "T1021"  # Remote Services
+    T1570 = "T1570"  # Lateral Tool Transfer
+    
+    # Collection
+    T1005 = "T1005"  # Data from Local System
+    T1039 = "T1039"  # Data from Network
+    
+    # Exfiltration
+    T1041 = "T1041"  # Exfiltration Over C2 Channel
+    T1048 = "T1048"  # Exfiltration Over Alternative Protocol
+
+
+@dataclass
+class SigmaCondition:
+    """Sigma-like detection condition"""
+    field: str
+    modifiers: List[str] = None
+    values: List[str] = None
+    operator: str = "contains"  # contains, equals, startswith, endswith, regex
+    
+    def __post_init__(self):
+        if self.modifiers is None:
+            self.modifiers = []
+        if self.values is None:
+            self.values = []
+
+
+@dataclass
+class SigmaRule:
+    """Sigma-like detection rule"""
+    id: str
+    title: str
+    description: str
+    severity: DetectionSeverity
+    status: str = "stable"
+    author: str = "Logforge"
+    date: str = None
+    references: List[str] = None
+    tags: List[str] = None
+    falsepositives: List[str] = None
+    level: str = None
+    
+    # Detection logic
+    logsource: Dict[str, Any] = None
+    detection: Dict[str, Any] = None
+    
+    # MITRE ATT&CK mapping
+    attack_techniques: List[AttackTechnique] = None
+    kill_chain_phases: List[str] = None
+    
+    # Metadata
+    customer_id: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    enabled: bool = True
+    
+    def __post_init__(self):
+        if self.date is None:
+            self.date = datetime.now().strftime("%Y/%m/%d")
+        if self.references is None:
+            self.references = []
+        if self.tags is None:
+            self.tags = []
+        if self.falsepositives is None:
+            self.falsepositives = []
+        if self.attack_techniques is None:
+            self.attack_techniques = []
+        if self.kill_chain_phases is None:
+            self.kill_chain_phases = []
+        if self.logsource is None:
+            self.logsource = {}
+        if self.detection is None:
+            self.detection = {}
+
+
+@dataclass
+class ThreatIntelIndicator:
+    """Threat intelligence indicator (IOC)"""
+    id: str
+    indicator_type: str  # ip, domain, hash, email, url
+    value: str
+    threat_type: List[str]  # malware, phishing, c2, etc.
+    severity: DetectionSeverity
+    confidence: int  # 0-100
+    source: str
+    description: Optional[str] = None
+    first_seen: Optional[str] = None
+    last_seen: Optional[str] = None
+    tags: List[str] = None
+    expires_at: Optional[str] = None
+    customer_id: Optional[str] = None
+    
+    def __post_init__(self):
+        if self.tags is None:
+            self.tags = []
+
+
+@dataclass 
+class SecurityEvent:
+    """Security event/detection"""
+    id: str
+    rule_id: str
+    rule_title: str
+    severity: DetectionSeverity
+    status: DetectionStatus
+    timestamp: str
+    customer_id: str
+    
+    # Event context
+    event_data: Dict[str, Any]
+    matched_fields: Dict[str, Any]
+    source_logs: List[Dict[str, Any]]
+    
+    # MITRE ATT&CK context
+    attack_techniques: List[AttackTechnique] = None
+    kill_chain_phase: Optional[str] = None
+    
+    # Investigation context
+    assigned_to: Optional[str] = None
+    investigation_notes: List[str] = None
+    related_events: List[str] = None
+    artifacts: List[str] = None
+    
+    def __post_init__(self):
+        if self.attack_techniques is None:
+            self.attack_techniques = []
+        if self.investigation_notes is None:
+            self.investigation_notes = []
+        if self.related_events is None:
+            self.related_events = []
+        if self.artifacts is None:
+            self.artifacts = []
+
+
+class SecurityAnalyticsEngine:
+    """Main security analytics engine"""
+    
+    def __init__(self, query_engine: AdvancedQueryEngine):
+        self.query_engine = query_engine
+        self.sigma_rules: Dict[str, SigmaRule] = {}
+        self.threat_intel: Dict[str, ThreatIntelIndicator] = {}
+        self.security_events: Dict[str, SecurityEvent] = {}
+        
+        # Initialize with default rules
+        self._load_default_sigma_rules()
+        self._load_default_threat_intel()
+        
+    def _load_default_sigma_rules(self):
+        """Load default Sigma detection rules"""
+        
+        # Brute Force Login Attempts
+        brute_force_rule = SigmaRule(
+            id="bf001",
+            title="Multiple Failed Login Attempts",
+            description="Detects potential brute force attacks with multiple failed login attempts",
+            severity=DetectionSeverity.HIGH,
+            attack_techniques=[AttackTechnique.T1110],
+            kill_chain_phases=["credential-access"],
+            tags=["brute_force", "authentication", "attack"],
+            logsource={
+                "product": "authentication",
+                "service": "login"
+            },
+            detection={
+                "selection": {
+                    "event_type": "login_failed",
+                    "status": ["failed", "invalid", "denied"]
+                },
+                "timeframe": "5m",
+                "condition": "count(selection) >= 10 group by source_ip"
+            }
+        )
+        
+        # Suspicious PowerShell Commands
+        powershell_rule = SigmaRule(
+            id="ps001", 
+            title="Suspicious PowerShell Command Execution",
+            description="Detects potentially malicious PowerShell commands",
+            severity=DetectionSeverity.MEDIUM,
+            attack_techniques=[AttackTechnique.T1059],
+            kill_chain_phases=["execution"],
+            tags=["powershell", "command_execution", "suspicious"],
+            logsource={
+                "product": "windows",
+                "service": "powershell"
+            },
+            detection={
+                "selection": {
+                    "command_line|contains": [
+                        "Invoke-Expression",
+                        "IEX",
+                        "downloadstring",
+                        "bypass",
+                        "hidden",
+                        "noprofile",
+                        "encoded"
+                    ]
+                },
+                "condition": "selection"
+            }
+        )
+        
+        # Privilege Escalation
+        privilege_escalation_rule = SigmaRule(
+            id="pe001",
+            title="Privilege Escalation Attempt", 
+            description="Detects attempts to escalate privileges",
+            severity=DetectionSeverity.HIGH,
+            attack_techniques=[AttackTechnique.T1068],
+            kill_chain_phases=["privilege-escalation"],
+            tags=["privilege_escalation", "sudo", "elevation"],
+            logsource={
+                "product": "linux",
+                "service": "auditd"
+            },
+            detection={
+                "selection": {
+                    "event_type": "syscall",
+                    "syscall": ["setuid", "setgid", "execve"],
+                    "success": "yes"
+                },
+                "filter": {
+                    "uid": "0"
+                },
+                "condition": "selection and not filter"
+            }
+        )
+        
+        # Data Exfiltration
+        data_exfil_rule = SigmaRule(
+            id="de001",
+            title="Large Data Transfer",
+            description="Detects unusually large data transfers that may indicate exfiltration",
+            severity=DetectionSeverity.CRITICAL,
+            attack_techniques=[AttackTechnique.T1041],
+            kill_chain_phases=["exfiltration"],
+            tags=["data_exfiltration", "network", "transfer"],
+            logsource={
+                "product": "network",
+                "service": "firewall"
+            },
+            detection={
+                "selection": {
+                    "bytes_out": ">1000000",  # > 1MB
+                    "duration": ">300"       # > 5 minutes
+                },
+                "condition": "selection"
+            }
+        )
+        
+        # Store rules
+        for rule in [brute_force_rule, powershell_rule, privilege_escalation_rule, data_exfil_rule]:
+            self.sigma_rules[rule.id] = rule
+            
+        logger.info(f"Loaded {len(self.sigma_rules)} default Sigma rules")
+    
+    def _load_default_threat_intel(self):
+        """Load default threat intelligence indicators"""
+        
+        # Known C2 domains
+        c2_domains = [
+            "evil.com", "badactor.net", "malware-c2.org",
+            "phishing-site.com", "suspicious-domain.tk"
+        ]
+        
+        for i, domain in enumerate(c2_domains):
+            indicator = ThreatIntelIndicator(
+                id=f"ioc_domain_{i+1:03d}",
+                indicator_type="domain",
+                value=domain,
+                threat_type=["c2", "malware"],
+                severity=DetectionSeverity.HIGH,
+                confidence=85,
+                source="internal_research",
+                description=f"Known C2 domain: {domain}",
+                tags=["c2", "domain", "malware"]
+            )
+            self.threat_intel[indicator.id] = indicator
+        
+        # Known malicious IPs
+        malicious_ips = [
+            "10.0.0.1", "192.168.1.100", "203.0.113.1"
+        ]
+        
+        for i, ip in enumerate(malicious_ips):
+            indicator = ThreatIntelIndicator(
+                id=f"ioc_ip_{i+1:03d}",
+                indicator_type="ip",
+                value=ip,
+                threat_type=["malware", "scanning"],
+                severity=DetectionSeverity.MEDIUM,
+                confidence=75,
+                source="threat_feed",
+                description=f"Known malicious IP: {ip}",
+                tags=["ip", "malicious", "scanning"]
+            )
+            self.threat_intel[indicator.id] = indicator
+            
+        logger.info(f"Loaded {len(self.threat_intel)} threat intelligence indicators")
+    
+    async def add_sigma_rule(self, rule: SigmaRule, customer_id: str) -> str:
+        """Add a new Sigma detection rule"""
+        rule.customer_id = customer_id
+        rule.created_at = datetime.now().isoformat()
+        rule.updated_at = rule.created_at
+        
+        self.sigma_rules[rule.id] = rule
+        logger.info(f"Added Sigma rule: {rule.id} - {rule.title}")
+        
+        return rule.id
+    
+    async def evaluate_sigma_rule(self, rule_id: str, customer_id: str) -> Optional[SecurityEvent]:
+        """Evaluate a Sigma rule against recent log data"""
+        if rule_id not in self.sigma_rules:
+            return None
+            
+        rule = self.sigma_rules[rule_id]
+        
+        # Convert Sigma detection to query
+        query_request = self._sigma_to_query(rule, customer_id)
+        
+        try:
+            # Execute query
+            results = await self.query_engine.execute_advanced_query(query_request)
+            
+            if results.get("results") and len(results["results"]) > 0:
+                # Create security event
+                event = SecurityEvent(
+                    id=str(uuid.uuid4()),
+                    rule_id=rule.id,
+                    rule_title=rule.title,
+                    severity=rule.severity,
+                    status=DetectionStatus.TRIGGERED,
+                    timestamp=datetime.now().isoformat(),
+                    customer_id=customer_id,
+                    event_data=results["metadata"],
+                    matched_fields=results["results"][0] if results["results"] else {},
+                    source_logs=results["results"][:10],  # First 10 matching logs
+                    attack_techniques=rule.attack_techniques,
+                    kill_chain_phase=rule.kill_chain_phases[0] if rule.kill_chain_phases else None
+                )
+                
+                self.security_events[event.id] = event
+                logger.warning(f"Security event triggered: {rule.title} ({event.id})")
+                
+                return event
+                
+        except Exception as e:
+            logger.error(f"Error evaluating Sigma rule {rule_id}: {e}")
+            
+        return None
+    
+    def _sigma_to_query(self, rule: SigmaRule, customer_id: str) -> AdvancedQueryRequest:
+        """Convert Sigma rule detection logic to AdvancedQueryRequest"""
+        
+        # Start with basic time window (last 5 minutes)
+        start_time = (datetime.now() - timedelta(minutes=5)).isoformat()
+        end_time = datetime.now().isoformat()
+        
+        filters = [
+            QueryFilter(field="customer_id", operator="eq", value=customer_id)
+        ]
+        
+        # Parse detection conditions
+        detection = rule.detection
+        if "selection" in detection:
+            selection = detection["selection"]
+            
+            for field, values in selection.items():
+                if "|" in field:
+                    # Handle field modifiers (e.g., "command_line|contains")
+                    field_name, modifier = field.split("|", 1)
+                    
+                    if modifier == "contains":
+                        if isinstance(values, list):
+                            # OR condition for multiple values
+                            for value in values:
+                                filters.append(QueryFilter(
+                                    field=field_name,
+                                    operator="contains", 
+                                    value=value
+                                ))
+                        else:
+                            filters.append(QueryFilter(
+                                field=field_name,
+                                operator="contains",
+                                value=values
+                            ))
+                else:
+                    # Direct field match
+                    if isinstance(values, list):
+                        for value in values:
+                            filters.append(QueryFilter(
+                                field=field,
+                                operator="eq",
+                                value=value
+                            ))
+                    else:
+                        filters.append(QueryFilter(
+                            field=field,
+                            operator="eq", 
+                            value=values
+                        ))
+        
+        return AdvancedQueryRequest(
+            start_time=start_time,
+            end_time=end_time,
+            filters=filters,
+            limit=100,
+            sort_order="desc"
+        )
+    
+    async def run_threat_hunting(self, customer_id: str) -> List[SecurityEvent]:
+        """Run all active Sigma rules for threat hunting"""
+        events = []
+        
+        active_rules = [rule for rule in self.sigma_rules.values() if rule.enabled]
+        
+        for rule in active_rules:
+            event = await self.evaluate_sigma_rule(rule.id, customer_id)
+            if event:
+                events.append(event)
+                
+        logger.info(f"Threat hunting completed: {len(events)} events detected")
+        return events
+    
+    async def enrich_with_threat_intel(self, event: SecurityEvent) -> SecurityEvent:
+        """Enrich security event with threat intelligence"""
+        
+        # Check for IOC matches in event data
+        for field, value in event.matched_fields.items():
+            if isinstance(value, str):
+                # Check domain indicators
+                for ioc in self.threat_intel.values():
+                    if ioc.indicator_type == "domain" and ioc.value.lower() in value.lower():
+                        event.artifacts.append(f"Threat Intel Match: {ioc.value} ({ioc.description})")
+                        if event.severity.value < ioc.severity.value:
+                            event.severity = ioc.severity
+                    
+                    # Check IP indicators
+                    elif ioc.indicator_type == "ip" and ioc.value in value:
+                        event.artifacts.append(f"Threat Intel Match: {ioc.value} ({ioc.description})")
+                        if event.severity.value < ioc.severity.value:
+                            event.severity = ioc.severity
+        
+        return event
+    
+    def get_sigma_rules(self, customer_id: Optional[str] = None) -> List[SigmaRule]:
+        """Get all Sigma rules, optionally filtered by customer"""
+        rules = list(self.sigma_rules.values())
+        if customer_id:
+            rules = [rule for rule in rules if rule.customer_id == customer_id or rule.customer_id is None]
+        return rules
+    
+    def get_security_events(self, customer_id: str, limit: int = 50) -> List[SecurityEvent]:
+        """Get security events for a customer"""
+        events = [event for event in self.security_events.values() 
+                 if event.customer_id == customer_id]
+        
+        # Sort by timestamp descending
+        events.sort(key=lambda x: x.timestamp, reverse=True)
+        
+        return events[:limit]
+    
+    def get_threat_intel_indicators(self, customer_id: Optional[str] = None) -> List[ThreatIntelIndicator]:
+        """Get threat intelligence indicators"""
+        indicators = list(self.threat_intel.values())
+        if customer_id:
+            indicators = [ioc for ioc in indicators if ioc.customer_id == customer_id or ioc.customer_id is None]
+        return indicators
+
+
+# Global security analytics engine instance
+security_analytics = None
+
+def get_security_analytics_engine():
+    """Get the global security analytics engine instance"""
+    global security_analytics
+    if security_analytics is None:
+        from query_engine import get_query_engine
+        query_engine = get_query_engine()
+        security_analytics = SecurityAnalyticsEngine(query_engine)
+    return security_analytics

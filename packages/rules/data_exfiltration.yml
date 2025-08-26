@@ -1,0 +1,57 @@
+title: Large Data Transfer Anomaly Detection
+id: de001-data-exfiltration
+status: stable
+description: Detects unusually large data transfers that may indicate data exfiltration attempts
+author: Logforge Security Team
+date: 2024/01/01
+references:
+    - https://attack.mitre.org/techniques/T1041/
+    - https://attack.mitre.org/techniques/T1048/
+tags:
+    - attack.exfiltration
+    - attack.t1041
+    - attack.t1048
+    - data_exfiltration
+    - network_transfer
+    - anomaly
+falsepositives:
+    - Legitimate large file transfers
+    - Backup operations
+    - Software updates and downloads
+    - Media streaming services
+level: critical
+logsource:
+    category: network
+    product: firewall
+    service: network_monitoring
+detection:
+    selection_large_transfer:
+        bytes_out: '>1000000'  # > 1MB
+        duration: '>300'       # > 5 minutes
+    selection_suspicious_protocols:
+        protocol:
+            - 'ftp'
+            - 'sftp'
+            - 'scp'
+        bytes_out: '>100000'   # > 100KB
+    selection_off_hours:
+        time_hour:
+            - '22'
+            - '23'
+            - '0'
+            - '1'
+            - '2'
+            - '3'
+            - '4'
+            - '5'
+        bytes_out: '>500000'   # > 500KB
+    condition: selection_large_transfer or selection_suspicious_protocols or selection_off_hours
+fields:
+    - src_ip
+    - dst_ip
+    - bytes_out
+    - bytes_in
+    - protocol
+    - port
+    - duration
+    - timestamp

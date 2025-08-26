@@ -486,3 +486,31 @@ class AdvancedQueryEngine:
             aggregations=aggregations,
             total_count=len(time_series_data) if query.time_series else 1
         )
+
+
+# Global query engine instance
+_query_engine_instance = None
+
+def get_query_engine():
+    """Get the global query engine instance"""
+    global _query_engine_instance
+    if _query_engine_instance is None:
+        import clickhouse_connect
+        import os
+        
+        # Get connection details from environment variables
+        host = 'clickhouse'
+        port = 8123
+        username = os.getenv('CLICKHOUSE_USER', 'logforge')
+        password = os.getenv('CLICKHOUSE_PASSWORD', 'logforge123')
+        database = os.getenv('CLICKHOUSE_DATABASE', 'logforge')
+        
+        client = clickhouse_connect.get_client(
+            host=host,
+            port=port,
+            username=username,
+            password=password,
+            database=database
+        )
+        _query_engine_instance = AdvancedQueryEngine(client)
+    return _query_engine_instance

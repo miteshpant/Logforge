@@ -1,0 +1,52 @@
+title: Privilege Escalation Attempt Detection
+id: pe001-privilege-escalation
+status: stable
+description: Detects attempts to escalate privileges using common Unix/Linux techniques
+author: Logforge Security Team
+date: 2024/01/01
+references:
+    - https://attack.mitre.org/techniques/T1068/
+    - https://attack.mitre.org/techniques/T1548/
+tags:
+    - attack.privilege_escalation
+    - attack.t1068
+    - attack.t1548
+    - sudo
+    - setuid
+    - privilege_escalation
+falsepositives:
+    - Legitimate administrative tasks
+    - System maintenance scripts
+    - Application deployments requiring elevated privileges
+level: high
+logsource:
+    category: process_creation
+    product: linux
+    service: auditd
+detection:
+    selection_sudo:
+        event_type: 'sudo'
+        result: 'success'
+    selection_setuid:
+        syscall: 
+            - 'setuid'
+            - 'setgid'
+            - 'setreuid'
+            - 'setregid'
+        success: 'yes'
+    selection_suspicious_binaries:
+        executable:
+            - '/bin/su'
+            - '/usr/bin/sudo'
+            - '/bin/passwd'
+            - '/usr/bin/passwd'
+        user_id: '!0'  # Not root
+    condition: selection_sudo or selection_setuid or selection_suspicious_binaries
+fields:
+    - user_id
+    - effective_user_id
+    - executable
+    - command_line
+    - host
+    - timestamp
+    - syscall

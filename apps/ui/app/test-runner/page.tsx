@@ -106,7 +106,7 @@ export default function TestRunner() {
 
   const checkApiHealth = async () => {
     try {
-      const response = await fetch('http://localhost:8080/health')
+      const response = await fetch('http://localhost:7080/health')
       if (response.ok) {
         setApiStatus('healthy')
         addLog('✅ API connection established')
@@ -145,7 +145,23 @@ export default function TestRunner() {
     setTestSuites(updatedSuites)
 
     try {
-      await executeTestSuite(suiteId)
+      // Start test execution via API
+      const response = await fetch(`http://localhost:7080/v1/test-runner/execute/${suiteId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        addLog(`📡 ${result.message}`)
+        
+        // Poll for results
+        await pollTestResults()
+      } else {
+        addLog(`❌ Failed to start test suite: ${response.statusText}`)
+      }
     } catch (error) {
       addLog(`❌ Test suite failed: ${error}`)
     } finally {
@@ -232,7 +248,7 @@ export default function TestRunner() {
     try {
       switch (testDef.type) {
         case 'health':
-          const healthResponse = await fetch('http://localhost:8080/health')
+          const healthResponse = await fetch('http://localhost:7080/health')
           const healthData = await healthResponse.json()
           output.push(`Status: ${healthData.status}`)
           return { success: healthResponse.ok, output }
@@ -245,7 +261,7 @@ export default function TestRunner() {
             service: 'test-runner',
             customer_id: 'test-customer'
           }
-          const ingestResponse = await fetch('http://localhost:8080/v1/ingest/logs', {
+          const ingestResponse = await fetch('http://localhost:7080/v1/ingest/logs', {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
@@ -257,7 +273,7 @@ export default function TestRunner() {
           return { success: ingestResponse.ok, output }
           
         case 'query':
-          const queryResponse = await fetch('http://localhost:8080/v1/query/advanced', {
+          const queryResponse = await fetch('http://localhost:7080/v1/query/advanced', {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
@@ -275,7 +291,7 @@ export default function TestRunner() {
           return { success: queryResponse.ok, output }
           
         case 'dashboard':
-          const dashboardResponse = await fetch('http://localhost:8080/v1/dashboards/security_soc', {
+          const dashboardResponse = await fetch('http://localhost:7080/v1/dashboards/security_soc', {
             headers: { 'X-Customer-ID': 'test-customer' }
           })
           const dashboardData = await dashboardResponse.json()
@@ -283,7 +299,7 @@ export default function TestRunner() {
           return { success: dashboardResponse.ok, output }
           
         case 'alert':
-          const alertRuleResponse = await fetch('http://localhost:8080/v1/alerts/rules', {
+          const alertRuleResponse = await fetch('http://localhost:7080/v1/alerts/rules', {
             headers: { 'X-Customer-ID': 'test-customer' }
           })
           const alertData = await alertRuleResponse.json()
@@ -445,8 +461,85 @@ export default function TestRunner() {
     addLog('🏁 All test suites completed')
   }
 
-  const clearLogs = () => {
-    setLogs([])
+  const pollTestResults = async () => {
+    const pollInterval = setInterval(async () => {
+      try {
+        // Get test status
+        const statusResponse = await fetch('http://localhost:7080/v1/test-runner/status')
+        if (statusResponse.ok) {
+          const status = await statusResponse.json()
+          
+          if (!status.running) {
+            // Tests completed, get final results
+            await fetchTestResults()
+            clearInterval(pollInterval)
+            setIsRunning(false)
+            return
+          }
+        }
+
+        // Get logs
+        const logsResponse = await fetch('http://localhost:7080/v1/test-runner/logs')
+        if (logsResponse.ok) {
+          const logsData = await logsResponse.json()
+          setLogs(logsData.logs)
+        }
+
+        // Get suite results if available
+        await fetchTestResults()
+        
+      } catch (error) {
+        addLog(`❌ Error polling results: ${error}`)
+      }
+    }, 2000) // Poll every 2 seconds
+
+    // Cleanup after 10 minutes
+    setTimeout(() => {
+      clearInterval(pollInterval)
+      setIsRunning(false)
+    }, 600000)
+  }
+
+  const fetchTestResults = async () => {
+    if (!selectedSuite) return
+
+    try {
+      const response = await fetch(`http://localhost:7080/v1/test-runner/suites/${selectedSuite}/results`)
+      if (response.ok) {
+        const suiteResult = await response.json()
+        
+        setTestSuites(prev => prev.map(suite => 
+          suite.id === selectedSuite
+            ? {
+                ...suite,
+                totalTests: suiteResult.total_tests,
+                passedTests: suiteResult.passed_tests,
+                failedTests: suiteResult.failed_tests,
+                runningTests: suiteResult.running_tests,
+                tests: suiteResult.tests.map((test: any) => ({
+                  name: test.name,
+                  status: test.status,
+                  duration: test.duration,
+                  error: test.error,
+                  output: test.output,
+                  timestamp: test.timestamp
+                }))
+              }
+            : suite
+        ))
+      }
+    } catch (error) {
+      // Ignore fetch errors during polling
+    }
+  }
+
+  const clearLogs = async () => {
+    try {
+      await fetch('http://localhost:7080/v1/test-runner/logs', { method: 'DELETE' })
+      setLogs([])
+    } catch (error) {
+      setLogs([])
+    }
   }
 
   return (

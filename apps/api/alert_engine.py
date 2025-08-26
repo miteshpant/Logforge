@@ -16,7 +16,7 @@ import re
 from pydantic import BaseModel, Field
 
 # Import query engine for alert rule evaluation
-from query_engine import AdvancedQueryEngine, AdvancedQueryRequest, FilterCondition
+from query_engine import AdvancedQueryEngine, AdvancedQueryRequest, QueryFilter
 
 logger = structlog.get_logger(__name__)
 
@@ -106,7 +106,7 @@ class AlertRule:
     rule_type: AlertRuleType
     enabled: bool = True
     conditions: List[AlertCondition] = None
-    filters: List[FilterCondition] = None
+    filters: List[QueryFilter] = None
     notification_channels: List[str] = None
     tags: List[str] = None
     evaluation_interval: str = "1m"
@@ -161,7 +161,7 @@ class AlertEngine:
     """M3 Alert Engine - Rule-based alerting system"""
     
     def __init__(self):
-        self.query_engine = AdvancedQueryEngine()
+        self.query_engine = None
         self.rules: Dict[str, AlertRule] = {}
         self.active_alerts: Dict[str, AlertInstance] = {}
         self.notification_channels: Dict[str, NotificationChannelConfig] = {}
@@ -260,7 +260,7 @@ class AlertEngine:
                     )
                 ],
                 filters=[
-                    FilterCondition(field="level", operator="eq", value="ERROR")
+                    QueryFilter(field="level", operator="eq", value="ERROR")
                 ],
                 notification_channels=["default-email", "default-webhook"],
                 tags=["error-monitoring", "critical"]
@@ -282,8 +282,8 @@ class AlertEngine:
                     )
                 ],
                 filters=[
-                    FilterCondition(field="http_status", operator="eq", value="401"),
-                    FilterCondition(field="service", operator="eq", value="auth-service")
+                    QueryFilter(field="http_status", operator="eq", value="401"),
+                    QueryFilter(field="service", operator="eq", value="auth-service")
                 ],
                 notification_channels=["default-email"],
                 tags=["security", "authentication"]
@@ -305,8 +305,8 @@ class AlertEngine:
                     )
                 ],
                 filters=[
-                    FilterCondition(field="http_method", operator="ne", value=""),
-                    FilterCondition(field="http_status", operator="lt", value="500")
+                    QueryFilter(field="http_method", operator="ne", value=""),
+                    QueryFilter(field="http_status", operator="lt", value="500")
                 ],
                 notification_channels=["default-webhook"],
                 tags=["performance", "api"]
@@ -347,6 +347,11 @@ class AlertEngine:
     async def _evaluate_rule(self, rule: AlertRule):
         """Evaluate a single alert rule"""
         try:
+            # Initialize query engine if needed
+            if not self.query_engine:
+                from query_engine import get_query_engine
+                self.query_engine = get_query_engine()
+            
             # Build query from rule conditions and filters
             query_request = await self._build_query_from_rule(rule)
             
@@ -760,6 +765,11 @@ Context: {json.dumps(alert.trigger_data, indent=2)}
     async def test_rule(self, rule: AlertRule) -> Dict[str, Any]:
         """Test an alert rule without triggering notifications"""
         try:
+            # Initialize query engine if needed
+            if not self.query_engine:
+                from query_engine import get_query_engine
+                self.query_engine = get_query_engine()
+                
             query_request = await self._build_query_from_rule(rule)
             result = await self.query_engine.execute_query(query_request)
             should_trigger = await self._should_trigger_alert(rule, result)
