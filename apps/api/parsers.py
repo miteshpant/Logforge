@@ -777,6 +777,10 @@ class ParserFactory:
         
         return cls._parsers[format_type](config)
     
+    def get_parser(self, format_type: str, config: Dict[str, Any] = None) -> BaseParser:
+        """Instance method to get parser for specified format"""
+        return self.create_parser(format_type, config)
+    
     @classmethod
     def get_supported_formats(cls) -> List[str]:
         """Get list of supported parser formats"""

@@ -8,8 +8,8 @@ from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 from unittest.mock import Mock, patch, AsyncMock
 
-from main import app
-from models import LogEntry, BatchLogEntry
+from apps.api.main import app
+from apps.api.models import LogEntry, BatchLogEntry
 
 
 class TestHealthEndpoint:
@@ -35,7 +35,7 @@ class TestHealthEndpoint:
 class TestLogIngestionEndpoints:
     """Test log ingestion endpoints"""
 
-    @patch('main.process_logs_background')
+    @patch('apps.api.main.process_logs_background')
     def test_ingest_logs_json(self, mock_process, client, sample_structured_json):
         """Test JSON log ingestion endpoint"""
         response = client.post("/v1/ingest/logs", json=sample_structured_json)
@@ -46,7 +46,7 @@ class TestLogIngestionEndpoints:
         assert data["count"] == 1
         mock_process.assert_called_once()
 
-    @patch('main.process_logs_background')
+    @patch('apps.api.main.process_logs_background')
     def test_ingest_logs_batch(self, mock_process, client, sample_batch_logs):
         """Test batch log ingestion"""
         batch_data = sample_batch_logs.model_dump()
@@ -58,7 +58,7 @@ class TestLogIngestionEndpoints:
         assert data["count"] == 5
         mock_process.assert_called_once()
 
-    @patch('main.process_logs_background')
+    @patch('apps.api.main.process_logs_background')
     def test_ingest_logs_auto_detect_json(self, mock_process, client):
         """Test auto-detection of JSON format"""
         log_data = {
@@ -92,7 +92,7 @@ class TestLogIngestionEndpoints:
 class TestNginxIngestionEndpoint:
     """Test Nginx log ingestion"""
 
-    @patch('main.process_logs_background')
+    @patch('apps.api.main.process_logs_background')
     def test_ingest_nginx_access_log(self, mock_process, client, sample_nginx_log):
         """Test Nginx access log ingestion"""
         response = client.post("/v1/ingest/nginx",
@@ -105,7 +105,7 @@ class TestNginxIngestionEndpoint:
         assert data["count"] == 1
         mock_process.assert_called_once()
 
-    @patch('main.process_logs_background')
+    @patch('apps.api.main.process_logs_background')
     def test_ingest_nginx_json_format(self, mock_process, client, sample_nginx_json_log):
         """Test Nginx JSON format ingestion"""
         response = client.post("/v1/ingest/nginx",
@@ -117,7 +117,7 @@ class TestNginxIngestionEndpoint:
         assert data["status"] == "accepted"
         assert data["count"] == 1
 
-    @patch('main.process_logs_background')
+    @patch('apps.api.main.process_logs_background')
     def test_ingest_nginx_batch_logs(self, mock_process, client, sample_nginx_log):
         """Test Nginx batch log ingestion"""
         batch_logs = "\n".join([sample_nginx_log] * 5)
@@ -146,7 +146,7 @@ class TestNginxIngestionEndpoint:
 class TestSyslogIngestionEndpoint:
     """Test Syslog ingestion"""
 
-    @patch('main.process_logs_background')
+    @patch('apps.api.main.process_logs_background')
     def test_ingest_syslog_rfc3164(self, mock_process, client, sample_syslog_rfc3164):
         """Test RFC 3164 syslog ingestion"""
         response = client.post("/v1/ingest/syslog",
@@ -159,7 +159,7 @@ class TestSyslogIngestionEndpoint:
         assert data["count"] == 1
         mock_process.assert_called_once()
 
-    @patch('main.process_logs_background')
+    @patch('apps.api.main.process_logs_background')
     def test_ingest_syslog_rfc5424(self, mock_process, client, sample_syslog_rfc5424):
         """Test RFC 5424 syslog ingestion"""
         response = client.post("/v1/ingest/syslog",
@@ -184,7 +184,7 @@ class TestSyslogIngestionEndpoint:
 class TestOTLPIngestionEndpoint:
     """Test OTLP (OpenTelemetry) ingestion"""
 
-    @patch('main.process_logs_background')
+    @patch('apps.api.main.process_logs_background')
     def test_ingest_otlp_logs(self, mock_process, client, sample_otlp_data):
         """Test OTLP logs ingestion"""
         response = client.post("/v1/ingest/otlp", json=sample_otlp_data)
@@ -216,7 +216,7 @@ class TestOTLPIngestionEndpoint:
 class TestCEFIngestionEndpoint:
     """Test CEF (Common Event Format) ingestion"""
 
-    @patch('main.process_logs_background')
+    @patch('apps.api.main.process_logs_background')
     def test_ingest_cef_log(self, mock_process, client, sample_cef_log):
         """Test CEF log ingestion"""
         response = client.post("/v1/ingest/cef",
@@ -242,7 +242,7 @@ class TestCEFIngestionEndpoint:
 class TestTextIngestionEndpoint:
     """Test plain text ingestion"""
 
-    @patch('main.process_logs_background')
+    @patch('apps.api.main.process_logs_background')
     def test_ingest_text_single_log(self, mock_process, client):
         """Test single text log ingestion"""
         log_text = "2023-12-25 10:00:00 INFO Application started successfully"
@@ -257,7 +257,7 @@ class TestTextIngestionEndpoint:
         assert data["count"] == 1
         mock_process.assert_called_once()
 
-    @patch('main.process_logs_background')
+    @patch('apps.api.main.process_logs_background')
     def test_ingest_text_multiline_logs(self, mock_process, client, sample_text_logs):
         """Test multi-line text log ingestion"""
         text_batch = "\n".join(sample_text_logs)
@@ -271,7 +271,7 @@ class TestTextIngestionEndpoint:
         assert data["status"] == "accepted"
         assert data["count"] == 5
 
-    @patch('main.process_logs_background')
+    @patch('apps.api.main.process_logs_background')
     def test_ingest_text_empty_lines(self, mock_process, client):
         """Test text ingestion with empty lines"""
         text_with_empties = "Log line 1\n\nLog line 2\n\n\nLog line 3"
@@ -288,7 +288,7 @@ class TestTextIngestionEndpoint:
 class TestBatchIngestionEndpoint:
     """Test batch ingestion endpoint"""
 
-    @patch('main.process_logs_background')
+    @patch('apps.api.main.process_logs_background')
     def test_ingest_batch_mixed_formats(self, mock_process, client):
         """Test batch ingestion with mixed log formats"""
         batch_data = {
@@ -312,7 +312,7 @@ class TestBatchIngestionEndpoint:
         assert data["count"] == 2
         mock_process.assert_called_once()
 
-    @patch('main.process_logs_background')
+    @patch('apps.api.main.process_logs_background')
     def test_ingest_batch_with_metadata(self, mock_process, client):
         """Test batch ingestion with metadata"""
         batch_data = {
@@ -353,7 +353,7 @@ class TestBatchIngestionEndpoint:
 class TestQueryEndpoint:
     """Test log query endpoint"""
 
-    @patch('main.clickhouse_client')
+    @patch('apps.api.main.clickhouse_client')
     def test_query_logs_basic(self, mock_client, client):
         """Test basic log query"""
         # Mock ClickHouse response
@@ -390,7 +390,7 @@ class TestQueryEndpoint:
         assert "execution_time_ms" in data
         assert len(data["logs"]) == 1
 
-    @patch('main.clickhouse_client')
+    @patch('apps.api.main.clickhouse_client')
     def test_query_logs_with_pagination(self, mock_client, client):
         """Test log query with pagination"""
         mock_result = Mock()
@@ -463,7 +463,7 @@ class TestAPIErrorHandling:
         # Should return 422 for invalid JSON or content type mismatch
         assert response.status_code in [400, 422]
 
-    @patch('main.process_logs_background')
+    @patch('apps.api.main.process_logs_background')
     def test_internal_server_error_handling(self, mock_process, client):
         """Test handling of internal server errors"""
         # Make the background processor raise an exception
@@ -481,7 +481,7 @@ class TestAPIErrorHandling:
 class TestAPIPerformance:
     """Test API performance characteristics"""
 
-    @patch('main.process_logs_background')
+    @patch('apps.api.main.process_logs_background')
     def test_concurrent_ingestion_requests(self, mock_process, client):
         """Test handling multiple concurrent ingestion requests"""
         import concurrent.futures
@@ -508,7 +508,7 @@ class TestAPIPerformance:
         # Background processor should be called for each request
         assert mock_process.call_count == 10
 
-    @patch('main.process_logs_background')
+    @patch('apps.api.main.process_logs_background')
     def test_large_payload_handling(self, mock_process, client, performance_log_batch):
         """Test handling of large log payloads"""
         # Create large batch (1000 logs)

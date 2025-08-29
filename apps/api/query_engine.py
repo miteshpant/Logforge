@@ -10,7 +10,11 @@ from enum import Enum
 import re
 import json
 import clickhouse_connect
+import structlog
 from dataclasses import dataclass
+from models import QueryResponse
+
+logger = structlog.get_logger(__name__)
 
 
 class QueryOperator(str, Enum):
@@ -68,10 +72,13 @@ class QueryFilter:
         """Convert filter to ClickHouse WHERE condition"""
         field_name = self.field
         
-        # Handle nested JSON fields in attrs
+        # Handle nested JSON fields in attrs/raw_data
         if '.' in field_name and field_name.startswith('attrs.'):
             json_field = field_name.replace('attrs.', '')
-            field_name = f"JSONExtractString(attrs, '{json_field}')"
+            field_name = f"JSONExtractString(raw_data, '{json_field}')"
+        elif '.' in field_name and field_name.startswith('raw_data.'):
+            json_field = field_name.replace('raw_data.', '')
+            field_name = f"JSONExtractString(raw_data, '{json_field}')"
         
         if self.operator == QueryOperator.EQ:
             if isinstance(self.value, str):
@@ -133,7 +140,7 @@ class QueryAggregation:
     def to_clickhouse_select(self) -> str:
         """Convert to ClickHouse SELECT clause"""
         field_name = self.field
-        alias = self.alias or f"{self.type}_{self.field}"
+        alias = self.alias or f"{self.type.value}_{self.field.replace('*', 'all')}"
         
         # Handle nested JSON fields
         if '.' in field_name and field_name.startswith('attrs.'):
@@ -209,15 +216,6 @@ class AdvancedQueryRequest(BaseModel):
         return v
 
 
-class QueryResponse(BaseModel):
-    """Advanced query response"""
-    logs: List[Dict[str, Any]] = Field(default=[], description="Log entries")
-    aggregations: Dict[str, Any] = Field(default={}, description="Aggregation results")
-    total_count: int = Field(0, description="Total matching records")
-    execution_time_ms: float = Field(0, description="Query execution time")
-    has_more: bool = Field(False, description="More results available")
-    next_offset: Optional[int] = Field(None, description="Next offset for pagination")
-    query_info: Dict[str, Any] = Field(default={}, description="Query execution information")
 
 
 class SavedQuery(BaseModel):
@@ -238,8 +236,8 @@ class AdvancedQueryEngine:
     
     def __init__(self, clickhouse_client):
         self.client = clickhouse_client
-        self.base_table = "logs_raw"
-        self.normalized_table = "logs_normalized"
+        self.base_table = "logs_raw_mt"
+        self.normalized_table = "logs_normalized_mt"
     
     async def execute_query(self, query: AdvancedQueryRequest) -> QueryResponse:
         """Execute advanced query and return results"""
@@ -252,6 +250,9 @@ class AdvancedQueryEngine:
             
             # Build the SQL query
             sql_query = self._build_sql_query(query, table)
+            
+            # Debug logging for alert queries
+            logger.info(f"Executing SQL: {sql_query}")
             
             # Execute query
             result = self.client.query(sql_query)
@@ -287,8 +288,14 @@ class AdvancedQueryEngine:
     
     def _select_optimal_table(self, query: AdvancedQueryRequest) -> str:
         """Select the optimal table for the query"""
+        # Check if this is a multi-tenant query (has customer_id filter)
+        has_customer_filter = any(f.field == "customer_id" for f in query.filters)
+        
         # Use normalized table if we need aggregations or complex filtering
         if query.aggregations or query.time_series or query.group_by:
+            # For multi-tenant, use raw table for now until materialized view is fixed
+            if has_customer_filter:
+                return self.base_table  # Already has _mt suffix
             return self.normalized_table
         
         # Check if we need fields only available in normalized table
@@ -325,6 +332,10 @@ class AdvancedQueryEngine:
             # Add aggregations
             for agg in query.aggregations:
                 select_parts.append(agg.to_clickhouse_select())
+            
+            # Ensure we have at least one SELECT element
+            if not select_parts:
+                select_parts.append("1")  # Fallback
             
             select_clause = ", ".join(select_parts)
         else:
@@ -371,6 +382,17 @@ class AdvancedQueryEngine:
         # ORDER BY clause
         if query.aggregations and query.time_series:
             order_by_clause = f"ORDER BY time_bucket {query.sort_order.value}"
+        elif query.aggregations:
+            # For aggregations without time series, order by first aggregation or group by field
+            if query.group_by:
+                order_by_clause = f"ORDER BY {query.group_by[0]} {query.sort_order.value}"
+            elif query.aggregations:
+                # Use first aggregation alias (match the one generated in to_clickhouse_select)
+                first_agg = query.aggregations[0]
+                first_agg_alias = first_agg.alias or f"{first_agg.type.value}_{first_agg.field.replace('*', 'all')}"
+                order_by_clause = f"ORDER BY {first_agg_alias} {query.sort_order.value}"
+            else:
+                order_by_clause = ""
         else:
             order_by_clause = f"ORDER BY {query.sort_field} {query.sort_order.value}"
         
@@ -442,6 +464,7 @@ class AdvancedQueryEngine:
         return QueryResponse(
             logs=logs,
             total_count=len(logs),
+            execution_time_ms=0,
             has_more=len(logs) == query.limit,
             next_offset=query.offset + query.limit if len(logs) == query.limit else None
         )
@@ -467,7 +490,7 @@ class AdvancedQueryEngine:
             
             # Process aggregation results
             for agg in query.aggregations:
-                alias = agg.alias or f"{agg.type}_{agg.field}"
+                alias = agg.alias or f"{agg.type.value}_{agg.field.replace('*', 'all')}"
                 row_data[alias] = row[col_idx]
                 col_idx += 1
             

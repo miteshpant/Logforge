@@ -91,7 +91,8 @@ services:
       - ../../config:/app/config
     environment:
       - PYTHONPATH=/app
-      - CLICKHOUSE_URL=http://clickhouse:8123
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=8123
       - CLICKHOUSE_USER=logforge
       - CLICKHOUSE_PASSWORD=logforge123
       - CLICKHOUSE_DATABASE=logforge

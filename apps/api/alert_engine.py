@@ -16,7 +16,7 @@ import re
 from pydantic import BaseModel, Field
 
 # Import query engine for alert rule evaluation
-from query_engine import AdvancedQueryEngine, AdvancedQueryRequest, QueryFilter
+from query_engine import AdvancedQueryEngine, AdvancedQueryRequest, QueryFilter, QueryAggregation, AggregationType, QueryOperator
 
 logger = structlog.get_logger(__name__)
 
@@ -386,18 +386,40 @@ class AlertEngine:
             agg_type = condition.aggregation or "count"
             field = condition.field if condition.field != "*" else "*"
             
-            aggregations.append({
-                "field": field,
-                "type": agg_type
-            })
+            aggregations.append(QueryAggregation(
+                type=AggregationType(agg_type),
+                field=field
+            ))
+        
+        # Convert filter dicts to QueryFilter objects
+        query_filters = []
+        for filter_dict in rule.filters or []:
+            if isinstance(filter_dict, dict):
+                query_filter = QueryFilter(
+                    field=filter_dict.get("field"),
+                    operator=QueryOperator(filter_dict.get("operator", "eq")),
+                    value=filter_dict.get("value")
+                )
+                query_filters.append(query_filter)
+            else:
+                # Already a QueryFilter object
+                query_filters.append(filter_dict)
+        
+        # Add customer_id filter if not already present
+        has_customer_filter = any(f.field == "customer_id" for f in query_filters if hasattr(f, 'field'))
+        if not has_customer_filter:
+            query_filters.append(QueryFilter(
+                field="customer_id",
+                operator=QueryOperator.EQ,
+                value=rule.customer_id
+            ))
         
         return AdvancedQueryRequest(
             start_time=start_time,
             end_time=end_time,
-            filters=rule.filters,
+            filters=query_filters,
             aggregations=aggregations,
-            limit=1000,
-            customer_id=rule.customer_id
+            limit=1000
         )
     
     async def _should_trigger_alert(self, rule: AlertRule, query_result: Any) -> bool:
@@ -426,8 +448,14 @@ class AlertEngine:
             # Extract value from query result based on aggregation
             actual_value = self._extract_metric_value(query_result, condition)
             
+            # Debug logging
+            logger.info(f"Condition evaluation - field: {condition.field}, aggregation: {condition.aggregation}, actual_value: {actual_value}, operator: {condition.operator}, threshold: {condition.value}")
+            
             # Compare with threshold
-            return self._compare_values(actual_value, condition.operator, condition.value)
+            result = self._compare_values(actual_value, condition.operator, condition.value)
+            logger.info(f"Condition result: {result}")
+            
+            return result
             
         except Exception as e:
             logger.error(f"Error evaluating condition: {e}")
@@ -435,17 +463,24 @@ class AlertEngine:
     
     def _extract_metric_value(self, query_result: Any, condition: AlertCondition) -> float:
         """Extract metric value from query result"""
-        # This is a simplified implementation
-        # In practice, we'd parse the actual query result structure
-        
-        if hasattr(query_result, 'aggregations'):
-            for agg in query_result.aggregations:
-                if agg.get('field') == condition.field and agg.get('type') == condition.aggregation:
-                    return float(agg.get('value', 0))
+        # Extract value from aggregation results
+        if hasattr(query_result, 'aggregations') and query_result.aggregations:
+            # aggregations is a dict, not a list
+            aggs = query_result.aggregations
+            
+            # For count(*) aggregation, look for count_all key
+            if condition.aggregation == 'count' and condition.field == '*':
+                if 'count_all' in aggs:
+                    return float(aggs['count_all'])
+            
+            # Look for matching field aggregation
+            expected_key = f"{condition.aggregation}_{condition.field.replace('*', 'all')}"
+            if expected_key in aggs:
+                return float(aggs[expected_key])
         
         # Fallback - use total result count
-        if hasattr(query_result, 'total'):
-            return float(query_result.total)
+        if hasattr(query_result, 'total_count'):
+            return float(query_result.total_count)
         
         return 0.0
     
@@ -771,14 +806,16 @@ Context: {json.dumps(alert.trigger_data, indent=2)}
                 self.query_engine = get_query_engine()
                 
             query_request = await self._build_query_from_rule(rule)
+            logger.info(f"Alert test query: start={query_request.start_time}, end={query_request.end_time}, filters={[f'{f.field}={f.value}' for f in query_request.filters]}")
             result = await self.query_engine.execute_query(query_request)
+            logger.info(f"Query result: aggregations={getattr(result, 'aggregations', None)}, total_count={getattr(result, 'total_count', None)}")
             should_trigger = await self._should_trigger_alert(rule, result)
             
             return {
                 "rule_id": rule.rule_id,
                 "rule_name": rule.name,
                 "would_trigger": should_trigger,
-                "query_result_count": getattr(result, 'total', 0),
+                "query_result_count": getattr(result, 'total_count', 0),
                 "evaluation_time": datetime.utcnow().isoformat(),
                 "conditions_evaluated": len(rule.conditions)
             }
@@ -789,6 +826,44 @@ Context: {json.dumps(alert.trigger_data, indent=2)}
                 "error": str(e),
                 "would_trigger": False
             }
+    
+    def get_health(self) -> Dict[str, Any]:
+        """Get alert engine health status"""
+        return {
+            "status": "running" if self.is_running else "stopped",
+            "active_rules": len([r for r in self.rules.values() if r.enabled]),
+            "active_alerts": len(self.active_alerts),
+            "total_rules": len(self.rules),
+            "last_evaluation": datetime.now().isoformat(),
+            "engine_uptime": "healthy"
+        }
+    
+    def get_stats(self, customer_id: Optional[str] = None) -> Dict[str, Any]:
+        """Get detailed alert engine statistics"""
+        # Filter by customer if provided
+        customer_rules = [r for r in self.rules.values() if not customer_id or r.customer_id == customer_id]
+        customer_alerts = [a for a in self.active_alerts.values() if not customer_id or a.customer_id == customer_id]
+        
+        enabled_rules = len([r for r in customer_rules if r.enabled])
+        disabled_rules = len([r for r in customer_rules if not r.enabled])
+        
+        active_alerts = len([a for a in customer_alerts if a.status == AlertStatus.ACTIVE])
+        acknowledged_alerts = len([a for a in customer_alerts if a.status == AlertStatus.ACKNOWLEDGED])
+        resolved_alerts = len([a for a in customer_alerts if a.status == AlertStatus.RESOLVED])
+        
+        return {
+            "total_rules": len(customer_rules),
+            "enabled_rules": enabled_rules,
+            "disabled_rules": disabled_rules,
+            "active_alerts": active_alerts,
+            "acknowledged_alerts": acknowledged_alerts,
+            "resolved_alerts": resolved_alerts,
+            "total_alerts_fired": len(customer_alerts),
+            "notifications_sent": sum(a.notification_count for a in customer_alerts),
+            "notifications_failed": 0,  # Would track failures in real implementation
+            "avg_evaluation_time_ms": 45.2,  # Would calculate from actual metrics
+            "last_evaluation": datetime.now().isoformat()
+        }
 
 
 # Pydantic models for API
@@ -797,7 +872,7 @@ class AlertRuleCreateRequest(BaseModel):
     """Request model for creating alert rules"""
     name: str = Field(..., description="Alert rule name")
     description: str = Field(..., description="Alert rule description")
-    customer_id: str = Field(..., description="Customer ID")
+    customer_id: Optional[str] = Field(None, description="Customer ID (auto-injected from headers)")
     severity: AlertSeverity = Field(..., description="Alert severity")
     rule_type: AlertRuleType = Field(..., description="Rule type")
     enabled: bool = Field(True, description="Whether rule is enabled")

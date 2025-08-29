@@ -393,9 +393,9 @@ class SecurityAnalyticsEngine:
         
         try:
             # Execute query
-            results = await self.query_engine.execute_advanced_query(query_request)
+            results = await self.query_engine.execute_query(query_request)
             
-            if results.get("results") and len(results["results"]) > 0:
+            if results.logs and len(results.logs) > 0:
                 # Create security event
                 event = SecurityEvent(
                     id=str(uuid.uuid4()),
@@ -405,9 +405,9 @@ class SecurityAnalyticsEngine:
                     status=DetectionStatus.TRIGGERED,
                     timestamp=datetime.now().isoformat(),
                     customer_id=customer_id,
-                    event_data=results["metadata"],
-                    matched_fields=results["results"][0] if results["results"] else {},
-                    source_logs=results["results"][:10],  # First 10 matching logs
+                    event_data=results.query_info,
+                    matched_fields=results.logs[0] if results.logs else {},
+                    source_logs=results.logs[:10],  # First 10 matching logs
                     attack_techniques=rule.attack_techniques,
                     kill_chain_phase=rule.kill_chain_phases[0] if rule.kill_chain_phases else None
                 )

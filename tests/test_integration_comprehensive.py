@@ -27,6 +27,7 @@ from alert_engine import (
     AlertEngine, AlertRule, AlertSeverity, AlertStatus, AlertRuleType,
     ThresholdOperator, AlertRuleCreateRequest
 )
+from observability_engine import ObservabilityEngine, TraceSpan, MetricData, SpanKind, SpanStatus, MetricType
 
 
 class IntegrationTestSuite:
@@ -911,6 +912,539 @@ class TestComprehensiveIntegration:
 
         print("✅ Comprehensive M3 Alert Engine test successful")
 
+    # ========== M5 OBSERVABILITY TESTS ==========
+
+    @pytest.mark.asyncio
+    async def test_m5_observability_trace_ingestion(self, test_suite, http_client):
+        """Test M5 observability trace ingestion and processing"""
+        print("\n🔄 Testing M5 trace ingestion...")
+
+        customer_id = test_suite.test_customers[0]
+        headers = {"X-Customer-ID": customer_id, "Content-Type": "application/json"}
+
+        # 1. Test observability health
+        response = await http_client.get(
+            f"{test_suite.base_url}/v1/observability/health"
+        )
+        assert response.status_code == 200, f"Observability health check failed: {response.text}"
+        health_data = response.json()
+        assert health_data.get("status") == "healthy", "Observability engine not healthy"
+
+        # 2. Create sample trace spans
+        trace_id = f"trace-{customer_id}-integration-test"
+        spans = [
+            {
+                "trace_id": trace_id,
+                "span_id": f"span-{customer_id}-1",
+                "parent_span_id": None,
+                "operation_name": "api_request",
+                "service_name": "api-gateway",
+                "start_time": (datetime.utcnow() - timedelta(minutes=5)).isoformat(),
+                "end_time": (datetime.utcnow() - timedelta(minutes=4)).isoformat(),
+                "duration_ms": 250,
+                "kind": "server",
+                "status": "ok",
+                "attributes": {
+                    "http.method": "POST",
+                    "http.status_code": 200,
+                    "http.url": "/api/payment",
+                    "user.id": f"{customer_id}-user"
+                }
+            },
+            {
+                "trace_id": trace_id,
+                "span_id": f"span-{customer_id}-2",
+                "parent_span_id": f"span-{customer_id}-1",
+                "operation_name": "process_payment",
+                "service_name": "payment-service",
+                "start_time": (datetime.utcnow() - timedelta(minutes=4, seconds=30)).isoformat(),
+                "end_time": (datetime.utcnow() - timedelta(minutes=4, seconds=10)).isoformat(),
+                "duration_ms": 180,
+                "kind": "internal",
+                "status": "ok",
+                "attributes": {
+                    "payment.amount": 99.99,
+                    "payment.currency": "USD",
+                    "payment.method": "credit_card"
+                }
+            },
+            {
+                "trace_id": trace_id,
+                "span_id": f"span-{customer_id}-3",
+                "parent_span_id": f"span-{customer_id}-2",
+                "operation_name": "db_query",
+                "service_name": "database",
+                "start_time": (datetime.utcnow() - timedelta(minutes=4, seconds=25)).isoformat(),
+                "end_time": (datetime.utcnow() - timedelta(minutes=4, seconds=20)).isoformat(),
+                "duration_ms": 45,
+                "kind": "client",
+                "status": "ok",
+                "attributes": {
+                    "db.statement": "SELECT * FROM payments WHERE id = ?",
+                    "db.connection_string": "postgresql://localhost:5432"
+                }
+            }
+        ]
+
+        # 3. Ingest traces
+        response = await http_client.post(
+            f"{test_suite.base_url}/v1/observability/traces/ingest",
+            json={"spans": spans},
+            headers=headers
+        )
+        assert response.status_code == 202, f"Trace ingestion failed: {response.text}"
+        ingestion_result = response.json()
+        assert ingestion_result.get("spans_ingested", 0) == 3, f"Expected 3 spans ingested, got {ingestion_result.get('spans_ingested')}"
+
+        print("✅ M5 trace ingestion successful")
+        return trace_id
+
+    @pytest.mark.asyncio
+    async def test_m5_observability_metrics_ingestion(self, test_suite, http_client):
+        """Test M5 observability metrics ingestion and processing"""
+        print("\n🔄 Testing M5 metrics ingestion...")
+
+        customer_id = test_suite.test_customers[0]
+        headers = {"X-Customer-ID": customer_id, "Content-Type": "application/json"}
+
+        # Create sample metrics
+        current_time = datetime.utcnow()
+        metrics = [
+            {
+                "metric_name": "http_requests_total",
+                "metric_type": "counter",
+                "value": 150,
+                "timestamp": current_time.isoformat(),
+                "labels": {
+                    "method": "POST",
+                    "endpoint": "/api/payment",
+                    "status_code": "200"
+                },
+                "service_name": "api-gateway"
+            },
+            {
+                "metric_name": "http_request_duration_seconds",
+                "metric_type": "histogram",
+                "value": 0.250,
+                "timestamp": current_time.isoformat(),
+                "labels": {
+                    "method": "POST",
+                    "endpoint": "/api/payment"
+                },
+                "service_name": "api-gateway"
+            },
+            {
+                "metric_name": "active_connections",
+                "metric_type": "gauge",
+                "value": 45,
+                "timestamp": current_time.isoformat(),
+                "labels": {
+                    "pool": "main"
+                },
+                "service_name": "database"
+            },
+            {
+                "metric_name": "payment_processing_time_ms",
+                "metric_type": "summary",
+                "value": 180.5,
+                "timestamp": current_time.isoformat(),
+                "labels": {
+                    "payment_method": "credit_card",
+                    "currency": "USD"
+                },
+                "service_name": "payment-service"
+            }
+        ]
+
+        # Ingest metrics
+        response = await http_client.post(
+            f"{test_suite.base_url}/v1/observability/metrics/ingest",
+            json={"metrics": metrics},
+            headers=headers
+        )
+        assert response.status_code == 202, f"Metrics ingestion failed: {response.text}"
+        ingestion_result = response.json()
+        assert ingestion_result.get("metrics_ingested", 0) == 4, f"Expected 4 metrics ingested, got {ingestion_result.get('metrics_ingested')}"
+
+        print("✅ M5 metrics ingestion successful")
+        return [metric["metric_name"] for metric in metrics]
+
+    @pytest.mark.asyncio
+    async def test_m5_observability_trace_search_and_correlation(self, test_suite, http_client):
+        """Test M5 trace search and log correlation"""
+        print("\n🔄 Testing M5 trace search and correlation...")
+
+        customer_id = test_suite.test_customers[0]
+        headers = {"X-Customer-ID": customer_id}
+
+        # First ingest some traces
+        trace_id = await self.test_m5_observability_trace_ingestion(test_suite, http_client)
+        
+        # Wait for processing
+        await asyncio.sleep(3)
+
+        # 1. Test trace search
+        search_request = {
+            "service_name": "api-gateway",
+            "start_time": (datetime.utcnow() - timedelta(hours=1)).isoformat(),
+            "end_time": datetime.utcnow().isoformat(),
+            "limit": 20
+        }
+
+        response = await http_client.post(
+            f"{test_suite.base_url}/v1/observability/traces/search",
+            json=search_request,
+            headers=headers
+        )
+        assert response.status_code == 200, f"Trace search failed: {response.text}"
+        search_results = response.json()
+
+        assert "traces" in search_results, "Search results missing traces"
+        assert "total" in search_results, "Search results missing total count"
+
+        # 2. Test trace details with correlation
+        if search_results.get("traces"):
+            test_trace = search_results["traces"][0]
+            response = await http_client.get(
+                f"{test_suite.base_url}/v1/observability/traces/{test_trace['trace_id']}",
+                headers=headers
+            )
+            assert response.status_code == 200, f"Get trace details failed: {response.text}"
+            trace_details = response.json()
+
+            assert "spans" in trace_details, "Trace details missing spans"
+            assert "correlated_logs" in trace_details, "Trace details missing correlated logs"
+            assert "correlation_info" in trace_details, "Trace details missing correlation info"
+            assert trace_details["customer_id"] == customer_id, "Customer isolation failed"
+
+        # 3. Test advanced trace search with filters
+        advanced_search = {
+            "service_name": "payment-service",
+            "operation_name": "process_payment",
+            "min_duration_ms": 100,
+            "max_duration_ms": 300,
+            "status": "ok",
+            "start_time": (datetime.utcnow() - timedelta(hours=1)).isoformat(),
+            "end_time": datetime.utcnow().isoformat(),
+            "limit": 10
+        }
+
+        response = await http_client.post(
+            f"{test_suite.base_url}/v1/observability/traces/search",
+            json=advanced_search,
+            headers=headers
+        )
+        assert response.status_code == 200, f"Advanced trace search failed: {response.text}"
+
+        print("✅ M5 trace search and correlation successful")
+
+    @pytest.mark.asyncio
+    async def test_m5_observability_service_map_generation(self, test_suite, http_client):
+        """Test M5 service map generation from traces"""
+        print("\n🔄 Testing M5 service map generation...")
+
+        customer_id = test_suite.test_customers[0]
+        headers = {"X-Customer-ID": customer_id}
+
+        # Ensure we have trace data
+        await self.test_m5_observability_trace_ingestion(test_suite, http_client)
+        
+        # Wait for processing
+        await asyncio.sleep(3)
+
+        # Test service map generation
+        response = await http_client.get(
+            f"{test_suite.base_url}/v1/observability/service-map?time_range_hours=1",
+            headers=headers
+        )
+        assert response.status_code == 200, f"Service map generation failed: {response.text}"
+        service_map = response.json()
+
+        # Verify service map structure
+        assert "services" in service_map, "Service map missing services"
+        assert "dependencies" in service_map, "Service map missing dependencies"
+        assert "time_range_hours" in service_map, "Service map missing time range"
+        assert service_map["customer_id"] == customer_id, "Customer isolation failed"
+
+        # Services should have required fields
+        for service in service_map.get("services", []):
+            assert "name" in service, "Service missing name"
+            assert "total_spans" in service, "Service missing total spans"
+            assert "avg_latency_ms" in service, "Service missing average latency"
+            assert "error_rate" in service, "Service missing error rate"
+            assert "operation_count" in service, "Service missing operation count"
+
+        # Dependencies should have required fields
+        for dependency in service_map.get("dependencies", []):
+            assert "from_service" in dependency, "Dependency missing from_service"
+            assert "to_service" in dependency, "Dependency missing to_service"
+            assert "call_count" in dependency, "Dependency missing call_count"
+            assert "avg_latency_ms" in dependency, "Dependency missing avg_latency_ms"
+
+        print("✅ M5 service map generation successful")
+
+    @pytest.mark.asyncio
+    async def test_m5_observability_apm_metrics(self, test_suite, http_client):
+        """Test M5 APM metrics and performance monitoring"""
+        print("\n🔄 Testing M5 APM metrics...")
+
+        customer_id = test_suite.test_customers[0]
+        headers = {"X-Customer-ID": customer_id}
+
+        # Ensure we have data
+        await self.test_m5_observability_trace_ingestion(test_suite, http_client)
+        await self.test_m5_observability_metrics_ingestion(test_suite, http_client)
+        
+        # Wait for processing
+        await asyncio.sleep(3)
+
+        # Test APM metrics for specific service
+        response = await http_client.get(
+            f"{test_suite.base_url}/v1/observability/apm/api-gateway?time_range_hours=1",
+            headers=headers
+        )
+        assert response.status_code == 200, f"APM metrics query failed: {response.text}"
+        apm_metrics = response.json()
+
+        # Verify APM metrics structure
+        assert "service_name" in apm_metrics, "APM metrics missing service name"
+        assert "metrics" in apm_metrics, "APM metrics missing metrics data"
+        assert "time_range_hours" in apm_metrics, "APM metrics missing time range"
+        assert "customer_id" in apm_metrics, "APM metrics missing customer ID"
+
+        metrics_data = apm_metrics["metrics"]
+        
+        # Check for expected metric components
+        assert "request_rate" in metrics_data, "APM metrics missing request rate"
+        assert "latency" in metrics_data, "APM metrics missing latency"
+        assert "error_rate" in metrics_data, "APM metrics missing error rate"
+
+        # Verify latency percentiles
+        latency = metrics_data["latency"]
+        assert "p50_ms" in latency, "Latency missing P50"
+        assert "p95_ms" in latency, "Latency missing P95" 
+        assert "p99_ms" in latency, "Latency missing P99"
+        assert "avg_ms" in latency, "Latency missing average"
+
+        # Verify request rate format
+        request_rate = metrics_data["request_rate"]
+        if request_rate:
+            for rate_point in request_rate:
+                assert "time" in rate_point, "Request rate point missing time"
+                assert "rpm" in rate_point, "Request rate point missing RPM"
+
+        print("✅ M5 APM metrics successful")
+
+    @pytest.mark.asyncio
+    async def test_m5_observability_metrics_query(self, test_suite, http_client):
+        """Test M5 metrics querying with aggregations"""
+        print("\n🔄 Testing M5 metrics querying...")
+
+        customer_id = test_suite.test_customers[0]
+        headers = {"X-Customer-ID": customer_id}
+
+        # Ensure we have metrics data
+        metric_names = await self.test_m5_observability_metrics_ingestion(test_suite, http_client)
+        
+        # Wait for processing
+        await asyncio.sleep(3)
+
+        # Test metrics query with aggregation
+        query_request = {
+            "metric_name": "http_requests_total",
+            "service_name": "api-gateway",
+            "start_time": (datetime.utcnow() - timedelta(hours=1)).isoformat(),
+            "end_time": datetime.utcnow().isoformat(),
+            "labels": {
+                "method": "POST"
+            },
+            "aggregation": "sum",
+            "granularity": "1m"
+        }
+
+        response = await http_client.post(
+            f"{test_suite.base_url}/v1/observability/metrics/query",
+            json=query_request,
+            headers=headers
+        )
+        assert response.status_code == 200, f"Metrics query failed: {response.text}"
+        query_result = response.json()
+
+        # Verify metrics query structure
+        assert "metrics" in query_result, "Metrics query result missing metrics"
+        assert "aggregation" in query_result, "Metrics query result missing aggregation"
+        assert "granularity" in query_result, "Metrics query result missing granularity"
+        assert "customer_id" in query_result, "Metrics query result missing customer ID"
+
+        # Test different aggregations
+        aggregations_to_test = ["avg", "max", "min", "sum"]
+        
+        for aggregation in aggregations_to_test:
+            test_query = {
+                "metric_name": "http_request_duration_seconds",
+                "service_name": "api-gateway",
+                "start_time": (datetime.utcnow() - timedelta(hours=1)).isoformat(),
+                "end_time": datetime.utcnow().isoformat(),
+                "aggregation": aggregation,
+                "granularity": "5m"
+            }
+
+            response = await http_client.post(
+                f"{test_suite.base_url}/v1/observability/metrics/query",
+                json=test_query,
+                headers=headers
+            )
+            assert response.status_code == 200, f"Metrics query with {aggregation} failed: {response.text}"
+            result = response.json()
+            assert result["aggregation"] == aggregation, f"Aggregation mismatch: expected {aggregation}, got {result['aggregation']}"
+
+        print("✅ M5 metrics querying successful")
+
+    @pytest.mark.asyncio
+    async def test_m5_observability_multi_tenant_isolation(self, test_suite, http_client):
+        """Test M5 observability multi-tenant isolation"""
+        print("\n🔄 Testing M5 observability multi-tenant isolation...")
+
+        customer1 = test_suite.test_customers[0]
+        customer2 = test_suite.test_customers[1]
+
+        headers1 = {"X-Customer-ID": customer1, "Content-Type": "application/json"}
+        headers2 = {"X-Customer-ID": customer2, "Content-Type": "application/json"}
+
+        # Create traces for customer 1
+        customer1_trace_id = f"trace-{customer1}-isolation-test"
+        customer1_spans = [{
+            "trace_id": customer1_trace_id,
+            "span_id": f"span-{customer1}-1",
+            "operation_name": "customer1_operation",
+            "service_name": "customer1-service",
+            "start_time": datetime.utcnow().isoformat(),
+            "end_time": datetime.utcnow().isoformat(),
+            "duration_ms": 100,
+            "kind": "server",
+            "status": "ok",
+            "attributes": {"tenant": customer1}
+        }]
+
+        # Create traces for customer 2
+        customer2_trace_id = f"trace-{customer2}-isolation-test"
+        customer2_spans = [{
+            "trace_id": customer2_trace_id,
+            "span_id": f"span-{customer2}-1",
+            "operation_name": "customer2_operation",
+            "service_name": "customer2-service",
+            "start_time": datetime.utcnow().isoformat(),
+            "end_time": datetime.utcnow().isoformat(),
+            "duration_ms": 200,
+            "kind": "server",
+            "status": "ok",
+            "attributes": {"tenant": customer2}
+        }]
+
+        # Ingest traces for both customers
+        response1 = await http_client.post(
+            f"{test_suite.base_url}/v1/observability/traces/ingest",
+            json={"spans": customer1_spans},
+            headers=headers1
+        )
+        assert response1.status_code == 202, f"Customer 1 trace ingestion failed: {response1.text}"
+
+        response2 = await http_client.post(
+            f"{test_suite.base_url}/v1/observability/traces/ingest",
+            json={"spans": customer2_spans},
+            headers=headers2
+        )
+        assert response2.status_code == 202, f"Customer 2 trace ingestion failed: {response2.text}"
+
+        # Wait for processing
+        await asyncio.sleep(3)
+
+        # Test customer 1 can only see their traces
+        response1 = await http_client.post(
+            f"{test_suite.base_url}/v1/observability/traces/search",
+            json={"limit": 100},
+            headers={"X-Customer-ID": customer1}
+        )
+        assert response1.status_code == 200, f"Customer 1 trace search failed: {response1.text}"
+        customer1_results = response1.json()
+
+        # Verify customer 1 isolation
+        for trace in customer1_results.get("traces", []):
+            # Customer 1 should not see customer 2's traces
+            assert customer2_trace_id not in trace.get("trace_id", ""), "Customer isolation failed - Customer 1 saw Customer 2's traces"
+
+        # Test customer 2 can only see their traces
+        response2 = await http_client.post(
+            f"{test_suite.base_url}/v1/observability/traces/search",
+            json={"limit": 100},
+            headers={"X-Customer-ID": customer2}
+        )
+        assert response2.status_code == 200, f"Customer 2 trace search failed: {response2.text}"
+        customer2_results = response2.json()
+
+        # Verify customer 2 isolation
+        for trace in customer2_results.get("traces", []):
+            # Customer 2 should not see customer 1's traces
+            assert customer1_trace_id not in trace.get("trace_id", ""), "Customer isolation failed - Customer 2 saw Customer 1's traces"
+
+        # Test service map isolation
+        response1 = await http_client.get(
+            f"{test_suite.base_url}/v1/observability/service-map",
+            headers={"X-Customer-ID": customer1}
+        )
+        assert response1.status_code == 200, f"Customer 1 service map failed: {response1.text}"
+        customer1_service_map = response1.json()
+
+        response2 = await http_client.get(
+            f"{test_suite.base_url}/v1/observability/service-map",
+            headers={"X-Customer-ID": customer2}
+        )
+        assert response2.status_code == 200, f"Customer 2 service map failed: {response2.text}"
+        customer2_service_map = response2.json()
+
+        # Verify service isolation
+        customer1_services = [s["name"] for s in customer1_service_map.get("services", [])]
+        customer2_services = [s["name"] for s in customer2_service_map.get("services", [])]
+
+        assert "customer2-service" not in customer1_services, "Customer 1 saw Customer 2's services"
+        assert "customer1-service" not in customer2_services, "Customer 2 saw Customer 1's services"
+
+        print("✅ M5 observability multi-tenant isolation successful")
+
+    @pytest.mark.asyncio
+    async def test_m5_observability_comprehensive(self, test_suite, http_client):
+        """Comprehensive test of all M5 observability functionality"""
+        print("\n🔄 Running comprehensive M5 observability test...")
+
+        customer_id = test_suite.test_customers[0]
+        
+        # Run all M5 tests in sequence
+        m5_tests = [
+            self.test_m5_observability_trace_ingestion,
+            self.test_m5_observability_metrics_ingestion,
+            self.test_m5_observability_trace_search_and_correlation,
+            self.test_m5_observability_service_map_generation,
+            self.test_m5_observability_apm_metrics,
+            self.test_m5_observability_metrics_query,
+            self.test_m5_observability_multi_tenant_isolation
+        ]
+
+        failed_tests = []
+
+        for test_func in m5_tests:
+            try:
+                await test_func(test_suite, http_client)
+                print(f"✅ {test_func.__name__} passed")
+            except Exception as e:
+                failed_tests.append((test_func.__name__, str(e)))
+                print(f"❌ {test_func.__name__} failed: {e}")
+
+        if failed_tests:
+            failure_summary = "\n".join([f"  • {name}: {error}" for name, error in failed_tests])
+            raise AssertionError(f"M5 Observability tests failed:\n{failure_summary}")
+
+        print("✅ All M5 observability tests passed!")
+
     # ========== TTL AND STORAGE TESTS ==========
 
     @pytest.mark.asyncio
@@ -1165,6 +1699,16 @@ async def run_integration_tests():
             await test_class.test_m3_alert_engine_alert_lifecycle(suite, http_client)
             await test_class.test_m3_alert_engine_multi_tenant_isolation(suite, http_client)
             await test_class.test_m3_alert_engine_comprehensive(suite, http_client)
+
+            # M5 Observability tests
+            await test_class.test_m5_observability_trace_ingestion(suite, http_client)
+            await test_class.test_m5_observability_metrics_ingestion(suite, http_client)
+            await test_class.test_m5_observability_trace_search_and_correlation(suite, http_client)
+            await test_class.test_m5_observability_service_map_generation(suite, http_client)
+            await test_class.test_m5_observability_apm_metrics(suite, http_client)
+            await test_class.test_m5_observability_metrics_query(suite, http_client)
+            await test_class.test_m5_observability_multi_tenant_isolation(suite, http_client)
+            await test_class.test_m5_observability_comprehensive(suite, http_client)
 
             await test_class.test_ttl_manager_multi_tenant(suite)
             await test_class.test_storage_config_multi_backend(suite)

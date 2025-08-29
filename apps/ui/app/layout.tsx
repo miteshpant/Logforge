@@ -24,6 +24,7 @@ export default function RootLayout({
               <a href="/" className="hover:text-gray-300">Dashboard</a>
               <a href="/logs" className="hover:text-gray-300">Logs</a>
               <a href="/security" className="hover:text-gray-300 bg-red-600 px-3 py-1 rounded">Security Analytics</a>
+              <a href="/observability" className="hover:text-gray-300 bg-green-600 px-3 py-1 rounded">Observability & APM</a>
               <a href="/test-runner" className="hover:text-gray-300 bg-blue-600 px-3 py-1 rounded">Test Runner</a>
               <a href="/health" className="hover:text-gray-300">Health</a>
             </div>

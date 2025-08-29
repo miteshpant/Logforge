@@ -37,7 +37,7 @@ export default function Home() {
       <div className="py-8">
         <h2 className="text-4xl font-bold text-center mb-8">Welcome to Logforge</h2>
         <p className="text-xl text-center text-gray-600 mb-12">
-          Open Observability + SIEM Platform - A credible Splunk alternative
+          Open Observability + SIEM Platform - A credible logger
         </p>
 
         {/* System Status Cards */}

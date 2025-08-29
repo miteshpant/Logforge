@@ -78,6 +78,10 @@ class BaseLogEntry(BaseModel):
     severity_num: Optional[int] = Field(0, description="Numeric severity (0-7)")
     facility: Optional[int] = Field(16, description="Syslog facility code")
     parser_version: Optional[str] = Field("v1", description="Parser version used")
+    
+    # Runtime metadata fields
+    ingested_at: Optional[datetime] = Field(None, description="Ingestion timestamp")
+    customer_id: Optional[str] = Field("default", description="Customer identifier for multi-tenancy")
 
     @validator('level')
     def normalize_level(cls, v):
@@ -252,9 +256,14 @@ class HealthResponse(BaseModel):
 
 class QueryResponse(BaseModel):
     """Log query response"""
-    logs: List[Dict[str, Any]]
-    total: int
-    query_time_ms: Optional[float] = 0
+    logs: List[Dict[str, Any]] = Field(default=[], description="Log entries")
+    aggregations: Dict[str, Any] = Field(default={}, description="Aggregation results")
+    total_count: int = Field(0, description="Total matching records")
+    execution_time_ms: float = Field(0, description="Query execution time")
+    has_more: bool = Field(False, description="More results available")
+    next_offset: Optional[int] = Field(None, description="Next offset for pagination")
+    query_info: Dict[str, Any] = Field(default={}, description="Query execution information")
+    customer_id: Optional[str] = Field("default", description="Customer identifier for multi-tenancy")
     
 # Validation models for different ingestion formats
 class IngestFormat(str, Enum):

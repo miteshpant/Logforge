@@ -31,6 +31,10 @@ logforge/
     api/            # FastAPI services  
     ui/             # Next.js frontend
     workers/        # background processors
+  tests/            # All test files (moved from apps/api)
+    test_m*_individual.py  # Individual milestone tests
+    test_*.py       # Unit and integration tests
+    conftest.py     # Pytest fixtures and configuration
   packages/
     sdk-python/     # client SDK
     rules/          # Sigma-like detections
@@ -40,6 +44,8 @@ logforge/
     docker/         # compose files
     helm/           # k8s charts
     terraform/      # cloud infra
+  docs/
+    wiki/           # Milestone documentation (M0-M5)
 ```
 
 ### Development Milestones
@@ -51,6 +57,7 @@ logforge/
 - **M5**: Traces & Metrics (3 weeks)
 - **M6**: AI Assistant & RCA (3 weeks)
 - **M7**: Enterprise Readiness (3 weeks)
+- **M8**: Production Demo Environment (2 weeks)
 
 ### Key APIs
 - **Ingestion**: 9 endpoints supporting JSON, Syslog, OTLP, CEF, Nginx, Text formats
@@ -99,7 +106,15 @@ python -m pytest tests/test_m2_comprehensive.py -v --asyncio-mode=auto
 python -m pytest tests/test_m2_api_endpoints.py -v --asyncio-mode=auto
 
 # Test runner with full validation
-python run_m2_tests.py
+python tests/run_m2_tests.py
+
+# Individual milestone tests (M0-M5)
+python tests/test_m0_individual.py
+python tests/test_m1_individual.py
+python tests/test_m2_individual.py
+python tests/test_m3_individual.py
+python tests/test_m4_individual.py
+python tests/test_m5_individual.py
 ```
 
 **Test Runner UI - Comprehensive Testing Interface:**
@@ -214,10 +229,104 @@ http://localhost:7080/docs  # FastAPI Swagger documentation
 - Alert lifecycle management with audit trail
 - 15+ API endpoints for complete CRUD operations
 
+## UI Enhancement Priorities 🎨
+
+**Current Status**: UI is functional but needs visual polish and accessibility improvements
+- **Contrast Issues**: White text on white background in several areas - needs fixing
+- **Accessibility**: Improve readability and navigation
+- **Interactivity**: Add hover states, loading indicators, better button feedback
+- **Visual Polish**: Better color coding for severity levels, improved typography, proper spacing
+- **Data Visualization**: Replace numbers with charts/graphs where appropriate
+- **Responsive Design**: Ensure mobile compatibility
+
+**Enhancement Plan** (lower priority, after core features):
+1. **Phase 1**: Fix critical accessibility issues (contrast, readability)
+2. **Phase 2**: Add visual polish (colors, spacing, hover effects) 
+3. **Phase 3**: Enhanced data visualization (charts, graphs, dashboards)
+4. **Phase 4**: Advanced interactions (real-time updates, animations)
+
 **Next Priorities**:
 - **M5**: Distributed tracing, metrics collection, service mapping, APM
 - **M6**: AI assistant, NL queries, root cause analysis, ML anomaly detection
 - **M7**: SSO/OIDC, multi-tenancy, RBAC, audit logging, compliance automation
+- **M8**: Production Demo Environment & Multi-Tenant Log Generation
+
+## M8 Production Demo Environment (Post-Launch)
+
+**Objective**: Create a realistic production demo with multiple local tenant clients continuously generating diverse log data to showcase Logforge capabilities in real-world scenarios.
+
+**Scope** (2 weeks):
+- **Multi-Tenant Client Setup**: 5-10 simulated customer environments generating realistic logs
+- **Diverse Log Sources**: Web servers, databases, security systems, applications, infrastructure
+- **Realistic Data Patterns**: Normal operations, security events, performance issues, compliance logs
+- **Actionable Dashboards**: Customer-specific dashboards with real business scenarios
+- **Self-Service Management**: Tenant UI for creating custom rules, alerts, and dashboards
+- **Demo Scenarios**: Incident response, threat hunting, compliance reporting, cost optimization
+
+**Deliverables**:
+1. **Log Generation Framework**:
+   - Containerized tenant simulators for different industries (fintech, healthcare, e-commerce, SaaS)
+   - Realistic log patterns with seasonal/daily variations
+   - Security events and attack scenarios for threat detection demos
+   - Performance degradation patterns for alerting demos
+
+2. **Multi-Tenant Demo Environment**:
+   - Docker Compose setup for 5+ simulated customers
+   - Industry-specific dashboards (financial services, healthcare, retail, manufacturing)
+   - Pre-configured detection rules relevant to each industry
+   - Compliance reporting templates (SOX, HIPAA, PCI-DSS, GDPR)
+
+3. **Interactive Demo Scenarios**:
+   - **Incident Response**: Simulated security breach with detection, investigation, and response
+   - **Threat Hunting**: Proactive threat detection across multiple tenants
+   - **Compliance Reporting**: Automated compliance dashboard generation
+   - **Cost Optimization**: Storage tiering and retention policy demos
+   - **Custom Rule Creation**: Show how customers can create industry-specific detection rules
+
+4. **Self-Service Tenant Portal**:
+   - Customer onboarding flow
+   - Dashboard customization interface
+   - Alert rule creation wizard
+   - Data retention and cost management tools
+   - Integration setup (API keys, webhooks, SIEM connectors)
+
+**Benefits**:
+- **Sales Enablement**: Realistic demos for prospective customers
+- **Product Validation**: Real-world usage patterns and performance testing
+- **Customer Training**: Hands-on training environment for new users
+- **Competitive Differentiation**: Show cost-effectiveness vs. Splunk/Elastic/Datadog
+- **Continuous Testing**: Always-on environment for regression testing
+
+## CRITICAL STRATEGY CHANGE - Systematic Testing Approach
+
+**STOP SPIRAL CHANGES**: No more quick fixes or cutting functionality. Follow systematic approach.
+
+**New Development Strategy**:
+1. **Individual Functionality Testing**: Test each M0-M5 feature individually with dedicated tests
+2. **Documentation First**: Create docs/wiki documentation for each functionality as we test
+3. **Methodical Validation**: Ensure each feature works completely before moving to integration
+4. **Final Integration**: Only write integrated tests after all individual tests pass
+5. **No Shortcuts**: Fix root causes, not symptoms
+
+**Testing Order**:
+- **M0**: Basic scaffold, health checks, log ingestion
+- **M1**: Multi-format ingestion, TTL, storage lifecycle 
+- **M2**: Query engine, aggregations, dashboards
+- **M3**: Alert engine, rules, notifications
+- **M4**: Security analytics, Sigma rules, threat intelligence
+- **M5**: Observability, traces, metrics, APM
+- **Integration**: Only after all individual tests pass
+
+**Documentation Requirements**:
+- Each functionality gets dedicated docs/wiki page
+- API endpoint documentation with examples
+- Test scenarios and expected behaviors
+- Known limitations and future improvements
+
+**Key Pending Issues to Address Systematically**:
+- Create materialized view for logs_raw_mt → logs_normalized_mt transformation
+- Multi-tenant table structure consistency
+- Timeseries query engine fixes (without spiral changes)
 
 ## Important Notes
 - This is a defensive security project only

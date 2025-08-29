@@ -293,6 +293,167 @@ assert r.status_code == 200
 assert len(techniques) > 0
 print('✓ MITRE ATT&CK techniques loaded successfully')
 """]),
+        ],
+        "m5-observability": [
+            ("Observability Health Check", ["python", "-c", """
+import requests
+response = requests.get('http://host.docker.internal:7080/v1/observability/health')
+print(f'Observability Health Status: {response.status_code}')
+assert response.status_code == 200
+data = response.json()
+print(f'Observability Status: {data.get("status", "unknown")}')
+assert data.get('status') == 'healthy'
+print('✓ M5 Observability engine is healthy')
+"""]),
+            ("Trace Ingestion", ["python", "-c", """
+import requests, json
+from datetime import datetime
+import uuid
+
+# Create sample trace spans
+spans = [{
+    'trace_id': str(uuid.uuid4()).replace('-', ''),
+    'span_id': str(uuid.uuid4())[:16].replace('-', ''),
+    'operation_name': 'api_request',
+    'service_name': 'test-service',
+    'start_time': datetime.now().isoformat(),
+    'end_time': datetime.now().isoformat(),
+    'duration_ms': 150,
+    'kind': 'server',
+    'status': 'ok',
+    'attributes': {'http.method': 'GET', 'http.status_code': 200}
+}]
+
+response = requests.post(
+    'http://host.docker.internal:7080/v1/observability/traces/ingest',
+    headers={'Content-Type': 'application/json', 'X-Customer-ID': 'test-customer'},
+    json={'spans': spans}
+)
+print(f'Trace Ingestion Status: {response.status_code}')
+assert response.status_code == 202
+data = response.json()
+print(f'Traces Ingested: {data.get("spans_ingested", 0)}')
+assert data.get('spans_ingested', 0) > 0
+print('✓ Trace ingestion successful')
+"""]),
+            ("Metrics Ingestion", ["python", "-c", """
+import requests, json
+from datetime import datetime
+
+# Create sample metrics
+metrics = [{
+    'metric_name': 'http_requests_total',
+    'metric_type': 'counter',
+    'value': 42,
+    'timestamp': datetime.now().isoformat(),
+    'labels': {'method': 'GET', 'endpoint': '/api/test'},
+    'service_name': 'test-service'
+}]
+
+response = requests.post(
+    'http://host.docker.internal:7080/v1/observability/metrics/ingest',
+    headers={'Content-Type': 'application/json', 'X-Customer-ID': 'test-customer'},
+    json={'metrics': metrics}
+)
+print(f'Metrics Ingestion Status: {response.status_code}')
+assert response.status_code == 202
+data = response.json()
+print(f'Metrics Ingested: {data.get("metrics_ingested", 0)}')
+assert data.get('metrics_ingested', 0) > 0
+print('✓ Metrics ingestion successful')
+"""]),
+            ("Service Map Generation", ["python", "-c", """
+import requests
+import time
+
+# Wait for data to be processed
+time.sleep(2)
+
+response = requests.get(
+    'http://host.docker.internal:7080/v1/observability/service-map?time_range_hours=1',
+    headers={'X-Customer-ID': 'test-customer'}
+)
+print(f'Service Map Status: {response.status_code}')
+assert response.status_code == 200
+data = response.json()
+print(f'Services Found: {len(data.get("services", []))}')
+print(f'Dependencies Found: {len(data.get("dependencies", []))}')
+# Services might be 0 initially, so we just check the response format
+assert 'services' in data and 'dependencies' in data
+print('✓ Service map generation working')
+"""]),
+            ("APM Metrics Query", ["python", "-c", """
+import requests
+import time
+
+# Wait for data to be processed
+time.sleep(2)
+
+response = requests.get(
+    'http://host.docker.internal:7080/v1/observability/apm/test-service?time_range_hours=1',
+    headers={'X-Customer-ID': 'test-customer'}
+)
+print(f'APM Metrics Status: {response.status_code}')
+assert response.status_code == 200
+data = response.json()
+print(f'APM Metrics for service: {data.get("service_name", "unknown")}')
+assert 'metrics' in data
+print('✓ APM metrics query successful')
+"""]),
+            ("Trace Search", ["python", "-c", """
+import requests
+import time
+
+# Wait for data to be processed
+time.sleep(2)
+
+search_request = {
+    'service_name': 'test-service',
+    'limit': 10
+}
+
+response = requests.post(
+    'http://host.docker.internal:7080/v1/observability/traces/search',
+    headers={'Content-Type': 'application/json', 'X-Customer-ID': 'test-customer'},
+    json=search_request
+)
+print(f'Trace Search Status: {response.status_code}')
+assert response.status_code == 200
+data = response.json()
+print(f'Traces Found: {len(data.get("traces", []))}')
+print(f'Total Results: {data.get("total", 0)}')
+# Traces might be 0 initially, so we just check the response format
+assert 'traces' in data and 'total' in data
+print('✓ Trace search functionality working')
+"""]),
+            ("Metrics Query", ["python", "-c", """
+import requests
+import time
+from datetime import datetime, timedelta
+
+# Wait for data to be processed
+time.sleep(2)
+
+query_request = {
+    'metric_name': 'http_requests_total',
+    'service_name': 'test-service',
+    'start_time': (datetime.now() - timedelta(hours=1)).isoformat(),
+    'end_time': datetime.now().isoformat(),
+    'aggregation': 'sum'
+}
+
+response = requests.post(
+    'http://host.docker.internal:7080/v1/observability/metrics/query',
+    headers={'Content-Type': 'application/json', 'X-Customer-ID': 'test-customer'},
+    json=query_request
+)
+print(f'Metrics Query Status: {response.status_code}')
+assert response.status_code == 200
+data = response.json()
+print(f'Metrics Data Keys: {list(data.get("metrics", {}).keys())}')
+assert 'metrics' in data
+print('✓ Metrics query functionality working')
+"""])
         ]
     }
     
@@ -435,7 +596,7 @@ async def execute_all_suites(background_tasks: BackgroundTasks):
     if test_execution_state["running"]:
         raise HTTPException(status_code=400, detail="Another test suite is currently running")
     
-    suites = ["ingestion", "query-dashboard", "alert-engine", "security-analytics", "integration", "performance"]
+    suites = ["ingestion", "query-dashboard", "alert-engine", "security-analytics", "m5-observability", "integration", "performance"]
     
     async def run_all_suites():
         for suite_id in suites:
@@ -446,6 +607,48 @@ async def execute_all_suites(background_tasks: BackgroundTasks):
     background_tasks.add_task(run_all_suites)
     
     return {"message": "All test suites execution started", "suites": suites}
+
+@router.get("/suites")
+async def get_available_suites():
+    """Get list of available test suites"""
+    suites = {
+        "ingestion": {
+            "name": "Data Ingestion",
+            "description": "Test log ingestion, multi-format parsing, and storage",
+            "test_count": 4
+        },
+        "query-dashboard": {
+            "name": "Query & Dashboards",
+            "description": "Test advanced query engine and dashboard generation",
+            "test_count": 2
+        },
+        "alert-engine": {
+            "name": "Alert Engine",
+            "description": "Test alert rules, notifications, and engine health",
+            "test_count": 2
+        },
+        "security-analytics": {
+            "name": "Security Analytics (M4)",
+            "description": "Test SIEM features, Sigma rules, threat intelligence",
+            "test_count": 7
+        },
+        "m5-observability": {
+            "name": "Observability & APM (M5)",
+            "description": "Test traces, metrics, service maps, and APM functionality", 
+            "test_count": 7
+        },
+        "integration": {
+            "name": "Integration Tests",
+            "description": "End-to-end integration testing",
+            "test_count": 1
+        },
+        "performance": {
+            "name": "Performance Tests",
+            "description": "Query performance and load testing",
+            "test_count": 1
+        }
+    }
+    return {"suites": suites}
 
 @router.get("/health")
 async def test_runner_health():

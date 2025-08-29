@@ -34,8 +34,7 @@ class VisualizationType(str, Enum):
     MAP = "map"
 
 
-@dataclass
-class DashboardWidget:
+class DashboardWidget(BaseModel):
     """Individual dashboard widget/panel"""
     id: str
     title: str

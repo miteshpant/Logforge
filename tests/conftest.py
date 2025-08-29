@@ -13,10 +13,10 @@ from fastapi.testclient import TestClient
 from httpx import AsyncClient
 
 # Import our modules
-from main import app
-from models import LogEntry, BatchLogEntry, OTLPLogsData
-from parsers import ParserFactory
-from storage_config import StorageConfigManager
+from apps.api.main import app
+from apps.api.models import LogEntry, BatchLogEntry, OTLPLogsData
+from apps.api.parsers import ParserFactory
+from apps.api.storage_config import StorageConfigManager
 
 fake = Faker()
 

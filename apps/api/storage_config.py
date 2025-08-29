@@ -376,3 +376,13 @@ class StorageConfigManager:
         
         # All compliance tiers require encryption
         return compliance_tier != 'standard'
+
+
+# FastAPI dependency for extracting customer ID from headers
+from fastapi import Header, HTTPException
+
+def get_customer_id(x_customer_id: str = Header(default="default", alias="X-Customer-ID")) -> str:
+    """Extract customer ID from request header"""
+    if not x_customer_id or x_customer_id == "default":
+        return "default"
+    return x_customer_id
