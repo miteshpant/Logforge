@@ -22,6 +22,7 @@ from test_runner_api import router as test_runner_router
 from security_api import router as security_router
 from observability_api import router as observability_router
 from ai_api import router as ai_router
+from enterprise_api import router as enterprise_router
 
 # Configure structured logging
 logger = structlog.get_logger()
@@ -60,6 +61,7 @@ app.include_router(test_runner_router)
 app.include_router(security_router)
 app.include_router(observability_router)
 app.include_router(ai_router)
+app.include_router(enterprise_router)
 
 if __name__ == "__main__":
     import uvicorn
