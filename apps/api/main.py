@@ -24,6 +24,7 @@ from observability_api import router as observability_router
 from ai_api import router as ai_router
 from enterprise_api import router as enterprise_router
 from tenant_api import router as tenant_router
+from subscription_api import router as subscription_router
 
 # Configure structured logging
 logger = structlog.get_logger()
@@ -49,6 +50,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Add feature access middleware
+from feature_access_middleware import FeatureAccessMiddleware
+app.add_middleware(FeatureAccessMiddleware)
+
 # Include all routers
 app.include_router(health_router)
 app.include_router(ingestion_router)
@@ -64,6 +69,7 @@ app.include_router(observability_router)
 app.include_router(ai_router)
 app.include_router(enterprise_router)
 app.include_router(tenant_router)
+app.include_router(subscription_router)
 
 if __name__ == "__main__":
     import uvicorn

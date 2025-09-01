@@ -4,9 +4,10 @@ Supports multiple log formats and ingestion protocols
 """
 
 from pydantic import BaseModel, Field, validator
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List, Union, Literal
 from enum import Enum
+from dataclasses import dataclass, field
 import json
 import re
 import uuid
@@ -257,13 +258,16 @@ class HealthResponse(BaseModel):
 
 class QueryResponse(BaseModel):
     """Log query response"""
-    logs: List[Dict[str, Any]] = Field(default=[], description="Log entries")
-    aggregations: Dict[str, Any] = Field(default={}, description="Aggregation results")
+    logs: List[Dict[str, Any]] = Field(description="Log entries")
+    logs: List[Dict[str, Any]] = []
+    aggregations: Dict[str, Any] = Field(description="Aggregation results")
+    aggregations: Dict[str, Any] = {}
     total_count: int = Field(0, description="Total matching records")
     execution_time_ms: float = Field(0, description="Query execution time")
     has_more: bool = Field(False, description="More results available")
     next_offset: Optional[int] = Field(None, description="Next offset for pagination")
-    query_info: Dict[str, Any] = Field(default={}, description="Query execution information")
+    query_info: Dict[str, Any] = Field(description="Query execution information")
+    query_info: Dict[str, Any] = {}
     customer_id: Optional[str] = Field("default", description="Customer identifier for multi-tenancy")
     
 # Validation models for different ingestion formats
@@ -462,7 +466,8 @@ class TenantResponse(BaseModel):
 
 class TenantListResponse(BaseModel):
     """Tenant list response"""
-    tenants: List[TenantResponse] = Field(default=[], description="List of tenants")
+    tenants: List[TenantResponse] = Field(description="List of tenants")
+    tenants: List[TenantResponse] = []
     total_count: int = Field(0, description="Total tenant count")
     page: int = Field(1, description="Current page")
     page_size: int = Field(50, description="Page size")
@@ -505,3 +510,143 @@ class StorageStatusResponse(BaseModel):
     health_status: str = Field("healthy", description="Storage health status")
     connection_status: str = Field("connected", description="Connection status")
     last_backup: Optional[datetime] = Field(None, description="Last backup timestamp")
+
+# =====================================
+# Subscription & Billing Models
+# =====================================
+
+class SubscriptionTier(str, Enum):
+    """Subscription tier levels"""
+    STARTER = "starter"
+    PROFESSIONAL = "professional" 
+    ENTERPRISE = "enterprise"
+
+class BillingCycle(str, Enum):
+    """Billing cycle options"""
+    MONTHLY = "monthly"
+    ANNUAL = "annual"
+
+class SubscriptionStatus(str, Enum):
+    """Subscription status"""
+    ACTIVE = "active"
+    SUSPENDED = "suspended"
+    CANCELLED = "cancelled"
+
+class PricingModel(str, Enum):
+    """Pricing model types"""
+    PER_UNIT = "per_unit"
+    FIXED_MONTHLY = "fixed_monthly"
+    TIERED = "tiered"
+
+class DeletionType(str, Enum):
+    """Tenant deletion types"""
+    SOFT_DELETE = "soft_delete"
+    HARD_DELETE = "hard_delete"
+
+@dataclass
+class TenantSubscription:
+    """Tenant subscription configuration"""
+    tenant_id: str
+    subscribed_features: List[str]
+    subscription_tier: SubscriptionTier
+    billing_cycle: BillingCycle
+    status: SubscriptionStatus
+    started_at: datetime
+    expires_at: Optional[datetime] = None
+    auto_renew: bool = True
+    monthly_spend_limit: Optional[float] = None
+    overage_allowed: bool = False
+
+@dataclass
+class FeatureRate:
+    """Feature pricing configuration"""
+    feature_name: str
+    pricing_model: PricingModel
+    base_rate: float
+    tier_rates: Dict[str, float]
+    currency: str = "USD"
+    effective_date: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_by: str = "system"
+    description: str = ""
+
+@dataclass
+class UsageRecord:
+    """Usage tracking for billing"""
+    usage_id: str
+    tenant_id: str
+    feature_name: str
+    usage_type: str
+    quantity: int
+    timestamp: datetime
+    billing_period: str
+    cost_calculated: float
+    rate_applied: float
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+@dataclass
+class TenantDeletion:
+    """Tenant deletion record"""
+    tenant_id: str
+    deletion_type: DeletionType
+    deleted_at: datetime
+    deleted_by: str
+    reason: str
+    data_cleanup_completed: bool = False
+    usage_records_retained: bool = True
+    final_bill_generated: bool = False
+
+class TenantSubscriptionRequest(BaseModel):
+    """Request to update tenant subscription"""
+    subscribed_features: List[str] = Field(..., description="List of subscribed features")
+    subscription_tier: SubscriptionTier = Field(..., description="Subscription tier")
+    billing_cycle: BillingCycle = Field(BillingCycle.MONTHLY, description="Billing cycle")
+    monthly_spend_limit: Optional[float] = Field(None, description="Monthly spending limit")
+    auto_renew: bool = Field(True, description="Auto-renewal enabled")
+
+class FeatureRateRequest(BaseModel):
+    """Request to set feature rate"""
+    feature_name: str = Field(..., description="Feature name")
+    pricing_model: PricingModel = Field(..., description="Pricing model")
+    base_rate: float = Field(..., description="Base rate per unit")
+    tier_rates: Dict[str, float] = Field(default_factory=dict, description="Tier-specific rates")
+    currency: str = Field("USD", description="Currency code")
+    description: str = Field("", description="Rate description")
+
+class TenantDeletionRequest(BaseModel):
+    """Request to delete tenant"""
+    deletion_type: DeletionType = Field(DeletionType.SOFT_DELETE, description="Type of deletion")
+    reason: str = Field(..., description="Reason for deletion")
+    data_cleanup: bool = Field(True, description="Clean up all tenant data")
+    generate_final_bill: bool = Field(True, description="Generate final bill")
+    confirmation: Optional[str] = Field(None, description="Confirmation for hard delete")
+
+class TenantSubscriptionResponse(BaseModel):
+    """Tenant subscription details response"""
+    tenant_id: str
+    subscribed_features: List[str]
+    subscription_tier: SubscriptionTier
+    billing_cycle: BillingCycle
+    status: SubscriptionStatus
+    started_at: datetime
+    expires_at: Optional[datetime]
+    auto_renew: bool
+    monthly_spend_limit: Optional[float]
+    current_usage: Dict[str, int] = Field(default_factory=dict)
+
+class FeatureAccessResponse(BaseModel):
+    """Feature access validation response"""
+    tenant_id: str
+    feature: str
+    access_granted: bool
+    subscription_tier: SubscriptionTier
+    usage_limits: Dict[str, Any] = Field(default_factory=dict)
+    current_usage: Dict[str, int] = Field(default_factory=dict)
+
+class UsageBreakdownResponse(BaseModel):
+    """Detailed usage breakdown response"""
+    tenant_id: str
+    billing_period: str
+    total_cost: float
+    currency: str
+    feature_usage: List[Dict[str, Any]] = Field(default_factory=list)
+    generated_at: datetime
