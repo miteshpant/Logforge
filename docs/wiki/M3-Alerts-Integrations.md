@@ -67,7 +67,7 @@ POST   /v1/alerts/notifications/channels   # Create channel
 {
     "name": "High Error Rate Alert",
     "description": "Alert when error rate exceeds threshold",
-    "customer_id": "acme-corp",
+    "customer_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
     "severity": "high",
     "rule_type": "threshold",
     "enabled": true,

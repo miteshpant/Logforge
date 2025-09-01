@@ -15,7 +15,31 @@ class M1TestSuite:
     def __init__(self):
         self.base_url = "http://localhost:7080"
         self.test_results = {}
-        self.test_customer = "test-m1-customer"
+        self.test_tenant_id = None  # Will create actual tenant UUID
+    
+    async def setup_test_tenant(self):
+        """Create a test tenant for M1 tests"""
+        tenant_data = {
+            "name": "M1 Test Corporation",
+            "type": "enterprise",
+            "primary_contact_name": "M1 Test Manager",
+            "primary_contact_email": "m1test@logforge.local",
+            "industry": "Technology"
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{self.base_url}/v1/tenants",
+                json=tenant_data,
+                headers={"Authorization": "Bearer admin-token", "Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 201:
+                self.test_tenant_id = response.json()["tenant_id"]
+                print(f"🏢 Created test tenant: {self.test_tenant_id}")
+            else:
+                print(f"❌ Failed to create test tenant: {response.text}")
+                self.test_tenant_id = "default"  # Fallback to default
     
     async def test_json_ingestion(self):
         """Test JSON log format ingestion"""
@@ -39,7 +63,8 @@ class M1TestSuite:
                 
                 response = await client.post(
                     f"{self.base_url}/v1/ingest/logs",
-                    json=log_entry
+                    json=log_entry,
+                    headers={"X-Customer-ID": self.test_tenant_id}
                 )
                 
                 assert response.status_code == 200, f"JSON ingestion failed: {response.text}"
@@ -78,7 +103,7 @@ class M1TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/ingest/logs/batch",
                     json=batch_data,
-                    headers={"X-Customer-ID": self.test_customer}
+                    headers={"X-Customer-ID": self.test_tenant_id}
                 )
                 
                 assert response.status_code == 200, f"Batch ingestion failed: {response.text}"
@@ -110,7 +135,7 @@ class M1TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/ingest/syslog",
                     content=syslog_message,
-                    headers={"Content-Type": "text/plain"}
+                    headers={"Content-Type": "text/plain", "X-Customer-ID": self.test_tenant_id}
                 )
                 
                 assert response.status_code == 200, f"Syslog ingestion failed: {response.text}"
@@ -143,7 +168,7 @@ class M1TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/ingest",
                     content=json_message,
-                    headers={"Content-Type": "text/plain"},
+                    headers={"Content-Type": "text/plain", "X-Customer-ID": self.test_tenant_id},
                     params={"service": "auto-detect-service"}
                 )
                 
@@ -216,20 +241,22 @@ class M1TestSuite:
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
-                customers = ["tenant-a", "tenant-b"]
+                # Use actual tenant UUID for multi-tenant testing
+                customers = [self.test_tenant_id, self.test_tenant_id]
                 
-                for customer in customers:
+                for i, customer in enumerate(customers):
                     log_data = {
                         "ts": datetime.now().isoformat(),
-                        "service": f"{customer}-service",
+                        "service": f"tenant-{i}-service",
                         "level": "INFO",
-                        "msg": f"Multi-tenant test for {customer}",
-                        "host": f"{customer}-host"
+                        "msg": f"Multi-tenant test for tenant-{i}",
+                        "host": f"tenant-{i}-host"
                     }
                     
                     response = await client.post(
                         f"{self.base_url}/v1/ingest/logs",
-                        json=log_data
+                        json=log_data,
+                        headers={"X-Customer-ID": customer}
                     )
                     
                     assert response.status_code == 200, f"Multi-tenant ingestion failed for {customer}: {response.text}"
@@ -247,6 +274,9 @@ class M1TestSuite:
         """Run all M1 tests"""
         print("\n🚀 Starting M1 Individual Test Suite...")
         print("📝 Testing: Multi-format ingestion, TTL, and storage lifecycle")
+        
+        # First create test tenant
+        await self.setup_test_tenant()
         
         # Run tests sequentially to avoid race conditions and timeouts
         tests = [

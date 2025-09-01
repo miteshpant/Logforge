@@ -23,6 +23,7 @@ from security_api import router as security_router
 from observability_api import router as observability_router
 from ai_api import router as ai_router
 from enterprise_api import router as enterprise_router
+from tenant_api import router as tenant_router
 
 # Configure structured logging
 logger = structlog.get_logger()
@@ -62,6 +63,7 @@ app.include_router(security_router)
 app.include_router(observability_router)
 app.include_router(ai_router)
 app.include_router(enterprise_router)
+app.include_router(tenant_router)
 
 if __name__ == "__main__":
     import uvicorn

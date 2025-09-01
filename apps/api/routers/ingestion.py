@@ -14,6 +14,8 @@ from models import (
 )
 from parsers import ParserFactory
 from storage_config import get_customer_id
+from tenant_dependencies import TenantOrDefault
+from tenant_service import tenant_service
 
 router = APIRouter(prefix="/v1/ingest")
 
@@ -28,11 +30,15 @@ def setup_dependencies(pf, plb):
     process_logs_background = plb
 
 @router.post("/logs", response_model=IngestResponse)
-async def ingest_logs(log_entry: LogEntry, background_tasks: BackgroundTasks, request: Request):
+async def ingest_logs(
+    log_entry: LogEntry, 
+    background_tasks: BackgroundTasks,
+    customer_id: str = TenantOrDefault
+):
     """Single log entry ingestion endpoint"""
     try:
-        # Extract customer ID from headers or use default
-        customer_id = request.headers.get("X-Customer-ID", "default")
+        # Track log ingestion for tenant
+        await tenant_service.track_usage(customer_id, "log_ingestion", 1)
         
         # Add metadata
         log_entry.ingested_at = datetime.now(timezone.utc)
@@ -54,11 +60,16 @@ async def ingest_logs(log_entry: LogEntry, background_tasks: BackgroundTasks, re
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
 
 @router.post("/logs/batch", response_model=BatchIngestResponse)
-async def ingest_logs_batch(batch: BatchLogEntry, background_tasks: BackgroundTasks, request: Request):
+async def ingest_logs_batch(
+    batch: BatchLogEntry, 
+    background_tasks: BackgroundTasks,
+    customer_id: str = TenantOrDefault
+):
     """Batch log entry ingestion"""
     try:
-        # Extract customer ID from headers or use default
-        customer_id = request.headers.get("X-Customer-ID", "default")
+        # Track log ingestion for tenant
+        await tenant_service.track_usage(customer_id, "log_ingestion", len(batch.logs))
+        
         ingested_at = datetime.now(timezone.utc)
         
         # Add metadata to all logs

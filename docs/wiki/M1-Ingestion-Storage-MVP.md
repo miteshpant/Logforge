@@ -248,7 +248,7 @@ TTL ts + INTERVAL 365 DAY;
 ```bash
 curl -X POST http://localhost:7080/v1/ingest/logs \
   -H "Content-Type: application/json" \
-  -H "X-Customer-ID: acme-corp" \
+  -H "X-Customer-ID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" \
   -d '{
     "ts": "2025-08-26T18:30:00.000Z",
     "service": "web-api",
@@ -268,7 +268,7 @@ curl -X POST http://localhost:7080/v1/ingest/logs \
 ```bash
 curl -X POST http://localhost:7080/v1/ingest/logs/batch \
   -H "Content-Type: application/json" \
-  -H "X-Customer-ID: acme-corp" \
+  -H "X-Customer-ID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" \
   -d '{
     "logs": [
       {"ts": "2025-08-26T18:30:00Z", "service": "api", "level": "INFO", "msg": "Request processed"},

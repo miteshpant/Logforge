@@ -16,9 +16,33 @@ class M5TestSuite:
     def __init__(self):
         self.base_url = "http://localhost:7080"
         self.test_results = {}
-        self.test_customer = "test-m5-customer"
+        self.test_tenant_id = None  # Will create actual tenant UUID
         self.test_trace_id = None
         self.test_service_name = "m5-test-service"
+    
+    async def setup_test_tenant(self):
+        """Create a test tenant for M5 tests"""
+        tenant_data = {
+            "name": "M5 Test Corporation",
+            "type": "enterprise",
+            "primary_contact_name": "M5 Test Manager",
+            "primary_contact_email": "m5test@logforge.local",
+            "industry": "Technology"
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{self.base_url}/v1/tenants",
+                json=tenant_data,
+                headers={"Authorization": "Bearer admin-token", "Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 201:
+                self.test_tenant_id = response.json()["tenant_id"]
+                print(f"🏢 Created test tenant: {self.test_tenant_id}")
+            else:
+                print(f"❌ Failed to create test tenant: {response.text}")
+                self.test_tenant_id = "default"  # Fallback to default
     
     async def test_observability_health(self):
         """Test observability engine health check"""
@@ -28,7 +52,7 @@ class M5TestSuite:
             try:
                 response = await client.get(
                     f"{self.base_url}/v1/observability/health",
-                    headers={"X-Customer-ID": self.test_customer}
+                    headers={"X-Customer-ID": self.test_tenant_id}
                 )
                 
                 assert response.status_code == 200, f"Observability health check failed: {response.text}"
@@ -116,7 +140,7 @@ class M5TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/observability/traces/ingest",
                     json=batch_request,
-                    headers={"X-Customer-ID": self.test_customer}
+                    headers={"X-Customer-ID": self.test_tenant_id}
                 )
                 
                 if response.status_code not in [200, 202]:
@@ -189,7 +213,7 @@ class M5TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/observability/metrics/ingest",
                     json=batch_request,
-                    headers={"X-Customer-ID": self.test_customer}
+                    headers={"X-Customer-ID": self.test_tenant_id}
                 )
                 
                 if response.status_code not in [200, 202]:
@@ -239,7 +263,7 @@ class M5TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/observability/traces/search",
                     json=search_request,
-                    headers={"X-Customer-ID": self.test_customer}
+                    headers={"X-Customer-ID": self.test_tenant_id}
                 )
                 
                 assert response.status_code == 200, f"Trace search failed: {response.text}"
@@ -279,7 +303,7 @@ class M5TestSuite:
                 
                 response = await client.get(
                     f"{self.base_url}/v1/observability/traces/{self.test_trace_id}",
-                    headers={"X-Customer-ID": self.test_customer}
+                    headers={"X-Customer-ID": self.test_tenant_id}
                 )
                 
                 assert response.status_code == 200, f"Trace details failed: {response.text}"
@@ -321,7 +345,7 @@ class M5TestSuite:
                 # Get service map
                 response = await client.get(
                     f"{self.base_url}/v1/observability/service-map",
-                    headers={"X-Customer-ID": self.test_customer},
+                    headers={"X-Customer-ID": self.test_tenant_id},
                     params={
                         "start_time": (datetime.now() - timedelta(hours=1)).isoformat(),
                         "end_time": datetime.now().isoformat()
@@ -364,7 +388,7 @@ class M5TestSuite:
             try:
                 response = await client.get(
                     f"{self.base_url}/v1/observability/apm/{self.test_service_name}",
-                    headers={"X-Customer-ID": self.test_customer},
+                    headers={"X-Customer-ID": self.test_tenant_id},
                     params={
                         "start_time": (datetime.now() - timedelta(hours=1)).isoformat(),
                         "end_time": datetime.now().isoformat()
@@ -427,7 +451,7 @@ class M5TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/observability/metrics/query",
                     json=query_request,
-                    headers={"X-Customer-ID": self.test_customer}
+                    headers={"X-Customer-ID": self.test_tenant_id}
                 )
                 
                 assert response.status_code == 200, f"Metrics query failed: {response.text}"
@@ -464,6 +488,9 @@ class M5TestSuite:
         """Run all M5 tests"""
         print("\n🚀 Starting M5 Individual Test Suite...")
         print("📝 Testing: Observability, distributed tracing, metrics, service mapping, APM")
+        
+        # First create test tenant
+        await self.setup_test_tenant()
         
         # Run tests in order (some depend on earlier ones)
         tests = [

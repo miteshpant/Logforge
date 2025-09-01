@@ -15,7 +15,31 @@ class M4TestSuite:
     def __init__(self):
         self.base_url = "http://localhost:7080"
         self.test_results = {}
-        self.test_customer = "test-m4-customer"
+        self.test_tenant_id = None  # Will create actual tenant UUID
+    
+    async def setup_test_tenant(self):
+        """Create a test tenant for M4 tests"""
+        tenant_data = {
+            "name": "M4 Test Corporation",
+            "type": "enterprise",
+            "primary_contact_name": "M4 Test Manager",
+            "primary_contact_email": "m4test@logforge.local",
+            "industry": "Technology"
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{self.base_url}/v1/tenants",
+                json=tenant_data,
+                headers={"Authorization": "Bearer admin-token", "Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 201:
+                self.test_tenant_id = response.json()["tenant_id"]
+                print(f"🏢 Created test tenant: {self.test_tenant_id}")
+            else:
+                print(f"❌ Failed to create test tenant: {response.text}")
+                self.test_tenant_id = "default"  # Fallback to default
     
     async def test_security_health(self):
         """Test security analytics health check"""
@@ -25,7 +49,7 @@ class M4TestSuite:
             try:
                 response = await client.get(
                     f"{self.base_url}/v1/security/health",
-                    headers={"X-Customer-ID": self.test_customer}
+                    headers={"X-Customer-ID": self.test_tenant_id}
                 )
                 
                 assert response.status_code == 200, f"Security health check failed: {response.text}"
@@ -61,7 +85,7 @@ class M4TestSuite:
             try:
                 response = await client.get(
                     f"{self.base_url}/v1/security/dashboard",
-                    headers={"X-Customer-ID": self.test_customer}
+                    headers={"X-Customer-ID": self.test_tenant_id}
                 )
                 
                 assert response.status_code == 200, f"Security dashboard failed: {response.text}"
@@ -101,7 +125,7 @@ class M4TestSuite:
                 # List existing Sigma rules
                 response = await client.get(
                     f"{self.base_url}/v1/security/sigma-rules",
-                    headers={"X-Customer-ID": self.test_customer}
+                    headers={"X-Customer-ID": self.test_tenant_id}
                 )
                 
                 assert response.status_code == 200, f"Sigma rules list failed: {response.text}"
@@ -149,7 +173,7 @@ class M4TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/security/sigma-rules",
                     json=custom_rule,
-                    headers={"X-Customer-ID": self.test_customer}
+                    headers={"X-Customer-ID": self.test_tenant_id}
                 )
                 
                 assert response.status_code == 200, f"Custom Sigma rule creation failed: {response.text}"
@@ -200,7 +224,7 @@ class M4TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/security/sigma-rules/{self.test_rule_id}/test",
                     json=test_data,
-                    headers={"X-Customer-ID": self.test_customer}
+                    headers={"X-Customer-ID": self.test_tenant_id}
                 )
                 
                 assert response.status_code == 200, f"Sigma rule testing failed: {response.text}"
@@ -229,7 +253,7 @@ class M4TestSuite:
                 # List security events
                 response = await client.get(
                     f"{self.base_url}/v1/security/events",
-                    headers={"X-Customer-ID": self.test_customer}
+                    headers={"X-Customer-ID": self.test_tenant_id}
                 )
                 
                 assert response.status_code == 200, f"Security events list failed: {response.text}"
@@ -254,7 +278,7 @@ class M4TestSuite:
                     response = await client.put(
                         f"{self.base_url}/v1/security/events/{event_id}/status",
                         json=status_update,
-                        headers={"X-Customer-ID": self.test_customer}
+                        headers={"X-Customer-ID": self.test_tenant_id}
                     )
                     
                     assert response.status_code == 200, f"Event status update failed: {response.text}"
@@ -298,7 +322,7 @@ class M4TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/security/threat-hunting",
                     json=hunting_campaign,
-                    headers={"X-Customer-ID": self.test_customer}
+                    headers={"X-Customer-ID": self.test_tenant_id}
                 )
                 
                 assert response.status_code == 200, f"Threat hunting failed: {response.text}"
@@ -329,7 +353,7 @@ class M4TestSuite:
                 # List threat intelligence indicators
                 response = await client.get(
                     f"{self.base_url}/v1/security/threat-intel",
-                    headers={"X-Customer-ID": self.test_customer}
+                    headers={"X-Customer-ID": self.test_tenant_id}
                 )
                 
                 assert response.status_code == 200, f"Threat intelligence failed: {response.text}"
@@ -370,7 +394,7 @@ class M4TestSuite:
                 # Get MITRE ATT&CK techniques
                 response = await client.get(
                     f"{self.base_url}/v1/security/mitre-attack/techniques",
-                    headers={"X-Customer-ID": self.test_customer}
+                    headers={"X-Customer-ID": self.test_tenant_id}
                 )
                 
                 assert response.status_code == 200, f"MITRE ATT&CK techniques failed: {response.text}"
@@ -405,6 +429,9 @@ class M4TestSuite:
         """Run all M4 tests"""
         print("\n🚀 Starting M4 Individual Test Suite...")
         print("📝 Testing: Security analytics, Sigma rules, threat intelligence, MITRE ATT&CK")
+        
+        # First create test tenant
+        await self.setup_test_tenant()
         
         # Run tests in order
         tests = [

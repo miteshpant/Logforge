@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any, List, Union, Literal
 from enum import Enum
 import json
 import re
+import uuid
 
 class LogLevel(str, Enum):
     """Standard log levels"""
@@ -311,3 +312,196 @@ class BulkRequest(BaseModel):
         if len(v) > 10000:
             raise ValueError("Bulk operation size cannot exceed 10000 operations")
         return v
+
+# Tenant Management Models
+class TenantType(str, Enum):
+    """Types of tenant organizations"""
+    ENTERPRISE = "enterprise"
+    SMB = "smb"
+    STARTUP = "startup"
+    NON_PROFIT = "non_profit"
+    GOVERNMENT = "government"
+    EDUCATION = "education"
+    HEALTHCARE = "healthcare"
+    FINANCIAL = "financial"
+
+class TenantStatus(str, Enum):
+    """Tenant account status"""
+    ACTIVE = "active"
+    SUSPENDED = "suspended"
+    TRIAL = "trial"
+    PENDING = "pending"
+    INACTIVE = "inactive"
+
+class StorageBackendType(str, Enum):
+    """Supported storage backend types"""
+    S3 = "s3"
+    GCS = "gcs"
+    AZURE = "azure"
+    MINIO = "minio"
+
+class TenantCreate(BaseModel):
+    """Tenant creation request"""
+    name: str = Field(..., description="Organization name", min_length=1, max_length=100)
+    type: TenantType = Field(..., description="Organization type")
+    address: Optional[str] = Field("", description="Organization address", max_length=500)
+    primary_contact_name: str = Field(..., description="Primary contact name", min_length=1, max_length=100)
+    primary_contact_email: str = Field(..., description="Primary contact email")
+    primary_contact_phone: Optional[str] = Field("", description="Primary contact phone", max_length=20)
+    industry: Optional[str] = Field("", description="Industry sector", max_length=100)
+    company_size: Optional[int] = Field(None, description="Number of employees")
+    website: Optional[str] = Field("", description="Company website", max_length=200)
+    notes: Optional[str] = Field("", description="Additional notes", max_length=1000)
+    
+    @validator('primary_contact_email')
+    def validate_email(cls, v):
+        """Basic email validation"""
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, v):
+            raise ValueError("Invalid email format")
+        return v.lower()
+
+class TenantUpdate(BaseModel):
+    """Tenant update request"""
+    name: Optional[str] = Field(None, description="Organization name", min_length=1, max_length=100)
+    type: Optional[TenantType] = Field(None, description="Organization type")
+    address: Optional[str] = Field(None, description="Organization address", max_length=500)
+    primary_contact_name: Optional[str] = Field(None, description="Primary contact name", min_length=1, max_length=100)
+    primary_contact_email: Optional[str] = Field(None, description="Primary contact email")
+    primary_contact_phone: Optional[str] = Field(None, description="Primary contact phone", max_length=20)
+    industry: Optional[str] = Field(None, description="Industry sector", max_length=100)
+    company_size: Optional[int] = Field(None, description="Number of employees")
+    website: Optional[str] = Field(None, description="Company website", max_length=200)
+    notes: Optional[str] = Field(None, description="Additional notes", max_length=1000)
+    status: Optional[TenantStatus] = Field(None, description="Tenant status")
+    
+    @validator('primary_contact_email')
+    def validate_email(cls, v):
+        """Basic email validation"""
+        if v is None:
+            return v
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, v):
+            raise ValueError("Invalid email format")
+        return v.lower()
+
+class StorageConfig(BaseModel):
+    """Storage backend configuration"""
+    backend_type: StorageBackendType = Field(..., description="Storage backend type")
+    region: str = Field(..., description="Storage region")
+    bucket_name: str = Field(..., description="Bucket/container name")
+    access_key_id: Optional[str] = Field("", description="Access key ID")
+    secret_access_key: Optional[str] = Field("", description="Secret access key")
+    encryption_enabled: bool = Field(True, description="Enable encryption at rest")
+    lifecycle_policy: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Lifecycle management policy")
+
+class TenantQuotas(BaseModel):
+    """Tenant quota configuration"""
+    monthly_log_limit: Optional[int] = Field(None, description="Monthly log ingestion limit")
+    storage_limit_gb: Optional[int] = Field(None, description="Storage limit in GB")
+    retention_days: int = Field(30, description="Log retention period in days")
+    query_rate_limit: Optional[int] = Field(1000, description="Queries per minute limit")
+
+class TenantConfig(BaseModel):
+    """Tenant configuration settings"""
+    timezone: str = Field("UTC", description="Default timezone")
+    data_residency: str = Field("US", description="Data residency requirement")
+    compliance_frameworks: List[str] = Field(default_factory=list, description="Active compliance frameworks")
+    encryption_required: bool = Field(True, description="Require encryption")
+    retention_policy: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Data retention policy")
+    notification_preferences: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Notification settings")
+
+class LegalHoldRequest(BaseModel):
+    """Legal hold creation request"""
+    case_name: str = Field(..., description="Legal case name")
+    description: str = Field(..., description="Hold description")
+    start_date: str = Field(..., description="Hold start date")
+    end_date: str = Field(..., description="Hold end date")
+    contact_person: str = Field(..., description="Legal contact person")
+    contact_email: str = Field(..., description="Legal contact email")
+    data_types: List[str] = Field(..., description="Data types to preserve")
+    justification: str = Field(..., description="Legal justification")
+
+class Tenant(BaseModel):
+    """Tenant entity"""
+    tenant_id: str = Field(..., description="Unique tenant UUID")
+    name: str = Field(..., description="Organization name")
+    type: TenantType = Field(..., description="Organization type")
+    address: str = Field("", description="Organization address")
+    primary_contact_name: str = Field(..., description="Primary contact name")
+    primary_contact_email: str = Field(..., description="Primary contact email")
+    primary_contact_phone: str = Field("", description="Primary contact phone")
+    industry: str = Field("", description="Industry sector")
+    company_size: Optional[int] = Field(None, description="Number of employees")
+    website: str = Field("", description="Company website")
+    notes: str = Field("", description="Additional notes")
+    status: TenantStatus = Field(TenantStatus.ACTIVE, description="Tenant status")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
+    updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last update timestamp")
+    
+    # Usage and billing
+    monthly_log_limit: Optional[int] = Field(None, description="Monthly log ingestion limit")
+    storage_limit_gb: Optional[int] = Field(None, description="Storage limit in GB")
+    retention_days: int = Field(30, description="Log retention period in days")
+    
+    # Settings
+    timezone: str = Field("UTC", description="Default timezone")
+    data_residency: str = Field("US", description="Data residency requirement")
+
+class TenantResponse(BaseModel):
+    """Tenant response model"""
+    tenant_id: str
+    name: str
+    type: TenantType
+    status: TenantStatus
+    primary_contact_name: str
+    primary_contact_email: str
+    industry: str
+    created_at: datetime
+    updated_at: datetime
+
+class TenantListResponse(BaseModel):
+    """Tenant list response"""
+    tenants: List[TenantResponse] = Field(default=[], description="List of tenants")
+    total_count: int = Field(0, description="Total tenant count")
+    page: int = Field(1, description="Current page")
+    page_size: int = Field(50, description="Page size")
+
+class TenantStatsResponse(BaseModel):
+    """Tenant statistics response"""
+    tenant_id: str
+    log_count_today: int = Field(0, description="Logs ingested today")
+    log_count_month: int = Field(0, description="Logs ingested this month")
+    storage_used_gb: float = Field(0.0, description="Storage used in GB")
+    storage_limit_gb: Optional[int] = Field(None, description="Storage limit in GB")
+    active_alerts: int = Field(0, description="Active alert count")
+    last_activity: Optional[datetime] = Field(None, description="Last log ingestion time")
+
+class TenantUsageResponse(BaseModel):
+    """Tenant usage and billing response"""
+    tenant_id: str
+    log_count_today: int = Field(0, description="Logs ingested today")
+    log_count_month: int = Field(0, description="Logs ingested this month")
+    storage_used_gb: float = Field(0.0, description="Storage used in GB")
+    query_count: int = Field(0, description="Queries executed")
+    api_calls: int = Field(0, description="API calls made")
+    billing_period: str = Field("", description="Current billing period")
+
+class TenantHealthResponse(BaseModel):
+    """Tenant health monitoring response"""
+    tenant_id: str
+    status: str = Field("healthy", description="Overall health status")
+    ingestion_health: str = Field("healthy", description="Log ingestion health")
+    storage_health: str = Field("healthy", description="Storage backend health")
+    query_performance: Dict[str, Any] = Field(default_factory=dict, description="Query performance metrics")
+    last_activity: Optional[datetime] = Field(None, description="Last activity timestamp")
+
+class StorageStatusResponse(BaseModel):
+    """Storage status response"""
+    tenant_id: str
+    backend_type: StorageBackendType
+    storage_used_gb: float = Field(0.0, description="Storage used in GB")
+    storage_limit_gb: Optional[int] = Field(None, description="Storage limit in GB")
+    health_status: str = Field("healthy", description="Storage health status")
+    connection_status: str = Field("connected", description="Connection status")
+    last_backup: Optional[datetime] = Field(None, description="Last backup timestamp")

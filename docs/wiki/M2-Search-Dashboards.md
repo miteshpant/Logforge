@@ -333,7 +333,7 @@ curl -X POST http://localhost:7080/v1/query/timeseries \
     "aggregations": [{"field": "*", "type": "count"}],
     "granularity": "hour",
     "filters": [
-      {"field": "customer_id", "operator": "eq", "value": "acme-corp"}
+      {"field": "customer_id", "operator": "eq", "value": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"}
     ]
   }'
 ```

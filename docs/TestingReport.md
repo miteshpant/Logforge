@@ -198,7 +198,7 @@ curl -s http://localhost:7080/health | jq .
 
 # Test ingestion  
 curl -s http://localhost:7080/v1/ingest/logs/bulk -X POST \
-  -H "Content-Type: application/json" -H "X-Customer-ID: default" \
+  -H "Content-Type: application/json" -H "X-Customer-ID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" \
   -d '{"logs": [{"level": "error", "msg": "test", "service": "test-service"}]}'
 
 # List alert rules

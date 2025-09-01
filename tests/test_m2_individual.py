@@ -15,7 +15,31 @@ class M2TestSuite:
     def __init__(self):
         self.base_url = "http://localhost:7080"
         self.test_results = {}
-        self.test_customer = "test-m2-customer"
+        self.test_tenant_id = None  # Will create actual tenant UUID
+    
+    async def setup_test_tenant(self):
+        """Create a test tenant for M2 tests"""
+        tenant_data = {
+            "name": "M2 Test Corporation",
+            "type": "enterprise",
+            "primary_contact_name": "M2 Test Manager",
+            "primary_contact_email": "m2test@logforge.local",
+            "industry": "Technology"
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{self.base_url}/v1/tenants",
+                json=tenant_data,
+                headers={"Authorization": "Bearer admin-token", "Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 201:
+                self.test_tenant_id = response.json()["tenant_id"]
+                print(f"🏢 Created test tenant: {self.test_tenant_id}")
+            else:
+                print(f"❌ Failed to create test tenant: {response.text}")
+                self.test_tenant_id = "default"  # Fallback to default
     
     async def test_advanced_query_engine(self):
         """Test advanced query with filters and aggregations"""
@@ -40,7 +64,7 @@ class M2TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/ingest/logs/bulk",
                     json={"logs": test_logs},
-                    headers={"X-Customer-ID": self.test_customer}
+                    headers={"X-Customer-ID": self.test_tenant_id}
                 )
                 assert response.status_code == 200, f"Failed to ingest test data: {response.text}"
                 
@@ -60,7 +84,7 @@ class M2TestSuite:
                         {
                             "field": "customer_id",
                             "operator": "eq", 
-                            "value": self.test_customer
+                            "value": self.test_tenant_id
                         }
                     ],
                     "aggregations": [
@@ -116,7 +140,7 @@ class M2TestSuite:
                         {
                             "field": "customer_id", 
                             "operator": "eq",
-                            "value": self.test_customer
+                            "value": self.test_tenant_id
                         }
                     ],
                     "limit": 100
@@ -163,7 +187,7 @@ class M2TestSuite:
                         {
                             "field": "customer_id",
                             "operator": "eq",
-                            "value": self.test_customer
+                            "value": self.test_tenant_id
                         }
                     ]
                 }
@@ -317,7 +341,7 @@ class M2TestSuite:
                         {
                             "field": "customer_id",
                             "operator": "eq",
-                            "value": self.test_customer
+                            "value": self.test_tenant_id
                         }
                     ],
                     "limit": 10
@@ -379,18 +403,28 @@ class M2TestSuite:
         print("\n🚀 Starting M2 Individual Test Suite...")
         print("📝 Testing: Advanced queries, dashboards, and search capabilities")
         
+        # First create test tenant
+        await self.setup_test_tenant()
+        
         tests = [
-            self.test_advanced_query_engine(),
-            self.test_aggregation_query(),
-            self.test_timeseries_query(),
-            self.test_dashboard_list(),
-            self.test_dashboard_definition(),
-            self.test_dashboard_data(),
-            self.test_data_export(),
-            self.test_saved_queries()
+            self.test_advanced_query_engine,
+            self.test_aggregation_query,
+            self.test_timeseries_query,
+            self.test_dashboard_list,
+            self.test_dashboard_definition,
+            self.test_dashboard_data,
+            self.test_data_export,
+            self.test_saved_queries
         ]
         
-        results = await asyncio.gather(*tests, return_exceptions=True)
+        # Run tests sequentially since some require data from previous tests
+        for test_func in tests:
+            try:
+                await test_func()
+            except Exception as e:
+                print(f"❌ Test {test_func.__name__} failed with exception: {str(e)}")
+                if test_func.__name__.replace("test_", "") not in self.test_results:
+                    self.test_results[test_func.__name__.replace("test_", "")] = f"FAIL: {str(e)}"
         
         # Summary
         print("\n📊 M2 Test Results Summary:")

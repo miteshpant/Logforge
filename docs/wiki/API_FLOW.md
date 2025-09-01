@@ -136,6 +136,13 @@ Log Ingestion:
 Query & Search (M2):
 ├── POST /v1/query/advanced       # Advanced log querying with filters, aggregations, time-series
 ├── GET /v1/logs                  # Simple log retrieval
+
+Tenant Management:
+├── POST /v1/tenants              # Create new tenant (generates UUID)
+├── GET /v1/tenants               # List tenants  
+├── GET /v1/tenants/{id}          # Get tenant details
+├── PUT /v1/tenants/{id}          # Update tenant
+└── DELETE /v1/tenants/{id}       # Delete tenant
 ├── GET /v1/dashboards           # List available enterprise dashboards
 ├── GET /v1/dashboards/{id}      # Get specific dashboard definition
 ├── GET /v1/dashboards/{id}/data # Get dashboard data with filters
@@ -1901,14 +1908,45 @@ The comprehensive test suite includes:
    - ✅ Enterprise integration platform with ITSM and SOAR connectivity
    - ✅ Compliance automation with SOX, HIPAA, PCI-DSS, GDPR reporting
 
+## Tenant Management
+
+### Tenant UUID System
+
+All Logforge functionality uses proper tenant UUIDs for multi-tenant isolation. Before using any API endpoints that require `X-Customer-ID` headers, you must create a tenant:
+
+```bash
+# Create tenant (generates UUID)
+curl -X POST http://localhost:7080/v1/tenants \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer admin-token" \
+  -d '{
+    "name": "Acme Corporation",
+    "type": "enterprise", 
+    "primary_contact_name": "John Smith",
+    "primary_contact_email": "john@acme.com",
+    "industry": "Technology"
+  }'
+
+# Response includes tenant_id UUID:
+# {
+#   "tenant_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+#   "name": "Acme Corporation", 
+#   "status": "active",
+#   ...
+# }
+```
+
+**Important**: Use the returned `tenant_id` UUID in all subsequent API calls requiring `X-Customer-ID` headers.
+
 ## API Usage Examples
 
 ### Ingesting Logs
 
 ```bash
-# JSON logs
+# JSON logs (requires tenant UUID)
 curl -X POST http://localhost:7080/v1/ingest/logs \
   -H "Content-Type: application/json" \
+  -H "X-Customer-ID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" \
   -d '{"level": "info", "message": "User login successful", "user_id": "john123"}'
 
 # Nginx logs
