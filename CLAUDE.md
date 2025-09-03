@@ -245,6 +245,85 @@ http://localhost:7080/docs  # FastAPI Swagger documentation
 3. **Phase 3**: Enhanced data visualization (charts, graphs, dashboards)
 4. **Phase 4**: Advanced interactions (real-time updates, animations)
 
+**CURRENT PRIORITY - Admin UI Implementation**:
+- **Admin UI** (Separate Next.js App on port 3002): Platform administration interface for tenant management, usage analytics, billing, and admin user management
+- **Missing Implementation**: Complete Admin UI application needs to be built from scratch
+- **Testing**: Comprehensive Playwright test suite already written and ready for validation
+
+## Admin UI Implementation Plan
+
+**Objective**: Build a complete administrative interface for platform operators to manage tenants, monitor usage, handle billing, and oversee platform operations.
+
+**Current Status**: Admin UI application does not exist - needs complete implementation
+
+**Specifications Source**: 
+- `docs/wiki/Admin-UI-Specifications.md` - Complete feature specifications
+- `tests/admin-ui-comprehensive.spec.ts` - Comprehensive Playwright test suite
+
+**Implementation Strategy** (Test-Driven Development):
+1. **Foundation Setup**: Create Next.js app structure with proper configuration
+2. **Backend API Gap Analysis**: Implement missing admin-specific API endpoints
+3. **Page Implementation**: Build all required pages with mock data first
+4. **API Integration**: Connect frontend to backend APIs
+5. **Test Validation**: Ensure all Playwright tests pass
+6. **Docker Integration**: Add admin-ui service to Docker Compose
+
+**Required Pages & Features**:
+
+### 1. Dashboard Home (`/`)
+- **Platform Statistics**: Active Tenants (1,247), Monthly Revenue ($127,450), Total Data (15.2TB), Uptime (99.97%)
+- **Navigation Grid**: 6 clickable cards for all admin functions
+- **Responsive Design**: 3-column desktop layout, mobile-friendly stacking
+
+### 2. Tenant Management (`/tenants`)
+- **CRUD Operations**: List, create, update, delete tenants
+- **Onboarding Modal**: Organization name, admin email, subscription tier selection
+- **Tenant Table**: Organization, ID, subscription, status, usage, cost, actions
+- **Mock Data**: Acme Corp (Enterprise), TechStart Inc (Professional), DevTeam LLC (Starter)
+- **Color-coded Badges**: Enterprise (purple), Professional (blue), Starter (green)
+
+### 3. Usage Analytics (`/usage`)
+- **Period Selector**: Current month, last month, last 3 months, custom range
+- **Summary Stats**: Total revenue, API calls, avg revenue/tenant, enterprise accounts
+- **Usage Breakdown**: Per-tenant data ingestion, API calls, costs
+- **Feature Usage**: Detailed feature-level usage and cost attribution
+- **Export Functionality**: Usage reports and bill generation
+
+### 4. Admin Users Management (`/admin-users`)
+- **User Table**: Name, email, role, status, last login, permissions, actions
+- **Add User Modal**: Full name, email, role selection (Admin, Super Admin, Support Admin, Billing Admin)
+- **Role Badges**: Color-coded role indicators with proper permissions display
+- **Mock Users**: Sarah Johnson (Super Admin), Mike Chen (Admin), Emily Rodriguez (Support Admin), David Park (Billing Admin)
+
+**Backend API Requirements**:
+- **Missing APIs**: Admin user management endpoints (`/v1/admin/users/*`)
+- **Usage Analytics**: `/v1/usage/analytics`, `/v1/usage/export`, `/v1/billing/generate`
+- **Enhanced Admin APIs**: Platform-wide statistics, multi-tenant usage aggregation
+
+**Technical Implementation**:
+- **Framework**: Next.js 14 with TypeScript, Tailwind CSS, shadcn/ui
+- **Port**: 3002 (separate from customer UI on 3001)
+- **API Integration**: FastAPI backend at localhost:7080
+- **Container**: Docker service `admin-ui` in compose.yml
+- **Testing**: Playwright E2E tests covering all functionality
+
+**Design System**:
+- **Consistent Styling**: Professional gray/blue palette, proper contrast ratios
+- **Navigation Pattern**: "← Back to Dashboard" on all pages
+- **Modal Pattern**: Consistent form styling and validation
+- **Table Pattern**: Professional data tables with proper headers and actions
+- **Badge System**: Color-coded status and subscription indicators
+
+**Performance Requirements**:
+- **Page Load**: < 2 seconds initial load, < 1 second navigation
+- **Modal Performance**: < 500ms open/close
+- **Table Rendering**: Efficient handling of large datasets with pagination
+
+**Security Considerations**:
+- **Admin-Only Access**: Separate from customer UI, role-based permissions
+- **Secure API Communication**: Proper headers and validation
+- **Data Protection**: No sensitive data exposure in client-side code
+
 **Next Priorities**:
 - **M5**: Distributed tracing, metrics collection, service mapping, APM
 - **M6**: AI assistant, NL queries, root cause analysis, ML anomaly detection

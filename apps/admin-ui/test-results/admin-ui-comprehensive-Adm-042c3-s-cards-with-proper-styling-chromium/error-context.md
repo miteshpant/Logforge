@@ -1,0 +1,74 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - heading "Logforge Admin Dashboard" [level=1] [ref=e5]
+      - paragraph [ref=e6]: Manage tenants, monitor usage, and oversee platform operations
+    - generic [ref=e7]:
+      - generic [ref=e10]:
+        - img [ref=e11]
+        - generic [ref=e16]:
+          - generic [ref=e17]: Active Tenants
+          - generic [ref=e18]: "6"
+      - generic [ref=e21]:
+        - img [ref=e22]
+        - generic [ref=e24]:
+          - generic [ref=e25]: Monthly Revenue
+          - generic [ref=e26]: $2,790
+      - generic [ref=e29]:
+        - img [ref=e30]
+        - generic [ref=e34]:
+          - generic [ref=e35]: Total Tenants
+          - generic [ref=e36]: "6"
+      - generic [ref=e39]:
+        - img [ref=e40]
+        - generic [ref=e42]:
+          - generic [ref=e43]: Platform Health
+          - generic [ref=e44]: 100%
+    - generic [ref=e45]:
+      - link "Tenant Management Onboard and manage tenant accounts" [ref=e46] [cursor=pointer]:
+        - /url: /tenants
+        - generic [ref=e48] [cursor=pointer]:
+          - generic [ref=e49] [cursor=pointer]:
+            - img [ref=e50] [cursor=pointer]
+            - heading "Tenant Management" [level=3] [ref=e55] [cursor=pointer]
+          - paragraph [ref=e56] [cursor=pointer]: Onboard and manage tenant accounts
+      - link "Usage Analytics Monitor usage patterns and billing" [ref=e57] [cursor=pointer]:
+        - /url: /usage
+        - generic [ref=e59] [cursor=pointer]:
+          - generic [ref=e60] [cursor=pointer]:
+            - img [ref=e61] [cursor=pointer]
+            - heading "Usage Analytics" [level=3] [ref=e63] [cursor=pointer]
+          - paragraph [ref=e64] [cursor=pointer]: Monitor usage patterns and billing
+      - link "Billing & Subscriptions Manage subscription tiers and billing" [ref=e65] [cursor=pointer]:
+        - /url: /billing
+        - generic [ref=e67] [cursor=pointer]:
+          - generic [ref=e68] [cursor=pointer]:
+            - img [ref=e69] [cursor=pointer]
+            - heading "Billing & Subscriptions" [level=3] [ref=e71] [cursor=pointer]
+          - paragraph [ref=e72] [cursor=pointer]: Manage subscription tiers and billing
+      - link "Feature Management Configure feature availability" [ref=e73] [cursor=pointer]:
+        - /url: /features
+        - generic [ref=e75] [cursor=pointer]:
+          - generic [ref=e76] [cursor=pointer]:
+            - img [ref=e77] [cursor=pointer]
+            - heading "Feature Management" [level=3] [ref=e80] [cursor=pointer]
+          - paragraph [ref=e81] [cursor=pointer]: Configure feature availability
+      - link "Support & Tickets Handle customer support requests" [ref=e82] [cursor=pointer]:
+        - /url: /support
+        - generic [ref=e84] [cursor=pointer]:
+          - generic [ref=e85] [cursor=pointer]:
+            - img [ref=e86] [cursor=pointer]
+            - heading "Support & Tickets" [level=3] [ref=e89] [cursor=pointer]
+          - paragraph [ref=e90] [cursor=pointer]: Handle customer support requests
+      - link "Admin Users Manage platform administrator accounts" [ref=e91] [cursor=pointer]:
+        - /url: /admin-users
+        - generic [ref=e93] [cursor=pointer]:
+          - generic [ref=e94] [cursor=pointer]:
+            - img [ref=e95] [cursor=pointer]
+            - heading "Admin Users" [level=3] [ref=e97] [cursor=pointer]
+          - paragraph [ref=e98] [cursor=pointer]: Manage platform administrator accounts
+  - alert [ref=e99]
+```

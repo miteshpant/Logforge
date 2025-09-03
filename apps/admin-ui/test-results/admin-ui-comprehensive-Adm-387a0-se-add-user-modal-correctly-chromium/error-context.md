@@ -1,0 +1,104 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - link "← Back to Dashboard" [ref=e6] [cursor=pointer]:
+      - /url: /
+      - img [ref=e7] [cursor=pointer]
+      - text: ← Back to Dashboard
+    - generic [ref=e9]:
+      - heading "Admin User Management" [level=1] [ref=e10]
+      - paragraph [ref=e11]: Manage platform administrator accounts and permissions
+    - button "Add Admin User" [ref=e13] [cursor=pointer]:
+      - img [ref=e14] [cursor=pointer]
+      - text: Add Admin User
+    - table [ref=e17]:
+      - rowgroup [ref=e18]:
+        - row "Name Email Role Status Last Login Permissions Actions" [ref=e19]:
+          - cell "Name" [ref=e20]
+          - cell "Email" [ref=e21]
+          - cell "Role" [ref=e22]
+          - cell "Status" [ref=e23]
+          - cell "Last Login" [ref=e24]
+          - cell "Permissions" [ref=e25]
+          - cell "Actions" [ref=e26]
+      - rowgroup [ref=e27]:
+        - row "Sarah Johnson sarah.johnson@logforge.com Super Admin Active 2024-01-15 09:30:00 All Permissions Edit | Deactivate" [ref=e28]:
+          - cell "Sarah Johnson" [ref=e29]:
+            - generic [ref=e30]: Sarah Johnson
+          - cell "sarah.johnson@logforge.com" [ref=e31]:
+            - generic [ref=e32]: sarah.johnson@logforge.com
+          - cell "Super Admin" [ref=e33]:
+            - generic [ref=e34]: Super Admin
+          - cell "Active" [ref=e35]:
+            - generic [ref=e36]: Active
+          - cell "2024-01-15 09:30:00" [ref=e37]:
+            - generic [ref=e38]: 2024-01-15 09:30:00
+          - cell "All Permissions" [ref=e39]:
+            - generic [ref=e40]: All Permissions
+          - cell "Edit | Deactivate" [ref=e41]:
+            - generic [ref=e42]:
+              - link "Edit" [ref=e43] [cursor=pointer]:
+                - /url: /admin-users/au001
+              - generic [ref=e44]: "|"
+              - button "Deactivate" [ref=e45] [cursor=pointer]
+        - row "Mike Chen mike.chen@logforge.com Admin Active 2024-01-14 16:45:00 Tenant Management, Usage Analytics, Billing Edit | Deactivate" [ref=e46]:
+          - cell "Mike Chen" [ref=e47]:
+            - generic [ref=e48]: Mike Chen
+          - cell "mike.chen@logforge.com" [ref=e49]:
+            - generic [ref=e50]: mike.chen@logforge.com
+          - cell "Admin" [ref=e51]:
+            - generic [ref=e52]: Admin
+          - cell "Active" [ref=e53]:
+            - generic [ref=e54]: Active
+          - cell "2024-01-14 16:45:00" [ref=e55]:
+            - generic [ref=e56]: 2024-01-14 16:45:00
+          - cell "Tenant Management, Usage Analytics, Billing" [ref=e57]:
+            - generic [ref=e58]: Tenant Management, Usage Analytics, Billing
+          - cell "Edit | Deactivate" [ref=e59]:
+            - generic [ref=e60]:
+              - link "Edit" [ref=e61] [cursor=pointer]:
+                - /url: /admin-users/au002
+              - generic [ref=e62]: "|"
+              - button "Deactivate" [ref=e63] [cursor=pointer]
+        - row "Emily Rodriguez emily.rodriguez@logforge.com Support Admin Active 2024-01-13 11:20:00 Support Tickets, User Management Edit | Deactivate" [ref=e64]:
+          - cell "Emily Rodriguez" [ref=e65]:
+            - generic [ref=e66]: Emily Rodriguez
+          - cell "emily.rodriguez@logforge.com" [ref=e67]:
+            - generic [ref=e68]: emily.rodriguez@logforge.com
+          - cell "Support Admin" [ref=e69]:
+            - generic [ref=e70]: Support Admin
+          - cell "Active" [ref=e71]:
+            - generic [ref=e72]: Active
+          - cell "2024-01-13 11:20:00" [ref=e73]:
+            - generic [ref=e74]: 2024-01-13 11:20:00
+          - cell "Support Tickets, User Management" [ref=e75]:
+            - generic [ref=e76]: Support Tickets, User Management
+          - cell "Edit | Deactivate" [ref=e77]:
+            - generic [ref=e78]:
+              - link "Edit" [ref=e79] [cursor=pointer]:
+                - /url: /admin-users/au003
+              - generic [ref=e80]: "|"
+              - button "Deactivate" [ref=e81] [cursor=pointer]
+        - row "David Park david.park@logforge.com Billing Admin Inactive 2024-01-10 14:15:00 Billing, Subscriptions Edit | Deactivate" [ref=e82]:
+          - cell "David Park" [ref=e83]:
+            - generic [ref=e84]: David Park
+          - cell "david.park@logforge.com" [ref=e85]:
+            - generic [ref=e86]: david.park@logforge.com
+          - cell "Billing Admin" [ref=e87]:
+            - generic [ref=e88]: Billing Admin
+          - cell "Inactive" [ref=e89]:
+            - generic [ref=e90]: Inactive
+          - cell "2024-01-10 14:15:00" [ref=e91]:
+            - generic [ref=e92]: 2024-01-10 14:15:00
+          - cell "Billing, Subscriptions" [ref=e93]:
+            - generic [ref=e94]: Billing, Subscriptions
+          - cell "Edit | Deactivate" [ref=e95]:
+            - generic [ref=e96]:
+              - link "Edit" [ref=e97] [cursor=pointer]:
+                - /url: /admin-users/au004
+              - generic [ref=e98]: "|"
+              - button "Deactivate" [ref=e99] [cursor=pointer]
+  - alert [ref=e100]
+```

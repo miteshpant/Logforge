@@ -1,0 +1,161 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - link "← Back to Dashboard" [ref=e6] [cursor=pointer]:
+      - /url: /
+      - img [ref=e7] [cursor=pointer]
+      - text: ← Back to Dashboard
+    - generic [ref=e10]:
+      - heading "Tenant Management" [level=1] [ref=e11]
+      - paragraph [ref=e12]: Onboard new tenants and manage existing accounts
+    - generic [ref=e13]:
+      - generic [ref=e16]:
+        - generic [ref=e17]: Total Tenants
+        - generic [ref=e18]: "6"
+      - generic [ref=e21]:
+        - generic [ref=e22]: Active Tenants
+        - generic [ref=e23]: "6"
+      - generic [ref=e26]:
+        - generic [ref=e27]: Total Storage
+        - generic [ref=e28]: 0.0GB
+      - generic [ref=e31]:
+        - generic [ref=e32]: Enterprise Customers
+        - generic [ref=e33]: "2"
+    - button "Onboard New Tenant" [ref=e35] [cursor=pointer]:
+      - img [ref=e36] [cursor=pointer]
+      - text: Onboard New Tenant
+    - table [ref=e41]:
+      - rowgroup [ref=e42]:
+        - row "Organization Tenant ID Subscription Status Monthly Usage Monthly Cost Actions" [ref=e43]:
+          - cell "Organization" [ref=e44]
+          - cell "Tenant ID" [ref=e45]
+          - cell "Subscription" [ref=e46]
+          - cell "Status" [ref=e47]
+          - cell "Monthly Usage" [ref=e48]
+          - cell "Monthly Cost" [ref=e49]
+          - cell "Actions" [ref=e50]
+      - rowgroup [ref=e51]:
+        - row "Default Organization default ENTERPRISE Active 0.0GB $997 View Details | Manage Subscription" [ref=e52]:
+          - cell "Default Organization" [ref=e53]:
+            - generic [ref=e54]: Default Organization
+          - cell "default" [ref=e55]:
+            - generic [ref=e56]: default
+          - cell "ENTERPRISE" [ref=e57]:
+            - generic [ref=e58]: ENTERPRISE
+          - cell "Active" [ref=e59]:
+            - generic [ref=e60]: Active
+          - cell "0.0GB" [ref=e61]:
+            - generic [ref=e62]: 0.0GB
+          - cell "$997" [ref=e63]:
+            - generic [ref=e64]: $997
+          - cell "View Details | Manage Subscription" [ref=e65]:
+            - generic [ref=e66]:
+              - link "View Details" [ref=e67] [cursor=pointer]:
+                - /url: /tenants/default
+              - generic [ref=e68]: "|"
+              - link "Manage Subscription" [ref=e69] [cursor=pointer]:
+                - /url: /tenants/default/subscription
+        - row "Acme Corporation 60118fbb-f310-46d5-b1ef-94f6b76e20f3 ENTERPRISE Active 0.0GB $997 View Details | Manage Subscription" [ref=e70]:
+          - cell "Acme Corporation" [ref=e71]:
+            - generic [ref=e72]: Acme Corporation
+          - cell "60118fbb-f310-46d5-b1ef-94f6b76e20f3" [ref=e73]:
+            - generic [ref=e74]: 60118fbb-f310-46d5-b1ef-94f6b76e20f3
+          - cell "ENTERPRISE" [ref=e75]:
+            - generic [ref=e76]: ENTERPRISE
+          - cell "Active" [ref=e77]:
+            - generic [ref=e78]: Active
+          - cell "0.0GB" [ref=e79]:
+            - generic [ref=e80]: 0.0GB
+          - cell "$997" [ref=e81]:
+            - generic [ref=e82]: $997
+          - cell "View Details | Manage Subscription" [ref=e83]:
+            - generic [ref=e84]:
+              - link "View Details" [ref=e85] [cursor=pointer]:
+                - /url: /tenants/60118fbb-f310-46d5-b1ef-94f6b76e20f3
+              - generic [ref=e86]: "|"
+              - link "Manage Subscription" [ref=e87] [cursor=pointer]:
+                - /url: /tenants/60118fbb-f310-46d5-b1ef-94f6b76e20f3/subscription
+        - row "TechStart Inc 07793ee4-8b25-4b69-b90d-a5520779ffd7 PROFESSIONAL Active 0.0GB $499 View Details | Manage Subscription" [ref=e88]:
+          - cell "TechStart Inc" [ref=e89]:
+            - generic [ref=e90]: TechStart Inc
+          - cell "07793ee4-8b25-4b69-b90d-a5520779ffd7" [ref=e91]:
+            - generic [ref=e92]: 07793ee4-8b25-4b69-b90d-a5520779ffd7
+          - cell "PROFESSIONAL" [ref=e93]:
+            - generic [ref=e94]: PROFESSIONAL
+          - cell "Active" [ref=e95]:
+            - generic [ref=e96]: Active
+          - cell "0.0GB" [ref=e97]:
+            - generic [ref=e98]: 0.0GB
+          - cell "$499" [ref=e99]:
+            - generic [ref=e100]: $499
+          - cell "View Details | Manage Subscription" [ref=e101]:
+            - generic [ref=e102]:
+              - link "View Details" [ref=e103] [cursor=pointer]:
+                - /url: /tenants/07793ee4-8b25-4b69-b90d-a5520779ffd7
+              - generic [ref=e104]: "|"
+              - link "Manage Subscription" [ref=e105] [cursor=pointer]:
+                - /url: /tenants/07793ee4-8b25-4b69-b90d-a5520779ffd7/subscription
+        - row "DevTeam LLC 6a35a624-4075-4513-b1dd-87f9d9eb209b STARTER Active 0.0GB $99 View Details | Manage Subscription" [ref=e106]:
+          - cell "DevTeam LLC" [ref=e107]:
+            - generic [ref=e108]: DevTeam LLC
+          - cell "6a35a624-4075-4513-b1dd-87f9d9eb209b" [ref=e109]:
+            - generic [ref=e110]: 6a35a624-4075-4513-b1dd-87f9d9eb209b
+          - cell "STARTER" [ref=e111]:
+            - generic [ref=e112]: STARTER
+          - cell "Active" [ref=e113]:
+            - generic [ref=e114]: Active
+          - cell "0.0GB" [ref=e115]:
+            - generic [ref=e116]: 0.0GB
+          - cell "$99" [ref=e117]:
+            - generic [ref=e118]: $99
+          - cell "View Details | Manage Subscription" [ref=e119]:
+            - generic [ref=e120]:
+              - link "View Details" [ref=e121] [cursor=pointer]:
+                - /url: /tenants/6a35a624-4075-4513-b1dd-87f9d9eb209b
+              - generic [ref=e122]: "|"
+              - link "Manage Subscription" [ref=e123] [cursor=pointer]:
+                - /url: /tenants/6a35a624-4075-4513-b1dd-87f9d9eb209b/subscription
+        - row "TestCorp UI Testing 5ded880e-043c-4a9a-a494-6447786bec37 STARTER Active 0.0GB $99 View Details | Manage Subscription" [ref=e124]:
+          - cell "TestCorp UI Testing" [ref=e125]:
+            - generic [ref=e126]: TestCorp UI Testing
+          - cell "5ded880e-043c-4a9a-a494-6447786bec37" [ref=e127]:
+            - generic [ref=e128]: 5ded880e-043c-4a9a-a494-6447786bec37
+          - cell "STARTER" [ref=e129]:
+            - generic [ref=e130]: STARTER
+          - cell "Active" [ref=e131]:
+            - generic [ref=e132]: Active
+          - cell "0.0GB" [ref=e133]:
+            - generic [ref=e134]: 0.0GB
+          - cell "$99" [ref=e135]:
+            - generic [ref=e136]: $99
+          - cell "View Details | Manage Subscription" [ref=e137]:
+            - generic [ref=e138]:
+              - link "View Details" [ref=e139] [cursor=pointer]:
+                - /url: /tenants/5ded880e-043c-4a9a-a494-6447786bec37
+              - generic [ref=e140]: "|"
+              - link "Manage Subscription" [ref=e141] [cursor=pointer]:
+                - /url: /tenants/5ded880e-043c-4a9a-a494-6447786bec37/subscription
+        - row "Test1 66ca2d5a-f6a4-4d1a-924c-81acfbd41f96 STARTER Active 0.0GB $99 View Details | Manage Subscription" [ref=e142]:
+          - cell "Test1" [ref=e143]:
+            - generic [ref=e144]: Test1
+          - cell "66ca2d5a-f6a4-4d1a-924c-81acfbd41f96" [ref=e145]:
+            - generic [ref=e146]: 66ca2d5a-f6a4-4d1a-924c-81acfbd41f96
+          - cell "STARTER" [ref=e147]:
+            - generic [ref=e148]: STARTER
+          - cell "Active" [ref=e149]:
+            - generic [ref=e150]: Active
+          - cell "0.0GB" [ref=e151]:
+            - generic [ref=e152]: 0.0GB
+          - cell "$99" [ref=e153]:
+            - generic [ref=e154]: $99
+          - cell "View Details | Manage Subscription" [ref=e155]:
+            - generic [ref=e156]:
+              - link "View Details" [ref=e157] [cursor=pointer]:
+                - /url: /tenants/66ca2d5a-f6a4-4d1a-924c-81acfbd41f96
+              - generic [ref=e158]: "|"
+              - link "Manage Subscription" [ref=e159] [cursor=pointer]:
+                - /url: /tenants/66ca2d5a-f6a4-4d1a-924c-81acfbd41f96/subscription
+  - alert [ref=e160]
+```
