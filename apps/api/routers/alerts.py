@@ -18,6 +18,7 @@ from alert_engine import (
 from query_engine import QueryFilter, QueryOperator
 from dataclasses import asdict
 from storage_config import get_customer_id
+from tenant_dependencies import MiddlewareTenant
 from fastapi import Depends
 
 router = APIRouter(prefix="/v1/alerts")
@@ -130,16 +131,14 @@ async def create_alert_rule(rule_request: AlertRuleCreateRequest, request: Reque
 
 @router.get("/rules")
 async def list_alert_rules(
-    request: Request,
     enabled: Optional[bool] = None,
     severity: Optional[str] = None,
     limit: int = 100,
-    offset: int = 0
+    offset: int = 0,
+    customer_id: str = MiddlewareTenant
 ):
     """List alert rules for the customer"""
     try:
-        # Extract customer ID from headers or use default
-        customer_id = request.headers.get("X-Customer-ID", "default")
         
         if not alert_engine:
             raise HTTPException(status_code=500, detail="Alert engine not initialized")

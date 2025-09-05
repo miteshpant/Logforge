@@ -24,3 +24,7 @@ azure-storage-blob==12.19.0
 # Performance optimizations
 orjson==3.9.10
 msgpack==1.0.7
+# M8 User Service dependencies
+bcrypt==4.1.2
+pyjwt==2.8.0
+python-jose[cryptography]==3.3.0

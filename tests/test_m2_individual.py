@@ -8,38 +8,15 @@ import asyncio
 import httpx
 import json
 from datetime import datetime, timedelta
+from base_test import BaseTestSuite
 
-class M2TestSuite:
+class M2TestSuite(BaseTestSuite):
     """Test M2 Search & Dashboards functionality"""
     
     def __init__(self):
-        self.base_url = "http://localhost:7080"
-        self.test_results = {}
-        self.test_tenant_id = None  # Will create actual tenant UUID
+        super().__init__("M2 Search & Dashboards")
     
-    async def setup_test_tenant(self):
-        """Create a test tenant for M2 tests"""
-        tenant_data = {
-            "name": "M2 Test Corporation",
-            "type": "enterprise",
-            "primary_contact_name": "M2 Test Manager",
-            "primary_contact_email": "m2test@logforge.local",
-            "industry": "Technology"
-        }
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                f"{self.base_url}/v1/tenants",
-                json=tenant_data,
-                headers={"Authorization": "Bearer admin-token", "Content-Type": "application/json"}
-            )
-            
-            if response.status_code == 201:
-                self.test_tenant_id = response.json()["tenant_id"]
-                print(f"🏢 Created test tenant: {self.test_tenant_id}")
-            else:
-                print(f"❌ Failed to create test tenant: {response.text}")
-                self.test_tenant_id = "default"  # Fallback to default
+    # Remove setup_test_tenant - BaseTestSuite handles tenant creation
     
     async def test_advanced_query_engine(self):
         """Test advanced query with filters and aggregations"""
@@ -64,7 +41,7 @@ class M2TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/ingest/logs/bulk",
                     json={"logs": test_logs},
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 assert response.status_code == 200, f"Failed to ingest test data: {response.text}"
                 
@@ -99,7 +76,8 @@ class M2TestSuite:
 
                 response = await client.post(
                     f"{self.base_url}/v1/query/advanced",
-                    json=query_request
+                    json=query_request,
+                    headers=self.auth_headers
                 )
 
                 assert response.status_code == 200, f"Advanced query failed: {response.text}"
@@ -148,7 +126,8 @@ class M2TestSuite:
 
                 response = await client.post(
                     f"{self.base_url}/v1/query/advanced",
-                    json=query_request
+                    json=query_request,
+                    headers=self.auth_headers
                 )
 
                 assert response.status_code == 200, f"Aggregation query failed: {response.text}"
@@ -194,7 +173,8 @@ class M2TestSuite:
 
                 response = await client.post(
                     f"{self.base_url}/v1/query/timeseries",
-                    json=query_request
+                    json=query_request,
+                    headers=self.auth_headers
                 )
 
                 assert response.status_code == 200, f"Time-series query failed: {response.text}"
@@ -222,7 +202,10 @@ class M2TestSuite:
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
-                response = await client.get(f"{self.base_url}/v1/dashboards")
+                response = await client.get(
+                    f"{self.base_url}/v1/dashboards",
+                    headers=self.auth_headers
+                )
                 
                 assert response.status_code == 200, f"Dashboard list failed: {response.text}"
                 result = response.json()
@@ -248,7 +231,10 @@ class M2TestSuite:
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
                 # First get list of dashboards
-                response = await client.get(f"{self.base_url}/v1/dashboards")
+                response = await client.get(
+                    f"{self.base_url}/v1/dashboards",
+                    headers=self.auth_headers
+                )
                 assert response.status_code == 200
                 dashboards = response.json()["dashboards"]
                 
@@ -259,7 +245,10 @@ class M2TestSuite:
                 
                 # Test first available dashboard
                 dashboard_id = dashboards[0]["id"]
-                response = await client.get(f"{self.base_url}/v1/dashboards/{dashboard_id}")
+                response = await client.get(
+                    f"{self.base_url}/v1/dashboards/{dashboard_id}",
+                    headers=self.auth_headers
+                )
                 
                 assert response.status_code == 200, f"Dashboard definition failed: {response.text}"
                 dashboard_def = response.json()
@@ -285,7 +274,10 @@ class M2TestSuite:
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
                 # First get list of dashboards
-                response = await client.get(f"{self.base_url}/v1/dashboards")
+                response = await client.get(
+                    f"{self.base_url}/v1/dashboards",
+                    headers=self.auth_headers
+                )
                 assert response.status_code == 200
                 dashboards = response.json()["dashboards"]
                 
@@ -303,7 +295,8 @@ class M2TestSuite:
                 
                 response = await client.get(
                     f"{self.base_url}/v1/dashboards/{dashboard_id}/data",
-                    params=params
+                    params=params,
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"Dashboard data failed: {response.text}"
@@ -355,7 +348,8 @@ class M2TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/export",
                     json=export_query,
-                    params=params
+                    params=params,
+                    headers=self.auth_headers
                 )
 
                 assert response.status_code == 200, f"Data export failed: {response.text}"
@@ -380,7 +374,10 @@ class M2TestSuite:
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
                 # Test get saved queries (may be empty/unimplemented)
-                response = await client.get(f"{self.base_url}/v1/query/saved")
+                response = await client.get(
+                    f"{self.base_url}/v1/query/saved",
+                    headers=self.auth_headers
+                )
                 
                 # Accept 200 (implemented) or 501/404 (not implemented yet)
                 assert response.status_code in [200, 404, 501], f"Saved queries failed: {response.text}"
@@ -399,12 +396,8 @@ class M2TestSuite:
                 return False
     
     async def run_all_tests(self):
-        """Run all M2 tests"""
-        print("\n🚀 Starting M2 Individual Test Suite...")
+        """Run all M2 tests using base class runner"""
         print("📝 Testing: Advanced queries, dashboards, and search capabilities")
-        
-        # First create test tenant
-        await self.setup_test_tenant()
         
         tests = [
             self.test_advanced_query_engine,
@@ -417,37 +410,7 @@ class M2TestSuite:
             self.test_saved_queries
         ]
         
-        # Run tests sequentially since some require data from previous tests
-        for test_func in tests:
-            try:
-                await test_func()
-            except Exception as e:
-                print(f"❌ Test {test_func.__name__} failed with exception: {str(e)}")
-                if test_func.__name__.replace("test_", "") not in self.test_results:
-                    self.test_results[test_func.__name__.replace("test_", "")] = f"FAIL: {str(e)}"
-        
-        # Summary
-        print("\n📊 M2 Test Results Summary:")
-        passed = sum(1 for result in self.test_results.values() if result == "PASS" or result.startswith("SKIP"))
-        total = len(self.test_results)
-        
-        for test_name, result in self.test_results.items():
-            if result == "PASS":
-                status = "✅"
-            elif result.startswith("SKIP"):
-                status = "⚠️"
-            else:
-                status = "❌"
-            print(f"  {status} {test_name}: {result}")
-        
-        print(f"\n🎯 M2 Results: {passed}/{total} tests passed")
-        
-        if passed == total:
-            print("✅ M2 Search & Dashboards: ALL TESTS PASSED")
-            return True
-        else:
-            print("❌ M2 Search & Dashboards: SOME TESTS FAILED")
-            return False
+        return await super().run_all_tests(tests)
 
 if __name__ == "__main__":
     test_suite = M2TestSuite()

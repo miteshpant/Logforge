@@ -8,38 +8,15 @@ import asyncio
 import httpx
 import json
 from datetime import datetime, timedelta
+from base_test import BaseTestSuite
 
-class M3TestSuite:
+class M3TestSuite(BaseTestSuite):
     """Test M3 Alerts & Integrations functionality"""
     
     def __init__(self):
-        self.base_url = "http://localhost:7080"
-        self.test_results = {}
-        self.test_tenant_id = None  # Will create actual tenant UUID
+        super().__init__("M3 Alerts & Integrations")
     
-    async def setup_test_tenant(self):
-        """Create a test tenant for M3 tests"""
-        tenant_data = {
-            "name": "M3 Test Corporation",
-            "type": "enterprise",
-            "primary_contact_name": "M3 Test Manager",
-            "primary_contact_email": "m3test@logforge.local",
-            "industry": "Technology"
-        }
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                f"{self.base_url}/v1/tenants",
-                json=tenant_data,
-                headers={"Authorization": "Bearer admin-token", "Content-Type": "application/json"}
-            )
-            
-            if response.status_code == 201:
-                self.test_tenant_id = response.json()["tenant_id"]
-                print(f"🏢 Created test tenant: {self.test_tenant_id}")
-            else:
-                print(f"❌ Failed to create test tenant: {response.text}")
-                self.test_tenant_id = "default"  # Fallback to default
+    # Remove setup_test_tenant - BaseTestSuite handles tenant creation
     
     async def test_alert_rule_creation(self):
         """Test creating alert rules"""
@@ -86,7 +63,7 @@ class M3TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/alerts/rules",
                     json=rule_data,
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
 
                 assert response.status_code == 200, f"Alert rule creation failed: {response.text}"
@@ -117,7 +94,7 @@ class M3TestSuite:
             try:
                 response = await client.get(
                     f"{self.base_url}/v1/alerts/rules",
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"Alert rule list failed: {response.text}"
@@ -165,7 +142,7 @@ class M3TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/ingest/logs/bulk",
                     json={"logs": test_logs},
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 assert response.status_code == 200, "Failed to ingest test data for alerts"
                 
@@ -213,7 +190,7 @@ class M3TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/alerts/rules/{self.test_rule_id}/test",
                     json=test_rule,
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
 
                 assert response.status_code == 200, f"Alert rule testing failed: {response.text}"
@@ -245,7 +222,10 @@ class M3TestSuite:
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
-                response = await client.get(f"{self.base_url}/v1/alerts")
+                response = await client.get(
+                    f"{self.base_url}/v1/alerts",
+                    headers=self.auth_headers
+                )
                 
                 assert response.status_code == 200, f"Alert history failed: {response.text}"
                 result = response.json()
@@ -279,7 +259,10 @@ class M3TestSuite:
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
                 # Test get notification channels
-                response = await client.get(f"{self.base_url}/v1/alerts/notifications/channels")
+                response = await client.get(
+                    f"{self.base_url}/v1/alerts/notifications/channels",
+                    headers=self.auth_headers
+                )
                 
                 assert response.status_code == 200, f"Notification channels list failed: {response.text}"
                 result = response.json()
@@ -302,7 +285,8 @@ class M3TestSuite:
 
                 response = await client.post(
                     f"{self.base_url}/v1/alerts/notifications/channels",
-                    json=channel_data
+                    json=channel_data,
+                    headers=self.auth_headers
                 )
 
                 # Accept 200 (implemented) or 501 (not implemented yet)
@@ -336,7 +320,10 @@ class M3TestSuite:
                 rule_id = self.test_rule_id
 
                 # Test get specific rule
-                response = await client.get(f"{self.base_url}/v1/alerts/rules/{rule_id}")
+                response = await client.get(
+                    f"{self.base_url}/v1/alerts/rules/{rule_id}",
+                    headers=self.auth_headers
+                )
                 
                 assert response.status_code == 200, f"Get alert rule failed: {response.text}"
                 rule_data = response.json()
@@ -354,7 +341,7 @@ class M3TestSuite:
                 response = await client.put(
                     f"{self.base_url}/v1/alerts/rules/{rule_id}",
                     json=update_data,
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
 
                 # Accept 200 (implemented) or 501 (not implemented yet)
@@ -363,7 +350,7 @@ class M3TestSuite:
                 # Test delete rule
                 response = await client.delete(
                     f"{self.base_url}/v1/alerts/rules/{rule_id}",
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 
                 # Accept 200 (implemented) or 501 (not implemented yet)  
@@ -402,7 +389,8 @@ class M3TestSuite:
 
                 response = await client.post(
                     f"{self.base_url}/v1/alerts/integrations/webhooks",
-                    json=webhook_config
+                    json=webhook_config,
+                    headers=self.auth_headers
                 )
 
                 # Accept 200 (implemented) or 501 (not implemented yet)
@@ -413,7 +401,10 @@ class M3TestSuite:
                     assert "webhook_id" in result or "status" in result
 
                 # Test webhook list
-                response = await client.get(f"{self.base_url}/v1/alerts/integrations/webhooks")
+                response = await client.get(
+                    f"{self.base_url}/v1/alerts/integrations/webhooks",
+                    headers=self.auth_headers
+                )
                 
                 # Accept 200 (implemented) or 404 (not implemented yet)
                 assert response.status_code in [200, 404, 501], f"Webhook list failed: {response.text}"
@@ -433,7 +424,10 @@ class M3TestSuite:
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
-                response = await client.get(f"{self.base_url}/v1/alerts/stats")
+                response = await client.get(
+                    f"{self.base_url}/v1/alerts/stats",
+                    headers=self.auth_headers
+                )
                 
                 assert response.status_code == 200, f"Alert metrics failed: {response.text}"
                 result = response.json()
@@ -462,12 +456,8 @@ class M3TestSuite:
                 return False
     
     async def run_all_tests(self):
-        """Run all M3 tests"""
-        print("\n🚀 Starting M3 Individual Test Suite...")
+        """Run all M3 tests using base class runner"""
         print("📝 Testing: Alert engine, rule management, and notification integrations")
-        
-        # First create test tenant
-        await self.setup_test_tenant()
         
         # Run tests in order (some depend on earlier ones)
         tests = [
@@ -481,37 +471,7 @@ class M3TestSuite:
             self.test_alert_metrics
         ]
         
-        # Run tests sequentially since some depend on previous ones
-        for test_func in tests:
-            try:
-                await test_func()
-            except Exception as e:
-                print(f"❌ Test {test_func.__name__} failed with exception: {str(e)}")
-                if test_func.__name__.replace("test_", "") not in self.test_results:
-                    self.test_results[test_func.__name__.replace("test_", "")] = f"FAIL: {str(e)}"
-        
-        # Summary
-        print("\n📊 M3 Test Results Summary:")
-        passed = sum(1 for result in self.test_results.values() if result == "PASS" or result.startswith("SKIP"))
-        total = len(self.test_results)
-        
-        for test_name, result in self.test_results.items():
-            if result == "PASS":
-                status = "✅"
-            elif result.startswith("SKIP"):
-                status = "⚠️"
-            else:
-                status = "❌"
-            print(f"  {status} {test_name}: {result}")
-        
-        print(f"\n🎯 M3 Results: {passed}/{total} tests passed")
-        
-        if passed == total:
-            print("✅ M3 Alerts & Integrations: ALL TESTS PASSED")
-            return True
-        else:
-            print("❌ M3 Alerts & Integrations: SOME TESTS FAILED")
-            return False
+        return await super().run_all_tests(tests)
 
 if __name__ == "__main__":
     test_suite = M3TestSuite()

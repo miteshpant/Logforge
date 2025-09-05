@@ -6,15 +6,14 @@ Tests basic scaffold, health checks, and basic log ingestion
 
 import asyncio
 import httpx
-import json
 from datetime import datetime
+from base_test import BaseTestSuite
 
-class M0TestSuite:
+class M0TestSuite(BaseTestSuite):
     """Test M0 Basic Scaffold & Hello Logs functionality"""
     
     def __init__(self):
-        self.base_url = "http://localhost:7080"
-        self.test_results = {}
+        super().__init__("M0 Basic Scaffold & Hello Logs")
     
     async def test_health_check(self):
         """Test basic health check endpoint"""
@@ -93,7 +92,8 @@ class M0TestSuite:
                 
                 response = await client.post(
                     f"{self.base_url}/v1/ingest/logs",
-                    json=log_entry
+                    json=log_entry,
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"Basic ingestion failed: {response.status_code} - {response.text}"
@@ -128,7 +128,8 @@ class M0TestSuite:
                     params={
                         "service": "test-service-m0",
                         "limit": 10
-                    }
+                    },
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"Log retrieval failed: {response.status_code} - {response.text}"
@@ -153,11 +154,9 @@ class M0TestSuite:
                 return False
     
     async def run_all_tests(self):
-        """Run all M0 tests"""
-        print("\n🚀 Starting M0 Individual Test Suite...")
+        """Run all M0 tests using base class runner"""
         print("📝 Testing: Basic scaffold, health checks, and hello logs")
         
-        # Run tests sequentially to ensure proper order (ingestion before retrieval)
         tests = [
             self.test_health_check,
             self.test_root_endpoint,
@@ -165,32 +164,7 @@ class M0TestSuite:
             self.test_basic_log_retrieval
         ]
         
-        # Run tests sequentially since some depend on previous ones
-        for test_func in tests:
-            try:
-                await test_func()
-            except Exception as e:
-                print(f"❌ Test {test_func.__name__} failed with exception: {str(e)}")
-                if test_func.__name__.replace("test_", "") not in self.test_results:
-                    self.test_results[test_func.__name__.replace("test_", "")] = f"FAIL: {str(e)}"
-        
-        # Summary
-        print("\n📊 M0 Test Results Summary:")
-        passed = sum(1 for result in self.test_results.values() if result == "PASS")
-        total = len(self.test_results)
-        
-        for test_name, result in self.test_results.items():
-            status = "✅" if result == "PASS" else "❌"
-            print(f"  {status} {test_name}: {result}")
-        
-        print(f"\n🎯 M0 Results: {passed}/{total} tests passed")
-        
-        if passed == total:
-            print("✅ M0 Basic Scaffold & Hello Logs: ALL TESTS PASSED")
-            return True
-        else:
-            print("❌ M0 Basic Scaffold & Hello Logs: SOME TESTS FAILED")
-            return False
+        return await super().run_all_tests(tests)
 
 if __name__ == "__main__":
     test_suite = M0TestSuite()

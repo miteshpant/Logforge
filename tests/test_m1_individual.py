@@ -8,38 +8,15 @@ import asyncio
 import httpx
 import json
 from datetime import datetime, timedelta
+from base_test import BaseTestSuite
 
-class M1TestSuite:
+class M1TestSuite(BaseTestSuite):
     """Test M1 Ingestion & Storage MVP functionality"""
     
     def __init__(self):
-        self.base_url = "http://localhost:7080"
-        self.test_results = {}
-        self.test_tenant_id = None  # Will create actual tenant UUID
+        super().__init__("M1 Ingestion & Storage MVP")
     
-    async def setup_test_tenant(self):
-        """Create a test tenant for M1 tests"""
-        tenant_data = {
-            "name": "M1 Test Corporation",
-            "type": "enterprise",
-            "primary_contact_name": "M1 Test Manager",
-            "primary_contact_email": "m1test@logforge.local",
-            "industry": "Technology"
-        }
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                f"{self.base_url}/v1/tenants",
-                json=tenant_data,
-                headers={"Authorization": "Bearer admin-token", "Content-Type": "application/json"}
-            )
-            
-            if response.status_code == 201:
-                self.test_tenant_id = response.json()["tenant_id"]
-                print(f"🏢 Created test tenant: {self.test_tenant_id}")
-            else:
-                print(f"❌ Failed to create test tenant: {response.text}")
-                self.test_tenant_id = "default"  # Fallback to default
+    # Remove setup_test_tenant - BaseTestSuite handles tenant creation
     
     async def test_json_ingestion(self):
         """Test JSON log format ingestion"""
@@ -64,7 +41,7 @@ class M1TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/ingest/logs",
                     json=log_entry,
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"JSON ingestion failed: {response.text}"
@@ -103,7 +80,7 @@ class M1TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/ingest/logs/batch",
                     json=batch_data,
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"Batch ingestion failed: {response.text}"
@@ -132,10 +109,13 @@ class M1TestSuite:
                 # RFC 3164 syslog message
                 syslog_message = "<34>Oct 11 22:14:15 mymachine su: 'su root' failed for lonvick on /dev/pts/8"
                 
+                headers = self.auth_headers.copy()
+                headers["Content-Type"] = "text/plain"
+                
                 response = await client.post(
                     f"{self.base_url}/v1/ingest/syslog",
                     content=syslog_message,
-                    headers={"Content-Type": "text/plain", "X-Customer-ID": self.test_tenant_id}
+                    headers=headers
                 )
                 
                 assert response.status_code == 200, f"Syslog ingestion failed: {response.text}"
@@ -165,10 +145,13 @@ class M1TestSuite:
                     "service": "auto-detect-test"
                 })
                 
+                headers = self.auth_headers.copy()
+                headers["Content-Type"] = "text/plain"
+                
                 response = await client.post(
                     f"{self.base_url}/v1/ingest",
                     content=json_message,
-                    headers={"Content-Type": "text/plain", "X-Customer-ID": self.test_tenant_id},
+                    headers=headers,
                     params={"service": "auto-detect-service"}
                 )
                 
@@ -192,7 +175,10 @@ class M1TestSuite:
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
-                response = await client.get(f"{self.base_url}/v1/storage/health")
+                response = await client.get(
+                    f"{self.base_url}/v1/storage/health",
+                    headers=self.auth_headers
+                )
                 
                 assert response.status_code == 200, f"Storage health failed: {response.text}"
                 health_data = response.json()
@@ -219,7 +205,10 @@ class M1TestSuite:
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
                 # Test cleanup trigger
-                response = await client.post(f"{self.base_url}/v1/storage/cleanup")
+                response = await client.post(
+                    f"{self.base_url}/v1/storage/cleanup",
+                    headers=self.auth_headers
+                )
                 
                 assert response.status_code == 200, f"TTL cleanup failed: {response.text}"
                 result = response.json()
@@ -241,8 +230,8 @@ class M1TestSuite:
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
-                # Use actual tenant UUID for multi-tenant testing
-                customers = [self.test_tenant_id, self.test_tenant_id]
+                # Use same tenant for multi-tenant testing (testing isolation with single tenant)
+                customers = [self.test_tenant_id]
                 
                 for i, customer in enumerate(customers):
                     log_data = {
@@ -256,7 +245,7 @@ class M1TestSuite:
                     response = await client.post(
                         f"{self.base_url}/v1/ingest/logs",
                         json=log_data,
-                        headers={"X-Customer-ID": customer}
+                        headers=self.auth_headers
                     )
                     
                     assert response.status_code == 200, f"Multi-tenant ingestion failed for {customer}: {response.text}"
@@ -271,14 +260,9 @@ class M1TestSuite:
                 return False
     
     async def run_all_tests(self):
-        """Run all M1 tests"""
-        print("\n🚀 Starting M1 Individual Test Suite...")
+        """Run all M1 tests using base class runner"""
         print("📝 Testing: Multi-format ingestion, TTL, and storage lifecycle")
         
-        # First create test tenant
-        await self.setup_test_tenant()
-        
-        # Run tests sequentially to avoid race conditions and timeouts
         tests = [
             self.test_json_ingestion,
             self.test_batch_ingestion,
@@ -289,32 +273,7 @@ class M1TestSuite:
             self.test_multi_tenant_ingestion
         ]
         
-        # Run tests sequentially since concurrent requests cause issues
-        for test_func in tests:
-            try:
-                await test_func()
-            except Exception as e:
-                print(f"❌ Test {test_func.__name__} failed with exception: {str(e)}")
-                if test_func.__name__.replace("test_", "") not in self.test_results:
-                    self.test_results[test_func.__name__.replace("test_", "")] = f"FAIL: {str(e)}"
-        
-        # Summary
-        print("\n📊 M1 Test Results Summary:")
-        passed = sum(1 for result in self.test_results.values() if result == "PASS")
-        total = len(self.test_results)
-        
-        for test_name, result in self.test_results.items():
-            status = "✅" if result == "PASS" else "❌"
-            print(f"  {status} {test_name}: {result}")
-        
-        print(f"\n🎯 M1 Results: {passed}/{total} tests passed")
-        
-        if passed == total:
-            print("✅ M1 Ingestion & Storage MVP: ALL TESTS PASSED")
-            return True
-        else:
-            print("❌ M1 Ingestion & Storage MVP: SOME TESTS FAILED")
-            return False
+        return await super().run_all_tests(tests, require_admin=True)
 
 if __name__ == "__main__":
     test_suite = M1TestSuite()

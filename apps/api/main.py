@@ -26,6 +26,12 @@ from enterprise_api import router as enterprise_router
 from tenant_api import router as tenant_router
 from subscription_api import router as subscription_router
 
+# Import M8 User Service routers
+from user_api import router as user_router
+from auth_api import router as auth_router
+from role_api import router as role_router
+from usage_api import router as usage_router
+
 # Configure structured logging
 logger = structlog.get_logger()
 
@@ -50,9 +56,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Add feature access middleware
-from feature_access_middleware import FeatureAccessMiddleware
-app.add_middleware(FeatureAccessMiddleware)
+# Add unified authentication & authorization middleware
+from authn_authz_middleware import setup_unified_auth_middleware
+setup_unified_auth_middleware(app)
 
 # Include all routers
 app.include_router(health_router)
@@ -61,6 +67,12 @@ app.include_router(query_router)
 app.include_router(dashboard_router)
 app.include_router(storage_router)
 app.include_router(alerts_router)
+
+# Include M8 User Service routers
+app.include_router(user_router)
+app.include_router(auth_router)
+app.include_router(role_router)
+app.include_router(usage_router)
 
 # Include additional API routers
 app.include_router(test_runner_router)

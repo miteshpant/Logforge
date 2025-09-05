@@ -5,7 +5,7 @@ FastAPI dependencies for tenant UUID validation across all endpoints
 """
 
 import structlog
-from fastapi import Header, HTTPException, Depends
+from fastapi import Header, HTTPException, Depends, Request
 from typing import Optional
 
 from tenant_service import tenant_service
@@ -82,7 +82,20 @@ async def require_valid_tenant(
     
     return x_customer_id
 
+async def get_middleware_tenant_id(request: Request) -> str:
+    """Get tenant ID from middleware-validated request state"""
+    if hasattr(request.state, 'tenant_id') and request.state.tenant_id:
+        return request.state.tenant_id
+    
+    # Fallback to header validation for non-middleware endpoints
+    tenant_id = request.headers.get("X-Customer-ID")
+    if not tenant_id:
+        raise HTTPException(400, "X-Customer-ID header required")
+    
+    return tenant_id
+
 # Commonly used aliases
 ValidatedTenant = Depends(validate_tenant_header)
 RequiredTenant = Depends(require_valid_tenant)
 TenantOrDefault = Depends(get_validated_tenant_id)
+MiddlewareTenant = Depends(get_middleware_tenant_id)

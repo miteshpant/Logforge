@@ -9,41 +9,18 @@ import httpx
 import json
 import uuid
 from datetime import datetime, timedelta
+from base_test import BaseTestSuite
 
-class M6TestSuite:
+class M6TestSuite(BaseTestSuite):
     """Test M6 AI Assistant & RCA functionality"""
     
     def __init__(self):
-        self.base_url = "http://localhost:7080"
-        self.test_results = {}
-        self.test_tenant_id = None  # Will create actual tenant UUID
+        super().__init__("M6 AI Assistant & RCA")
         self.test_incident_id = None
         self.test_investigation_id = None
         self.test_query_id = None
     
-    async def setup_test_tenant(self):
-        """Create a test tenant for M6 tests"""
-        tenant_data = {
-            "name": "M6 Test Corporation",
-            "type": "enterprise",
-            "primary_contact_name": "M6 Test Manager",
-            "primary_contact_email": "m6test@logforge.local",
-            "industry": "Technology"
-        }
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                f"{self.base_url}/v1/tenants",
-                json=tenant_data,
-                headers={"Authorization": "Bearer admin-token", "Content-Type": "application/json"}
-            )
-            
-            if response.status_code == 201:
-                self.test_tenant_id = response.json()["tenant_id"]
-                print(f"🏢 Created test tenant: {self.test_tenant_id}")
-            else:
-                print(f"❌ Failed to create test tenant: {response.text}")
-                self.test_tenant_id = "default"  # Fallback to default
+    # Remove setup_test_tenant - BaseTestSuite handles tenant creation
     
     async def test_ai_health(self):
         """Test AI engine health and model status"""
@@ -53,7 +30,7 @@ class M6TestSuite:
             try:
                 response = await client.get(
                     f"{self.base_url}/v1/ai/health",
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"AI health check failed: {response.text}"
@@ -110,7 +87,7 @@ class M6TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/ai/query",
                     json=nlq_request,
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"Natural language query failed: {response.text}"
@@ -166,7 +143,7 @@ class M6TestSuite:
             try:
                 response = await client.get(
                     f"{self.base_url}/v1/ai/query/suggestions",
-                    headers={"X-Customer-ID": self.test_tenant_id},
+                    headers=self.auth_headers,
                     params={
                         "user_role": "devops_engineer",
                         "context": "general_exploration",
@@ -230,7 +207,7 @@ class M6TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/ai/analyze-incident",
                     json=incident_request,
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"Incident analysis failed: {response.text}"
@@ -312,7 +289,7 @@ class M6TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/ai/analyze-symptoms",
                     json=symptom_request,
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"Symptom analysis failed: {response.text}"
@@ -353,7 +330,7 @@ class M6TestSuite:
             try:
                 response = await client.get(
                     f"{self.base_url}/v1/ai/anomalies",
-                    headers={"X-Customer-ID": self.test_tenant_id},
+                    headers=self.auth_headers,
                     params={
                         "time_range": "24h",
                         "severity": "medium,high,critical",
@@ -426,7 +403,7 @@ class M6TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/ai/predict",
                     json=prediction_request,
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"Failure prediction failed: {response.text}"
@@ -496,7 +473,7 @@ class M6TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/ai/investigate/start",
                     json=investigation_request,
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"Investigation start failed: {response.text}"
@@ -575,7 +552,7 @@ class M6TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/ai/investigate/{self.test_investigation_id}/evidence",
                     json=evidence_request,
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"Investigation evidence failed: {response.text}"
@@ -619,7 +596,7 @@ class M6TestSuite:
                 
                 response = await client.get(
                     f"{self.base_url}/v1/ai/investigate/{self.test_investigation_id}/recommendations",
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"Investigation recommendations failed: {response.text}"
@@ -669,7 +646,7 @@ class M6TestSuite:
             try:
                 response = await client.get(
                     f"{self.base_url}/v1/ai/knowledge/search",
-                    headers={"X-Customer-ID": self.test_tenant_id},
+                    headers=self.auth_headers,
                     params={
                         "symptoms": "database connection timeout",
                         "services": "payment-api",
@@ -744,7 +721,7 @@ class M6TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/ai/knowledge/solutions",
                     json=solution_request,
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"Knowledge solutions failed: {response.text}"
@@ -791,7 +768,7 @@ class M6TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/ai/business-impact",
                     json=impact_request,
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"Business impact failed: {response.text}"
@@ -841,7 +818,7 @@ class M6TestSuite:
             try:
                 response = await client.get(
                     f"{self.base_url}/v1/ai/insights/operational",
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"Operational insights failed: {response.text}"
@@ -887,7 +864,7 @@ class M6TestSuite:
             try:
                 response = await client.get(
                     f"{self.base_url}/v1/ai/metrics/business",
-                    headers={"X-Customer-ID": self.test_tenant_id},
+                    headers=self.auth_headers,
                     params={
                         "time_range": "24h",
                         "services": "payment-api,user-service",
@@ -946,7 +923,7 @@ class M6TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/ai/integrations/slack",
                     json=slack_request,
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"Slack integration failed: {response.text}"
@@ -1015,7 +992,7 @@ class M6TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/ai/learn/incident",
                     json=learning_request,
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"Incident learning failed: {response.text}"
@@ -1069,7 +1046,7 @@ class M6TestSuite:
                 response = await client.post(
                     f"{self.base_url}/v1/ai/correlate",
                     json=correlation_request,
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"Event correlation failed: {response.text}"
@@ -1118,7 +1095,7 @@ class M6TestSuite:
             try:
                 response = await client.get(
                     f"{self.base_url}/v1/ai/baselines",
-                    headers={"X-Customer-ID": self.test_tenant_id},
+                    headers=self.auth_headers,
                     params={
                         "services": "payment-api,user-service",
                         "metric_types": "performance,business,security"
@@ -1182,7 +1159,7 @@ class M6TestSuite:
                 
                 response = await client.get(
                     f"{self.base_url}/v1/ai/query/{self.test_query_id}/history",
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"Query history failed: {response.text}"
@@ -1235,7 +1212,7 @@ class M6TestSuite:
                 
                 response = await client.get(
                     f"{self.base_url}/v1/ai/incidents/{self.test_incident_id}/analysis",
-                    headers={"X-Customer-ID": self.test_tenant_id}
+                    headers=self.auth_headers
                 )
                 
                 assert response.status_code == 200, f"Incident analysis retrieval failed: {response.text}"
@@ -1259,12 +1236,8 @@ class M6TestSuite:
                 return False
     
     async def run_all_tests(self):
-        """Run all M6 tests"""
-        print("\n🚀 Starting M6 Individual Test Suite...")
+        """Run all M6 tests using base class runner"""
         print("📝 Testing: AI Assistant, NLQ, RCA, Anomaly Detection, Investigation Assistant, Knowledge Management")
-        
-        # First create test tenant
-        await self.setup_test_tenant()
         
         # Run tests in logical order
         tests = [
@@ -1291,37 +1264,7 @@ class M6TestSuite:
             self.test_incident_learning
         ]
         
-        # Run tests sequentially since some depend on previous ones
-        for test_func in tests:
-            try:
-                await test_func()
-            except Exception as e:
-                print(f"❌ Test {test_func.__name__} failed with exception: {str(e)}")
-                if test_func.__name__.replace("test_", "") not in self.test_results:
-                    self.test_results[test_func.__name__.replace("test_", "")] = f"FAIL: {str(e)}"
-        
-        # Summary
-        print("\n📊 M6 Test Results Summary:")
-        passed = sum(1 for result in self.test_results.values() if result == "PASS" or result.startswith("SKIP"))
-        total = len(self.test_results)
-        
-        for test_name, result in self.test_results.items():
-            if result == "PASS":
-                status = "✅"
-            elif result.startswith("SKIP"):
-                status = "⚠️"
-            else:
-                status = "❌"
-            print(f"  {status} {test_name}: {result}")
-        
-        print(f"\n🎯 M6 Results: {passed}/{total} tests passed")
-        
-        if passed == total:
-            print("✅ M6 AI Assistant & RCA: ALL TESTS PASSED")
-            return True
-        else:
-            print("❌ M6 AI Assistant & RCA: SOME TESTS FAILED")
-            return False
+        return await super().run_all_tests(tests)
 
 if __name__ == "__main__":
     test_suite = M6TestSuite()

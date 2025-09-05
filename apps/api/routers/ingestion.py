@@ -14,7 +14,8 @@ from models import (
 )
 from parsers import ParserFactory
 from storage_config import get_customer_id
-from tenant_dependencies import TenantOrDefault
+from tenant_dependencies import TenantOrDefault, RequiredTenant, MiddlewareTenant
+from fastapi import Depends
 from tenant_service import tenant_service
 
 router = APIRouter(prefix="/v1/ingest")
@@ -33,7 +34,7 @@ def setup_dependencies(pf, plb):
 async def ingest_logs(
     log_entry: LogEntry, 
     background_tasks: BackgroundTasks,
-    customer_id: str = TenantOrDefault
+    customer_id: str = MiddlewareTenant
 ):
     """Single log entry ingestion endpoint"""
     try:
@@ -63,7 +64,7 @@ async def ingest_logs(
 async def ingest_logs_batch(
     batch: BatchLogEntry, 
     background_tasks: BackgroundTasks,
-    customer_id: str = TenantOrDefault
+    customer_id: str = MiddlewareTenant
 ):
     """Batch log entry ingestion"""
     try:
@@ -89,11 +90,13 @@ async def ingest_logs_batch(
         raise HTTPException(status_code=500, detail=f"Batch ingestion failed: {str(e)}")
 
 @router.post("/logs/bulk", response_model=BatchIngestResponse)  
-async def ingest_logs_bulk(bulk_data: Dict[str, Any], background_tasks: BackgroundTasks, request: Request):
+async def ingest_logs_bulk(
+    bulk_data: Dict[str, Any], 
+    background_tasks: BackgroundTasks, 
+    customer_id: str = MiddlewareTenant
+):
     """Bulk ingestion from various sources"""
     try:
-        # Extract customer ID from headers or use default
-        customer_id = request.headers.get("X-Customer-ID", "default")
         
         if "logs" not in bulk_data:
             raise HTTPException(status_code=400, detail="Missing 'logs' field in request")
@@ -119,11 +122,13 @@ async def ingest_logs_bulk(bulk_data: Dict[str, Any], background_tasks: Backgrou
         raise HTTPException(status_code=500, detail=f"Bulk ingestion failed: {str(e)}")
 
 @router.post("/otlp", response_model=BatchIngestResponse)
-async def ingest_otlp_logs(otlp_data: OTLPLogsData, background_tasks: BackgroundTasks, request: Request):
+async def ingest_otlp_logs(
+    otlp_data: OTLPLogsData, 
+    background_tasks: BackgroundTasks, 
+    customer_id: str = MiddlewareTenant
+):
     """OpenTelemetry Protocol (OTLP) log ingestion"""
     try:
-        # Extract customer ID from headers or use default
-        customer_id = request.headers.get("X-Customer-ID", "default")
         
         if not parser_factory:
             raise HTTPException(status_code=500, detail="Parser factory not initialized")
@@ -148,11 +153,13 @@ async def ingest_otlp_logs(otlp_data: OTLPLogsData, background_tasks: Background
         raise HTTPException(status_code=500, detail=f"OTLP ingestion failed: {str(e)}")
 
 @router.post("/syslog", response_model=IngestResponse)
-async def ingest_syslog(request: Request, background_tasks: BackgroundTasks):
+async def ingest_syslog(
+    request: Request, 
+    background_tasks: BackgroundTasks,
+    customer_id: str = MiddlewareTenant
+):
     """Syslog format ingestion (RFC 3164 and RFC 5424)"""
     try:
-        # Extract customer ID from headers or use default
-        customer_id = request.headers.get("X-Customer-ID", "default")
         raw_content = await request.body()
         syslog_data = raw_content.decode('utf-8').strip()
         
@@ -178,11 +185,13 @@ async def ingest_syslog(request: Request, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=400, detail=f"Syslog parsing failed: {str(e)}")
 
 @router.post("/nginx", response_model=IngestResponse) 
-async def ingest_nginx(request: Request, background_tasks: BackgroundTasks):
+async def ingest_nginx(
+    request: Request, 
+    background_tasks: BackgroundTasks,
+    customer_id: str = MiddlewareTenant
+):
     """Nginx access log ingestion"""
     try:
-        # Extract customer ID from headers or use default
-        customer_id = request.headers.get("X-Customer-ID", "default")
         raw_content = await request.body()
         nginx_logs = raw_content.decode('utf-8').strip()
         
@@ -208,11 +217,13 @@ async def ingest_nginx(request: Request, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=400, detail=f"Nginx log parsing failed: {str(e)}")
 
 @router.post("/cef", response_model=IngestResponse)
-async def ingest_cef(request: Request, background_tasks: BackgroundTasks):
+async def ingest_cef(
+    request: Request, 
+    background_tasks: BackgroundTasks,
+    customer_id: str = MiddlewareTenant
+):
     """Common Event Format (CEF) log ingestion"""
     try:
-        # Extract customer ID from headers or use default
-        customer_id = request.headers.get("X-Customer-ID", "default")
         raw_content = await request.body()
         cef_data = raw_content.decode('utf-8').strip()
         
@@ -238,11 +249,13 @@ async def ingest_cef(request: Request, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=400, detail=f"CEF parsing failed: {str(e)}")
 
 @router.post("/text", response_model=IngestResponse)
-async def ingest_text(request: Request, background_tasks: BackgroundTasks):
+async def ingest_text(
+    request: Request, 
+    background_tasks: BackgroundTasks,
+    customer_id: str = MiddlewareTenant
+):
     """Plain text log ingestion with basic parsing"""
     try:
-        # Extract customer ID from headers or use default
-        customer_id = request.headers.get("X-Customer-ID", "default")
         raw_content = await request.body()
         text_data = raw_content.decode('utf-8').strip()
         
@@ -268,11 +281,13 @@ async def ingest_text(request: Request, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=400, detail=f"Text parsing failed: {str(e)}")
 
 @router.post("/structured", response_model=IngestResponse)
-async def ingest_structured(structured_data: Dict[str, Any], background_tasks: BackgroundTasks, request: Request):
+async def ingest_structured(
+    structured_data: Dict[str, Any], 
+    background_tasks: BackgroundTasks, 
+    customer_id: str = MiddlewareTenant
+):
     """Structured JSON log ingestion"""
     try:
-        # Extract customer ID from headers or use default
-        customer_id = request.headers.get("X-Customer-ID", "default")
         
         logs = []
         ingested_at = datetime.now(timezone.utc)
@@ -301,11 +316,13 @@ async def ingest_structured(structured_data: Dict[str, Any], background_tasks: B
 
 # Generic format-aware endpoint
 @router.post("", response_model=IngestResponse)
-async def ingest_auto_detect(request: Request, background_tasks: BackgroundTasks):
+async def ingest_auto_detect(
+    request: Request, 
+    background_tasks: BackgroundTasks,
+    customer_id: str = MiddlewareTenant
+):
     """Auto-detect format and ingest logs"""
     try:
-        # Extract customer ID from headers or use default
-        customer_id = request.headers.get("X-Customer-ID", "default")
         
         content_type = request.headers.get("content-type", "")
         raw_content = await request.body()

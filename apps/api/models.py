@@ -497,6 +497,244 @@ class TenantHealthResponse(BaseModel):
     tenant_id: str
     status: str = Field("healthy", description="Overall health status")
     ingestion_health: str = Field("healthy", description="Log ingestion health")
+
+# =================================================================
+# M8 USER SERVICE & AUTHENTICATION MODELS
+# =================================================================
+
+class UserStatus(str, Enum):
+    """User account status"""
+    ACTIVE = "active"
+    INACTIVE = "inactive" 
+    PENDING = "pending"
+    SUSPENDED = "suspended"
+
+class UserRole(str, Enum):
+    """User roles for platform and tenant access"""
+    # Platform Admin Roles
+    SUPER_ADMIN = "super_admin"
+    ADMIN = "admin"
+    SUPPORT_ADMIN = "support_admin"
+    BILLING_ADMIN = "billing_admin"
+    
+    # Customer User Roles
+    TENANT_ADMIN = "tenant_admin"
+    SECURITY_ANALYST = "security_analyst"
+    DEVOPS_ENGINEER = "devops_engineer"
+    COMPLIANCE_OFFICER = "compliance_officer"
+    VIEWER = "viewer"
+
+class SessionStatus(str, Enum):
+    """Session status"""
+    ACTIVE = "active"
+    EXPIRED = "expired"
+    REVOKED = "revoked"
+
+class User(BaseModel):
+    """User entity model"""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Unique user UUID")
+    email: str = Field(..., description="User email (unique)")
+    name: str = Field(..., description="Full user name")
+    password_hash: Optional[str] = Field(None, description="Hashed password (not returned in API)")
+    status: UserStatus = Field(UserStatus.PENDING, description="Account status")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Account creation time")
+    updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last update time")
+    last_login_at: Optional[datetime] = Field(None, description="Last login timestamp")
+    password_reset_token: Optional[str] = Field(None, description="Password reset token")
+    password_reset_expires: Optional[datetime] = Field(None, description="Reset token expiration")
+    email_verified_at: Optional[datetime] = Field(None, description="Email verification timestamp")
+    setup_token: Optional[str] = Field(None, description="Initial setup token")
+    setup_token_expires: Optional[datetime] = Field(None, description="Setup token expiration")
+
+    @validator('email')
+    def validate_email(cls, v):
+        """Validate email format"""
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, v):
+            raise ValueError('Invalid email format')
+        return v.lower()
+
+class UserTenantRole(BaseModel):
+    """User role assignment for specific tenant"""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Role assignment UUID")
+    user_id: str = Field(..., description="User UUID")
+    tenant_id: str = Field(..., description="Tenant UUID ('platform' for admin users)")
+    role: UserRole = Field(..., description="Assigned role")
+    granted_by: str = Field(..., description="User who granted this role")
+    granted_at: datetime = Field(default_factory=datetime.utcnow, description="Role granted timestamp")
+    expires_at: Optional[datetime] = Field(None, description="Role expiration (optional)")
+    status: UserStatus = Field(UserStatus.ACTIVE, description="Role assignment status")
+
+class UserSession(BaseModel):
+    """User session model"""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Session UUID")
+    user_id: str = Field(..., description="User UUID")
+    session_token: str = Field(..., description="Session token (JWT or random)")
+    ip_address: str = Field(..., description="Client IP address")
+    user_agent: str = Field(..., description="Client user agent")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Session creation time")
+    last_activity: datetime = Field(default_factory=datetime.utcnow, description="Last activity timestamp")
+    expires_at: datetime = Field(..., description="Session expiration time")
+    status: SessionStatus = Field(SessionStatus.ACTIVE, description="Session status")
+
+class APIUsageAudit(BaseModel):
+    """API usage audit record for billing"""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Audit record UUID")
+    tenant_id: str = Field(..., description="Tenant UUID")
+    user_id: str = Field(..., description="User UUID")
+    endpoint: str = Field(..., description="API endpoint accessed")
+    method: str = Field(..., description="HTTP method")
+    status_code: int = Field(..., description="HTTP response status code")
+    response_size_bytes: int = Field(0, description="Response size in bytes")
+    processing_time_ms: int = Field(0, description="Processing time in milliseconds")
+    ip_address: str = Field(..., description="Client IP address")
+    user_agent: str = Field(..., description="Client user agent")
+    request_timestamp: datetime = Field(default_factory=datetime.utcnow, description="Request timestamp")
+    billing_feature: str = Field(..., description="Billing feature category")
+    cost_credits: float = Field(0.0, description="Cost in credits")
+
+# =================================================================
+# API REQUEST/RESPONSE MODELS
+# =================================================================
+
+class UserCreateRequest(BaseModel):
+    """Request to create new user"""
+    name: str = Field(..., min_length=1, max_length=255, description="Full user name")
+    email: str = Field(..., description="User email address")
+    password: str = Field(..., min_length=12, description="User password (min 12 chars)")
+    status: UserStatus = Field(UserStatus.PENDING, description="Initial account status")
+
+    @validator('password')
+    def validate_password_strength(cls, v):
+        """Enforce strong password policy"""
+        if len(v) < 12:
+            raise ValueError('Password must be at least 12 characters')
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('Password must contain uppercase letter')
+        if not re.search(r'[a-z]', v):
+            raise ValueError('Password must contain lowercase letter')
+        if not re.search(r'[0-9]', v):
+            raise ValueError('Password must contain number')
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', v):
+            raise ValueError('Password must contain special character')
+        return v
+
+class UserUpdateRequest(BaseModel):
+    """Request to update user"""
+    name: Optional[str] = Field(None, min_length=1, max_length=255, description="Full user name")
+    email: Optional[str] = Field(None, description="User email address") 
+    status: Optional[UserStatus] = Field(None, description="Account status")
+
+class UserResponse(BaseModel):
+    """User response (no sensitive data)"""
+    id: str
+    email: str
+    name: str
+    status: UserStatus
+    created_at: datetime
+    updated_at: datetime
+    last_login_at: Optional[datetime]
+    email_verified_at: Optional[datetime]
+
+class UserListResponse(BaseModel):
+    """User list response"""
+    users: List[UserResponse] = Field(description="List of users")
+    total_count: int = Field(0, description="Total user count")
+    page: int = Field(1, description="Current page")
+    page_size: int = Field(50, description="Page size")
+
+class LoginRequest(BaseModel):
+    """User login request"""
+    email: str = Field(..., description="User email")
+    password: str = Field(..., description="User password")
+
+class LoginResponse(BaseModel):
+    """User login response"""
+    access_token: str = Field(..., description="Access token")
+    expires_at: datetime = Field(..., description="Token expiration time")
+    user: UserResponse = Field(..., description="User profile")
+    
+class RoleAssignmentRequest(BaseModel):
+    """Request to assign role to user"""
+    tenant_id: str = Field(..., description="Tenant UUID ('platform' for admin)")
+    role: UserRole = Field(..., description="Role to assign")
+
+class RoleAssignmentResponse(BaseModel):
+    """Role assignment response"""
+    id: str
+    user_id: str
+    tenant_id: str
+    role: UserRole
+    granted_by: str
+    granted_at: datetime
+    expires_at: Optional[datetime]
+    status: UserStatus
+
+class UserRolesResponse(BaseModel):
+    """User roles response"""
+    user_id: str
+    roles: List[RoleAssignmentResponse] = Field(description="User's role assignments")
+
+class SetupTokenResponse(BaseModel):
+    """Initial setup token response"""
+    setup_token: str = Field(..., description="Secure setup token")
+    expires_at: datetime = Field(..., description="Token expiration time")
+
+class AdminSetupRequest(BaseModel):
+    """Initial admin setup request"""
+    name: str = Field(..., description="Admin name")
+    email: str = Field(..., description="Admin email")
+    password: str = Field(..., description="Admin password")
+    setup_token: str = Field(..., description="Setup token")
+
+class InvitationRequest(BaseModel):
+    """User invitation request"""
+    email: str = Field(..., description="Invitee email")
+    role: UserRole = Field(..., description="Role to assign")
+    tenant_id: str = Field(..., description="Tenant UUID")
+
+class InvitationResponse(BaseModel):
+    """User invitation response"""
+    invitation_token: str = Field(..., description="Invitation token")
+    invitation_expires: datetime = Field(..., description="Invitation expiration")
+    invited_email: str = Field(..., description="Invited user email")
+
+class AcceptInviteRequest(BaseModel):
+    """Accept invitation request"""
+    name: str = Field(..., description="User full name")
+    email: str = Field(..., description="User email (must match invitation)")
+    password: str = Field(..., description="User password")
+    invitation_token: str = Field(..., description="Invitation token")
+    tenant_id: str = Field(..., description="Tenant UUID")
+
+class PasswordResetRequest(BaseModel):
+    """Password reset request"""
+    email: str = Field(..., description="User email")
+
+class PasswordChangeRequest(BaseModel):
+    """Password change request"""
+    current_password: str = Field(..., description="Current password")
+    new_password: str = Field(..., description="New password")
+
+class UsageCurrentResponse(BaseModel):
+    """Current usage response"""
+    tenant_id: str
+    api_calls: int = Field(0, description="API calls this month")
+    feature_breakdown: Dict[str, int] = Field(default_factory=dict, description="Usage by feature")
+    cost_estimate: float = Field(0.0, description="Estimated cost this month")
+    billing_period: str = Field("", description="Current billing period")
+
+class BillingEstimateResponse(BaseModel):
+    """Billing estimate response"""
+    tenant_id: str
+    total_estimated_cost: float = Field(0.0, description="Total estimated cost")
+    feature_costs: Dict[str, float] = Field(default_factory=dict, description="Cost breakdown by feature")
+    period: str = Field("", description="Billing period")
+
+class UsageHistoryResponse(BaseModel):
+    """Usage history response"""
+    tenant_id: str
+    usage_by_month: List[Dict[str, Any]] = Field(default_factory=list, description="Monthly usage history")
     storage_health: str = Field("healthy", description="Storage backend health")
     query_performance: Dict[str, Any] = Field(default_factory=dict, description="Query performance metrics")
     last_activity: Optional[datetime] = Field(None, description="Last activity timestamp")

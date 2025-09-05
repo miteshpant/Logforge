@@ -3,7 +3,7 @@ M7 Enterprise API Router - Enterprise Readiness Endpoints
 Provides 22 enterprise endpoints for authentication, RBAC, compliance, and integrations
 """
 
-from fastapi import APIRouter, HTTPException, Header, Query, Depends
+from fastapi import APIRouter, HTTPException, Header, Query, Depends, Request
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any, Union
 from datetime import datetime, timedelta
@@ -209,11 +209,15 @@ async def assign_user_roles(
 
 @router.get("/rbac/permissions")
 async def get_user_permissions(
-    x_customer_id: str = Header(..., alias="X-Customer-ID"),
-    x_user_id: str = Header(..., alias="X-User-ID")
+    request: Request,
+    x_customer_id: str = Header(..., alias="X-Customer-ID")
 ):
     """Get effective permissions for current user"""
     try:
+        # Get user ID from authentication context (JWT token)
+        user = request.state.user
+        x_user_id = user.id
+        
         result = await enterprise_engine.get_user_permissions(x_customer_id, x_user_id)
         return result
     except Exception as e:

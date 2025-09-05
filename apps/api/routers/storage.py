@@ -8,6 +8,7 @@ from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 
 from storage_config import get_customer_id
+from tenant_dependencies import MiddlewareTenant
 
 router = APIRouter(prefix="/v1/storage")
 
@@ -29,11 +30,9 @@ class RetentionPolicyRequest(BaseModel):
 # TTL and Storage Management Endpoints
 
 @router.get("/retention/{customer_id}")
-async def get_retention_policy(customer_id: str, request: Request):
+async def get_retention_policy(customer_id: str, requesting_customer: str = MiddlewareTenant):
     """Get current retention policy for customer"""
     try:
-        # Extract customer ID from headers or use default
-        requesting_customer = request.headers.get("X-Customer-ID", "default")
         
         # Basic auth check - customers can only see their own policies
         if requesting_customer != customer_id:
@@ -59,12 +58,10 @@ async def get_retention_policy(customer_id: str, request: Request):
 async def update_retention_policy(
     customer_id: str, 
     policy_request: RetentionPolicyRequest, 
-    request: Request
+    requesting_customer: str = MiddlewareTenant
 ):
     """Update retention policy for customer"""
     try:
-        # Extract customer ID from headers or use default
-        requesting_customer = request.headers.get("X-Customer-ID", "default")
         
         # Basic auth check - customers can only update their own policies
         if requesting_customer != customer_id:
@@ -92,11 +89,9 @@ async def update_retention_policy(
         raise HTTPException(status_code=500, detail=f"Failed to update retention policy: {str(e)}")
 
 @router.post("/cleanup")
-async def trigger_cleanup(request: Request, cleanup_request: Dict[str, Any] = None):
+async def trigger_cleanup(cleanup_request: Dict[str, Any] = None, customer_id: str = MiddlewareTenant):
     """Trigger manual cleanup based on TTL policies"""
     try:
-        # Extract customer ID from headers or use default
-        customer_id = request.headers.get("X-Customer-ID", "default")
         
         if not ttl_manager:
             raise HTTPException(status_code=500, detail="TTL manager not initialized")
@@ -114,11 +109,9 @@ async def trigger_cleanup(request: Request, cleanup_request: Dict[str, Any] = No
         raise HTTPException(status_code=500, detail=f"Cleanup failed: {str(e)}")
 
 @router.post("/archive/{customer_id}")
-async def archive_old_data(customer_id: str, request: Request):
+async def archive_old_data(customer_id: str, requesting_customer: str = MiddlewareTenant):
     """Archive old data to cold storage"""
     try:
-        # Extract customer ID from headers or use default
-        requesting_customer = request.headers.get("X-Customer-ID", "default")
         
         # Basic auth check
         if requesting_customer != customer_id:
@@ -143,11 +136,9 @@ async def archive_old_data(customer_id: str, request: Request):
         raise HTTPException(status_code=500, detail=f"Archival failed: {str(e)}")
 
 @router.get("/health")
-async def storage_health_check(request: Request):
+async def storage_health_check(customer_id: str = MiddlewareTenant):
     """Get storage system health and capacity information"""
     try:
-        # Extract customer ID from headers or use default
-        customer_id = request.headers.get("X-Customer-ID", "default")
         
         # This would check ClickHouse, S3, and other storage components
         health_info = {

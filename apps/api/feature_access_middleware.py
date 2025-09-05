@@ -3,7 +3,7 @@ Feature Access Middleware
 Enforces tenant feature subscriptions with 403 responses for unauthorized access
 """
 
-from fastapi import Request
+from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from subscription_service import subscription_service
@@ -110,6 +110,9 @@ class FeatureAccessMiddleware(BaseHTTPMiddleware):
             
             return response
             
+        except HTTPException as http_exc:
+            # Re-raise HTTP exceptions (including auth errors)
+            raise http_exc
         except Exception as e:
             print(f"Feature access validation error: {str(e)}")
             # On error, allow access but log the issue

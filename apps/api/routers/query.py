@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from models import QueryResponse
 from query_engine import AdvancedQueryRequest, QueryFilter, QueryOperator
 from storage_config import get_customer_id
+from tenant_dependencies import MiddlewareTenant
 
 router = APIRouter(prefix="/v1")
 
@@ -39,10 +40,9 @@ class TimeseriesQueryRequest(BaseModel):
 # Advanced Query Engine Endpoints (M2 Core)
 
 @router.post("/query/advanced", response_model=QueryResponse)
-async def advanced_query_logs(query_request: AdvancedQueryRequest, request: Request):
+async def advanced_query_logs(query_request: AdvancedQueryRequest, customer_id: str = MiddlewareTenant):
     """Advanced log querying with filters, aggregations, and analysis"""
     try:
-        customer_id = request.headers.get("X-Customer-ID", "default")
         
         if not query_engine:
             raise HTTPException(status_code=500, detail="Query engine not initialized")
@@ -67,10 +67,9 @@ async def advanced_query_logs(query_request: AdvancedQueryRequest, request: Requ
         raise HTTPException(status_code=500, detail=f"Advanced query failed: {str(e)}")
 
 @router.post("/query/aggregate")
-async def aggregate_logs(query_data: Dict[str, Any], request: Request):
+async def aggregate_logs(query_data: Dict[str, Any], customer_id: str = MiddlewareTenant):
     """Aggregate log data with grouping and calculations"""
     try:
-        customer_id = request.headers.get("X-Customer-ID", "default")
         
         if not query_engine:
             raise HTTPException(status_code=500, detail="Query engine not initialized")
@@ -99,10 +98,9 @@ async def aggregate_logs(query_data: Dict[str, Any], request: Request):
         raise HTTPException(status_code=500, detail=f"Aggregation failed: {str(e)}")
 
 @router.post("/query/timeseries")
-async def timeseries_query(query_request: TimeseriesQueryRequest, request: Request):
+async def timeseries_query(query_request: TimeseriesQueryRequest, customer_id: str = MiddlewareTenant):
     """Time-series analysis endpoint for trends and patterns"""
     try:
-        customer_id = request.headers.get("X-Customer-ID", "default")
         
         if not query_engine:
             raise HTTPException(status_code=500, detail="Query engine not initialized")
@@ -134,33 +132,29 @@ async def timeseries_query(query_request: TimeseriesQueryRequest, request: Reque
 # Saved Query Management
 
 @router.get("/query/saved")
-async def list_saved_queries(request: Request):
+async def list_saved_queries(customer_id: str = MiddlewareTenant):
     """List saved queries for the customer"""
-    customer_id = request.headers.get("X-Customer-ID", "default")
     # Placeholder - implement saved query storage
     return {"saved_queries": [], "customer_id": customer_id}
 
 @router.post("/query/saved") 
-async def save_query(query_data: Dict[str, Any], request: Request):
+async def save_query(query_data: Dict[str, Any], customer_id: str = MiddlewareTenant):
     """Save a query for future use"""
-    customer_id = request.headers.get("X-Customer-ID", "default")
     # Placeholder - implement saved query storage
     return {"status": "saved", "customer_id": customer_id}
 
 @router.get("/query/saved/{query_id}")
-async def get_saved_query(query_id: str, request: Request):
+async def get_saved_query(query_id: str, customer_id: str = MiddlewareTenant):
     """Retrieve a specific saved query"""
-    customer_id = request.headers.get("X-Customer-ID", "default")
     # Placeholder - implement saved query retrieval
     return {"query_id": query_id, "customer_id": customer_id}
 
 # Data Export Endpoints
 
 @router.post("/export")
-async def export_query_results(export_request: Dict[str, Any], request: Request):
+async def export_query_results(export_request: Dict[str, Any], customer_id: str = MiddlewareTenant):
     """Export query results in various formats (JSON, CSV, etc.)"""
     try:
-        customer_id = request.headers.get("X-Customer-ID", "default")
         
         # Get query results first
         if not query_engine:
@@ -209,15 +203,14 @@ async def export_query_results(export_request: Dict[str, Any], request: Request)
 # Basic log retrieval for M0 compatibility
 @router.get("/logs")
 async def get_logs(
-    request: Request,
     service: str = Query(None, description="Filter by service name"),
     level: str = Query(None, description="Filter by log level"),
     limit: int = Query(100, description="Maximum number of logs to return"),
-    offset: int = Query(0, description="Number of logs to skip")
+    offset: int = Query(0, description="Number of logs to skip"),
+    customer_id: str = MiddlewareTenant
 ):
     """Simple log retrieval endpoint for basic queries (M0 compatibility)"""
     try:
-        customer_id = request.headers.get("X-Customer-ID", "default")
         
         if not clickhouse_client:
             raise HTTPException(status_code=500, detail="Database client not initialized")
