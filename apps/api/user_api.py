@@ -6,12 +6,13 @@ FastAPI router for user CRUD operations, admin user management, and user profile
 from fastapi import APIRouter, HTTPException, Depends, Request
 from typing import List, Optional
 import structlog
+from datetime import datetime
 
 from models import (
     UserCreateRequest, UserUpdateRequest, UserResponse, UserListResponse,
     User, UserStatus, UserRole
 )
-from auth_middleware import (
+from authn_authz_middleware import (
     get_current_user, require_platform_admin, require_tenant_admin,
     user_service
 )
@@ -126,30 +127,24 @@ async def update_user(
         if not is_self and not is_platform_admin:
             raise HTTPException(403, "Can only update your own profile or need admin access")
         
-        # Apply updates
+        # Apply updates through user service (database-enabled)
         update_data = user_update.dict(exclude_none=True)
-        for field, value in update_data.items():
-            setattr(user, field, value)
-        
-        user.updated_at = datetime.utcnow()
-        
-        # TODO: Save to database
-        user_service.users_cache[user.id] = user
+        updated_user = await user_service.update_user(user.id, update_data)
         
         logger.info("User updated", 
-                   user_id=user.id,
+                   user_id=updated_user.id,
                    updated_by=current_user.id,
                    fields=list(update_data.keys()))
         
         return UserResponse(
-            id=user.id,
-            email=user.email,
-            name=user.name,
-            status=user.status,
-            created_at=user.created_at,
-            updated_at=user.updated_at,
-            last_login_at=user.last_login_at,
-            email_verified_at=user.email_verified_at
+            id=updated_user.id,
+            email=updated_user.email,
+            name=updated_user.name,
+            status=updated_user.status,
+            created_at=updated_user.created_at,
+            updated_at=updated_user.updated_at,
+            last_login_at=updated_user.last_login_at,
+            email_verified_at=updated_user.email_verified_at
         )
         
     except HTTPException:
@@ -180,12 +175,8 @@ async def delete_user(
             # This would require checking user's tenant memberships
             raise HTTPException(403, "Admin permissions required to delete users")
         
-        # Soft delete - mark as inactive
-        user.status = UserStatus.INACTIVE
-        user.updated_at = datetime.utcnow()
-        
-        # TODO: Save to database and revoke all sessions
-        user_service.users_cache[user.id] = user
+        # Soft delete using user service (database-enabled)
+        deleted = await user_service.delete_user(user.id)
         
         logger.info("User deleted", 
                    user_id=user.id,
@@ -228,9 +219,8 @@ async def list_users(
             # Regular users can only see themselves
             users = [current_user]
         else:
-            # TODO: Query database with proper filtering
-            # For now, return cached users
-            users = list(user_service.users_cache.values())
+            # Query database with proper filtering
+            users = await user_service.list_users(search, status, page, page_size)
             
             # Apply filters
             if search:
@@ -325,9 +315,8 @@ async def list_admin_users(
 ):
     """List platform admin users (platform admins only)"""
     try:
-        # TODO: Query database for users with platform roles
-        # For now, filter cached users by checking if they have platform roles
-        all_users = list(user_service.users_cache.values())
+        # Query database for users (simplified - in production would filter by platform roles)
+        all_users = await user_service.list_users(None, None, 1, 1000)  # Get all users
         
         # This is a simplified implementation - in reality, we'd join with user_tenant_roles
         admin_users = []
@@ -386,8 +375,11 @@ async def update_admin_user(
         
         user.updated_at = datetime.utcnow()
         
-        # TODO: Save to database
-        user_service.users_cache[user.id] = user
+        # Update user in database
+        await user_service.update_user(user.id, {
+            "status": user.status,
+            "updated_at": user.updated_at
+        })
         
         logger.info("Admin user updated",
                    user_id=user.id,
@@ -433,8 +425,12 @@ async def delete_admin_user(
         user.status = UserStatus.INACTIVE
         user.updated_at = datetime.utcnow()
         
-        # TODO: Save to database and revoke all sessions
-        user_service.users_cache[user.id] = user
+        # Soft delete user in database
+        await user_service.update_user(user.id, {
+            "status": user.status,
+            "updated_at": user.updated_at
+        })
+        # TODO: Revoke all sessions for security
         
         logger.info("Admin user deleted",
                    user_id=user.id,
@@ -511,8 +507,12 @@ async def update_current_user_profile(
         
         current_user.updated_at = datetime.utcnow()
         
-        # TODO: Save to database
-        user_service.users_cache[current_user.id] = current_user
+        # Update user profile in database
+        filtered_update_data = {k: v for k, v in update_data.items() if k != "status"}
+        await user_service.update_user(current_user.id, {
+            **filtered_update_data,
+            "updated_at": current_user.updated_at
+        })
         
         logger.info("User profile updated",
                    user_id=current_user.id,
@@ -562,9 +562,9 @@ async def search_users(
         if not is_platform_admin and not is_tenant_admin:
             raise HTTPException(403, "Admin permissions required to search users")
         
-        # Search users
+        # Search users from database
         search_term = q.lower()
-        all_users = list(user_service.users_cache.values())
+        all_users = await user_service.list_users(q, None, 1, 1000)  # Use search parameter
         
         matching_users = [
             user for user in all_users 

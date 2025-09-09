@@ -256,7 +256,8 @@ ROLE_PERMISSIONS = {
     UserRole.TENANT_ADMIN: [
         "logs:*:tenant", "alerts:*:tenant", "dashboards:*:tenant",
         "security:*:tenant", "users:*:tenant", "settings:*:tenant",
-        "storage:*:tenant", "queries:*:tenant", "ai:*:tenant", "enterprise:*:tenant"
+        "storage:*:tenant", "queries:*:tenant", "ai:*:tenant", "enterprise:*:tenant",
+        "observability:*:tenant"
     ],
     UserRole.SECURITY_ANALYST: [
         "security:*:tenant", "logs:read,search:tenant",
@@ -330,15 +331,24 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in ["POST", "PUT", "DELETE"]:
             return "enterprise:write:tenant"
         return "enterprise:read:tenant"
+    elif path.startswith("/v1/observability"):
+        if method in ["POST", "PUT", "DELETE"]:
+            return "observability:write:tenant"
+        return "observability:read:tenant"
     else:
         return "platform:general:tenant"
 
 def check_permission(user_roles: List[Dict[str, Any]], required_permission: str, tenant_id: str) -> bool:
-    """Check if user has required permission for tenant"""
+    """Check if user has required permission for tenant (supports tenant-less platform admins)"""
     resource, action, scope = required_permission.split(":")
     
     for role_assignment in user_roles:
-        if role_assignment["tenant_id"] != tenant_id and role_assignment["tenant_id"] != "platform":
+        # Platform admins (tenant_id = "platform") have platform-wide access
+        is_platform_admin = role_assignment["tenant_id"] == "platform"
+        is_tenant_match = role_assignment["tenant_id"] == tenant_id
+        
+        # Skip if not platform admin and not matching tenant
+        if not is_platform_admin and not is_tenant_match:
             continue
             
         role = UserRole(role_assignment["role"])
@@ -360,9 +370,9 @@ def check_permission(user_roles: List[Dict[str, Any]], required_permission: str,
             # Check scope match
             if perm_scope == "*":
                 return True
-            elif perm_scope == "platform" and role_assignment["tenant_id"] == "platform":
+            elif perm_scope == "platform" and is_platform_admin:
                 return True
-            elif perm_scope == "tenant" and role_assignment["tenant_id"] == tenant_id:
+            elif perm_scope == "tenant" and is_tenant_match:
                 return True
     
     return False
@@ -382,11 +392,9 @@ class UserService:
             logger.info("DatabaseLayer initialized for user service")
         except (SecurityError, DatabaseError) as e:
             logger.error("Failed to initialize DatabaseLayer", error=str(e))
-            # Fall back to in-memory for development
+            # Database required - no cache fallback
             self.db = None
-            self.users_cache = {}
-            self.sessions_cache = {}
-            logger.warning("Falling back to in-memory storage for development")
+            raise RuntimeError("DatabaseLayer initialization failed - database operations required")
     
     async def create_user(self, user_data: Dict[str, Any]) -> User:
         """Create new user with hashed password"""
@@ -414,11 +422,9 @@ class UserService:
                 logger.info("User saved to database", user_id=user.id, email=user.email)
             except Exception as e:
                 logger.error("Failed to save user to database", user_id=user.id, error=str(e))
-                # Fall back to cache
-                self.users_cache[user.id] = user
+                raise RuntimeError(f"Failed to create user {user.id} - database operation required")
         else:
-            # Fall back to cache
-            self.users_cache[user.id] = user
+            raise RuntimeError("DatabaseLayer not initialized - cannot create user")
         
         logger.info("User created", user_id=user.id, email=user.email)
         return user
@@ -442,10 +448,7 @@ class UserService:
             except Exception as e:
                 logger.error("Failed to query user from database", email=email, error=str(e))
         
-        # Fall back to cache
-        for user in self.users_cache.values():
-            if user.email.lower() == email.lower():
-                return user
+        # No cache fallback - database only
         return None
     
     async def get_user_by_id(self, user_id: str) -> Optional[User]:
@@ -467,8 +470,8 @@ class UserService:
             except Exception as e:
                 logger.error("Failed to query user from database", user_id=user_id, error=str(e))
         
-        # Fall back to cache
-        return self.users_cache.get(user_id)
+        # No cache fallback - database only
+        return None
     
     async def authenticate_user(self, email: str, password: str) -> Optional[User]:
         """Authenticate user credentials"""
@@ -522,13 +525,9 @@ class UserService:
                 logger.info("Session saved to database", user_id=user.id, session_id=session.id)
             except Exception as e:
                 logger.error("Failed to save session to database", session_id=session.id, error=str(e))
-                # Fall back to cache only if it exists
-                if hasattr(self, 'sessions_cache'):
-                    self.sessions_cache[session.session_token] = session
+                raise RuntimeError(f"Failed to create session {session.id} - database operation required")
         else:
-            # Fall back to cache only if it exists
-            if hasattr(self, 'sessions_cache'):
-                self.sessions_cache[session.session_token] = session
+            raise RuntimeError("DatabaseLayer not initialized - cannot create session")
         
         logger.info("Session created", user_id=user.id, session_id=session.id)
         return session_data
@@ -554,39 +553,30 @@ class UserService:
             except Exception as e:
                 logger.error("Failed to validate session in database", token=token[:8] + "...", error=str(e))
         
-        # Fall back to cache only if database layer is not available
-        if hasattr(self, 'sessions_cache') and self.sessions_cache:
-            session = self.sessions_cache.get(token)
-            if session and session.status == SessionStatus.ACTIVE:
-                # Update last activity
-                session.last_activity = datetime.utcnow()
-                
-                user = await self.get_user_by_id(user_id)
-                if user and user.status == UserStatus.ACTIVE:
-                    return user
+        # Database-only operation - no cache fallback
         
         # If session not found or inactive, return None (will be handled by middleware)
         return None
     
     async def get_user_tenant_roles(self, user_id: str, tenant_id: str) -> List[Dict[str, Any]]:
-        """Get user's roles for specific tenant"""
+        """Get user's roles for specific tenant (includes platform admin roles)"""
         if self.db:
             try:
-                return await self.db.get_user_tenant_roles(user_id, tenant_id)
+                # Get all roles for user (both tenant-specific and platform admin roles)
+                query = """
+                    SELECT * FROM user_tenant_roles_mt 
+                    WHERE user_id = %(user_id)s 
+                    AND (tenant_id = %(tenant_id)s OR tenant_id = 'platform')
+                    AND status = 'active'
+                    AND (expires_at IS NULL OR expires_at > now())
+                """
+                return await self.db.execute_query(query, {"user_id": user_id, "tenant_id": tenant_id})
             except Exception as e:
                 logger.error("Failed to get user tenant roles from database", 
                            user_id=user_id, tenant_id=tenant_id, error=str(e))
         
-        # Fall back to mock data for development
-        return [
-            {
-                "user_id": user_id,
-                "tenant_id": tenant_id, 
-                "role": "tenant_admin",
-                "status": "active",
-                "granted_at": datetime.utcnow()
-            }
-        ]
+        # Database-only operation - no fallback
+        raise RuntimeError("DatabaseLayer not initialized - cannot get user tenant roles")
     
     async def _update_user_last_login_async(self, user_id: str, last_login_at: datetime):
         """Update user last login asynchronously without blocking authentication"""
@@ -605,6 +595,79 @@ class UserService:
                 logger.debug("Session activity updated asynchronously", token=token[:8] + "...")
         except Exception as e:
             logger.error("Failed to update session activity asynchronously", token=token[:8] + "...", error=str(e))
+    
+    async def update_user(self, user_id: str, update_data: Dict[str, Any]) -> User:
+        """Update user data"""
+        if self.db:
+            try:
+                await self.db.update_user(user_id, update_data)
+                # Small delay to ensure ClickHouse consistency after update
+                await asyncio.sleep(0.1)  # 100ms delay for read-after-write consistency
+                # Get updated user from database
+                return await self.get_user_by_id(user_id)
+            except Exception as e:
+                logger.error("Failed to update user in database", user_id=user_id, error=str(e))
+                raise RuntimeError(f"Failed to update user {user_id} - database operation required")
+        else:
+            raise RuntimeError("DatabaseLayer not initialized - cannot update user")
+    
+    async def delete_user(self, user_id: str) -> bool:
+        """Delete (deactivate) user"""
+        if self.db:
+            try:
+                await self.db.update_user(user_id, {"status": UserStatus.INACTIVE.value})
+                logger.info("User soft deleted in database", user_id=user_id)
+                return True
+            except Exception as e:
+                logger.error("Failed to delete user in database", user_id=user_id, error=str(e))
+                return False
+        else:
+            raise RuntimeError("DatabaseLayer not initialized - cannot delete user")
+    
+    async def list_users(self, search: str = None, status: UserStatus = None, 
+                        page: int = 1, page_size: int = 50) -> List[User]:
+        """List users with optional filtering and pagination"""
+        if self.db:
+            try:
+                # TODO: Add proper database query with filtering and pagination
+                # For now, use a simple approach - in production this should be optimized
+                all_user_data = await self.db.execute_query(
+                    "SELECT * FROM users_mt WHERE customer_id = 'platform' ORDER BY created_at DESC LIMIT %(page_size)s OFFSET %(offset)s",
+                    {"page_size": page_size, "offset": (page - 1) * page_size}
+                )
+                
+                users = []
+                for user_data in all_user_data:
+                    user = User(
+                        id=user_data["id"],
+                        email=user_data["email"],
+                        name=user_data["name"],
+                        password_hash=user_data["password_hash"],
+                        status=UserStatus(user_data["status"]),
+                        created_at=user_data.get("created_at"),
+                        updated_at=user_data.get("updated_at"),
+                        last_login_at=user_data.get("last_login_at")
+                    )
+                    
+                    # Apply filters
+                    if search:
+                        search_lower = search.lower()
+                        if not (search_lower in user.name.lower() or search_lower in user.email.lower()):
+                            continue
+                    
+                    if status and user.status != status:
+                        continue
+                        
+                    users.append(user)
+                
+                return users
+                
+            except Exception as e:
+                logger.error("Failed to list users from database", error=str(e))
+                raise RuntimeError("Failed to list users - database operation required")
+                
+        else:
+            raise RuntimeError("DatabaseLayer not initialized - cannot list users")
 
 # Global user service instance
 user_service = UserService()
@@ -915,13 +978,69 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                     request.url.path, 
                     getattr(response, "status_code", 200),
                     response_size
-                )
+                ),
+                "customer_id": tenant_id  # customer_id is the same as tenant_id in our architecture
             }
             
             await usage_buffer.add_usage(usage_data)
             
         except Exception as e:
             logger.error("Usage tracking failed", error=str(e))
+
+# =================================================================
+# DEPENDENCY INJECTION
+# =================================================================
+
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Depends
+
+security = HTTPBearer()
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
+    """Get current authenticated user"""
+    user = await user_service.validate_session(credentials.credentials)
+    if not user:
+        raise HTTPException(401, "Invalid or expired session")
+    return user
+
+async def get_current_tenant_id(request: Request) -> str:
+    """Get current tenant ID from request"""
+    tenant_id = request.headers.get("X-Customer-ID")
+    if not tenant_id:
+        raise HTTPException(400, "X-Customer-ID header required")
+    return tenant_id
+
+async def require_platform_admin(user: User = Depends(get_current_user), 
+                                 request: Request = None) -> User:
+    """Require platform admin permissions (tenant-less platform admins)"""
+    if not hasattr(request.state, "roles"):
+        raise HTTPException(403, "No role information available")
+    
+    # Platform admins have tenant_id = "platform" (super-tenant)
+    platform_roles = [r for r in request.state.roles if r["tenant_id"] == "platform"]
+    if not platform_roles:
+        raise HTTPException(403, "Platform admin access required")
+    
+    return user
+
+async def require_tenant_admin(user: User = Depends(get_current_user),
+                              tenant_id: str = Depends(get_current_tenant_id),
+                              request: Request = None) -> User:
+    """Require tenant admin permissions"""
+    if not hasattr(request.state, "roles"):
+        raise HTTPException(403, "No role information available")
+    
+    tenant_roles = [r for r in request.state.roles if r["tenant_id"] == tenant_id]
+    admin_roles = [r for r in tenant_roles if r["role"] in ["tenant_admin"]]
+    
+    if not admin_roles:
+        raise HTTPException(403, f"Tenant admin access required for {tenant_id}")
+    
+    return user
+
+# Global instances
+setup_token_manager = SetupTokenManager()
+invitation_manager = InvitationManager()
 
 def setup_unified_auth_middleware(app):
     """Setup unified authentication and authorization middleware"""

@@ -13,7 +13,7 @@ from models import (
     UsageCurrentResponse, BillingEstimateResponse, UsageHistoryResponse,
     APIUsageAudit, User
 )
-from auth_middleware import (
+from authn_authz_middleware import (
     get_current_user, require_platform_admin, require_tenant_admin,
     usage_buffer, FEATURE_BASE_COSTS, map_endpoint_to_feature
 )

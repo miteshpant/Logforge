@@ -176,6 +176,30 @@ class DatabaseLayer:
             ORDER BY (customer_id, user_id, tenant_id)
             SETTINGS index_granularity = 8192
         """)
+        
+        # API usage tracking table
+        self.client.command("""
+            CREATE TABLE IF NOT EXISTS api_usage_mt (
+                id String,
+                tenant_id String,
+                user_id String,
+                endpoint String,
+                method String,
+                status_code UInt16,
+                processing_time_ms UInt32,
+                response_size_bytes UInt64,
+                ip_address String,
+                user_agent String,
+                request_timestamp DateTime DEFAULT now(),
+                billing_feature String,
+                cost_credits Float64,
+                created_at DateTime DEFAULT now(),
+                customer_id String DEFAULT 'platform'
+            ) ENGINE = MergeTree() 
+            ORDER BY (customer_id, tenant_id, request_timestamp, endpoint)
+            PARTITION BY toYYYYMM(request_timestamp)
+            SETTINGS index_granularity = 8192
+        """)
     
     def _create_alert_tables(self):
         """Create alert management tables (placeholder for AlertService)"""
@@ -299,6 +323,10 @@ class DatabaseLayer:
             elif table == 'user_tenant_roles_mt':
                 columns = ['id', 'user_id', 'tenant_id', 'role', 'granted_by', 'granted_at',
                           'expires_at', 'status', 'customer_id']
+            elif table == 'api_usage_mt':
+                columns = ['id', 'tenant_id', 'user_id', 'endpoint', 'method', 'status_code',
+                          'processing_time_ms', 'response_size_bytes', 'ip_address', 'user_agent',
+                          'request_timestamp', 'billing_feature', 'cost_credits', 'created_at', 'customer_id']
             else:
                 # For other tables, let ClickHouse determine columns
                 self.client.insert(table, data)

@@ -1,9 +1,10 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import AuthGuard from '@/components/AuthGuard'
 
 export const metadata: Metadata = {
-  title: 'Logforge Admin Dashboard',
-  description: 'Administrative interface for Logforge platform management',
+  title: 'MrLogSec Admin Dashboard',
+  description: 'Administrative interface for MrLogSec platform management',
 }
 
 export default function RootLayout({
@@ -14,9 +15,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {children}
-        </div>
+        <AuthGuard>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            {children}
+          </div>
+        </AuthGuard>
       </body>
     </html>
   )

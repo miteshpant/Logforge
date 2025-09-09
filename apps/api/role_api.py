@@ -12,7 +12,7 @@ from models import (
     RoleAssignmentRequest, RoleAssignmentResponse, UserRolesResponse,
     UserRole, UserStatus, UserTenantRole, User
 )
-from auth_middleware import (
+from authn_authz_middleware import (
     get_current_user, require_platform_admin, require_tenant_admin,
     user_service, ROLE_PERMISSIONS, check_permission
 )
@@ -716,7 +716,7 @@ async def validate_user_access(
         check_tenant_id = tenant_id or request.headers.get("X-Customer-ID", "platform")
         
         # Get required permission for endpoint
-        from auth_middleware import get_endpoint_permission
+        from authn_authz_middleware import get_endpoint_permission
         required_permission = get_endpoint_permission(endpoint, method)
         
         # Get user's roles

@@ -14,10 +14,13 @@ from models import (
     PasswordResetRequest, PasswordChangeRequest,
     User, UserRole, UserStatus
 )
-from auth_middleware import (
+from authn_authz_middleware import (
     user_service, setup_token_manager, invitation_manager,
     get_current_user, generate_secure_token, require_platform_admin
 )
+from database_layer import DatabaseLayer
+import uuid
+import os
 
 logger = structlog.get_logger()
 
@@ -212,8 +215,34 @@ async def complete_platform_setup(
         
         admin_user = await user_service.create_user(admin_data)
         
-        # TODO: Assign super_admin role to platform tenant
-        # This would be handled by role management system
+        # Assign super_admin role for platform-wide access (tenant-less)
+        try:
+            # Create role assignment using DatabaseLayer directly
+            service_key = os.getenv("USER_SERVICE_KEY", "user-service-key-dev")
+            db = DatabaseLayer("UserService", service_key)
+            
+            role_assignment = {
+                "id": str(uuid.uuid4()),
+                "user_id": admin_user.id,
+                "tenant_id": "platform",     # Platform is the super-tenant
+                "role": "super_admin",       # Platform super admin role
+                "status": "active",
+                "granted_at": datetime.utcnow(),
+                "granted_by": "system",
+                "customer_id": "platform"    # Special marker for platform data
+            }
+            
+            await db.execute_insert("user_tenant_roles_mt", [role_assignment])
+            logger.info("Platform admin role assigned", 
+                       user_id=admin_user.id, 
+                       tenant_id=None, 
+                       role="super_admin")
+            
+        except Exception as e:
+            logger.error("Failed to assign platform admin role", 
+                        user_id=admin_user.id, 
+                        error=str(e))
+            # Continue anyway - user is created but may need manual role assignment
         
         logger.info("Platform setup completed",
                    admin_user_id=admin_user.id,
@@ -265,8 +294,12 @@ async def request_password_reset(
         user.password_reset_expires = expires_at
         user.updated_at = datetime.utcnow()
         
-        # TODO: Save to database
-        user_service.users_cache[user.id] = user
+        # Update user in database
+        await user_service.update_user(user.id, {
+            "password_reset_token": user.password_reset_token,
+            "password_reset_expires": user.password_reset_expires,
+            "updated_at": user.updated_at
+        })
         
         # TODO: Send reset email
         logger.info("Password reset requested",
@@ -288,14 +321,30 @@ async def confirm_password_reset(
 ):
     """Confirm password reset with token"""
     try:
-        # Find user with valid reset token
+        # Find user with valid reset token from database
         user = None
-        for u in user_service.users_cache.values():
-            if (u.password_reset_token == token and 
-                u.password_reset_expires and
-                datetime.utcnow() < u.password_reset_expires):
-                user = u
-                break
+        if user_service.db:
+            try:
+                query = """
+                    SELECT * FROM users_mt 
+                    WHERE password_reset_token = %(token)s
+                    AND password_reset_expires > now()
+                    LIMIT 1
+                """
+                results = await user_service.db.execute_query(query, {'token': token})
+                if results:
+                    user_data = results[0]
+                    user = User(
+                        id=user_data['id'],
+                        email=user_data['email'],
+                        name=user_data['name'],
+                        password_hash=user_data['password_hash'],
+                        status=UserStatus(user_data['status']),
+                        password_reset_token=user_data.get('password_reset_token'),
+                        password_reset_expires=user_data.get('password_reset_expires')
+                    )
+            except Exception as e:
+                logger.error("Failed to query reset token from database", error=str(e))
         
         if not user:
             raise HTTPException(400, "Invalid or expired reset token")
@@ -309,14 +358,20 @@ async def confirm_password_reset(
             raise HTTPException(400, str(e))
         
         # Update password
-        from auth_middleware import hash_password
+        from authn_authz_middleware import hash_password
         user.password_hash = hash_password(new_password)
         user.password_reset_token = None
         user.password_reset_expires = None
         user.updated_at = datetime.utcnow()
         
-        # TODO: Save to database and revoke all existing sessions
-        user_service.users_cache[user.id] = user
+        # Update password in database and clear reset token
+        await user_service.update_user(user.id, {
+            "password_hash": user.password_hash,
+            "password_reset_token": None,
+            "password_reset_expires": None,
+            "updated_at": user.updated_at
+        })
+        # TODO: Revoke all existing sessions for security
         
         logger.info("Password reset completed",
                    user_id=user.id,
@@ -338,7 +393,7 @@ async def change_password(
     """Change user password"""
     try:
         # Verify current password
-        from auth_middleware import verify_password, hash_password
+        from authn_authz_middleware import verify_password, hash_password
         if not verify_password(password_change.current_password, current_user.password_hash):
             raise HTTPException(400, "Current password is incorrect")
         
@@ -353,8 +408,11 @@ async def change_password(
         current_user.password_hash = hash_password(password_change.new_password)
         current_user.updated_at = datetime.utcnow()
         
-        # TODO: Save to database
-        user_service.users_cache[current_user.id] = current_user
+        # Update password in database
+        await user_service.update_user(current_user.id, {
+            "password_hash": current_user.password_hash,
+            "updated_at": current_user.updated_at
+        })
         
         logger.info("Password changed", user_id=current_user.id)
         
@@ -532,8 +590,11 @@ async def confirm_email_verification(
         current_user.email_verified_at = datetime.utcnow()
         current_user.updated_at = datetime.utcnow()
         
-        # TODO: Save to database
-        user_service.users_cache[current_user.id] = current_user
+        # Update email verification in database
+        await user_service.update_user(current_user.id, {
+            "email_verified_at": current_user.email_verified_at,
+            "updated_at": current_user.updated_at
+        })
         
         logger.info("Email verified",
                    user_id=current_user.id,
@@ -710,8 +771,12 @@ async def deactivate_account(
         current_user.status = UserStatus.INACTIVE
         current_user.updated_at = datetime.utcnow()
         
-        # TODO: Save to database and revoke all sessions
-        user_service.users_cache[current_user.id] = current_user
+        # Deactivate user in database
+        await user_service.update_user(current_user.id, {
+            "status": current_user.status,
+            "updated_at": current_user.updated_at
+        })
+        # TODO: Revoke all sessions for security
         
         logger.info("Account deactivated", user_id=current_user.id)
         
@@ -739,8 +804,11 @@ async def reactivate_account(
         user.status = UserStatus.ACTIVE
         user.updated_at = datetime.utcnow()
         
-        # TODO: Save to database
-        user_service.users_cache[user.id] = user
+        # Reactivate user in database
+        await user_service.update_user(user.id, {
+            "status": user.status,
+            "updated_at": user.updated_at
+        })
         
         logger.info("Account reactivated",
                    user_id=user.id,
