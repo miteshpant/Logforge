@@ -3,6 +3,7 @@ Log ingestion API endpoints - all formats and methods
 """
 
 import json
+import time
 from typing import Dict, Any, List
 from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Request, HTTPException
@@ -17,12 +18,14 @@ from storage_config import get_customer_id
 from tenant_dependencies import TenantOrDefault, RequiredTenant, MiddlewareTenant
 from fastapi import Depends
 from tenant_service import tenant_service
+from services.ingestion_service import IngestionService
 
 router = APIRouter(prefix="/v1/ingest")
 
 # Global instances (will be injected)
 parser_factory = None
 process_logs_background = None
+ingestion_service = IngestionService()
 
 def setup_dependencies(pf, plb):
     """Setup dependencies from main app"""
@@ -37,18 +40,35 @@ async def ingest_logs(
     customer_id: str = MiddlewareTenant
 ):
     """Single log entry ingestion endpoint"""
+    start_time = time.time()
+    
     try:
-        # Track log ingestion for tenant
+        # Validate log entry
+        if not ingestion_service.validate_log_entry(log_entry):
+            await ingestion_service.track_ingestion_error(
+                customer_id, "/logs", "validation_error", "Log entry validation failed"
+            )
+            raise HTTPException(status_code=400, detail="Invalid log entry")
+        
+        # Track tenant usage
         await tenant_service.track_usage(customer_id, "log_ingestion", 1)
         
-        # Add metadata
-        log_entry.ingested_at = datetime.now(timezone.utc)
-        log_entry.customer_id = customer_id
+        # Prepare logs for storage
+        logs = ingestion_service.prepare_logs_for_storage([log_entry], customer_id)
         
         # Background processing
-        background_tasks.add_task(process_logs_background, [log_entry], customer_id)
+        background_tasks.add_task(process_logs_background, logs, customer_id)
         
-        # Generate a simple log_id for M0 compatibility
+        # Calculate processing metrics
+        bytes_processed = len(str(log_entry.msg))
+        metrics = ingestion_service.calculate_processing_metrics(start_time, 1, bytes_processed)
+        
+        # Track ingestion success
+        await ingestion_service.track_ingestion_success(
+            customer_id, "/logs", "json", 1, bytes_processed, metrics["processing_time_ms"]
+        )
+        
+        # Generate a simple log_id for compatibility
         log_id = f"log-{int(datetime.now().timestamp())}-{hash(str(log_entry)) % 10000}"
         
         return IngestResponse(
@@ -57,7 +77,13 @@ async def ingest_logs(
             log_id=log_id,
             processed_count=1
         )
+        
+    except HTTPException:
+        raise
     except Exception as e:
+        await ingestion_service.track_ingestion_error(
+            customer_id, "/logs", "processing_error", str(e)
+        )
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
 
 @router.post("/logs/batch", response_model=BatchIngestResponse)
@@ -118,6 +144,8 @@ async def ingest_logs_bulk(
             processed_count=len(logs),
             error_count=0
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Bulk ingestion failed: {str(e)}")
 

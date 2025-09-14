@@ -1,0 +1,47 @@
+"""
+API Constants - Logforge API
+Centralized constants for API configuration, limits, and default values
+"""
+
+# API Configuration
+DEFAULT_PAGE_SIZE = 50
+MAX_PAGE_SIZE = 1000
+DEFAULT_QUERY_LIMIT = 100
+MAX_QUERY_LIMIT = 10000
+
+# Pagination
+DEFAULT_OFFSET = 0
+MAX_RESULTS = 10000
+
+# Timeouts (milliseconds)
+DEFAULT_QUERY_TIMEOUT_MS = 30000
+LONG_QUERY_TIMEOUT_MS = 120000
+API_REQUEST_TIMEOUT_MS = 60000
+
+# Rate Limits
+DEFAULT_RATE_LIMIT = 1000  # requests per hour
+BURST_RATE_LIMIT = 100     # requests per minute
+
+# File Sizes
+MAX_LOG_ENTRY_SIZE_KB = 1024  # 1MB
+MAX_LOG_SIZE_BYTES = 1048576  # 1MB in bytes
+MAX_BATCH_SIZE = 1000
+MAX_EXPORT_SIZE_MB = 100
+
+# Export Formats
+SUPPORTED_EXPORT_FORMATS = ["json", "csv", "parquet"]
+DEFAULT_EXPORT_FORMAT = "json"
+
+# Response Codes
+HTTP_SUCCESS = 200
+HTTP_CREATED = 201
+HTTP_BAD_REQUEST = 400
+HTTP_UNAUTHORIZED = 401
+HTTP_FORBIDDEN = 403
+HTTP_NOT_FOUND = 404
+HTTP_CONFLICT = 409
+HTTP_INTERNAL_ERROR = 500
+
+# Default Values
+DEFAULT_TENANT_ID = "default"
+PLATFORM_TENANT_ID = "platform"

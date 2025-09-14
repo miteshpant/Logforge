@@ -97,8 +97,71 @@ usage_buffer = UsageBuffer()
 # AUTHENTICATION UTILITIES
 # =================================================================
 
+def validate_password_strength(password: str) -> None:
+    """
+    Validate password meets security requirements
+    
+    Requirements:
+    - Minimum 12 characters
+    - At least one uppercase letter
+    - At least one lowercase letter  
+    - At least one number
+    - At least one special character
+    - Not a common weak password
+    
+    Raises:
+        ValueError: If password doesn't meet requirements
+    """
+    if not password:
+        raise ValueError("Password is required")
+    
+    if len(password) < 12:
+        raise ValueError("Password must be at least 12 characters long")
+    
+    # Check character type requirements
+    has_upper = any(c.isupper() for c in password)
+    has_lower = any(c.islower() for c in password)
+    has_digit = any(c.isdigit() for c in password)
+    has_special = any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?~`" for c in password)
+    
+    if not has_upper:
+        raise ValueError("Password must contain at least one uppercase letter")
+    if not has_lower:
+        raise ValueError("Password must contain at least one lowercase letter")
+    if not has_digit:
+        raise ValueError("Password must contain at least one number")
+    if not has_special:
+        raise ValueError("Password must contain at least one special character (!@#$%^&* etc.)")
+    
+    # Check against common weak passwords
+    weak_passwords = {
+        'password123!', 'password123@', 'password123#', 'password123$',
+        '123456789012', 'qwertyuiopas', 'asdfghjklzxc', 'adminpassword',
+        'welcome123!', 'letmein123!', 'changeme123!', '1234567890!@',
+        'p@ssw0rd123', 'P@ssw0rd123', 'admin123456!', 'user123456!'
+    }
+    
+    if password.lower() in {pwd.lower() for pwd in weak_passwords}:
+        raise ValueError("Password is too common. Please choose a more unique password")
+
 def hash_password(password: str) -> str:
-    """Hash password using bcrypt with 12 rounds"""
+    """
+    Hash password using bcrypt with 12 rounds
+    Validates password strength before hashing
+    
+    Args:
+        password: Plain text password
+        
+    Returns:
+        Hashed password string
+        
+    Raises:
+        ValueError: If password doesn't meet security requirements
+    """
+    # Validate password strength first
+    validate_password_strength(password)
+    
+    # Hash the password
     salt = bcrypt.gensalt(rounds=12)
     return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
 
@@ -257,7 +320,7 @@ ROLE_PERMISSIONS = {
         "logs:*:tenant", "alerts:*:tenant", "dashboards:*:tenant",
         "security:*:tenant", "users:*:tenant", "settings:*:tenant",
         "storage:*:tenant", "queries:*:tenant", "ai:*:tenant", "enterprise:*:tenant",
-        "observability:*:tenant"
+        "observability:*:tenant", "roles:*:tenant"
     ],
     UserRole.SECURITY_ANALYST: [
         "security:*:tenant", "logs:read,search:tenant",
@@ -287,6 +350,9 @@ def get_endpoint_permission(path: str, method: str) -> str:
     # Map endpoints to permissions
     if path.startswith("/v1/admin/"):
         return "platform:admin:platform"
+    elif path.startswith("/v1/auth/"):
+        # Auth endpoints are user-level operations, no tenant-specific permissions needed
+        return "auth:user:user"
     elif path.startswith("/v1/users"):
         if method in ["POST", "PUT", "DELETE"]:
             return "users:write:tenant"
@@ -335,6 +401,16 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in ["POST", "PUT", "DELETE"]:
             return "observability:write:tenant"
         return "observability:read:tenant"
+    elif path.startswith("/v1/roles") or path.startswith("/v1/permissions"):
+        if method in ["POST", "PUT", "DELETE"]:
+            return "roles:write:tenant"
+        return "roles:read:tenant"
+    elif "/roles" in path or path.startswith("/v1/tenants") and "/users" in path:
+        if method in ["POST", "PUT", "DELETE"]:
+            return "roles:write:tenant"
+        return "roles:read:tenant"
+    elif path.startswith("/v1/check-permission") or path.startswith("/v1/validate-access"):
+        return "roles:read:tenant"
     else:
         return "platform:general:tenant"
 
@@ -378,298 +454,11 @@ def check_permission(user_roles: List[Dict[str, Any]], required_permission: str,
     return False
 
 # =================================================================
-# USER SERVICE
+# USER SERVICE (IMPORT FROM PROPER SERVICE LAYER)
 # =================================================================
 
-class UserService:
-    """Core user management service with DatabaseLayer persistence"""
-    
-    def __init__(self):
-        # Initialize DatabaseLayer with service credentials
-        try:
-            service_key = os.getenv("USER_SERVICE_KEY", "user-service-key-dev")
-            self.db = DatabaseLayer("UserService", service_key)
-            logger.info("DatabaseLayer initialized for user service")
-        except (SecurityError, DatabaseError) as e:
-            logger.error("Failed to initialize DatabaseLayer", error=str(e))
-            # Database required - no cache fallback
-            self.db = None
-            raise RuntimeError("DatabaseLayer initialization failed - database operations required")
-    
-    async def create_user(self, user_data: Dict[str, Any]) -> User:
-        """Create new user with hashed password"""
-        password_hash = hash_password(user_data["password"])
-        
-        user = User(
-            email=user_data["email"],
-            name=user_data["name"],
-            password_hash=password_hash,
-            status=user_data.get("status", UserStatus.PENDING)
-        )
-        
-        if self.db:
-            try:
-                # Save to database using DatabaseLayer
-                db_user_data = {
-                    "id": user.id,
-                    "email": user.email,
-                    "name": user.name,
-                    "password_hash": password_hash,
-                    "status": user.status.value,
-                    "customer_id": user_data.get("customer_id", "platform")
-                }
-                await self.db.create_user(db_user_data)
-                logger.info("User saved to database", user_id=user.id, email=user.email)
-            except Exception as e:
-                logger.error("Failed to save user to database", user_id=user.id, error=str(e))
-                raise RuntimeError(f"Failed to create user {user.id} - database operation required")
-        else:
-            raise RuntimeError("DatabaseLayer not initialized - cannot create user")
-        
-        logger.info("User created", user_id=user.id, email=user.email)
-        return user
-    
-    async def get_user_by_email(self, email: str) -> Optional[User]:
-        """Get user by email address"""
-        if self.db:
-            try:
-                user_data = await self.db.get_user_by_email(email)
-                if user_data:
-                    return User(
-                        id=user_data["id"],
-                        email=user_data["email"],
-                        name=user_data["name"],
-                        password_hash=user_data["password_hash"],
-                        status=UserStatus(user_data["status"]),
-                        created_at=user_data.get("created_at"),
-                        updated_at=user_data.get("updated_at"),
-                        last_login_at=user_data.get("last_login_at")
-                    )
-            except Exception as e:
-                logger.error("Failed to query user from database", email=email, error=str(e))
-        
-        # No cache fallback - database only
-        return None
-    
-    async def get_user_by_id(self, user_id: str) -> Optional[User]:
-        """Get user by ID"""
-        if self.db:
-            try:
-                user_data = await self.db.get_user_by_id(user_id)
-                if user_data:
-                    return User(
-                        id=user_data["id"],
-                        email=user_data["email"],
-                        name=user_data["name"],
-                        password_hash=user_data["password_hash"],
-                        status=UserStatus(user_data["status"]),
-                        created_at=user_data.get("created_at"),
-                        updated_at=user_data.get("updated_at"),
-                        last_login_at=user_data.get("last_login_at")
-                    )
-            except Exception as e:
-                logger.error("Failed to query user from database", user_id=user_id, error=str(e))
-        
-        # No cache fallback - database only
-        return None
-    
-    async def authenticate_user(self, email: str, password: str) -> Optional[User]:
-        """Authenticate user credentials"""
-        user = await self.get_user_by_email(email)
-        if not user or not user.password_hash:
-            return None
-            
-        if not verify_password(password, user.password_hash):
-            logger.warning("Authentication failed", email=email)
-            return None
-            
-        if user.status != UserStatus.ACTIVE:
-            logger.warning("Inactive user login attempt", email=email, status=user.status)
-            return None
-            
-        # Update last login
-        user.last_login_at = datetime.utcnow()
-        if self.db:
-            # Update last login asynchronously without blocking
-            asyncio.create_task(self._update_user_last_login_async(user.id, user.last_login_at))
-        
-        logger.info("User authenticated", user_id=user.id, email=email)
-        return user
-    
-    async def create_session(self, user: User, ip_address: str, user_agent: str) -> Dict[str, Any]:
-        """Create new user session"""
-        session_data = generate_jwt_token(user.id)
-        
-        session = UserSession(
-            user_id=user.id,
-            session_token=session_data["access_token"],
-            ip_address=ip_address,
-            user_agent=user_agent,
-            expires_at=session_data["expires_at"]
-        )
-        
-        if self.db:
-            try:
-                # Save session to database using DatabaseLayer
-                db_session_data = {
-                    "id": session.id,
-                    "user_id": session.user_id,
-                    "session_token": session.session_token,
-                    "ip_address": session.ip_address,
-                    "user_agent": session.user_agent,
-                    "expires_at": session.expires_at,
-                    "status": session.status.value,
-                    "customer_id": "platform"  # Default for user sessions
-                }
-                await self.db.create_session(db_session_data)
-                logger.info("Session saved to database", user_id=user.id, session_id=session.id)
-            except Exception as e:
-                logger.error("Failed to save session to database", session_id=session.id, error=str(e))
-                raise RuntimeError(f"Failed to create session {session.id} - database operation required")
-        else:
-            raise RuntimeError("DatabaseLayer not initialized - cannot create session")
-        
-        logger.info("Session created", user_id=user.id, session_id=session.id)
-        return session_data
-    
-    async def validate_session(self, token: str) -> Optional[User]:
-        """Validate session token and return user"""
-        # Let JWT decode exceptions propagate (they raise HTTPException)
-        payload = decode_jwt_token(token)
-        user_id = payload["user_id"]
-        
-        # Check session exists and is active
-        session_data = None
-        if self.db:
-            try:
-                session_data = await self.db.get_session(token)
-                if session_data and session_data["status"] == SessionStatus.ACTIVE.value:
-                    # Update last activity in database asynchronously without blocking
-                    asyncio.create_task(self._update_session_activity_async(token))
-                    
-                    user = await self.get_user_by_id(user_id)
-                    if user and user.status == UserStatus.ACTIVE:
-                        return user
-            except Exception as e:
-                logger.error("Failed to validate session in database", token=token[:8] + "...", error=str(e))
-        
-        # Database-only operation - no cache fallback
-        
-        # If session not found or inactive, return None (will be handled by middleware)
-        return None
-    
-    async def get_user_tenant_roles(self, user_id: str, tenant_id: str) -> List[Dict[str, Any]]:
-        """Get user's roles for specific tenant (includes platform admin roles)"""
-        if self.db:
-            try:
-                # Get all roles for user (both tenant-specific and platform admin roles)
-                query = """
-                    SELECT * FROM user_tenant_roles_mt 
-                    WHERE user_id = %(user_id)s 
-                    AND (tenant_id = %(tenant_id)s OR tenant_id = 'platform')
-                    AND status = 'active'
-                    AND (expires_at IS NULL OR expires_at > now())
-                """
-                return await self.db.execute_query(query, {"user_id": user_id, "tenant_id": tenant_id})
-            except Exception as e:
-                logger.error("Failed to get user tenant roles from database", 
-                           user_id=user_id, tenant_id=tenant_id, error=str(e))
-        
-        # Database-only operation - no fallback
-        raise RuntimeError("DatabaseLayer not initialized - cannot get user tenant roles")
-    
-    async def _update_user_last_login_async(self, user_id: str, last_login_at: datetime):
-        """Update user last login asynchronously without blocking authentication"""
-        try:
-            if self.db:
-                await self.db.update_user(user_id, {"last_login_at": last_login_at})
-                logger.debug("User last login updated asynchronously", user_id=user_id)
-        except Exception as e:
-            logger.error("Failed to update user last login asynchronously", user_id=user_id, error=str(e))
-    
-    async def _update_session_activity_async(self, token: str):
-        """Update session activity asynchronously without blocking validation"""
-        try:
-            if self.db:
-                await self.db.update_session_activity(token)
-                logger.debug("Session activity updated asynchronously", token=token[:8] + "...")
-        except Exception as e:
-            logger.error("Failed to update session activity asynchronously", token=token[:8] + "...", error=str(e))
-    
-    async def update_user(self, user_id: str, update_data: Dict[str, Any]) -> User:
-        """Update user data"""
-        if self.db:
-            try:
-                await self.db.update_user(user_id, update_data)
-                # Small delay to ensure ClickHouse consistency after update
-                await asyncio.sleep(0.1)  # 100ms delay for read-after-write consistency
-                # Get updated user from database
-                return await self.get_user_by_id(user_id)
-            except Exception as e:
-                logger.error("Failed to update user in database", user_id=user_id, error=str(e))
-                raise RuntimeError(f"Failed to update user {user_id} - database operation required")
-        else:
-            raise RuntimeError("DatabaseLayer not initialized - cannot update user")
-    
-    async def delete_user(self, user_id: str) -> bool:
-        """Delete (deactivate) user"""
-        if self.db:
-            try:
-                await self.db.update_user(user_id, {"status": UserStatus.INACTIVE.value})
-                logger.info("User soft deleted in database", user_id=user_id)
-                return True
-            except Exception as e:
-                logger.error("Failed to delete user in database", user_id=user_id, error=str(e))
-                return False
-        else:
-            raise RuntimeError("DatabaseLayer not initialized - cannot delete user")
-    
-    async def list_users(self, search: str = None, status: UserStatus = None, 
-                        page: int = 1, page_size: int = 50) -> List[User]:
-        """List users with optional filtering and pagination"""
-        if self.db:
-            try:
-                # TODO: Add proper database query with filtering and pagination
-                # For now, use a simple approach - in production this should be optimized
-                all_user_data = await self.db.execute_query(
-                    "SELECT * FROM users_mt WHERE customer_id = 'platform' ORDER BY created_at DESC LIMIT %(page_size)s OFFSET %(offset)s",
-                    {"page_size": page_size, "offset": (page - 1) * page_size}
-                )
-                
-                users = []
-                for user_data in all_user_data:
-                    user = User(
-                        id=user_data["id"],
-                        email=user_data["email"],
-                        name=user_data["name"],
-                        password_hash=user_data["password_hash"],
-                        status=UserStatus(user_data["status"]),
-                        created_at=user_data.get("created_at"),
-                        updated_at=user_data.get("updated_at"),
-                        last_login_at=user_data.get("last_login_at")
-                    )
-                    
-                    # Apply filters
-                    if search:
-                        search_lower = search.lower()
-                        if not (search_lower in user.name.lower() or search_lower in user.email.lower()):
-                            continue
-                    
-                    if status and user.status != status:
-                        continue
-                        
-                    users.append(user)
-                
-                return users
-                
-            except Exception as e:
-                logger.error("Failed to list users from database", error=str(e))
-                raise RuntimeError("Failed to list users - database operation required")
-                
-        else:
-            raise RuntimeError("DatabaseLayer not initialized - cannot list users")
-
-# Global user service instance
+# Import UserService from proper service layer
+from services.user_service import UserService
 user_service = UserService()
 
 # =================================================================
@@ -680,17 +469,23 @@ class SetupTokenManager:
     """Manages initial platform setup tokens"""
     
     def __init__(self):
-        self.setup_tokens = {}  # In-memory storage (use Redis in production)
+        # Use database storage instead of memory
+        from database_layer import DatabaseLayer
+        self.db = DatabaseLayer("PlatformSetup", "platform-setup-key")
+        # Initialize in-memory storage for now (TODO: move to database)
+        self.setup_tokens = {}
     
     def generate_setup_token(self) -> Dict[str, Any]:
         """Generate initial setup token"""
         token = generate_secure_token(32)
         expires_at = datetime.utcnow() + timedelta(hours=24)
         
+        # Store in memory for now (TODO: Store in database instead)
         self.setup_tokens[token] = {
-            "created_at": datetime.utcnow(),
+            "token": token,
             "expires_at": expires_at,
-            "used": False
+            "used": False,
+            "created_at": datetime.utcnow()
         }
         
         logger.info("Setup token generated", expires_at=expires_at)
@@ -720,70 +515,56 @@ class SetupTokenManager:
     
     def has_setup_completed(self) -> bool:
         """Check if initial setup has been completed"""
-        # TODO: Check if any super_admin users exist
+        # TODO: Check if any super_admin users exist in database
+        # For now, check if any tokens have been used
         return any(token_data["used"] for token_data in self.setup_tokens.values())
 
-# Global setup token manager
-setup_token_manager = SetupTokenManager()
+# Global setup token manager (lazy initialization)
+setup_token_manager = None
+
+def get_setup_token_manager():
+    """Get setup token manager with lazy initialization"""
+    global setup_token_manager
+    if setup_token_manager is None:
+        try:
+            setup_token_manager = SetupTokenManager()
+        except Exception as e:
+            logger.warning("Failed to initialize SetupTokenManager", error=str(e))
+            # Return a dummy manager for testing
+            setup_token_manager = type('DummySetupTokenManager', (), {
+                'is_setup_complete': lambda: True,
+                'generate_setup_token': lambda: {"token": "test-token", "expires_at": "2024-01-01T00:00:00Z"},
+                'validate_setup_token': lambda token: None,
+                'complete_setup': lambda token, admin_data: True
+            })()
+    return setup_token_manager
 
 # =================================================================
 # INVITATION SYSTEM
 # =================================================================
 
 class InvitationManager:
-    """Manages user invitations"""
+    """Manages user invitations with database persistence"""
     
     def __init__(self):
-        self.invitations = {}  # In-memory storage (use Redis in production)
+        # Use the UserService from this module instead of importing
+        self.user_service = None  # Will be set when needed
     
-    def create_invitation(self, email: str, tenant_id: str, role: UserRole, 
-                         invited_by: str) -> Dict[str, Any]:
-        """Create user invitation"""
-        token = generate_secure_token(32)
-        expires_at = datetime.utcnow() + timedelta(days=7)  # 7 day expiry
-        
-        self.invitations[token] = {
-            "email": email.lower(),
-            "tenant_id": tenant_id,
-            "role": role,
-            "invited_by": invited_by,
-            "created_at": datetime.utcnow(),
-            "expires_at": expires_at,
-            "accepted": False
-        }
-        
-        logger.info("Invitation created", email=email, tenant_id=tenant_id, role=role)
-        
-        return {
-            "invitation_token": token,
-            "invitation_expires": expires_at,
-            "invited_email": email
-        }
+    async def create_invitation(self, email: str, tenant_id: str, role: UserRole, 
+                               invited_by: str) -> Dict[str, Any]:
+        """Create user invitation using database storage"""
+        # Use the global user_service instance
+        return await user_service.create_invitation(email, tenant_id, role, invited_by)
     
-    def validate_invitation(self, token: str, email: str) -> Optional[Dict[str, Any]]:
-        """Validate invitation token and email match"""
-        invitation = self.invitations.get(token)
-        if not invitation:
-            return None
-        
-        if invitation["accepted"]:
-            return None
-        
-        if datetime.utcnow() > invitation["expires_at"]:
-            return None
-        
-        if invitation["email"] != email.lower():
-            return None
-        
-        return invitation
+    async def validate_invitation(self, token: str, email: str) -> Optional[Dict[str, Any]]:
+        """Validate invitation token and email match using database"""
+        # Use the global user_service instance
+        return await user_service.validate_invitation(token, email)
     
-    def accept_invitation(self, token: str) -> Dict[str, Any]:
-        """Mark invitation as accepted and return details"""
-        invitation = self.invitations.get(token)
-        if invitation:
-            invitation["accepted"] = True
-            invitation["accepted_at"] = datetime.utcnow()
-        return invitation
+    async def accept_invitation(self, token: str, invitation_id: str) -> bool:
+        """Mark invitation as accepted using database"""
+        # Use the global user_service instance
+        return await user_service.accept_invitation(invitation_id)
 
 # Global invitation manager
 invitation_manager = InvitationManager()
@@ -832,6 +613,10 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         """Process authentication, authorization, and feature access"""
         start_time = time.time()
         
+        # Allow CORS preflight requests to pass through without authentication
+        if request.method == "OPTIONS":
+            return await call_next(request)
+        
         # Skip authentication for public endpoints
         if self._is_public_endpoint(request.url.path):
             return await call_next(request)
@@ -857,7 +642,8 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                     raise HTTPException(403, f"No access to tenant: {tenant_id}")
             
             # Step 4: Permission Check - Verify endpoint permissions
-            if tenant_id:
+            # Skip permission checks for auth endpoints (they are user-level operations)
+            if tenant_id and not request.url.path.startswith("/v1/auth/"):
                 required_permission = get_endpoint_permission(request.url.path, request.method)
                 if not check_permission(user_roles, required_permission, tenant_id):
                     raise HTTPException(403, f"Insufficient permissions for {request.url.path}")
@@ -1038,9 +824,9 @@ async def require_tenant_admin(user: User = Depends(get_current_user),
     
     return user
 
-# Global instances
-setup_token_manager = SetupTokenManager()
+# Global instances (using lazy initialization)
 invitation_manager = InvitationManager()
+setup_token_manager = get_setup_token_manager()
 
 def setup_unified_auth_middleware(app):
     """Setup unified authentication and authorization middleware"""

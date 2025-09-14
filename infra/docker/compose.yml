@@ -10,7 +10,7 @@ services:
       - "9001:9000"
     volumes:
       - clickhouse-data:/var/lib/clickhouse
-      - ./clickhouse/init_simple.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./clickhouse/init_simple.sql:/docker-entrypoint-initdb.d/01-init.sql
     environment:
       CLICKHOUSE_DB: logforge
       CLICKHOUSE_USER: logforge

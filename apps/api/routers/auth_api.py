@@ -15,10 +15,11 @@ from models import (
     User, UserRole, UserStatus
 )
 from authn_authz_middleware import (
-    user_service, setup_token_manager, invitation_manager,
+    setup_token_manager, invitation_manager,
     get_current_user, generate_secure_token, require_platform_admin
 )
-from database_layer import DatabaseLayer
+from services.user_service import UserService
+from tenant_dependencies import MiddlewareTenant
 import uuid
 import os
 
@@ -26,6 +27,9 @@ logger = structlog.get_logger()
 
 # Create router for authentication
 router = APIRouter(prefix="/v1/auth", tags=["Authentication"])
+
+# Initialize services using proper service layer
+user_service = UserService()
 
 # =================================================================
 # AUTHENTICATION ENDPOINTS
@@ -215,27 +219,22 @@ async def complete_platform_setup(
         
         admin_user = await user_service.create_user(admin_data)
         
-        # Assign super_admin role for platform-wide access (tenant-less)
+        # Assign super_admin role for platform-wide access using role service
         try:
-            # Create role assignment using DatabaseLayer directly
-            service_key = os.getenv("USER_SERVICE_KEY", "user-service-key-dev")
-            db = DatabaseLayer("UserService", service_key)
+            from services.role_service import RoleService
+            role_service = RoleService()
             
-            role_assignment = {
-                "id": str(uuid.uuid4()),
-                "user_id": admin_user.id,
-                "tenant_id": "platform",     # Platform is the super-tenant
-                "role": "super_admin",       # Platform super admin role
-                "status": "active",
-                "granted_at": datetime.utcnow(),
-                "granted_by": "system",
-                "customer_id": "platform"    # Special marker for platform data
-            }
+            # Assign platform super admin role
+            await role_service.assign_role(
+                user_id=admin_user.id,
+                tenant_id="platform",
+                role=UserRole.SUPER_ADMIN,
+                granted_by="system"
+            )
             
-            await db.execute_insert("user_tenant_roles_mt", [role_assignment])
             logger.info("Platform admin role assigned", 
                        user_id=admin_user.id, 
-                       tenant_id=None, 
+                       tenant_id="platform", 
                        role="super_admin")
             
         except Exception as e:
@@ -321,30 +320,8 @@ async def confirm_password_reset(
 ):
     """Confirm password reset with token"""
     try:
-        # Find user with valid reset token from database
-        user = None
-        if user_service.db:
-            try:
-                query = """
-                    SELECT * FROM users_mt 
-                    WHERE password_reset_token = %(token)s
-                    AND password_reset_expires > now()
-                    LIMIT 1
-                """
-                results = await user_service.db.execute_query(query, {'token': token})
-                if results:
-                    user_data = results[0]
-                    user = User(
-                        id=user_data['id'],
-                        email=user_data['email'],
-                        name=user_data['name'],
-                        password_hash=user_data['password_hash'],
-                        status=UserStatus(user_data['status']),
-                        password_reset_token=user_data.get('password_reset_token'),
-                        password_reset_expires=user_data.get('password_reset_expires')
-                    )
-            except Exception as e:
-                logger.error("Failed to query reset token from database", error=str(e))
+        # Find user with valid reset token through user service
+        user = await user_service.get_user_by_reset_token(token)
         
         if not user:
             raise HTTPException(400, "Invalid or expired reset token")
@@ -353,7 +330,7 @@ async def confirm_password_reset(
         from models import UserCreateRequest
         try:
             # Use validator from UserCreateRequest
-            UserCreateRequest.validate_password_strength(None, new_password)
+            UserCreateRequest.validate_password_strength(new_password)
         except ValueError as e:
             raise HTTPException(400, str(e))
         
@@ -400,7 +377,7 @@ async def change_password(
         # Validate new password
         from models import UserCreateRequest
         try:
-            UserCreateRequest.validate_password_strength(None, password_change.new_password)
+            UserCreateRequest.validate_password_strength(password_change.new_password)
         except ValueError as e:
             raise HTTPException(400, str(e))
         
@@ -459,7 +436,7 @@ async def invite_user(
             raise HTTPException(409, f"User with email {invitation_request.email} already exists")
         
         # Create invitation
-        invitation_data = invitation_manager.create_invitation(
+        invitation_data = await invitation_manager.create_invitation(
             email=invitation_request.email,
             tenant_id=tenant_id,
             role=invitation_request.role,
@@ -490,7 +467,7 @@ async def accept_invitation(
     """Accept user invitation and create account"""
     try:
         # Validate invitation token
-        invitation = invitation_manager.validate_invitation(
+        invitation = await invitation_manager.validate_invitation(
             accept_request.invitation_token,
             accept_request.email
         )
@@ -518,7 +495,7 @@ async def accept_invitation(
         new_user = await user_service.create_user(user_data)
         
         # Mark invitation as accepted
-        invitation_manager.accept_invitation(accept_request.invitation_token)
+        await invitation_manager.accept_invitation(accept_request.invitation_token, invitation["id"])
         
         # TODO: Assign role from invitation to user for tenant
         # This would be handled by role management system
@@ -637,7 +614,7 @@ async def onboard_tenant(
         tenant_id = str(uuid.uuid4())
         
         # Create invitation for tenant admin
-        invitation_data = invitation_manager.create_invitation(
+        invitation_data = await invitation_manager.create_invitation(
             email=admin_email,
             tenant_id=tenant_id,
             role=UserRole.TENANT_ADMIN,
@@ -670,60 +647,14 @@ async def list_user_sessions(
 ):
     """List current user's active sessions"""
     try:
-        # TODO: Query database for user's sessions
-        user_sessions = [
-            session for session in user_service.sessions_cache.values()
-            if session.user_id == current_user.id and session.status.value == "active"
-        ]
-        
-        session_list = []
-        for session in user_sessions:
-            session_list.append({
-                "id": session.id,
-                "ip_address": session.ip_address,
-                "user_agent": session.user_agent,
-                "created_at": session.created_at,
-                "last_activity": session.last_activity,
-                "expires_at": session.expires_at
-            })
+        # Get user sessions through user service
+        session_list = await user_service.get_user_sessions(current_user.id)
         
         return {"sessions": session_list, "total_count": len(session_list)}
         
     except Exception as e:
         logger.error("Session listing failed", user_id=current_user.id, error=str(e))
         raise HTTPException(500, "Session listing failed")
-
-@router.delete("/sessions/{session_id}")
-async def revoke_session(
-    session_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    """Revoke specific session"""
-    try:
-        # Find session
-        target_session = None
-        for session in user_service.sessions_cache.values():
-            if session.id == session_id and session.user_id == current_user.id:
-                target_session = session
-                break
-        
-        if not target_session:
-            raise HTTPException(404, f"Session {session_id} not found")
-        
-        # Revoke session
-        await user_service.revoke_session(target_session.session_token)
-        
-        logger.info("Session revoked",
-                   session_id=session_id,
-                   user_id=current_user.id)
-        
-        return {"message": "Session revoked successfully"}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Session revocation failed", session_id=session_id, error=str(e))
-        raise HTTPException(500, "Session revocation failed")
 
 @router.delete("/sessions/all")
 async def revoke_all_sessions(
@@ -738,14 +669,11 @@ async def revoke_all_sessions(
         if auth_header.startswith("Bearer "):
             current_token = auth_header.split(" ")[1]
         
-        # Revoke all other sessions
-        revoked_count = 0
-        for session in user_service.sessions_cache.values():
-            if (session.user_id == current_user.id and 
-                session.session_token != current_token and
-                session.status.value == "active"):
-                await user_service.revoke_session(session.session_token)
-                revoked_count += 1
+        # Revoke all other sessions except current through user service
+        revoked_count = await user_service.revoke_all_user_sessions_except_current(
+            current_user.id, 
+            current_token
+        )
         
         logger.info("All sessions revoked",
                    user_id=current_user.id,
@@ -755,6 +683,31 @@ async def revoke_all_sessions(
         
     except Exception as e:
         logger.error("Session revocation failed", user_id=current_user.id, error=str(e))
+        raise HTTPException(500, "Session revocation failed")
+
+@router.delete("/sessions/{session_id}")
+async def revoke_session(
+    session_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Revoke specific session"""
+    try:
+        # Revoke session by ID through user service
+        success = await user_service.revoke_session_by_id(session_id, current_user.id)
+        
+        if not success:
+            raise HTTPException(404, f"Session {session_id} not found or already revoked")
+        
+        logger.info("Session revoked",
+                   session_id=session_id,
+                   user_id=current_user.id)
+        
+        return {"message": "Session revoked successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Session revocation failed", session_id=session_id, error=str(e))
         raise HTTPException(500, "Session revocation failed")
 
 # =================================================================

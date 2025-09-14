@@ -29,23 +29,63 @@ class DatabaseLayer:
     # Service authentication registry
     AUTHORIZED_SERVICES = {
         'UserService': os.getenv('USER_SERVICE_KEY', 'user-service-key-dev'),
+        'RoleService': os.getenv('ROLE_SERVICE_KEY', 'role-service-key-dev'),
         'AlertService': os.getenv('ALERT_SERVICE_KEY', 'alert-service-key-dev'),
         'SecurityService': os.getenv('SECURITY_SERVICE_KEY', 'security-service-key-dev'),
         'IngestionService': os.getenv('INGESTION_SERVICE_KEY', 'ingestion-service-key-dev'),
         'QueryService': os.getenv('QUERY_SERVICE_KEY', 'query-service-key-dev'),
         'StorageService': os.getenv('STORAGE_SERVICE_KEY', 'storage-service-key-dev'),
-        'TestService': 'test-service-key'  # For testing only
+        'TestService': 'test-service-key',  # For testing only
+        # Additional Services
+        'UsageService': os.getenv('USAGE_SERVICE_KEY', 'usage-service-key-dev'),
+        # DAO Services
+        'UserDAO': os.getenv('USER_SERVICE_KEY', 'user-dao-service-key'),
+        'TenantDAO': os.getenv('TENANT_SERVICE_KEY', 'tenant-dao-service-key'), 
+        'RoleDAO': os.getenv('ROLE_SERVICE_KEY', 'role-dao-service-key'),
+        'IngestionDAO': os.getenv('INGESTION_SERVICE_KEY', 'ingestion-dao-service-key'),
+        'QueryDAO': os.getenv('QUERY_SERVICE_KEY', 'query-dao-service-key'),
+        'DashboardDAO': os.getenv('DASHBOARD_SERVICE_KEY', 'dashboard-dao-service-key'),
+        'StorageDAO': os.getenv('STORAGE_SERVICE_KEY', 'storage-dao-service-key'),
+        'AlertDAO': os.getenv('ALERT_SERVICE_KEY', 'alert-dao-service-key'),
+        'UsageDAO': os.getenv('USAGE_SERVICE_KEY', 'usage-dao-service-key'),
+        'SecurityDAO': os.getenv('SECURITY_SERVICE_KEY', 'security-dao-service-key'),
+        'ObservabilityDAO': os.getenv('OBSERVABILITY_SERVICE_KEY', 'observability-dao-service-key'),
+        'AIDAO': os.getenv('AI_SERVICE_KEY', 'ai-dao-service-key'),
+        'EnterpriseDAO': os.getenv('ENTERPRISE_SERVICE_KEY', 'enterprise-dao-service-key'),
+        'SubscriptionDAO': os.getenv('SUBSCRIPTION_SERVICE_KEY', 'subscription-dao-service-key'),
+        'PlatformSetup': os.getenv('PLATFORM_SETUP_KEY', 'platform-setup-key'),
+        'IngestionTestService': 'ingestion-test-service-key'
     }
     
     # Table access control by service
     TABLE_ACCESS_CONTROL = {
         'UserService': ['users_mt', 'user_sessions_mt', 'user_tenant_roles_mt', 'api_usage_mt'],
+        'RoleService': ['user_tenant_roles_mt', 'users_mt'],  # Role service needs access to user and role tables
         'AlertService': ['alert_rules_mt', 'alert_events_mt', 'alert_notifications_mt'],
         'SecurityService': ['security_events_mt', 'sigma_rules_mt', 'threat_intel_mt'],
         'IngestionService': ['logs_raw_mt', 'logs_normalized_mt', 'ingestion_stats_mt'],
-        'QueryService': ['logs_normalized_mt', 'query_cache_mt'],
+        'QueryService': ['logs_normalized_mt', 'query_cache_mt', 'saved_queries_mt'],
         'StorageService': ['logs_raw_mt', 'logs_normalized_mt', 'storage_metadata_mt'],
-        'TestService': ['*']  # Test service can access all tables
+        'TestService': ['*'],  # Test service can access all tables
+        # Additional Services
+        'UsageService': ['api_usage_mt', 'tenants_mt'],
+        # DAO Services - inherit permissions from parent services
+        'UserDAO': ['users_mt', 'user_sessions_mt', 'user_tenant_roles_mt', 'user_invitations_mt'],
+        'TenantDAO': ['tenants_mt', 'tenant_configs_mt', 'tenant_quotas_mt'], 
+        'RoleDAO': ['user_tenant_roles_mt', 'users_mt'],
+        'IngestionDAO': ['ingestion_stats_mt', 'ingestion_errors_mt'],
+        'QueryDAO': ['saved_queries_mt', 'query_cache_mt', 'logs_normalized_mt'],
+        'DashboardDAO': ['dashboards_mt', 'dashboard_widgets_mt', 'dashboard_shares_mt', 'logs_normalized_mt'],
+        'StorageDAO': ['retention_policies_mt', 'storage_backends_mt', 'storage_operations_mt', 'storage_quotas_mt', 'data_archives_mt', 'logs_raw_mt', 'logs_normalized_mt'],
+        'AlertDAO': ['alert_rules_mt', 'alert_instances_mt', 'notification_channels_mt', 'alert_rule_states_mt'],
+        'UsageDAO': ['api_usage_audit_mt', 'tenants_mt', 'users_mt'],
+        'SecurityDAO': ['sigma_rules_mt', 'security_events_mt', 'threat_intel_mt'],
+        'ObservabilityDAO': ['traces_mt', 'metrics_mt', 'service_topology_mt', 'service_dependencies_mt'],
+        'AIDAO': ['ai_investigations_mt', 'ai_analyses_mt', 'ai_baselines_mt', 'ai_query_history_mt'],
+        'EnterpriseDAO': ['auth_providers_mt', 'api_keys_enterprise_mt', 'tenants_mt', 'enterprise_compliance_mt', 'enterprise_integrations_mt', 'enterprise_audit_logs_mt', 'api_usage_mt'],
+        'SubscriptionDAO': ['tenant_subscriptions_mt', 'feature_rates_mt', 'usage_records_mt', 'tenant_deletions_mt'],
+        'PlatformSetup': ['users_mt', 'user_tenant_roles_mt', 'user_sessions_mt'],
+        'IngestionTestService': ['*']  # Test service can access all tables
     }
     
     # Dangerous operations requiring admin privileges
@@ -53,7 +93,7 @@ class DatabaseLayer:
     ADMIN_SERVICES = ['TestService']  # Services allowed to perform admin operations
     
     # Services allowed to perform UPDATE operations (ALTER TABLE ... UPDATE)
-    UPDATE_ALLOWED_SERVICES = ['UserService', 'AlertService', 'SecurityService', 'TestService']
+    UPDATE_ALLOWED_SERVICES = ['UserService', 'AlertService', 'SecurityService', 'TestService', 'UserDAO', 'TenantDAO', 'RoleDAO', 'QueryDAO', 'QueryService', 'DashboardDAO', 'DashboardService', 'StorageDAO', 'StorageService', 'AlertDAO', 'SecurityDAO', 'AIDAO', 'ObservabilityDAO', 'EnterpriseDAO', 'SubscriptionDAO']
     
     def __init__(self, service_name: str, service_key: str):
         """Initialize database layer with service authentication
@@ -97,7 +137,7 @@ class DatabaseLayer:
         """Create required tables if they don't exist"""
         try:
             # User management tables
-            if self.service_name == 'UserService':
+            if self.service_name in ['UserService', 'UserDAO', 'TestService', 'PlatformSetup']:
                 self._create_user_tables()
             
             # Alert management tables
@@ -109,8 +149,16 @@ class DatabaseLayer:
                 self._create_security_tables()
             
             # Ingestion and query tables (created by respective services)
-            elif self.service_name in ['IngestionService', 'QueryService', 'StorageService']:
+            elif self.service_name in ['IngestionService', 'StorageService']:
                 self._create_log_tables()
+            elif self.service_name in ['QueryService', 'QueryDAO']:
+                self._verify_query_tables()
+            elif self.service_name in ['DashboardService', 'DashboardDAO']:
+                self._verify_dashboard_tables()
+            elif self.service_name in ['StorageService', 'StorageDAO']:
+                self._verify_storage_tables()
+            elif self.service_name in ['AlertService', 'AlertDAO']:
+                self._verify_alert_tables()
             
             logger.info("Database tables ensured", service=self.service_name)
             
@@ -171,6 +219,8 @@ class DatabaseLayer:
                 granted_at DateTime DEFAULT now(),
                 expires_at Nullable(DateTime),
                 status Enum8('active'=1, 'inactive'=2, 'expired'=3),
+                created_at DateTime DEFAULT now(),
+                updated_at DateTime DEFAULT now(),
                 customer_id String DEFAULT 'platform'
             ) ENGINE = MergeTree() 
             ORDER BY (customer_id, user_id, tenant_id)
@@ -212,6 +262,50 @@ class DatabaseLayer:
     def _create_log_tables(self):
         """Create log storage tables (placeholder for log services)"""
         pass  # Implement when log services use database layer
+    
+    def _verify_query_tables(self):
+        """Verify query management tables exist (should be created via SQL schema files)"""
+        required_tables = ['saved_queries_mt', 'query_cache_mt']
+        self._verify_tables_exist(required_tables, "query management")
+    
+    def _verify_dashboard_tables(self):
+        """Verify dashboard management tables exist (should be created via SQL schema files)"""
+        required_tables = ['dashboards_mt', 'dashboard_widgets_mt', 'dashboard_shares_mt']
+        self._verify_tables_exist(required_tables, "dashboard management")
+    
+    def _verify_storage_tables(self):
+        """Verify storage management tables exist (should be created via SQL schema files)"""
+        required_tables = ['retention_policies_mt', 'storage_backends_mt', 'storage_operations_mt', 'storage_quotas_mt', 'data_archives_mt']
+        self._verify_tables_exist(required_tables, "storage management")
+    
+    def _verify_alert_tables(self):
+        """Verify alert management tables exist (should be created via SQL schema files)"""
+        required_tables = ['alert_rules_mt', 'alert_instances_mt', 'notification_channels_mt', 'alert_rule_states_mt']
+        self._verify_tables_exist(required_tables, "alert management")
+    
+    def _verify_tables_exist(self, table_names: List[str], table_group: str):
+        """Verify that required tables exist in the database"""
+        try:
+            existing_tables = set()
+            result = self.client.query("SHOW TABLES")
+            for row in result.result_rows:
+                existing_tables.add(row[0])
+            
+            missing_tables = [table for table in table_names if table not in existing_tables]
+            
+            if missing_tables:
+                missing_list = ', '.join(missing_tables)
+                error_msg = f"Missing {table_group} tables: {missing_list}. Please run the schema initialization SQL scripts."
+                logger.error(error_msg, service=self.service_name)
+                raise DatabaseError(error_msg)
+            
+            logger.info(f"{table_group.title()} tables verified", service=self.service_name, tables=table_names)
+            
+        except Exception as e:
+            if "Missing" in str(e):
+                raise e  # Re-raise our custom error
+            logger.error(f"Failed to verify {table_group} tables", service=self.service_name, error=str(e))
+            raise DatabaseError(f"Table verification failed: {str(e)}")
     
     def _validate_table_access(self, table_name: str):
         """Validate service has access to requested table"""
@@ -257,6 +351,16 @@ class DatabaseLayer:
             sanitized[key] = value
         
         return sanitized
+    
+    # Helper methods for common database operations
+    async def fetch_all(self, query: str, params: Dict = None) -> List[Dict]:
+        """Fetch all results from query (alias for execute_query)"""
+        return await self.execute_query(query, params)
+    
+    async def fetch_one(self, query: str, params: Dict = None) -> Optional[Dict]:
+        """Fetch single result from query"""
+        results = await self.execute_query(query, params)
+        return results[0] if results else None
     
     async def execute_query(self, query: str, params: Dict = None) -> List[Dict]:
         """Execute SELECT query and return results as list of dictionaries
@@ -322,7 +426,7 @@ class DatabaseLayer:
                           'created_at', 'last_activity', 'expires_at', 'status', 'customer_id']
             elif table == 'user_tenant_roles_mt':
                 columns = ['id', 'user_id', 'tenant_id', 'role', 'granted_by', 'granted_at',
-                          'expires_at', 'status', 'customer_id']
+                          'expires_at', 'status', 'created_at', 'updated_at', 'customer_id']
             elif table == 'api_usage_mt':
                 columns = ['id', 'tenant_id', 'user_id', 'endpoint', 'method', 'status_code',
                           'processing_time_ms', 'response_size_bytes', 'ip_address', 'user_agent',
@@ -578,7 +682,9 @@ class DatabaseLayer:
             'status': 'active',
             'customer_id': role_data.get('customer_id', 'platform'),
             'granted_at': datetime.utcnow(),
-            'expires_at': role_data.get('expires_at')
+            'expires_at': role_data.get('expires_at'),
+            'created_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
         }
         
         await self.execute_insert('user_tenant_roles_mt', [role_record])

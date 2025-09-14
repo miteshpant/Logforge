@@ -249,9 +249,9 @@ class BaseTestSuite:
         """
         url = f"{self.base_url}{endpoint}"
         
-        # Ensure auth headers are included
-        headers = kwargs.get('headers', {})
-        headers.update(self.auth_headers)
+        # Ensure auth headers are included, but allow custom headers to override
+        headers = dict(self.auth_headers)  # Start with default auth headers
+        headers.update(kwargs.get('headers', {}))  # Allow custom headers to override defaults
         kwargs['headers'] = headers
         
         async with httpx.AsyncClient(timeout=30.0) as client:

@@ -2,23 +2,22 @@
 Storage and TTL management API endpoints
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 
-from storage_config import get_customer_id
+from services.storage_service import StorageService
 from tenant_dependencies import MiddlewareTenant
 
 router = APIRouter(prefix="/v1/storage")
 
-# Global instances (will be injected)
-ttl_manager = None
+# Initialize storage service
+storage_service = StorageService()
 
-def setup_dependencies(tm):
+def setup_dependencies(ttl_manager):
     """Setup dependencies from main app"""
-    global ttl_manager
-    ttl_manager = tm
+    storage_service.set_ttl_manager(ttl_manager)
 
 class RetentionPolicyRequest(BaseModel):
     hot_retention_days: int
@@ -29,19 +28,50 @@ class RetentionPolicyRequest(BaseModel):
 
 # TTL and Storage Management Endpoints
 
+@router.post("/retention/{customer_id}")
+async def create_retention_policy(
+    customer_id: str, 
+    policy_request: RetentionPolicyRequest, 
+    requesting_customer: str = MiddlewareTenant
+):
+    """Create a new retention policy for customer"""
+    try:
+        # Basic auth check - customers can only create their own policies
+        if requesting_customer != customer_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Create policy using storage service
+        result = await storage_service.create_retention_policy({
+            "customer_id": customer_id,
+            "policy_name": "default",
+            "hot_retention_days": policy_request.hot_retention_days,
+            "cold_retention_days": policy_request.cold_retention_days,
+            "archive_retention_days": policy_request.archive_retention_days,
+            "compression_enabled": policy_request.compression_enabled,
+            "auto_deletion_enabled": policy_request.auto_deletion_enabled
+        })
+        
+        return {
+            "status": "created",
+            "customer_id": customer_id,
+            "policy": result,
+            "created_at": datetime.now(timezone.utc)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create retention policy: {str(e)}")
+
 @router.get("/retention/{customer_id}")
 async def get_retention_policy(customer_id: str, requesting_customer: str = MiddlewareTenant):
     """Get current retention policy for customer"""
     try:
-        
         # Basic auth check - customers can only see their own policies
         if requesting_customer != customer_id:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        if not ttl_manager:
-            raise HTTPException(status_code=500, detail="TTL manager not initialized")
-        
-        policy = ttl_manager.get_retention_policy(customer_id)
+        policy = await storage_service.get_retention_policy(customer_id)
         
         return {
             "customer_id": customer_id,
@@ -62,24 +92,27 @@ async def update_retention_policy(
 ):
     """Update retention policy for customer"""
     try:
-        
         # Basic auth check - customers can only update their own policies
         if requesting_customer != customer_id:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        if not ttl_manager:
-            raise HTTPException(status_code=500, detail="TTL manager not initialized")
-        
-        # Update policy
-        success = ttl_manager.update_retention_policy(customer_id, policy_request.model_dump())
-        
-        if not success:
-            raise HTTPException(status_code=500, detail="Failed to update retention policy")
+        # Update policy using storage service
+        result = await storage_service.update_retention_policy(
+            customer_id, 
+            "default",  # policy_name
+            {
+                "hot_retention_days": policy_request.hot_retention_days,
+                "cold_retention_days": policy_request.cold_retention_days,
+                "archive_retention_days": policy_request.archive_retention_days,
+                "compression_enabled": policy_request.compression_enabled,
+                "auto_deletion_enabled": policy_request.auto_deletion_enabled
+            }
+        )
         
         return {
             "status": "updated",
             "customer_id": customer_id,
-            "policy": policy_request.model_dump(),
+            "policy": result,
             "updated_at": datetime.now(timezone.utc)
         }
         
@@ -89,19 +122,20 @@ async def update_retention_policy(
         raise HTTPException(status_code=500, detail=f"Failed to update retention policy: {str(e)}")
 
 @router.post("/cleanup")
-async def trigger_cleanup(cleanup_request: Dict[str, Any] = None, customer_id: str = MiddlewareTenant):
+async def trigger_cleanup(cleanup_request: Optional[Dict[str, Any]] = None, customer_id: str = MiddlewareTenant):
     """Trigger manual cleanup based on TTL policies"""
     try:
+        # Extract policy name from request if provided
+        policy_name = None
+        if cleanup_request and "policy_name" in cleanup_request:
+            policy_name = cleanup_request["policy_name"]
         
-        if not ttl_manager:
-            raise HTTPException(status_code=500, detail="TTL manager not initialized")
-        
-        # Trigger cleanup
-        result = await ttl_manager.cleanup_expired_data()
+        # Trigger cleanup using storage service
+        result = await storage_service.trigger_cleanup_operation(customer_id, policy_name)
         
         return {
             "status": "completed",
-            "cleanup_stats": result or {},
+            "cleanup_stats": result,
             "triggered_at": datetime.now(timezone.utc)
         }
         
@@ -112,16 +146,12 @@ async def trigger_cleanup(cleanup_request: Dict[str, Any] = None, customer_id: s
 async def archive_old_data(customer_id: str, requesting_customer: str = MiddlewareTenant):
     """Archive old data to cold storage"""
     try:
-        
         # Basic auth check
         if requesting_customer != customer_id:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        if not ttl_manager:
-            raise HTTPException(status_code=500, detail="TTL manager not initialized")
-        
-        # Trigger archival
-        result = await ttl_manager.archive_data(customer_id)
+        # Trigger archival using storage service
+        result = await storage_service.trigger_archive_operation(customer_id)
         
         return {
             "status": "archival_started",
@@ -135,39 +165,59 @@ async def archive_old_data(customer_id: str, requesting_customer: str = Middlewa
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Archival failed: {str(e)}")
 
-@router.get("/health")
-async def storage_health_check(customer_id: str = MiddlewareTenant):
-    """Get storage system health and capacity information"""
+@router.get("/health/infrastructure")
+async def get_infrastructure_health(customer_id: str = MiddlewareTenant):
+    """Get system-wide infrastructure health (Admin-only access)"""
     try:
+        # TODO: Add admin access check here
+        # For now, we'll implement the check in a future admin authorization system
+        # if not is_admin(customer_id):
+        #     raise HTTPException(status_code=403, detail="Admin access required")
         
-        # This would check ClickHouse, S3, and other storage components
-        health_info = {
-            "status": "healthy",
-            "overall_stats": {
-                "total_logs": 12000,  # Mock data for M1 testing
-                "total_customers": 5,
-                "total_storage_gb": 45.2,
-                "hot_storage_gb": 30.1,
-                "cold_storage_gb": 15.1
-            },
-            "clickhouse": {
-                "status": "connected",
-                "disk_usage_percent": 45.2,
-                "available_space_gb": 1500.5
-            },
-            "cold_storage": {
-                "status": "accessible",
-                "provider": "s3",
-                "total_archived_gb": 250.8
-            },
-            "ttl_policies": {
-                "active_policies": 3,
-                "next_cleanup": "2025-08-29T04:00:00Z"
-            },
+        # Get infrastructure health information using storage service
+        health_info = await storage_service.get_infrastructure_health()
+        
+        return {
+            "infrastructure_health": health_info,
+            "access_level": "admin",
             "checked_at": datetime.now(timezone.utc)
         }
         
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Infrastructure health check failed: {str(e)}")
+
+@router.get("/health")
+async def get_customer_storage_health(customer_id: str = MiddlewareTenant):
+    """Get customer-specific storage health (Tenant-level access)"""
+    try:
+        # Customer can only see their own storage health
+        # This is enforced by the middleware tenant validation
+        
+        # Get comprehensive storage health information using storage service
+        health_info = await storage_service.get_storage_health(customer_id)
+        
         return health_info
         
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Storage health check failed: {str(e)}")
+
+@router.get("/health/{target_customer_id}")
+async def get_specific_customer_health(target_customer_id: str, requesting_customer: str = MiddlewareTenant):
+    """Get specific customer's storage health (Admin access or own data only)"""
+    try:
+        # Basic tenant isolation check
+        if requesting_customer != target_customer_id:
+            # TODO: Add admin access check here
+            # For now, block cross-tenant access (will be enhanced with admin roles)
+            # if not is_admin(requesting_customer):
+            raise HTTPException(status_code=403, detail="Access denied - can only view own storage health")
+        
+        # Get storage health for the target customer
+        health_info = await storage_service.get_storage_health(target_customer_id)
+        
+        return health_info
+        
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Storage health check failed: {str(e)}")

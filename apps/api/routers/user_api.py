@@ -39,32 +39,147 @@ async def create_user(
         if existing_user:
             raise HTTPException(409, f"User with email {user_request.email} already exists")
         
-        # Create user
+        # Create user (this will validate password strength)
         user_data = user_request.dict()
         new_user = await user_service.create_user(user_data)
+    
+    except HTTPException:
+        # Re-raise HTTP exceptions (including 409 for duplicate email)
+        raise
+    except ValueError as e:
+        # Handle password validation errors
+        raise HTTPException(400, f"Password validation failed: {str(e)}")
+    except Exception as e:
+        logger.error("User creation failed", error=str(e), email=user_request.email)
+        raise HTTPException(500, "Failed to create user")
         
-        logger.info("User created", 
-                   user_id=new_user.id, 
-                   email=new_user.email,
-                   created_by=current_user.id)
+    logger.info("User created", 
+               user_id=new_user.id, 
+               email=new_user.email,
+               created_by=current_user.id)
         
-        # Return user response without sensitive data
-        return UserResponse(
-            id=new_user.id,
-            email=new_user.email,
-            name=new_user.name,
-            status=new_user.status,
-            created_at=new_user.created_at,
-            updated_at=new_user.updated_at,
-            last_login_at=new_user.last_login_at,
-            email_verified_at=new_user.email_verified_at
+    # Return user response without sensitive data
+    return UserResponse(
+        id=new_user.id,
+        email=new_user.email,
+        name=new_user.name,
+        status=new_user.status,
+        created_at=new_user.created_at,
+        updated_at=new_user.updated_at,
+        last_login_at=new_user.last_login_at,
+        email_verified_at=new_user.email_verified_at
+    )
+
+@router.get("/users/search", response_model=UserListResponse)
+async def search_users(
+    q: str,
+    page: int = 1,
+    page_size: int = 20,
+    current_user: User = Depends(get_current_user),
+    request: Request = None
+):
+    """Search users by name or email"""
+    try:
+        # Check permissions - only admins or tenant admins can search users
+        tenant_id = request.headers.get("X-Customer-ID", "platform")
+        
+        is_platform_admin = any(
+            r["tenant_id"] == "platform" for r in request.state.roles
+        ) if hasattr(request.state, "roles") else False
+        
+        is_tenant_admin = any(
+            r["tenant_id"] == tenant_id and r["role"] == "tenant_admin"
+            for r in request.state.roles
+        ) if hasattr(request.state, "roles") else False
+        
+        if not is_platform_admin and not is_tenant_admin:
+            raise HTTPException(403, "Admin permissions required to search users")
+        
+        # Search users from database (handled at database level)
+        result = await user_service.list_users(page, page_size, None, q)
+        matching_users = result["users"]
+        total_count = result["total_count"]
+        
+        user_responses = [
+            UserResponse(
+                id=u.id,
+                email=u.email,
+                name=u.name,
+                status=u.status,
+                created_at=u.created_at,
+                updated_at=u.updated_at,
+                last_login_at=u.last_login_at,
+                email_verified_at=u.email_verified_at
+            ) for u in matching_users
+        ]
+        
+        return UserListResponse(
+            users=user_responses,
+            total_count=total_count,
+            page=page,
+            page_size=page_size
         )
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("User creation failed", error=str(e))
-        raise HTTPException(500, "User creation failed")
+        logger.error("User search failed", query=q, error=str(e))
+        raise HTTPException(500, "User search failed")
+
+@router.get("/users/me", response_model=UserResponse)
+async def get_current_user_profile(current_user: User = Depends(get_current_user)):
+    """Get current user's profile"""
+    return UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        name=current_user.name,
+        status=current_user.status,
+        created_at=current_user.created_at,
+        updated_at=current_user.updated_at,
+        last_login_at=current_user.last_login_at,
+        email_verified_at=current_user.email_verified_at
+    )
+
+@router.put("/users/me", response_model=UserResponse)
+async def update_current_user_profile(
+    user_update: UserUpdateRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Update current user's profile"""
+    try:
+        # Apply updates to current user
+        update_data = user_update.dict(exclude_none=True)
+        for field, value in update_data.items():
+            if field != "status":  # Users cannot change their own status
+                setattr(current_user, field, value)
+        
+        current_user.updated_at = datetime.utcnow()
+        
+        # Update user profile in database
+        filtered_update_data = {k: v for k, v in update_data.items() if k != "status"}
+        await user_service.update_user(current_user.id, {
+            **filtered_update_data,
+            "updated_at": current_user.updated_at
+        })
+        
+        logger.info("User profile updated",
+                   user_id=current_user.id,
+                   fields=list(update_data.keys()))
+        
+        return UserResponse(
+            id=current_user.id,
+            email=current_user.email,
+            name=current_user.name,
+            status=current_user.status,
+            created_at=current_user.created_at,
+            updated_at=current_user.updated_at,
+            last_login_at=current_user.last_login_at,
+            email_verified_at=current_user.email_verified_at
+        )
+        
+    except Exception as e:
+        logger.error("Profile update failed", user_id=current_user.id, error=str(e))
+        raise HTTPException(500, "Profile update failed")
 
 @router.get("/users/{user_id}", response_model=UserResponse)
 async def get_user(
@@ -79,14 +194,34 @@ async def get_user(
             raise HTTPException(404, f"User {user_id} not found")
         
         # Check permissions - users can view themselves or admins can view anyone
-        tenant_id = request.headers.get("X-Customer-ID", "platform")
+        current_tenant_id = request.headers.get("X-Customer-ID", "platform")
         is_self = user.id == current_user.id
         is_platform_admin = any(
             r["tenant_id"] == "platform" for r in request.state.roles
         ) if hasattr(request.state, "roles") else False
         
+        # For cross-tenant access attempts, block unless platform admin
+        user_current_tenant = current_user.id == user.id  # Current user accessing their own profile
+        if not user_current_tenant and not is_platform_admin:
+            # This is a cross-user access attempt - only allow if user has admin permissions in current tenant
+            is_tenant_admin = any(
+                r["tenant_id"] == current_tenant_id and r["role"] in ["tenant_admin", "super_admin"]
+                for r in request.state.roles
+            ) if hasattr(request.state, "roles") else False
+            
+            if not is_tenant_admin:
+                raise HTTPException(403, "Cross-tenant access denied")
+        
+        # Additional check - if not self and not admin, deny
         if not is_self and not is_platform_admin:
-            raise HTTPException(403, "Can only view your own profile or need admin access")
+            # Check if user is tenant admin for current tenant
+            is_tenant_admin = any(
+                r["tenant_id"] == current_tenant_id and r["role"] in ["tenant_admin", "super_admin"]
+                for r in request.state.roles
+            ) if hasattr(request.state, "roles") else False
+            
+            if not is_tenant_admin:
+                raise HTTPException(403, "Can only view your own profile or need admin access")
         
         return UserResponse(
             id=user.id,
@@ -130,6 +265,9 @@ async def update_user(
         # Apply updates through user service (database-enabled)
         update_data = user_update.dict(exclude_none=True)
         updated_user = await user_service.update_user(user.id, update_data)
+        
+        if not updated_user:
+            raise HTTPException(500, "User update failed - could not retrieve updated user")
         
         logger.info("User updated", 
                    user_id=updated_user.id,
@@ -218,25 +356,14 @@ async def list_users(
         if not is_platform_admin and not is_tenant_admin:
             # Regular users can only see themselves
             users = [current_user]
+            total_count = 1
         else:
-            # Query database with proper filtering
-            users = await user_service.list_users(search, status, page, page_size)
-            
-            # Apply filters
-            if search:
-                search_lower = search.lower()
-                users = [u for u in users if 
-                        search_lower in u.name.lower() or search_lower in u.email.lower()]
-            
-            if status:
-                users = [u for u in users if u.status == status]
+            # Query database with proper filtering (search handled at database level)
+            result = await user_service.list_users(page, page_size, status, search)
+            users = result["users"]
+            total_count = result["total_count"]
         
-        # Pagination
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-        paginated_users = users[start_idx:end_idx]
-        
-        # Convert to response format
+        # Convert to response format  
         user_responses = [
             UserResponse(
                 id=u.id,
@@ -247,12 +374,12 @@ async def list_users(
                 updated_at=u.updated_at,
                 last_login_at=u.last_login_at,
                 email_verified_at=u.email_verified_at
-            ) for u in paginated_users
+            ) for u in users
         ]
         
         return UserListResponse(
             users=user_responses,
-            total_count=len(users),
+            total_count=total_count,
             page=page,
             page_size=page_size
         )
@@ -302,7 +429,11 @@ async def create_admin_user(
         )
         
     except HTTPException:
+        # Re-raise HTTP exceptions (including 409 for duplicate email)
         raise
+    except ValueError as e:
+        # Handle password validation errors
+        raise HTTPException(400, f"Password validation failed: {str(e)}")
     except Exception as e:
         logger.error("Admin user creation failed", error=str(e))
         raise HTTPException(500, "Admin user creation failed")
@@ -316,19 +447,12 @@ async def list_admin_users(
     """List platform admin users (platform admins only)"""
     try:
         # Query database for users (simplified - in production would filter by platform roles)
-        all_users = await user_service.list_users(None, None, 1, 1000)  # Get all users
+        result = await user_service.list_users(page, page_size, None, None)  # Use API parameters
+        users = result["users"]
+        total_count = result["total_count"]
         
         # This is a simplified implementation - in reality, we'd join with user_tenant_roles
-        admin_users = []
-        for user in all_users:
-            # TODO: Check if user has any platform roles
-            # For now, include all users (would need proper role checking)
-            admin_users.append(user)
-        
-        # Pagination
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-        paginated_users = admin_users[start_idx:end_idx]
+        # For now, return all users (would need proper role checking in production)
         
         user_responses = [
             UserResponse(
@@ -340,12 +464,12 @@ async def list_admin_users(
                 updated_at=u.updated_at,
                 last_login_at=u.last_login_at,
                 email_verified_at=u.email_verified_at
-            ) for u in paginated_users
+            ) for u in users
         ]
         
         return UserListResponse(
             users=user_responses,
-            total_count=len(admin_users),
+            total_count=total_count,
             page=page,
             page_size=page_size
         )
@@ -478,130 +602,11 @@ async def get_admin_user(
 # USER PROFILE MANAGEMENT
 # =================================================================
 
-@router.get("/users/me", response_model=UserResponse)
-async def get_current_user_profile(current_user: User = Depends(get_current_user)):
-    """Get current user's profile"""
-    return UserResponse(
-        id=current_user.id,
-        email=current_user.email,
-        name=current_user.name,
-        status=current_user.status,
-        created_at=current_user.created_at,
-        updated_at=current_user.updated_at,
-        last_login_at=current_user.last_login_at,
-        email_verified_at=current_user.email_verified_at
-    )
-
-@router.put("/users/me", response_model=UserResponse)
-async def update_current_user_profile(
-    user_update: UserUpdateRequest,
-    current_user: User = Depends(get_current_user)
-):
-    """Update current user's profile"""
-    try:
-        # Apply updates to current user
-        update_data = user_update.dict(exclude_none=True)
-        for field, value in update_data.items():
-            if field != "status":  # Users cannot change their own status
-                setattr(current_user, field, value)
-        
-        current_user.updated_at = datetime.utcnow()
-        
-        # Update user profile in database
-        filtered_update_data = {k: v for k, v in update_data.items() if k != "status"}
-        await user_service.update_user(current_user.id, {
-            **filtered_update_data,
-            "updated_at": current_user.updated_at
-        })
-        
-        logger.info("User profile updated",
-                   user_id=current_user.id,
-                   fields=list(update_data.keys()))
-        
-        return UserResponse(
-            id=current_user.id,
-            email=current_user.email,
-            name=current_user.name,
-            status=current_user.status,
-            created_at=current_user.created_at,
-            updated_at=current_user.updated_at,
-            last_login_at=current_user.last_login_at,
-            email_verified_at=current_user.email_verified_at
-        )
-        
-    except Exception as e:
-        logger.error("Profile update failed", user_id=current_user.id, error=str(e))
-        raise HTTPException(500, "Profile update failed")
 
 # =================================================================
 # USER SEARCH & FILTERING
 # =================================================================
 
-@router.get("/users/search", response_model=UserListResponse)
-async def search_users(
-    q: str,
-    page: int = 1,
-    page_size: int = 20,
-    current_user: User = Depends(get_current_user),
-    request: Request = None
-):
-    """Search users by name or email"""
-    try:
-        # Check permissions - only admins or tenant admins can search users
-        tenant_id = request.headers.get("X-Customer-ID", "platform")
-        
-        is_platform_admin = any(
-            r["tenant_id"] == "platform" for r in request.state.roles
-        ) if hasattr(request.state, "roles") else False
-        
-        is_tenant_admin = any(
-            r["tenant_id"] == tenant_id and r["role"] == "tenant_admin"
-            for r in request.state.roles
-        ) if hasattr(request.state, "roles") else False
-        
-        if not is_platform_admin and not is_tenant_admin:
-            raise HTTPException(403, "Admin permissions required to search users")
-        
-        # Search users from database
-        search_term = q.lower()
-        all_users = await user_service.list_users(q, None, 1, 1000)  # Use search parameter
-        
-        matching_users = [
-            user for user in all_users 
-            if (search_term in user.name.lower() or 
-                search_term in user.email.lower())
-        ]
-        
-        # Pagination
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-        paginated_users = matching_users[start_idx:end_idx]
-        
-        user_responses = [
-            UserResponse(
-                id=u.id,
-                email=u.email,
-                name=u.name,
-                status=u.status,
-                created_at=u.created_at,
-                updated_at=u.updated_at,
-                last_login_at=u.last_login_at,
-                email_verified_at=u.email_verified_at
-            ) for u in paginated_users
-        ]
-        
-        return UserListResponse(
-            users=user_responses,
-            total_count=len(matching_users),
-            page=page,
-            page_size=page_size
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("User search failed", query=q, error=str(e))
-        raise HTTPException(500, "User search failed")
 
 # =================================================================
 # BULK USER OPERATIONS

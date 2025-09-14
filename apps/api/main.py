@@ -18,19 +18,19 @@ from routers.storage import router as storage_router
 from routers.alerts import router as alerts_router
 
 # Import API routers for additional functionality
-from test_runner_api import router as test_runner_router
-from security_api import router as security_router
-from observability_api import router as observability_router
-from ai_api import router as ai_router
-from enterprise_api import router as enterprise_router
-from tenant_api import router as tenant_router
-from subscription_api import router as subscription_router
+from routers.test_runner_api import router as test_runner_router
+from routers.security_api import router as security_router
+from routers.observability_api import router as observability_router
+from routers.ai_api import router as ai_router
+from routers.enterprise_api import router as enterprise_router
+from routers.tenant_api import router as tenant_router
+from routers.subscription_api import router as subscription_router
 
 # Import M8 User Service routers
-from user_api import router as user_router
-from auth_api import router as auth_router
-from role_api import router as role_router
-from usage_api import router as usage_router
+from routers.user_api import router as user_router
+from routers.auth_api import router as auth_router
+from routers.role_api import router as role_router
+from routers.usage_api import router as usage_router
 
 # Configure structured logging
 logger = structlog.get_logger()
@@ -82,6 +82,7 @@ app.include_router(ai_router)
 app.include_router(enterprise_router)
 app.include_router(tenant_router)
 app.include_router(subscription_router)
+
 
 if __name__ == "__main__":
     import uvicorn

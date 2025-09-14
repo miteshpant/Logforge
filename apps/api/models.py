@@ -675,6 +675,13 @@ class UserRolesResponse(BaseModel):
     user_id: str
     roles: List[RoleAssignmentResponse] = Field(description="User's role assignments")
 
+class PermissionCheckRequest(BaseModel):
+    """Request to check user permission"""
+    resource: str = Field(..., description="Resource to check access for (e.g., 'logs', 'dashboards')")
+    action: str = Field(..., description="Action to check (e.g., 'read', 'write', 'delete')")
+    scope: str = Field(..., description="Scope of access (e.g., 'tenant', 'platform')")
+    tenant_id: Optional[str] = Field(None, description="Tenant ID (optional, defaults to X-Customer-ID header)")
+
 class SetupTokenResponse(BaseModel):
     """Initial setup token response"""
     setup_token: str = Field(..., description="Secure setup token")
@@ -698,6 +705,9 @@ class InvitationResponse(BaseModel):
     invitation_token: str = Field(..., description="Invitation token")
     invitation_expires: datetime = Field(..., description="Invitation expiration")
     invited_email: str = Field(..., description="Invited user email")
+    email: str = Field(..., description="Email (alias for invited_email for compatibility)")
+    tenant_id: str = Field(..., description="Tenant ID for the invitation")
+    role: str = Field(..., description="Role assigned in the invitation")
 
 class AcceptInviteRequest(BaseModel):
     """Accept invitation request"""

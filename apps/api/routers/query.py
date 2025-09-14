@@ -12,12 +12,14 @@ from models import QueryResponse
 from query_engine import AdvancedQueryRequest, QueryFilter, QueryOperator
 from storage_config import get_customer_id
 from tenant_dependencies import MiddlewareTenant
+from services.query_service import QueryService
 
 router = APIRouter(prefix="/v1")
 
 # Global instances (will be injected)
 query_engine = None
 clickhouse_client = None
+query_service = QueryService()
 
 def setup_dependencies(qe, client):
     """Setup dependencies from main app"""
@@ -56,8 +58,30 @@ async def advanced_query_logs(query_request: AdvancedQueryRequest, customer_id: 
             value=customer_id
         ))
         
+        # Check cache first
+        query_dict = query_request.model_dump()
+        cached_result = await query_service.get_cached_result(query_dict, customer_id)
+        
+        if cached_result:
+            # Return cached result as QueryResponse
+            return QueryResponse(
+                logs=cached_result.get('logs', []),
+                total_count=cached_result.get('total_count', 0),
+                aggregations=cached_result.get('aggregations', {}),
+                execution_time_ms=cached_result.get('execution_time_ms', 0),
+                customer_id=customer_id
+            )
+        
         # Execute advanced query
         result = await query_engine.execute_query(query_request)
+        
+        # Cache the result for future use (5 minutes TTL)
+        await query_service.cache_query_result(
+            query_data=query_dict,
+            customer_id=customer_id,
+            result=result.model_dump(),
+            ttl_seconds=300
+        )
         
         # result is already a QueryResponse object, just return it
         result.customer_id = customer_id
@@ -83,8 +107,33 @@ async def aggregate_logs(query_data: Dict[str, Any], customer_id: str = Middlewa
             "value": customer_id
         })
         
+        # Check cache first
+        cached_result = await query_service.get_cached_result(query_data, customer_id)
+        
+        if cached_result:
+            return {
+                "aggregations": cached_result.get('aggregations', {}),
+                "group_by": query_data.get("group_by", []),
+                "total_groups": cached_result.get('total_count', 0),
+                "execution_time_ms": cached_result.get('execution_time_ms', 0),
+                "customer_id": customer_id
+            }
+        
         # Build aggregation query
         result = await query_engine.execute_query(query_data)
+        
+        # Cache the result
+        result_dict = {
+            "aggregations": result.aggregations or {},
+            "total_count": result.total_count or 0,
+            "execution_time_ms": result.execution_time_ms or 0
+        }
+        await query_service.cache_query_result(
+            query_data=query_data,
+            customer_id=customer_id,
+            result=result_dict,
+            ttl_seconds=300
+        )
         
         return {
             "aggregations": result.aggregations or {},
@@ -115,8 +164,33 @@ async def timeseries_query(query_request: TimeseriesQueryRequest, customer_id: s
             "value": customer_id
         })
         
+        # Check cache first
+        cached_result = await query_service.get_cached_result(query_data, customer_id)
+        
+        if cached_result:
+            return {
+                "buckets": cached_result.get('aggregations', {}).get("time_series", []),
+                "aggregations": cached_result.get('aggregations', {}),
+                "total_count": cached_result.get('total_count', 0),
+                "execution_time_ms": cached_result.get('execution_time_ms', 0),
+                "customer_id": customer_id
+            }
+        
         # Execute time-series query
         result = await query_engine.execute_query(query_data)
+        
+        # Cache the result
+        result_dict = {
+            "aggregations": result.aggregations or {},
+            "total_count": result.total_count or 0,
+            "execution_time_ms": result.execution_time_ms or 0
+        }
+        await query_service.cache_query_result(
+            query_data=query_data,
+            customer_id=customer_id,
+            result=result_dict,
+            ttl_seconds=300
+        )
         
         return {
             "buckets": result.aggregations.get("time_series", []),
@@ -132,22 +206,90 @@ async def timeseries_query(query_request: TimeseriesQueryRequest, customer_id: s
 # Saved Query Management
 
 @router.get("/query/saved")
-async def list_saved_queries(customer_id: str = MiddlewareTenant):
+async def list_saved_queries(
+    created_by: str = Query(None, description="Filter by creator"),
+    query_type: str = Query(None, description="Filter by query type"),
+    limit: int = Query(50, description="Maximum number of queries to return"),
+    customer_id: str = MiddlewareTenant
+):
     """List saved queries for the customer"""
-    # Placeholder - implement saved query storage
-    return {"saved_queries": [], "customer_id": customer_id}
+    try:
+        result = await query_service.list_saved_queries(
+            customer_id=customer_id,
+            created_by=created_by,
+            query_type=query_type,
+            limit=limit
+        )
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list saved queries: {str(e)}")
 
 @router.post("/query/saved") 
 async def save_query(query_data: Dict[str, Any], customer_id: str = MiddlewareTenant):
     """Save a query for future use"""
-    # Placeholder - implement saved query storage
-    return {"status": "saved", "customer_id": customer_id}
+    try:
+        # Add customer_id to query data
+        query_data['customer_id'] = customer_id
+        
+        # Validate and save query
+        result = await query_service.save_query(query_data)
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save query: {str(e)}")
 
 @router.get("/query/saved/{query_id}")
 async def get_saved_query(query_id: str, customer_id: str = MiddlewareTenant):
     """Retrieve a specific saved query"""
-    # Placeholder - implement saved query retrieval
-    return {"query_id": query_id, "customer_id": customer_id}
+    try:
+        query_data = await query_service.get_saved_query(query_id, customer_id)
+        
+        if query_data:
+            return query_data
+        else:
+            raise HTTPException(status_code=404, detail="Query not found")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve query: {str(e)}")
+
+@router.put("/query/saved/{query_id}")
+async def update_saved_query(query_id: str, update_data: Dict[str, Any], customer_id: str = MiddlewareTenant):
+    """Update a specific saved query"""
+    try:
+        result = await query_service.update_saved_query(query_id, customer_id, update_data)
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update query: {str(e)}")
+
+@router.delete("/query/saved/{query_id}")
+async def delete_saved_query(query_id: str, customer_id: str = MiddlewareTenant):
+    """Delete a specific saved query"""
+    try:
+        result = await query_service.delete_saved_query(query_id, customer_id)
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete query: {str(e)}")
+
+@router.post("/query/validate")
+async def validate_query(query_data: Dict[str, Any], customer_id: str = MiddlewareTenant):
+    """Validate query structure and parameters"""
+    try:
+        validation_result = await query_service.validate_query_structure(query_data)
+        return validation_result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Query validation failed: {str(e)}")
 
 # Data Export Endpoints
 

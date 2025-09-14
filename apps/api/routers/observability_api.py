@@ -1,6 +1,6 @@
 """
 M5 Observability API - OpenTelemetry Traces & Metrics Endpoints
-Multi-tenant APM capabilities with trace-log correlation
+Multi-tenant APM capabilities with database-backed service/dao pattern
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Request, Header
@@ -12,15 +12,34 @@ import structlog
 import json
 import uuid
 from dataclasses import asdict
+from enum import Enum
 
-from observability_engine import (
-    ObservabilityEngine, TraceSpan, MetricData, SpanKind, SpanStatus, MetricType,
-    get_observability_engine
-)
+from services.observability_service import ObservabilityService
 
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/v1/observability", tags=["observability"])
+
+
+# Enums for span status and kind
+class SpanKind(str, Enum):
+    UNSPECIFIED = "unspecified"
+    INTERNAL = "internal"
+    SERVER = "server"
+    CLIENT = "client"
+    PRODUCER = "producer"
+    CONSUMER = "consumer"
+
+class SpanStatus(str, Enum):
+    UNSET = "unset"
+    OK = "ok"
+    ERROR = "error"
+
+class MetricType(str, Enum):
+    COUNTER = "counter"
+    GAUGE = "gauge"
+    HISTOGRAM = "histogram"
+    SUMMARY = "summary"
 
 
 # Pydantic models for API requests/responses
@@ -104,47 +123,44 @@ async def ingest_trace_spans(
 ):
     """Ingest OpenTelemetry trace spans"""
     try:
-        observability_engine = get_observability_engine()
+        observability_service = ObservabilityService()
         
-        # Convert request spans to internal format
-        spans = []
+        # Process each span in the batch
+        ingested_spans = []
+        errors = []
+        
         for span_req in request.spans:
-            # Calculate duration if not provided
-            duration_ms = span_req.duration_ms
-            if not duration_ms and span_req.start_time and span_req.end_time:
-                duration_ms = int((span_req.end_time - span_req.start_time).total_seconds() * 1000)
-            
-            span = TraceSpan(
-                trace_id=span_req.trace_id,
-                span_id=span_req.span_id,
-                parent_span_id=span_req.parent_span_id,
-                operation_name=span_req.operation_name,
-                service_name=span_req.service_name,
-                start_time=span_req.start_time,
-                end_time=span_req.end_time,
-                duration_ms=duration_ms,
-                kind=span_req.kind,
-                status=span_req.status,
-                status_message=span_req.status_message,
-                attributes=span_req.attributes,
-                events=span_req.events,
-                links=span_req.links,
-                resource=span_req.resource,
-                customer_id=customer_id,
-                ingested_at=datetime.utcnow()
-            )
-            spans.append(span)
-        
-        # Ingest spans with customer isolation
-        result = await observability_engine.ingest_traces(spans)
+            try:
+                # Convert to dict format for service
+                span_data = {
+                    'trace_id': span_req.trace_id,
+                    'span_id': span_req.span_id,
+                    'parent_span_id': span_req.parent_span_id,
+                    'operation_name': span_req.operation_name,
+                    'service_name': span_req.service_name,
+                    'start_time': span_req.start_time.isoformat(),
+                    'end_time': span_req.end_time.isoformat() if span_req.end_time else None,
+                    'kind': span_req.kind.value,
+                    'status': span_req.status.value,
+                    'attributes': span_req.attributes,
+                    'events': span_req.events,
+                    'links': span_req.links,
+                    'resource': span_req.resource
+                }
+                
+                span_id = await observability_service.ingest_trace_span(span_data, customer_id)
+                ingested_spans.append(span_id)
+                
+            except Exception as e:
+                errors.append(f"Failed to ingest span {span_req.span_id}: {str(e)}")
         
         return JSONResponse(
             status_code=202,
             content={
                 "message": "Traces ingested successfully",
-                "spans_ingested": result["ingested"],
+                "spans_ingested": len(ingested_spans),
                 "customer_id": customer_id,
-                "errors": result.get("errors", [])
+                "errors": errors
             }
         )
         
@@ -160,34 +176,39 @@ async def ingest_metrics(
 ):
     """Ingest time series metrics"""
     try:
-        observability_engine = get_observability_engine()
+        observability_service = ObservabilityService()
         
-        # Convert request metrics to internal format
-        metrics = []
+        # Process each metric in the batch
+        ingested_metrics = []
+        errors = []
+        
         for metric_req in request.metrics:
-            metric = MetricData(
-                metric_name=metric_req.metric_name,
-                metric_type=metric_req.metric_type,
-                value=metric_req.value,
-                timestamp=metric_req.timestamp,
-                labels=metric_req.labels,
-                service_name=metric_req.service_name,
-                resource=metric_req.resource,
-                customer_id=customer_id,
-                ingested_at=datetime.utcnow()
-            )
-            metrics.append(metric)
-        
-        # Ingest metrics with customer isolation
-        result = await observability_engine.ingest_metrics(metrics)
+            try:
+                # Convert to dict format for service
+                metric_data = {
+                    'name': metric_req.metric_name,
+                    'type': metric_req.metric_type.value,
+                    'value': metric_req.value,
+                    'unit': '',
+                    'description': '',
+                    'attributes': metric_req.labels,
+                    'resource': metric_req.resource,
+                    'timestamp': metric_req.timestamp.isoformat()
+                }
+                
+                metric_id = await observability_service.ingest_metric(metric_data, customer_id)
+                ingested_metrics.append(metric_id)
+                
+            except Exception as e:
+                errors.append(f"Failed to ingest metric {metric_req.metric_name}: {str(e)}")
         
         return JSONResponse(
             status_code=202,
             content={
                 "message": "Metrics ingested successfully",
-                "metrics_ingested": result["ingested"],
+                "metrics_ingested": len(ingested_metrics),
                 "customer_id": customer_id,
-                "errors": result.get("errors", [])
+                "errors": errors
             }
         )
         
@@ -203,77 +224,36 @@ async def search_traces(
 ):
     """Search traces with filters"""
     try:
-        observability_engine = get_observability_engine()
+        observability_service = ObservabilityService()
         
-        # Build ClickHouse query with customer isolation
-        where_conditions = ["customer_id = %(customer_id)s"]
-        params = {"customer_id": customer_id}
+        # Build filters dict for service
+        filters = {}
         
         if query.service_name:
-            where_conditions.append("service_name = %(service_name)s")
-            params["service_name"] = query.service_name
+            filters['service_name'] = query.service_name
         
         if query.operation_name:
-            where_conditions.append("operation_name = %(operation_name)s")
-            params["operation_name"] = query.operation_name
+            filters['operation_name'] = query.operation_name
         
         if query.start_time:
-            where_conditions.append("start_time >= %(start_time)s")
-            params["start_time"] = query.start_time
+            filters['start_time'] = query.start_time
         
         if query.end_time:
-            where_conditions.append("start_time <= %(end_time)s")
-            params["end_time"] = query.end_time
+            filters['end_time'] = query.end_time
         
         if query.min_duration_ms:
-            where_conditions.append("duration_ms >= %(min_duration)s")
-            params["min_duration"] = query.min_duration_ms
+            filters['min_duration_ms'] = query.min_duration_ms
         
         if query.max_duration_ms:
-            where_conditions.append("duration_ms <= %(max_duration)s")
-            params["max_duration"] = query.max_duration_ms
+            filters['max_duration_ms'] = query.max_duration_ms
         
         if query.status:
-            where_conditions.append("status = %(status)s")
-            params["status"] = query.status.value
+            filters['status'] = query.status.value
         
-        where_clause = " AND ".join(where_conditions)
+        filters['limit'] = query.limit
+        filters['offset'] = query.offset
         
-        search_query = f"""
-        SELECT 
-            trace_id, span_id, parent_span_id, operation_name, service_name,
-            start_time, end_time, duration_ms, kind, status, status_message,
-            attributes, events, links, resource
-        FROM traces 
-        WHERE {where_clause}
-        ORDER BY start_time DESC
-        LIMIT %(limit)s OFFSET %(offset)s
-        """
-        
-        params["limit"] = query.limit
-        params["offset"] = query.offset
-        
-        result = observability_engine.clickhouse_client.query(search_query, parameters=params)
-        
-        traces = []
-        for row in result.result_rows:
-            traces.append({
-                "trace_id": row[0],
-                "span_id": row[1], 
-                "parent_span_id": row[2],
-                "operation_name": row[3],
-                "service_name": row[4],
-                "start_time": row[5],
-                "end_time": row[6],
-                "duration_ms": row[7],
-                "kind": row[8],
-                "status": row[9],
-                "status_message": row[10],
-                "attributes": json.loads(row[11]) if row[11] else {},
-                "events": json.loads(row[12]) if row[12] else [],
-                "links": json.loads(row[13]) if row[13] else [],
-                "resource": json.loads(row[14]) if row[14] else {}
-            })
+        traces = await observability_service.search_traces(customer_id, filters, query.limit)
         
         return {
             "traces": traces,
@@ -293,21 +273,19 @@ async def get_trace_details(
     trace_id: str,
     customer_id: str = Depends(get_customer_id)
 ):
-    """Get detailed trace information including correlated logs"""
+    """Get detailed trace information"""
     try:
-        observability_engine = get_observability_engine()
+        observability_service = ObservabilityService()
         
-        # Get trace with correlated logs
-        result = await observability_engine.correlate_traces_with_logs(trace_id, customer_id)
+        # Get complete trace
+        trace = await observability_service.get_trace_by_id(trace_id, customer_id)
         
-        if not result["traces"]:
+        if not trace:
             raise HTTPException(status_code=404, detail="Trace not found")
         
         return {
             "trace_id": trace_id,
-            "spans": result["traces"],
-            "correlated_logs": result["logs"],
-            "correlation_info": result["correlation"],
+            "trace": trace,
             "customer_id": customer_id
         }
         
@@ -325,13 +303,12 @@ async def get_service_map(
 ):
     """Get service topology and dependencies"""
     try:
-        observability_engine = get_observability_engine()
+        observability_service = ObservabilityService()
         
-        service_map = await observability_engine.get_service_map(customer_id, time_range_hours)
+        services = await observability_service.get_service_topology(customer_id)
         
         return {
-            "services": service_map["services"],
-            "dependencies": service_map["dependencies"],
+            "services": services,
             "time_range_hours": time_range_hours,
             "customer_id": customer_id
         }
@@ -349,13 +326,13 @@ async def get_apm_metrics(
 ):
     """Get APM metrics for a specific service"""
     try:
-        observability_engine = get_observability_engine()
+        observability_service = ObservabilityService()
         
-        metrics = await observability_engine.get_apm_metrics(customer_id, service_name, time_range_hours)
+        metrics = await observability_service.get_service_apm_metrics(service_name, customer_id, time_range_hours)
         
         return {
             "service_name": service_name,
-            "metrics": metrics,
+            "metrics": asdict(metrics),
             "time_range_hours": time_range_hours,
             "customer_id": customer_id
         }
@@ -365,6 +342,50 @@ async def get_apm_metrics(
         raise HTTPException(status_code=500, detail=f"Failed to get APM metrics: {str(e)}")
 
 
+@router.get("/apm/overview")
+async def get_apm_overview(
+    time_range_hours: int = 24,
+    customer_id: str = Depends(get_customer_id)
+):
+    """Get APM overview for all services"""
+    try:
+        observability_service = ObservabilityService()
+        
+        overview = await observability_service.get_apm_overview(customer_id, time_range_hours)
+        
+        return {
+            "overview": overview,
+            "time_range_hours": time_range_hours,
+            "customer_id": customer_id
+        }
+        
+    except Exception as e:
+        logger.error("Failed to get APM overview", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to get APM overview: {str(e)}")
+
+
+@router.get("/analytics")
+async def get_trace_analytics(
+    time_range_hours: int = 24,
+    customer_id: str = Depends(get_customer_id)
+):
+    """Get comprehensive trace analytics"""
+    try:
+        observability_service = ObservabilityService()
+        
+        analytics = await observability_service.get_trace_analytics(customer_id, time_range_hours)
+        
+        return {
+            "analytics": analytics,
+            "time_range_hours": time_range_hours,
+            "customer_id": customer_id
+        }
+        
+    except Exception as e:
+        logger.error("Failed to get trace analytics", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to get trace analytics: {str(e)}")
+
+
 @router.post("/metrics/query")
 async def query_metrics(
     query: MetricQueryRequest,
@@ -372,68 +393,34 @@ async def query_metrics(
 ):
     """Query time series metrics"""
     try:
-        observability_engine = get_observability_engine()
+        observability_service = ObservabilityService()
         
-        # Build ClickHouse query with customer isolation
-        where_conditions = ["customer_id = %(customer_id)s"]
-        params = {"customer_id": customer_id}
+        # Get basic metrics data
+        hours = int((query.end_time - query.start_time).total_seconds() / 3600)
+        metrics = await observability_service.get_metrics(customer_id, query.metric_name, hours)
         
-        if query.metric_name:
-            where_conditions.append("metric_name = %(metric_name)s")
-            params["metric_name"] = query.metric_name
+        # If aggregation is requested, get aggregated data
+        if query.aggregation and query.metric_name:
+            aggregated = await observability_service.get_metric_aggregation(
+                customer_id, query.metric_name, query.aggregation, hours
+            )
+            
+            return {
+                "metrics": {query.metric_name: [aggregated]},
+                "aggregation": query.aggregation,
+                "granularity": query.granularity,
+                "customer_id": customer_id
+            }
         
-        if query.service_name:
-            where_conditions.append("service_name = %(service_name)s")
-            params["service_name"] = query.service_name
-        
-        if query.start_time:
-            where_conditions.append("timestamp >= %(start_time)s")
-            params["start_time"] = query.start_time
-        
-        if query.end_time:
-            where_conditions.append("timestamp <= %(end_time)s")
-            params["end_time"] = query.end_time
-        
-        # Handle label filters
-        for label_key, label_value in query.labels.items():
-            where_conditions.append(f"JSONExtractString(labels, '{label_key}') = %(label_{label_key})s")
-            params[f"label_{label_key}"] = label_value
-        
-        where_clause = " AND ".join(where_conditions)
-        
-        # Map granularity to ClickHouse intervals
-        granularity_map = {
-            "1m": "toStartOfMinute",
-            "5m": "toStartOfFiveMinutes", 
-            "1h": "toStartOfHour",
-            "1d": "toDate"
-        }
-        
-        time_func = granularity_map.get(query.granularity, "toStartOfMinute")
-        agg_func = query.aggregation.lower()
-        
-        metrics_query = f"""
-        SELECT 
-            {time_func}(timestamp) as time_bucket,
-            metric_name,
-            {agg_func}(value) as aggregated_value
-        FROM metrics 
-        WHERE {where_clause}
-        GROUP BY time_bucket, metric_name
-        ORDER BY time_bucket, metric_name
-        """
-        
-        result = observability_engine.clickhouse_client.query(metrics_query, parameters=params)
-        
-        # Group results by metric name
+        # Group metrics by name
         metrics_data = {}
-        for row in result.result_rows:
-            time_bucket, metric_name, value = row
-            if metric_name not in metrics_data:
-                metrics_data[metric_name] = []
-            metrics_data[metric_name].append({
-                "timestamp": time_bucket,
-                "value": value
+        for metric in metrics:
+            name = metric['name']
+            if name not in metrics_data:
+                metrics_data[name] = []
+            metrics_data[name].append({
+                "timestamp": metric['timestamp'],
+                "value": metric['value']
             })
         
         return {
@@ -448,28 +435,73 @@ async def query_metrics(
         raise HTTPException(status_code=500, detail=f"Failed to query metrics: {str(e)}")
 
 
+@router.get("/service/{service_name}/health")
+async def get_service_health(
+    service_name: str,
+    customer_id: str = Depends(get_customer_id)
+):
+    """Get detailed health status for a service"""
+    try:
+        observability_service = ObservabilityService()
+        
+        health = await observability_service.get_service_health_status(service_name, customer_id)
+        
+        return {
+            "service_name": service_name,
+            "health": health,
+            "customer_id": customer_id
+        }
+        
+    except Exception as e:
+        logger.error("Failed to get service health", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to get service health: {str(e)}")
+
+
+@router.get("/trends")
+async def get_performance_trends(
+    days: int = 7,
+    customer_id: str = Depends(get_customer_id)
+):
+    """Get performance trends over time"""
+    try:
+        observability_service = ObservabilityService()
+        
+        trends = await observability_service.get_performance_trends(customer_id, days)
+        
+        return {
+            "trends": trends,
+            "days": days,
+            "customer_id": customer_id
+        }
+        
+    except Exception as e:
+        logger.error("Failed to get performance trends", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to get performance trends: {str(e)}")
+
+
 @router.get("/health")
 async def observability_health():
-    """Health check for observability engine"""
+    """Health check for observability service"""
     try:
-        observability_engine = get_observability_engine()
+        observability_service = ObservabilityService()
         
-        if not observability_engine.clickhouse_client:
-            return {"status": "warning", "message": "ClickHouse client not available"}
-        
-        # Test ClickHouse connectivity
-        observability_engine.clickhouse_client.query("SELECT 1")
+        # Test database connectivity through service
+        test_customer = "health-check-test"
+        await observability_service.get_metrics(test_customer, limit=1, hours=1)
         
         return {
             "status": "healthy",
-            "message": "Observability engine operational",
+            "message": "Observability service operational",
             "features": [
                 "trace_ingestion",
                 "metrics_ingestion", 
                 "trace_search",
                 "service_map",
                 "apm_metrics",
-                "trace_log_correlation"
+                "apm_overview",
+                "trace_analytics",
+                "service_health",
+                "performance_trends"
             ]
         }
         

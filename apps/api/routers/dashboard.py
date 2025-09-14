@@ -3,64 +3,91 @@ Dashboard API endpoints - M2 core functionality
 """
 
 from typing import Dict, Any, List, Optional
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Query
 from pydantic import BaseModel
+import structlog
 
 from storage_config import get_customer_id
+from tenant_dependencies import MiddlewareTenant
+from services.dashboard_service import DashboardService
+
+logger = structlog.get_logger()
 
 router = APIRouter(prefix="/v1/dashboards")
 
 # Global instances (will be injected)
 dashboard_engine = None
+dashboard_service = DashboardService()
 
 def setup_dependencies(de):
     """Setup dependencies from main app"""
     global dashboard_engine
     dashboard_engine = de
+    dashboard_service.set_dashboard_engine(de)
 
 class DashboardRequest(BaseModel):
     name: str
-    description: str
-    widgets: List[Dict[str, Any]]
-    layout: Dict[str, Any]
+    description: str = ""
+    widgets: List[Dict[str, Any]] = []
+    layout: Dict[str, Any] = {}
     filters: List[Dict[str, Any]] = []
+    tags: List[str] = []
+    is_public: bool = False
+
+class WidgetRequest(BaseModel):
+    name: str
+    type: str  # chart, table, metric, etc.
+    query_definition: Dict[str, Any] = {}
+    visualization_config: Dict[str, Any] = {}
+    position: Dict[str, Any] = {}
+    size: Dict[str, Any] = {}
+    refresh_interval: int = 300
+
+class ShareRequest(BaseModel):
+    shared_with_email: Optional[str] = None
+    shared_with_tenant: Optional[str] = None
+    permission_level: str = "view"  # view, edit, admin
+    expires_at: Optional[str] = None
+    created_by: str = "system"
 
 @router.get("")
-async def list_dashboards(request: Request):
+async def list_dashboards(
+    created_by: str = Query(None, description="Filter by creator"),
+    is_public: bool = Query(None, description="Filter public/private dashboards"),
+    include_default: bool = Query(True, description="Include default dashboards"),
+    limit: int = Query(50, description="Maximum number of dashboards to return"),
+    customer_id: str = MiddlewareTenant
+):
     """List all available dashboards for the customer"""
     try:
-        # Extract customer ID from headers or use default
-        customer_id = request.headers.get("X-Customer-ID", "default")
-
-        if not dashboard_engine:
-            raise HTTPException(status_code=500, detail="Dashboard engine not initialized")
-
-        dashboards = dashboard_engine.get_dashboard_list()
-
-        return {
-            "dashboards": dashboards,
-            "total": len(dashboards),
-            "customer_id": customer_id
-        }
-
+        result = await dashboard_service.list_dashboards(
+            customer_id=customer_id,
+            created_by=created_by,
+            is_public=is_public,
+            include_default=include_default,
+            limit=limit
+        )
+        return result
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list dashboards: {str(e)}")
 
 @router.get("/{dashboard_id}")
-async def get_dashboard_config(dashboard_id: str, request: Request):
+async def get_dashboard_config(dashboard_id: str, customer_id: str = MiddlewareTenant):
     """Get dashboard configuration and metadata"""
     try:
-        # Extract customer ID from headers or use default
-        customer_id = request.headers.get("X-Customer-ID", "default")
-
-        if not dashboard_engine:
-            raise HTTPException(status_code=500, detail="Dashboard engine not initialized")
-
-        dashboard = dashboard_engine.get_dashboard_definition(dashboard_id)
-
+        dashboard = await dashboard_service.get_dashboard(dashboard_id, customer_id)
+        
         if not dashboard:
+            # Try default dashboard engine as fallback
+            if dashboard_engine:
+                dashboard = dashboard_engine.get_dashboard_definition(dashboard_id)
+                if dashboard:
+                    dashboard['customer_id'] = customer_id
+                    return dashboard
+            
             raise HTTPException(status_code=404, detail="Dashboard not found")
-
+        
         return dashboard
 
     except HTTPException:
@@ -69,33 +96,27 @@ async def get_dashboard_config(dashboard_id: str, request: Request):
         raise HTTPException(status_code=500, detail=f"Failed to get dashboard: {str(e)}")
 
 @router.get("/{dashboard_id}/data")
-async def get_dashboard_data(dashboard_id: str, request: Request):
+async def get_dashboard_data(
+    dashboard_id: str,
+    start_time: str = Query(None, description="Start time for data range"),
+    end_time: str = Query(None, description="End time for data range"),
+    customer_id: str = MiddlewareTenant
+):
     """Get dashboard data with all widget results"""
     try:
-        # Extract customer ID from headers or use default
-        customer_id = request.headers.get("X-Customer-ID", "default")
-
-        if not dashboard_engine:
-            raise HTTPException(status_code=500, detail="Dashboard engine not initialized")
-
         # Parse time range from query parameters
-        from datetime import datetime
-        import urllib.parse
-        
         time_range = None
-        if hasattr(request, 'query_params'):
-            start_time_str = request.query_params.get('start_time')
-            end_time_str = request.query_params.get('end_time')
-            if start_time_str and end_time_str:
-                try:
-                    start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
-                    end_time = datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
-                    time_range = {"start_time": start_time, "end_time": end_time}
-                except:
-                    pass  # Use default time range
+        if start_time and end_time:
+            try:
+                from datetime import datetime
+                start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+                time_range = {"start_time": start_dt, "end_time": end_dt}
+            except Exception as e:
+                logger.warning("Invalid time range format", error=str(e))
         
         # Get dashboard data
-        data = await dashboard_engine.get_dashboard_data(dashboard_id, time_range)
+        data = await dashboard_service.get_dashboard_data(dashboard_id, customer_id, time_range)
 
         if not data:
             raise HTTPException(status_code=404, detail="Dashboard not found")
@@ -108,76 +129,56 @@ async def get_dashboard_data(dashboard_id: str, request: Request):
         raise HTTPException(status_code=500, detail=f"Failed to get dashboard data: {str(e)}")
 
 @router.post("")
-async def create_dashboard(dashboard_request: DashboardRequest, request: Request):
+async def create_dashboard(dashboard_request: DashboardRequest, customer_id: str = MiddlewareTenant):
     """Create a new custom dashboard"""
     try:
-        # Extract customer ID from headers or use default
-        customer_id = request.headers.get("X-Customer-ID", "default")
-
-        # Placeholder for custom dashboard creation
-        # This would integrate with a dashboard storage system
-
-        return {
-            "status": "created",
-            "message": "Custom dashboard creation not yet implemented",
-            "customer_id": customer_id
-        }
-
+        # Add customer_id to dashboard data
+        dashboard_data = dashboard_request.model_dump()
+        dashboard_data['customer_id'] = customer_id
+        
+        # Create dashboard
+        result = await dashboard_service.create_dashboard(dashboard_data)
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create dashboard: {str(e)}")
 
 @router.put("/{dashboard_id}")
-async def update_dashboard(dashboard_id: str, dashboard_request: DashboardRequest, request: Request):
+async def update_dashboard(dashboard_id: str, dashboard_request: DashboardRequest, customer_id: str = MiddlewareTenant):
     """Update an existing dashboard"""
     try:
-        # Extract customer ID from headers or use default
-        customer_id = request.headers.get("X-Customer-ID", "default")
-
-        # Placeholder for dashboard update
-        return {
-            "status": "updated",
-            "message": "Dashboard update not yet implemented",
-            "customer_id": customer_id
-        }
-
+        # Update dashboard
+        update_data = dashboard_request.model_dump()
+        result = await dashboard_service.update_dashboard(dashboard_id, customer_id, update_data)
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update dashboard: {str(e)}")
 
 @router.delete("/{dashboard_id}")
-async def delete_dashboard(dashboard_id: str, request: Request):
+async def delete_dashboard(dashboard_id: str, customer_id: str = MiddlewareTenant):
     """Delete a dashboard"""
     try:
-        # Extract customer ID from headers or use default
-        customer_id = request.headers.get("X-Customer-ID", "default")
-
-        # Placeholder for dashboard deletion
-        return {
-            "status": "deleted",
-            "message": "Dashboard deletion not yet implemented",
-            "customer_id": customer_id
-        }
-
+        result = await dashboard_service.delete_dashboard(dashboard_id, customer_id)
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete dashboard: {str(e)}")
 
 # Dashboard Widget-Level Endpoints
 
 @router.get("/{dashboard_id}/widgets/{widget_id}/data")
-async def get_widget_data(dashboard_id: str, widget_id: str, request: Request):
+async def get_widget_data(dashboard_id: str, widget_id: str, customer_id: str = MiddlewareTenant):
     """Get data for a specific dashboard widget"""
     try:
-        # Extract customer ID from headers or use default
-        customer_id = request.headers.get("X-Customer-ID", "default")
-
-        if not dashboard_engine:
-            raise HTTPException(status_code=500, detail="Dashboard engine not initialized")
-
         # Get widget-specific data
-        widget_data = await dashboard_engine.get_widget_data(
-            dashboard_id,
-            widget_id,
-            customer_id
-        )
+        widget_data = await dashboard_service.get_widget_data(dashboard_id, widget_id, customer_id)
 
         if not widget_data:
             raise HTTPException(status_code=404, detail="Widget not found")
@@ -193,3 +194,77 @@ async def get_widget_data(dashboard_id: str, widget_id: str, request: Request):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get widget data: {str(e)}")
+
+# Widget Management Endpoints
+
+@router.post("/{dashboard_id}/widgets")
+async def create_widget(dashboard_id: str, widget_request: WidgetRequest, customer_id: str = MiddlewareTenant):
+    """Create a new dashboard widget"""
+    try:
+        # Add dashboard_id and customer_id to widget data
+        widget_data = widget_request.model_dump()
+        widget_data['dashboard_id'] = dashboard_id
+        widget_data['customer_id'] = customer_id
+        
+        result = await dashboard_service.create_widget(widget_data)
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create widget: {str(e)}")
+
+@router.put("/{dashboard_id}/widgets/{widget_id}")
+async def update_widget(dashboard_id: str, widget_id: str, widget_request: WidgetRequest, customer_id: str = MiddlewareTenant):
+    """Update a dashboard widget"""
+    try:
+        update_data = widget_request.model_dump()
+        result = await dashboard_service.update_widget(widget_id, customer_id, update_data)
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update widget: {str(e)}")
+
+@router.delete("/{dashboard_id}/widgets/{widget_id}")
+async def delete_widget(dashboard_id: str, widget_id: str, customer_id: str = MiddlewareTenant):
+    """Delete a dashboard widget"""
+    try:
+        result = await dashboard_service.delete_widget(widget_id, customer_id)
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete widget: {str(e)}")
+
+# Dashboard Sharing Endpoints
+
+@router.post("/{dashboard_id}/share")
+async def share_dashboard(dashboard_id: str, share_request: ShareRequest, customer_id: str = MiddlewareTenant):
+    """Share dashboard with another user or tenant"""
+    try:
+        share_data = share_request.model_dump()
+        result = await dashboard_service.share_dashboard(dashboard_id, customer_id, share_data)
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to share dashboard: {str(e)}")
+
+@router.get("/{dashboard_id}/shares")
+async def get_dashboard_shares(dashboard_id: str, customer_id: str = MiddlewareTenant):
+    """Get dashboard sharing information"""
+    try:
+        shares = await dashboard_service.get_dashboard_shares(dashboard_id, customer_id)
+        return {
+            "dashboard_id": dashboard_id,
+            "shares": shares,
+            "total": len(shares),
+            "customer_id": customer_id
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get dashboard shares: {str(e)}")
