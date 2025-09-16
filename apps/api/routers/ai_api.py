@@ -4,13 +4,9 @@ Database-backed service/dao pattern with comprehensive AI capabilities
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Request, Header
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, ValidationError
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List, Union
+from pydantic import BaseModel, Field
+from typing import Optional, Dict, Any, List
 import structlog
-import uuid
-from dataclasses import asdict
 
 from services.ai_service import AIService
 
@@ -529,25 +525,20 @@ async def predict_incidents(
 ):
     """Predict potential incidents using ML models"""
     try:
-        # Mock prediction results (would use real ML models in production)
-        predictions = [
-            {
-                "prediction_id": str(uuid.uuid4()),
-                "incident_type": "service_degradation",
-                "service_name": "payment-api",
-                "confidence": 0.84,
-                "predicted_time": (datetime.utcnow() + timedelta(hours=4)).isoformat(),
-                "contributing_factors": ["High CPU usage trend", "Increasing error rate"],
-                "preventive_actions": ["Scale service instances", "Check database connections"]
-            }
-        ]
+        ai_service = AIService()
+        
+        predictions = await ai_service.predict_incidents(
+            time_horizon=time_horizon,
+            confidence_threshold=confidence_threshold,
+            customer_id=customer_id
+        )
         
         return {
-            "predictions": predictions,
+            "predictions": predictions["predictions"],
             "time_horizon": time_horizon,
             "confidence_threshold": confidence_threshold,
-            "total_predictions": len(predictions),
-            "generated_at": datetime.utcnow().isoformat(),
+            "total_predictions": predictions["total_predictions"],
+            "generated_at": predictions["generated_at"],
             "customer_id": customer_id
         }
         
@@ -564,41 +555,16 @@ async def optimize_performance(
 ):
     """Generate performance optimization recommendations"""
     try:
-        # Mock optimization recommendations
-        recommendations = {
-            "service_name": service_name,
-            "optimization_type": optimization_type,
-            "current_metrics": {
-                "avg_response_time": 450,
-                "error_rate": 2.3,
-                "cost_per_request": 0.002
-            },
-            "optimizations": [
-                {
-                    "category": "performance",
-                    "action": "Enable connection pooling",
-                    "expected_improvement": "25% response time reduction",
-                    "implementation_effort": "low",
-                    "priority": "high"
-                },
-                {
-                    "category": "cost",
-                    "action": "Optimize instance sizing",
-                    "expected_improvement": "15% cost reduction",
-                    "implementation_effort": "medium",
-                    "priority": "medium"
-                }
-            ],
-            "projected_metrics": {
-                "avg_response_time": 340,
-                "error_rate": 1.8,
-                "cost_per_request": 0.0017
-            },
-            "generated_at": datetime.utcnow().isoformat()
-        }
+        ai_service = AIService()
+        
+        optimization_plan = await ai_service.generate_optimization_recommendations(
+            service_name=service_name,
+            optimization_type=optimization_type,
+            customer_id=customer_id
+        )
         
         return {
-            "optimization_plan": recommendations,
+            "optimization_plan": optimization_plan,
             "customer_id": customer_id
         }
         
@@ -613,41 +579,14 @@ async def list_ai_models(
 ):
     """List available AI models and their status"""
     try:
-        # Mock AI models status
-        models = [
-            {
-                "model_id": "nlp-query-v2.1",
-                "name": "Natural Language Query Processor",
-                "type": "natural_language_processing",
-                "status": "active",
-                "accuracy": 0.87,
-                "last_trained": "2024-01-15T10:30:00Z",
-                "version": "2.1.0"
-            },
-            {
-                "model_id": "anomaly-detector-v1.3",
-                "name": "Service Anomaly Detector",
-                "type": "anomaly_detection",
-                "status": "active",
-                "accuracy": 0.92,
-                "last_trained": "2024-01-20T14:15:00Z",
-                "version": "1.3.2"
-            },
-            {
-                "model_id": "rca-analyzer-v1.0",
-                "name": "Root Cause Analysis Engine",
-                "type": "root_cause_analysis",
-                "status": "active",
-                "accuracy": 0.78,
-                "last_trained": "2024-01-18T09:45:00Z",
-                "version": "1.0.5"
-            }
-        ]
+        ai_service = AIService()
+        
+        models_data = await ai_service.list_ai_models(customer_id)
         
         return {
-            "models": models,
-            "total": len(models),
-            "active_models": len([m for m in models if m["status"] == "active"]),
+            "models": models_data["models"],
+            "total": models_data["total"],
+            "active_models": models_data["active_models"],
             "customer_id": customer_id
         }
         

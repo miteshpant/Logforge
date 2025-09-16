@@ -118,11 +118,11 @@ class AIDAO:
         INSERT INTO ai_investigations_mt (
             id, title, description, investigation_type, status,
             input_data, results, confidence_score, started_by,
-            started_at, completed_at, investigation_notes, customer_id
+            started_at, completed_at, customer_id
         ) VALUES (
             %(id)s, %(title)s, %(description)s, %(investigation_type)s, %(status)s,
             %(input_data)s, %(results)s, %(confidence_score)s, %(started_by)s,
-            %(started_at)s, %(completed_at)s, %(investigation_notes)s, %(customer_id)s
+            %(started_at)s, %(completed_at)s, %(customer_id)s
         )
         """
         
@@ -138,7 +138,6 @@ class AIDAO:
             'started_by': investigation_data['started_by'],
             'started_at': investigation_data['started_at'],
             'completed_at': investigation_data.get('completed_at'),
-            'investigation_notes': json.dumps(investigation_data.get('investigation_notes', [])),
             'customer_id': investigation_data['customer_id']
         }
         
@@ -150,7 +149,7 @@ class AIDAO:
         query = """
         SELECT id, title, description, investigation_type, status,
                input_data, results, confidence_score, started_by,
-               started_at, completed_at, investigation_notes
+               started_at, completed_at
         FROM ai_investigations_mt
         WHERE customer_id = %(customer_id)s AND id = %(investigation_id)s
         """
@@ -163,7 +162,8 @@ class AIDAO:
             # Parse JSON fields
             investigation['input_data'] = json.loads(investigation['input_data'])
             investigation['results'] = json.loads(investigation['results'])
-            investigation['investigation_notes'] = json.loads(investigation['investigation_notes'])
+            # Add empty investigation_notes for backward compatibility
+            investigation['investigation_notes'] = []
             return investigation
         
         return None
@@ -190,9 +190,8 @@ class AIDAO:
             set_clauses.append("completed_at = %(completed_at)s")
             params['completed_at'] = updates['completed_at']
         
-        if 'investigation_notes' in updates:
-            set_clauses.append("investigation_notes = %(investigation_notes)s")
-            params['investigation_notes'] = json.dumps(updates['investigation_notes'])
+        # Note: investigation_notes column doesn't exist in table schema
+        # Ignoring investigation_notes updates for database compatibility
         
         if not set_clauses:
             return False
@@ -300,12 +299,12 @@ class AIDAO:
         """Save ML model baseline"""
         query = """
         INSERT INTO ai_baselines_mt (
-            model_id, service_name, baseline_type, baseline_data,
+            model_id, baseline_type, baseline_data,
             training_period, last_trained, accuracy_score,
             false_positive_rate, false_negative_rate, sample_count,
             is_active, created_at, customer_id
         ) VALUES (
-            %(model_id)s, %(service_name)s, %(baseline_type)s, %(baseline_data)s,
+            %(model_id)s, %(baseline_type)s, %(baseline_data)s,
             %(training_period)s, %(last_trained)s, %(accuracy_score)s,
             %(false_positive_rate)s, %(false_negative_rate)s, %(sample_count)s,
             %(is_active)s, %(created_at)s, %(customer_id)s
@@ -314,7 +313,6 @@ class AIDAO:
         
         params = {
             'model_id': baseline_data['model_id'],
-            'service_name': baseline_data['service_name'],
             'baseline_type': baseline_data['baseline_type'],
             'baseline_data': json.dumps(baseline_data['baseline_data']),
             'training_period': baseline_data['training_period'],
@@ -337,9 +335,8 @@ class AIDAO:
         where_conditions = ["customer_id = %(customer_id)s"]
         params = {'customer_id': customer_id}
         
-        if service_name:
-            where_conditions.append("service_name = %(service_name)s")
-            params['service_name'] = service_name
+        # Note: service_name column doesn't exist in table schema
+        # Ignoring service_name filter for database compatibility
         
         if baseline_type:
             where_conditions.append("baseline_type = %(baseline_type)s")
@@ -351,7 +348,7 @@ class AIDAO:
         where_clause = " AND ".join(where_conditions)
         
         query = f"""
-        SELECT model_id, service_name, baseline_type, baseline_data,
+        SELECT model_id, baseline_type, baseline_data,
                training_period, last_trained, accuracy_score,
                false_positive_rate, false_negative_rate, sample_count,
                is_active, created_at
@@ -367,6 +364,8 @@ class AIDAO:
             baseline = dict(result)
             # Parse JSON field
             baseline['baseline_data'] = json.loads(baseline['baseline_data'])
+            # Add empty service_name for backward compatibility
+            baseline['service_name'] = ''
             baselines.append(baseline)
         
         return baselines
@@ -424,22 +423,23 @@ class AIDAO:
     async def search_similar_incidents(self, symptoms: List[str], services: List[str],
                                      customer_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Search for similar incidents based on symptoms and services"""
-        # Create symptom search patterns
+        # Create symptom search patterns - search in findings JSON field
         symptom_patterns = []
         params = {'customer_id': customer_id, 'limit': limit}
         
         for i, symptom in enumerate(symptoms[:5]):  # Limit to 5 symptoms for performance
             symptom_key = f'symptom_{i}'
-            symptom_patterns.append(f"positionCaseInsensitive(description, %({symptom_key})s) > 0")
+            symptom_patterns.append(f"positionCaseInsensitive(findings, %({symptom_key})s) > 0")
             params[symptom_key] = symptom
         
-        # Create service filters if provided
+        # Create service filters if provided - search in evidence (handle both Array and String types)
         service_filter = ""
         if services:
             service_conditions = []
             for i, service in enumerate(services[:3]):  # Limit to 3 services
                 service_key = f'service_{i}'
-                service_conditions.append(f"hasAny(arrayStringConcat(evidence, ' '), %({service_key})s)")
+                # Use arrayStringConcat to handle Array(String) or treat as string
+                service_conditions.append(f"positionCaseInsensitive(arrayStringConcat(evidence, ' '), %({service_key})s) > 0")
                 params[service_key] = service
             service_filter = f"AND ({' OR '.join(service_conditions)})" if service_conditions else ""
         
