@@ -301,6 +301,7 @@ class UsageDAO:
         """Get platform-wide usage statistics"""
         try:
             current_month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            logger.debug(f"Getting platform usage stats from: {current_month_start}")
             
             query = """
             SELECT 
@@ -312,9 +313,23 @@ class UsageDAO:
             WHERE request_timestamp >= %(current_month_start)s
             """
             
-            result = await self.db.fetch_one(query, {"current_month_start": current_month_start})
+            logger.debug(f"Executing query: {query}")
+            logger.debug(f"Query params: {{'current_month_start': {current_month_start}}}")
             
-            return {
+            result = await self.db.fetch_one(query, {"current_month_start": current_month_start})
+            logger.debug(f"Raw query result: {result}")
+            
+            if not result:
+                logger.warning("No result returned from platform usage stats query")
+                return {
+                    "active_tenants_this_month": 0,
+                    "total_api_calls_month": 0,
+                    "avg_response_time_ms": 0.0,
+                    "total_errors": 0,
+                    "calculated_at": datetime.now(timezone.utc).isoformat()
+                }
+            
+            final_result = {
                 "active_tenants_this_month": result.get("active_tenants", 0),
                 "total_api_calls_month": result.get("total_api_calls", 0),
                 "avg_response_time_ms": round(result.get("avg_response_time", 0), 2),
@@ -322,8 +337,11 @@ class UsageDAO:
                 "calculated_at": datetime.now(timezone.utc).isoformat()
             }
             
+            logger.debug(f"Final platform stats result: {final_result}")
+            return final_result
+            
         except Exception as e:
-            logger.error(f"Failed to get platform usage stats: {e}")
+            logger.error(f"Failed to get platform usage stats: {e}", exc_info=True)
             raise
     
     async def get_top_consuming_tenants(self, limit: int = 10) -> List[Dict[str, Any]]:

@@ -5,7 +5,7 @@ Handles distributed tracing, metrics collection, and service topology mapping
 
 import structlog
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import json
 import uuid
 
@@ -385,9 +385,9 @@ class ObservabilityDAO:
             SELECT 
                 COUNT(*) as total_spans,
                 AVG(duration_ms) as avg_duration_ms,
-                percentile(duration_ms, 0.5) as p50_duration_ms,
-                percentile(duration_ms, 0.95) as p95_duration_ms,
-                percentile(duration_ms, 0.99) as p99_duration_ms,
+                quantile(0.5)(duration_ms) as p50_duration_ms,
+                quantile(0.95)(duration_ms) as p95_duration_ms,
+                quantile(0.99)(duration_ms) as p99_duration_ms,
                 COUNT(CASE WHEN status = 'error' THEN 1 END) * 100.0 / COUNT(*) as error_rate
             FROM traces_mt 
             WHERE service_name = %(service_name)s 
@@ -458,4 +458,337 @@ class ObservabilityDAO:
             
         except Exception as e:
             logger.error(f"Failed to get platform observability stats: {e}")
+            raise
+
+    # Missing methods needed by ObservabilityService
+
+    async def get_trace_spans(self, trace_id: str, customer_id: str) -> List[Dict[str, Any]]:
+        """Get all spans for a specific trace ID - alias for get_traces_by_trace_id"""
+        return await self.get_traces_by_trace_id(trace_id, customer_id)
+
+    async def search_traces(self, customer_id: str, filters: Dict[str, Any], limit: int = 100) -> List[Dict[str, Any]]:
+        """Search traces with filters"""
+        try:
+            where_clauses = ["customer_id = %(customer_id)s"]
+            params = {"customer_id": customer_id, "limit": limit}
+            
+            if filters.get("service_name"):
+                where_clauses.append("service_name = %(service_name)s")
+                params["service_name"] = filters["service_name"]
+            
+            if filters.get("operation_name"):
+                where_clauses.append("operation_name = %(operation_name)s")
+                params["operation_name"] = filters["operation_name"]
+                
+            if filters.get("start_time"):
+                where_clauses.append("start_time >= %(start_time)s")
+                params["start_time"] = filters["start_time"]
+                
+            if filters.get("end_time"):
+                where_clauses.append("start_time <= %(end_time)s")
+                params["end_time"] = filters["end_time"]
+                
+            if filters.get("min_duration_ms"):
+                where_clauses.append("duration_ms >= %(min_duration_ms)s")
+                params["min_duration_ms"] = filters["min_duration_ms"]
+                
+            if filters.get("max_duration_ms"):
+                where_clauses.append("duration_ms <= %(max_duration_ms)s")
+                params["max_duration_ms"] = filters["max_duration_ms"]
+                
+            if filters.get("status"):
+                where_clauses.append("status = %(status)s")
+                params["status"] = filters["status"]
+            
+            query = f"""
+            SELECT * FROM traces_mt 
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY start_time DESC
+            LIMIT %(limit)s
+            """
+            
+            if filters.get("offset"):
+                query += " OFFSET %(offset)s"
+                params["offset"] = filters["offset"]
+            
+            results = await self.db.execute_query(query, params)
+            
+            # Parse JSON fields
+            for result in results:
+                for json_field in ["attributes", "events", "links", "resource"]:
+                    if result.get(json_field):
+                        try:
+                            result[json_field] = json.loads(result[json_field])
+                        except (json.JSONDecodeError, TypeError):
+                            result[json_field] = {} if json_field in ["attributes", "resource"] else []
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Failed to search traces: {e}")
+            raise
+
+    async def get_span_by_id(self, span_id: str, customer_id: str) -> List[Dict[str, Any]]:
+        """Get span by span ID"""
+        try:
+            query = """
+            SELECT * FROM traces_mt 
+            WHERE span_id = %(span_id)s AND customer_id = %(customer_id)s
+            """
+            
+            results = await self.db.execute_query(query, {
+                "span_id": span_id,
+                "customer_id": customer_id
+            })
+            
+            # Parse JSON fields
+            for result in results:
+                for json_field in ["attributes", "events", "links", "resource"]:
+                    if result.get(json_field):
+                        try:
+                            result[json_field] = json.loads(result[json_field])
+                        except (json.JSONDecodeError, TypeError):
+                            result[json_field] = {} if json_field in ["attributes", "resource"] else []
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Failed to get span by ID {span_id}: {e}")
+            raise
+
+    async def update_service_topology(self, service_data: Dict[str, Any]) -> str:
+        """Update or insert service topology"""
+        try:
+            service_name = service_data.get("service_name")
+            customer_id = service_data.get("customer_id")
+            
+            # Check if service already exists
+            check_query = """
+            SELECT id FROM service_topology_mt 
+            WHERE service_name = %(service_name)s AND customer_id = %(customer_id)s
+            """
+            
+            existing = await self.db.execute_query(check_query, {
+                "service_name": service_name,
+                "customer_id": customer_id
+            })
+            
+            if existing:
+                # Update existing service
+                update_query = """
+                ALTER TABLE service_topology_mt 
+                UPDATE 
+                    health_status = %(health_status)s,
+                    metadata = %(metadata)s,
+                    last_seen = %(last_seen)s,
+                    updated_at = %(updated_at)s
+                WHERE service_name = %(service_name)s AND customer_id = %(customer_id)s
+                """
+                
+                params = {
+                    "service_name": service_name,
+                    "customer_id": customer_id,
+                    "health_status": service_data.get("health_status", "unknown"),
+                    "metadata": json.dumps(service_data.get("attributes", {})),
+                    "last_seen": datetime.now(timezone.utc),
+                    "updated_at": datetime.now(timezone.utc)
+                }
+                
+                await self.db.execute_query(update_query, params)
+                return existing[0]["id"]
+            else:
+                # Create new service
+                service_topology_data = {
+                    "service_name": service_name,
+                    "service_type": "application",
+                    "dependencies": service_data.get("dependencies", []),
+                    "health_status": service_data.get("health_status", "unknown"),
+                    "metadata": service_data.get("attributes", {}),
+                    "customer_id": customer_id
+                }
+                return await self.save_service_topology(service_topology_data)
+                
+        except Exception as e:
+            logger.error(f"Failed to update service topology: {e}")
+            raise
+
+    async def get_metrics(self, customer_id: str, metric_name: Optional[str] = None, 
+                         hours: int = 24, limit: int = 1000) -> List[Dict[str, Any]]:
+        """Get metrics with optional filtering"""
+        try:
+            where_clauses = [
+                "customer_id = %(customer_id)s",
+                "timestamp >= now() - INTERVAL %(hours)s HOUR"
+            ]
+            params = {
+                "customer_id": customer_id,
+                "hours": hours,
+                "limit": limit
+            }
+            
+            if metric_name:
+                where_clauses.append("metric_name = %(metric_name)s")
+                params["metric_name"] = metric_name
+            
+            query = f"""
+            SELECT * FROM metrics_mt 
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY timestamp DESC
+            LIMIT %(limit)s
+            """
+            
+            results = await self.db.execute_query(query, params)
+            
+            # Parse JSON fields and convert to expected format
+            for result in results:
+                for json_field in ["labels", "resource"]:
+                    if result.get(json_field):
+                        try:
+                            result[json_field] = json.loads(result[json_field])
+                        except (json.JSONDecodeError, TypeError):
+                            result[json_field] = {}
+                            
+                # Convert to expected format
+                result["name"] = result.get("metric_name", "")
+                result["type"] = result.get("metric_type", "gauge")
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Failed to get metrics: {e}")
+            raise
+
+    async def get_metric_aggregation(self, customer_id: str, metric_name: str, 
+                                   aggregation: str, hours: int = 24) -> Dict[str, Any]:
+        """Get aggregated metric values"""
+        try:
+            agg_function = {
+                "avg": "AVG",
+                "sum": "SUM", 
+                "max": "MAX",
+                "min": "MIN",
+                "count": "COUNT"
+            }.get(aggregation.lower(), "AVG")
+            
+            query = f"""
+            SELECT 
+                {agg_function}(value) as aggregated_value,
+                COUNT(*) as data_points,
+                MIN(timestamp) as start_time,
+                MAX(timestamp) as end_time
+            FROM metrics_mt 
+            WHERE metric_name = %(metric_name)s 
+            AND customer_id = %(customer_id)s
+            AND timestamp >= now() - INTERVAL %(hours)s HOUR
+            """
+            
+            results = await self.db.execute_query(query, {
+                "metric_name": metric_name,
+                "customer_id": customer_id,
+                "hours": hours
+            })
+            
+            if results:
+                result = results[0]
+                # Safely handle aggregated value (can be NULL/None from ClickHouse)
+                aggregated_value = result.get("aggregated_value", 0)
+                if aggregated_value is None or (isinstance(aggregated_value, float) and 
+                   (aggregated_value != aggregated_value or abs(aggregated_value) == float('inf'))):
+                    aggregated_value = 0.0
+                
+                return {
+                    "metric_name": metric_name,
+                    "aggregation": aggregation,
+                    "value": float(aggregated_value),
+                    "data_points": result.get("data_points", 0),
+                    "time_range": {
+                        "start": result.get("start_time").isoformat() if result.get("start_time") else None,
+                        "end": result.get("end_time").isoformat() if result.get("end_time") else None,
+                        "hours": hours
+                    }
+                }
+            else:
+                return {
+                    "metric_name": metric_name,
+                    "aggregation": aggregation,
+                    "value": 0,
+                    "data_points": 0,
+                    "time_range": {"hours": hours}
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to get metric aggregation: {e}")
+            raise
+
+    async def get_trace_analytics(self, customer_id: str, hours: int = 24, start_time: Optional[datetime] = None) -> Dict[str, Any]:
+        """Get comprehensive trace analytics"""
+        try:
+            where_clauses = ["customer_id = %(customer_id)s"]
+            params = {"customer_id": customer_id, "hours": hours}
+            
+            if start_time:
+                where_clauses.append("start_time >= %(start_time)s")
+                where_clauses.append("start_time < %(end_time)s")
+                params["start_time"] = start_time
+                params["end_time"] = start_time + timedelta(hours=hours)
+            else:
+                where_clauses.append("start_time >= now() - INTERVAL %(hours)s HOUR")
+            
+            query = f"""
+            SELECT 
+                COUNT(*) as total_traces,
+                COUNT(DISTINCT trace_id) as unique_traces,
+                COUNT(DISTINCT service_name) as unique_services,
+                AVG(duration_ms) as avg_duration,
+                quantile(0.5)(duration_ms) as p50_duration,
+                quantile(0.95)(duration_ms) as p95_duration,
+                quantile(0.99)(duration_ms) as p99_duration,
+                COUNT(CASE WHEN status = 'error' THEN 1 END) * 100.0 / COUNT(*) as error_rate,
+                COUNT(CASE WHEN status = 'error' THEN 1 END) as error_count
+            FROM traces_mt 
+            WHERE {' AND '.join(where_clauses)}
+            """
+            
+            results = await self.db.execute_query(query, params)
+            
+            if results:
+                analytics = results[0]
+                
+                # Safely handle all float values from ClickHouse aggregations
+                def safe_float(value, default=0.0):
+                    if value is None or (isinstance(value, float) and 
+                       (value != value or abs(value) == float('inf'))):
+                        return default
+                    return float(value)
+                
+                return {
+                    "total_traces": analytics.get("total_traces", 0),
+                    "unique_traces": analytics.get("unique_traces", 0),
+                    "unique_services": analytics.get("unique_services", 0),
+                    "avg_duration": safe_float(analytics.get("avg_duration")),
+                    "p50_duration": safe_float(analytics.get("p50_duration")),
+                    "p95_duration": safe_float(analytics.get("p95_duration")),
+                    "p99_duration": safe_float(analytics.get("p99_duration")),
+                    "error_rate": safe_float(analytics.get("error_rate")),
+                    "error_count": analytics.get("error_count", 0),
+                    "time_window_hours": hours,
+                    "calculated_at": datetime.now(timezone.utc).isoformat()
+                }
+            else:
+                return {
+                    "total_traces": 0,
+                    "unique_traces": 0,
+                    "unique_services": 0,
+                    "avg_duration": 0,
+                    "p50_duration": 0,
+                    "p95_duration": 0,
+                    "p99_duration": 0,
+                    "error_rate": 0,
+                    "error_count": 0,
+                    "time_window_hours": hours,
+                    "calculated_at": datetime.now(timezone.utc).isoformat()
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to get trace analytics: {e}")
             raise

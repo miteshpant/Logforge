@@ -26,36 +26,60 @@ class SecurityDAO:
         try:
             rule_id = rule_data.get("id", str(uuid.uuid4()))
             
+            # Validate required fields
+            if not rule_data.get("title"):
+                raise ValueError("Rule title is required")
+            
+            if not rule_data.get("logsource"):
+                raise ValueError("Rule logsource is required")
+            
+            if not rule_data.get("detection"):
+                raise ValueError("Rule detection logic is required")
+            
+            # Validate severity level (ClickHouse enum constraint)
+            severity = rule_data.get("severity", "medium")
+            valid_severities = ["low", "medium", "high", "critical"]
+            if severity not in valid_severities:
+                logger.warning(f"Invalid severity '{severity}', defaulting to 'medium'")
+                severity = "medium"
+            
+            # Build rule content JSON from the various rule components
+            rule_content = {
+                "logsource": rule_data.get("logsource", {}),
+                "detection": rule_data.get("detection", {}),
+                "references": rule_data.get("references", []),
+                "falsepositives": rule_data.get("falsepositives", []),
+                "tags": rule_data.get("tags", []),
+                "kill_chain_phases": rule_data.get("kill_chain_phases", []),
+                "author": rule_data.get("author", "logforge"),
+                "date": rule_data.get("date", datetime.now(timezone.utc).strftime("%Y/%m/%d"))
+            }
+            
+            # Validate detection logic format
+            if not isinstance(rule_content["detection"], dict):
+                raise ValueError("Detection logic must be a dictionary")
+            
             query = """
             INSERT INTO sigma_rules_mt (
-                id, customer_id, title, description, severity, status, author, date,
-                tags, attack_techniques, kill_chain_phases, logsource, detection,
-                references, falsepositives, enabled, created_at, updated_at
+                id, customer_id, name, description, rule_content, mitre_techniques,
+                severity, is_enabled, created_by, created_at, updated_at
             ) VALUES (
-                %(id)s, %(customer_id)s, %(title)s, %(description)s, %(severity)s, %(status)s,
-                %(author)s, %(date)s, %(tags)s, %(attack_techniques)s, %(kill_chain_phases)s,
-                %(logsource)s, %(detection)s, %(references)s, %(falsepositives)s,
-                %(enabled)s, %(created_at)s, %(updated_at)s
+                %(id)s, %(customer_id)s, %(name)s, %(description)s, %(rule_content)s,
+                %(mitre_techniques)s, %(severity)s, %(is_enabled)s, %(created_by)s,
+                %(created_at)s, %(updated_at)s
             )
             """
             
             params = {
                 "id": rule_id,
                 "customer_id": rule_data.get("customer_id", "default"),
-                "title": rule_data.get("title", ""),
+                "name": rule_data.get("title", ""),  # Map title to name
                 "description": rule_data.get("description", ""),
-                "severity": rule_data.get("severity", "medium"),
-                "status": rule_data.get("status", "active"),
-                "author": rule_data.get("author", "logforge"),
-                "date": rule_data.get("date", datetime.now(timezone.utc).strftime("%Y/%m/%d")),
-                "tags": json.dumps(rule_data.get("tags", [])),
-                "attack_techniques": json.dumps([t.value if hasattr(t, 'value') else str(t) for t in rule_data.get("attack_techniques", [])]),
-                "kill_chain_phases": json.dumps(rule_data.get("kill_chain_phases", [])),
-                "logsource": json.dumps(rule_data.get("logsource", {})),
-                "detection": json.dumps(rule_data.get("detection", {})),
-                "references": json.dumps(rule_data.get("references", [])),
-                "falsepositives": json.dumps(rule_data.get("falsepositives", [])),
-                "enabled": rule_data.get("enabled", True),
+                "rule_content": json.dumps(rule_content),
+                "mitre_techniques": rule_data.get("attack_techniques", []),
+                "severity": severity,  # Use validated severity
+                "is_enabled": 1 if rule_data.get("enabled", True) else 0,
+                "created_by": rule_data.get("author", "logforge"),
                 "created_at": datetime.now(timezone.utc),
                 "updated_at": datetime.now(timezone.utc)
             }
@@ -85,18 +109,38 @@ class SecurityDAO:
             
             results = await self.db.fetch_all(query, params)
             
-            # Process results to parse JSON fields
+            # Process results to map to expected API format
             processed_rules = []
             for rule in results:
-                processed_rule = dict(rule)
+                # Parse rule_content JSON
+                rule_content = {}
+                try:
+                    if rule.get("rule_content"):
+                        rule_content = json.loads(rule["rule_content"])
+                except (json.JSONDecodeError, TypeError):
+                    rule_content = {}
                 
-                # Parse JSON fields
-                for json_field in ["tags", "attack_techniques", "kill_chain_phases", "logsource", "detection", "references", "falsepositives"]:
-                    if processed_rule.get(json_field):
-                        try:
-                            processed_rule[json_field] = json.loads(processed_rule[json_field])
-                        except (json.JSONDecodeError, TypeError):
-                            processed_rule[json_field] = []
+                # Map database columns to API response format
+                processed_rule = {
+                    "id": rule["id"],
+                    "title": rule["name"],  # Map name back to title
+                    "description": rule["description"],
+                    "severity": rule["severity"],
+                    "status": "active" if rule["is_enabled"] else "inactive",
+                    "author": rule["created_by"],
+                    "date": rule_content.get("date", rule["created_at"].strftime("%Y/%m/%d") if rule.get("created_at") else ""),
+                    "enabled": bool(rule["is_enabled"]),
+                    "attack_techniques": rule.get("mitre_techniques", []),
+                    "tags": rule_content.get("tags", []),
+                    "kill_chain_phases": rule_content.get("kill_chain_phases", []),
+                    "logsource": rule_content.get("logsource", {}),
+                    "detection": rule_content.get("detection", {}),
+                    "references": rule_content.get("references", []),
+                    "falsepositives": rule_content.get("falsepositives", []),
+                    "created_at": rule["created_at"],
+                    "updated_at": rule["updated_at"],
+                    "customer_id": rule["customer_id"]
+                }
                 
                 processed_rules.append(processed_rule)
             
@@ -122,15 +166,35 @@ class SecurityDAO:
             result = await self.db.fetch_one(query, params)
             
             if result:
-                processed_rule = dict(result)
+                # Parse rule_content JSON
+                rule_content = {}
+                try:
+                    if result.get("rule_content"):
+                        rule_content = json.loads(result["rule_content"])
+                except (json.JSONDecodeError, TypeError):
+                    rule_content = {}
                 
-                # Parse JSON fields
-                for json_field in ["tags", "attack_techniques", "kill_chain_phases", "logsource", "detection", "references", "falsepositives"]:
-                    if processed_rule.get(json_field):
-                        try:
-                            processed_rule[json_field] = json.loads(processed_rule[json_field])
-                        except (json.JSONDecodeError, TypeError):
-                            processed_rule[json_field] = []
+                # Map database columns to API response format
+                processed_rule = {
+                    "id": result["id"],
+                    "title": result["name"],  # Map name back to title
+                    "description": result["description"],
+                    "severity": result["severity"],
+                    "status": "active" if result["is_enabled"] else "inactive",
+                    "author": result["created_by"],
+                    "date": rule_content.get("date", result["created_at"].strftime("%Y/%m/%d") if result.get("created_at") else ""),
+                    "enabled": bool(result["is_enabled"]),
+                    "attack_techniques": result.get("mitre_techniques", []),
+                    "tags": rule_content.get("tags", []),
+                    "kill_chain_phases": rule_content.get("kill_chain_phases", []),
+                    "logsource": rule_content.get("logsource", {}),
+                    "detection": rule_content.get("detection", {}),
+                    "references": rule_content.get("references", []),
+                    "falsepositives": rule_content.get("falsepositives", []),
+                    "created_at": result["created_at"],
+                    "updated_at": result["updated_at"],
+                    "customer_id": result["customer_id"]
+                }
                 
                 return processed_rule
             
@@ -208,7 +272,7 @@ class SecurityDAO:
             query = f"""
             SELECT * FROM security_events_mt 
             WHERE {' AND '.join(where_clauses)}
-            ORDER BY timestamp DESC
+            ORDER BY created_at DESC
             LIMIT %(limit)s
             """
             
@@ -238,28 +302,43 @@ class SecurityDAO:
     async def update_security_event(self, event_id: str, customer_id: str, updates: Dict[str, Any]) -> bool:
         """Update security event"""
         try:
-            # Build dynamic update query
+            # First check if the event exists
+            check_query = """
+            SELECT COUNT(*) as count FROM security_events_mt 
+            WHERE id = %(event_id)s AND customer_id = %(customer_id)s
+            """
+            check_params = {"event_id": event_id, "customer_id": customer_id}
+            
+            result = await self.db.fetch_one(check_query, check_params)
+            if not result or result.get("count", 0) == 0:
+                logger.debug(f"Security event not found: {event_id}")
+                return False  # Event doesn't exist
+            
+            # Build dynamic update query using ClickHouse ALTER TABLE syntax
             set_clauses = []
             params = {"event_id": event_id, "customer_id": customer_id, "updated_at": datetime.now(timezone.utc)}
             
             for field, value in updates.items():
                 if field in ["status", "assigned_to", "kill_chain_phase"]:
-                    set_clauses.append(f"{field} = %({field})s")
-                    params[field] = value
+                    set_clauses.append(f"{field} = '{value}'")
                 elif field == "investigation_notes":
-                    set_clauses.append("investigation_notes = %(investigation_notes)s")
-                    params["investigation_notes"] = json.dumps(value)
+                    set_clauses.append(f"investigation_notes = '{json.dumps(value)}'")
             
             if not set_clauses:
                 return False
             
+            # Add updated_at to set_clauses (format for ClickHouse DateTime64)
+            updated_at_str = params['updated_at'].strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]  # Remove timezone and limit to 3 decimal places
+            set_clauses.append(f"updated_at = '{updated_at_str}'")
+            
+            # Use ClickHouse ALTER TABLE UPDATE syntax
             query = f"""
-            UPDATE security_events_mt 
-            SET {', '.join(set_clauses)}, updated_at = %(updated_at)s
-            WHERE id = %(event_id)s AND customer_id = %(customer_id)s
+            ALTER TABLE security_events_mt 
+            UPDATE {', '.join(set_clauses)}
+            WHERE id = '{event_id}' AND customer_id = '{customer_id}'
             """
             
-            await self.db.execute_query(query, params)
+            await self.db.execute_query(query, {})
             logger.debug(f"Security event updated: {event_id}")
             
             return True

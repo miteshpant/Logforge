@@ -45,27 +45,49 @@ CLICKHOUSE_DATABASE = os.getenv("CLICKHOUSE_DATABASE", "logforge")
 
 class UsageBuffer:
     """Batched usage tracking for zero-latency API calls"""
-    
+
     def __init__(self):
         self.buffer: List[Dict[str, Any]] = []
         self.batch_size = 100
         self.flush_interval = 30  # seconds
         self._last_flush = time.time()
-        
+
     async def add_usage(self, usage_data: Dict[str, Any]):
         """Add usage data to buffer, flush when batch size reached"""
+        try:
+            # Debug: Create JSON-serializable copy for validation (datetime objects -> ISO strings)
+            import json
+            json_test_data = {}
+            for key, value in usage_data.items():
+                if isinstance(value, datetime):
+                    json_test_data[key] = value.isoformat()
+                else:
+                    json_test_data[key] = value
+            
+            json.dumps(json_test_data)  # This will raise error if values are JSON-unsafe
+            logger.debug("DEBUG: Usage data JSON validation passed")
+        except (TypeError, ValueError) as e:
+            logger.error("DEBUG: JSON validation failed in add_usage", 
+                        error=str(e))
+            # Try to sanitize the data (keep original datetime objects for database)
+            for key, value in usage_data.items():
+                if isinstance(value, float):
+                    if value != value or abs(value) == float('inf'):
+                        logger.warning("DEBUG: Sanitizing invalid float", key=key, original_value=value)
+                        usage_data[key] = 0.0
+
         self.buffer.append(usage_data)
-        
+
         # Flush if batch size reached or time interval exceeded
-        if (len(self.buffer) >= self.batch_size or 
+        if (len(self.buffer) >= self.batch_size or
             time.time() - self._last_flush > self.flush_interval):
             await self.flush_batch()
-    
+
     async def flush_batch(self):
         """Batch insert to database with retry logic"""
         if not self.buffer:
             return
-            
+
         try:
             await self._insert_usage_batch(self.buffer.copy())
             self.buffer.clear()
@@ -74,18 +96,18 @@ class UsageBuffer:
         except Exception as e:
             logger.error(f"Usage tracking batch failed", error=str(e))
             # Keep buffer for retry on next flush
-    
+
     async def _insert_usage_batch(self, usage_records: List[Dict[str, Any]]):
         """Insert usage records to database using DatabaseLayer"""
         try:
             # Initialize DatabaseLayer for usage tracking
             service_key = os.getenv("USER_SERVICE_KEY", "user-service-key-dev")
             db = DatabaseLayer("UserService", service_key)
-            
+
             # Use batch insert for usage tracking
             result = await db.batch_insert_usage(usage_records)
             logger.info("Usage batch inserted to database", records=result)
-            
+
         except Exception as e:
             logger.error("Failed to insert usage batch to database", error=str(e), records=len(usage_records))
             # Continue without failing - usage tracking should not block requests
@@ -100,30 +122,30 @@ usage_buffer = UsageBuffer()
 def validate_password_strength(password: str) -> None:
     """
     Validate password meets security requirements
-    
+
     Requirements:
     - Minimum 12 characters
     - At least one uppercase letter
-    - At least one lowercase letter  
+    - At least one lowercase letter
     - At least one number
     - At least one special character
     - Not a common weak password
-    
+
     Raises:
         ValueError: If password doesn't meet requirements
     """
     if not password:
         raise ValueError("Password is required")
-    
+
     if len(password) < 12:
         raise ValueError("Password must be at least 12 characters long")
-    
+
     # Check character type requirements
     has_upper = any(c.isupper() for c in password)
     has_lower = any(c.islower() for c in password)
     has_digit = any(c.isdigit() for c in password)
     has_special = any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?~`" for c in password)
-    
+
     if not has_upper:
         raise ValueError("Password must contain at least one uppercase letter")
     if not has_lower:
@@ -132,7 +154,7 @@ def validate_password_strength(password: str) -> None:
         raise ValueError("Password must contain at least one number")
     if not has_special:
         raise ValueError("Password must contain at least one special character (!@#$%^&* etc.)")
-    
+
     # Check against common weak passwords
     weak_passwords = {
         'password123!', 'password123@', 'password123#', 'password123$',
@@ -140,7 +162,7 @@ def validate_password_strength(password: str) -> None:
         'welcome123!', 'letmein123!', 'changeme123!', '1234567890!@',
         'p@ssw0rd123', 'P@ssw0rd123', 'admin123456!', 'user123456!'
     }
-    
+
     if password.lower() in {pwd.lower() for pwd in weak_passwords}:
         raise ValueError("Password is too common. Please choose a more unique password")
 
@@ -148,19 +170,19 @@ def hash_password(password: str) -> str:
     """
     Hash password using bcrypt with 12 rounds
     Validates password strength before hashing
-    
+
     Args:
         password: Plain text password
-        
+
     Returns:
         Hashed password string
-        
+
     Raises:
         ValueError: If password doesn't meet security requirements
     """
     # Validate password strength first
     validate_password_strength(password)
-    
+
     # Hash the password
     salt = bcrypt.gensalt(rounds=12)
     return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
@@ -172,18 +194,18 @@ def verify_password(password: str, hashed: str) -> bool:
 def generate_jwt_token(user_id: str, expires_in_hours: int = SESSION_EXPIRY_HOURS) -> Dict[str, Any]:
     """Generate JWT token for user session"""
     import time
-    
+
     now_timestamp = time.time()
     expires_timestamp = now_timestamp + (expires_in_hours * 3600)
     expires_dt = datetime.utcfromtimestamp(expires_timestamp)
-    
+
     payload = {
         "user_id": user_id,
         "iat": now_timestamp,
         "exp": expires_timestamp,
         "type": "access_token"
     }
-    
+
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
     return {
         "access_token": token,
@@ -211,30 +233,30 @@ def generate_secure_token(length: int = 32) -> str:
 BILLING_FEATURE_MAP = {
     # Ingestion endpoints
     "/v1/ingest/logs": "ingestion.basic",
-    "/v1/ingest/syslog": "ingestion.basic", 
+    "/v1/ingest/syslog": "ingestion.basic",
     "/v1/ingest/otlp": "ingestion.basic",
     "/v1/ingest/cef": "ingestion.basic",
     "/v1/ingest/nginx": "ingestion.basic",
     "/v1/ingest/text": "ingestion.basic",
     "/v1/ingest/logs/batch": "ingestion.basic",
     "/v1/ingest": "ingestion.basic",
-    
+
     # Query endpoints
     "/v1/query/advanced": "queries.advanced",
     "/v1/logs/search": "queries.advanced",
     "/v1/logs": "queries.basic",
-    
+
     # Security endpoints
     "/v1/security/events": "security.analytics",
     "/v1/security/threat-hunting": "security.analytics",
     "/v1/security/sigma-rules": "security.analytics",
     "/v1/security/dashboard": "security.analytics",
-    
+
     # Alert endpoints
     "/v1/alerts/rules": "alerts.management",
     "/v1/alerts/events": "alerts.management",
     "/v1/alerts/notifications": "alerts.management",
-    
+
     # Storage endpoints
     "/v1/storage/export": "storage.retrieval",
     "/v1/storage/download": "storage.retrieval",
@@ -256,7 +278,7 @@ def map_endpoint_to_feature(endpoint: str) -> str:
     # Exact match first
     if endpoint in BILLING_FEATURE_MAP:
         return BILLING_FEATURE_MAP[endpoint]
-    
+
     # Pattern matching for dynamic endpoints
     if endpoint.startswith("/v1/security/"):
         return "security.analytics"
@@ -277,7 +299,7 @@ def calculate_request_cost(endpoint: str, status_code: int, response_size: int =
     """Calculate cost based on endpoint, status, and response size"""
     billing_feature = map_endpoint_to_feature(endpoint)
     base_cost = FEATURE_BASE_COSTS.get(billing_feature, 0.0001)
-    
+
     # Apply billing policy for failed requests
     if 500 <= status_code < 600:
         return 0.0  # No charge for server errors
@@ -288,8 +310,17 @@ def calculate_request_cost(endpoint: str, status_code: int, response_size: int =
     else:
         # Full charge for successful requests
         if billing_feature == "storage.retrieval" and response_size > 0:
-            gb_retrieved = response_size / (1024 * 1024 * 1024)
-            return base_cost * max(1, gb_retrieved * 1000)  # Scale by GB
+            # Cap response_size to prevent overflow (max 10GB)
+            capped_response_size = min(response_size, 10 * 1024 * 1024 * 1024)
+            gb_retrieved = capped_response_size / (1024 * 1024 * 1024)
+            multiplier = max(1, gb_retrieved * 1000)
+            # Cap the multiplier to prevent JSON overflow (max 1M multiplier)
+            multiplier = min(multiplier, 1000000)
+            cost = base_cost * multiplier
+            # Ensure cost is JSON-safe and within reasonable bounds
+            if cost != cost or abs(cost) == float('inf') or cost > 1000000:
+                return 1.0  # Default to $1 for extreme cases
+            return cost
         return base_cost
 
 # =================================================================
@@ -299,7 +330,7 @@ def calculate_request_cost(endpoint: str, status_code: int, response_size: int =
 ROLE_PERMISSIONS = {
     # Platform Admin Roles
     UserRole.SUPER_ADMIN: [
-        "*:*:*", "platform:*:*", "tenants:*:*", "users:*:*", 
+        "*:*:*", "platform:*:*", "tenants:*:*", "users:*:*",
         "billing:*:*", "system:*:*", "audit:*:*", "storage:*:*"
     ],
     UserRole.ADMIN: [
@@ -314,13 +345,14 @@ ROLE_PERMISSIONS = {
         "billing:*:platform", "usage:read:platform",
         "reports:generate:platform", "tenants:read:platform"
     ],
-    
+
     # Customer User Roles
     UserRole.TENANT_ADMIN: [
         "logs:*:tenant", "alerts:*:tenant", "dashboards:*:tenant",
         "security:*:tenant", "users:*:tenant", "settings:*:tenant",
         "storage:*:tenant", "queries:*:tenant", "ai:*:tenant", "enterprise:*:tenant",
-        "observability:*:tenant", "roles:*:tenant"
+        "observability:*:tenant", "roles:*:tenant", "usage:*:tenant", "billing:read:tenant",
+        "costs:*:tenant", "analytics:read:tenant"
     ],
     UserRole.SECURITY_ANALYST: [
         "security:*:tenant", "logs:read,search:tenant",
@@ -346,7 +378,7 @@ ROLE_PERMISSIONS = {
 def get_endpoint_permission(path: str, method: str) -> str:
     """Get required permission for endpoint"""
     method = method.upper()
-    
+
     # Map endpoints to permissions
     if path.startswith("/v1/admin/"):
         return "platform:admin:platform"
@@ -381,6 +413,14 @@ def get_endpoint_permission(path: str, method: str) -> str:
         return "billing:read:platform"
     elif path.startswith("/v1/usage/"):
         return "usage:read:tenant"
+    elif path.startswith("/v1/costs/"):
+        if method in ["POST", "PUT", "DELETE"]:
+            return "costs:write:tenant"
+        return "costs:read:tenant"
+    elif path.startswith("/v1/analytics/"):
+        if method in ["POST", "PUT", "DELETE"]:
+            return "analytics:write:tenant"
+        return "analytics:read:tenant"
     elif path.startswith("/v1/storage/"):
         if method in ["POST", "PUT", "DELETE"]:
             return "storage:write:tenant"
@@ -417,32 +457,32 @@ def get_endpoint_permission(path: str, method: str) -> str:
 def check_permission(user_roles: List[Dict[str, Any]], required_permission: str, tenant_id: str) -> bool:
     """Check if user has required permission for tenant (supports tenant-less platform admins)"""
     resource, action, scope = required_permission.split(":")
-    
+
     for role_assignment in user_roles:
         # Platform admins (tenant_id = "platform") have platform-wide access
         is_platform_admin = role_assignment["tenant_id"] == "platform"
         is_tenant_match = role_assignment["tenant_id"] == tenant_id
-        
+
         # Skip if not platform admin and not matching tenant
         if not is_platform_admin and not is_tenant_match:
             continue
-            
+
         role = UserRole(role_assignment["role"])
         role_permissions = ROLE_PERMISSIONS.get(role, [])
-        
+
         for permission in role_permissions:
             perm_resource, perm_action, perm_scope = permission.split(":")
-            
+
             # Check resource match
             if perm_resource != "*" and perm_resource != resource:
                 continue
-                
+
             # Check action match (supports comma-separated actions)
             if perm_action != "*":
                 allowed_actions = perm_action.split(",")
                 if action not in allowed_actions:
                     continue
-            
+
             # Check scope match
             if perm_scope == "*":
                 return True
@@ -450,7 +490,7 @@ def check_permission(user_roles: List[Dict[str, Any]], required_permission: str,
                 return True
             elif perm_scope == "tenant" and is_tenant_match:
                 return True
-    
+
     return False
 
 # =================================================================
@@ -467,19 +507,19 @@ user_service = UserService()
 
 class SetupTokenManager:
     """Manages initial platform setup tokens"""
-    
+
     def __init__(self):
         # Use database storage instead of memory
         from database_layer import DatabaseLayer
         self.db = DatabaseLayer("PlatformSetup", "platform-setup-key")
         # Initialize in-memory storage for now (TODO: move to database)
         self.setup_tokens = {}
-    
+
     def generate_setup_token(self) -> Dict[str, Any]:
         """Generate initial setup token"""
         token = generate_secure_token(32)
         expires_at = datetime.utcnow() + timedelta(hours=24)
-        
+
         # Store in memory for now (TODO: Store in database instead)
         self.setup_tokens[token] = {
             "token": token,
@@ -487,32 +527,32 @@ class SetupTokenManager:
             "used": False,
             "created_at": datetime.utcnow()
         }
-        
+
         logger.info("Setup token generated", expires_at=expires_at)
-        
+
         return {
             "setup_token": token,
             "expires_at": expires_at
         }
-    
+
     def validate_setup_token(self, token: str) -> bool:
         """Validate and consume setup token"""
         token_data = self.setup_tokens.get(token)
         if not token_data:
             return False
-        
+
         if token_data["used"]:
             return False
-        
+
         if datetime.utcnow() > token_data["expires_at"]:
             return False
-        
+
         # Mark token as used
         token_data["used"] = True
         logger.info("Setup token consumed", token=token[:8] + "...")
-        
+
         return True
-    
+
     def has_setup_completed(self) -> bool:
         """Check if initial setup has been completed"""
         # TODO: Check if any super_admin users exist in database
@@ -545,22 +585,22 @@ def get_setup_token_manager():
 
 class InvitationManager:
     """Manages user invitations with database persistence"""
-    
+
     def __init__(self):
         # Use the UserService from this module instead of importing
         self.user_service = None  # Will be set when needed
-    
-    async def create_invitation(self, email: str, tenant_id: str, role: UserRole, 
+
+    async def create_invitation(self, email: str, tenant_id: str, role: UserRole,
                                invited_by: str) -> Dict[str, Any]:
         """Create user invitation using database storage"""
         # Use the global user_service instance
         return await user_service.create_invitation(email, tenant_id, role, invited_by)
-    
+
     async def validate_invitation(self, token: str, email: str) -> Optional[Dict[str, Any]]:
         """Validate invitation token and email match using database"""
         # Use the global user_service instance
         return await user_service.validate_invitation(token, email)
-    
+
     async def accept_invitation(self, token: str, invitation_id: str) -> bool:
         """Mark invitation as accepted using database"""
         # Use the global user_service instance
@@ -575,19 +615,19 @@ invitation_manager = InvitationManager()
 
 class UnifiedAuthMiddleware(BaseHTTPMiddleware):
     """Unified Authentication & Authorization Middleware
-    
+
     Handles:
     1. Authentication (JWT token validation)
     2. Authorization (role-based permissions)
     3. Feature Access (subscription validation)
     4. Usage Tracking (billing and audit)
     """
-    
+
     def __init__(self, app):
         super().__init__(app)
         self.user_service = user_service
         self.subscription_service = subscription_service
-        
+
         # Public endpoints (no authentication required)
         self.public_endpoints = [
             "/",
@@ -596,58 +636,59 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "/openapi.json",
             "/redoc",
             "/v1/auth/login",
-            "/v1/auth/setup/init", 
+            "/v1/auth/setup/init",
             "/v1/auth/setup",
             "/v1/auth/accept-invite",
             "/v1/auth/password/reset",
             "/v1/auth/password/reset-confirm"
         ]
-        
+
         # Admin endpoints (bypass feature validation)
         self.admin_endpoints = [
             "/v1/admin/",
             "/v1/test-runner/"
         ]
-    
+
     async def dispatch(self, request: Request, call_next):
         """Process authentication, authorization, and feature access"""
         start_time = time.time()
-        
+
         # Allow CORS preflight requests to pass through without authentication
         if request.method == "OPTIONS":
             return await call_next(request)
-        
+
         # Skip authentication for public endpoints
         if self._is_public_endpoint(request.url.path):
             return await call_next(request)
-        
+
         # Skip feature validation for admin endpoints but still require auth
         is_admin_endpoint = self._is_admin_endpoint(request.url.path)
-        
+
         try:
             # Step 1: Authentication - Extract and validate JWT token
             auth_context = await self._extract_authentication(request)
+
             user = await self._validate_user_session(auth_context)
-            
+
             # Step 2: Tenant Context - Extract tenant ID
             tenant_id = request.headers.get("X-Customer-ID")
             if not tenant_id and not request.url.path.startswith("/v1/auth/"):
                 raise HTTPException(400, "X-Customer-ID header required")
-            
+
             # Step 3: Authorization - Verify user has access to tenant
             user_roles = []
             if tenant_id:
                 user_roles = await self.user_service.get_user_tenant_roles(user.id, tenant_id)
                 if not user_roles:
                     raise HTTPException(403, f"No access to tenant: {tenant_id}")
-            
+
             # Step 4: Permission Check - Verify endpoint permissions
             # Skip permission checks for auth endpoints (they are user-level operations)
             if tenant_id and not request.url.path.startswith("/v1/auth/"):
                 required_permission = get_endpoint_permission(request.url.path, request.method)
                 if not check_permission(user_roles, required_permission, tenant_id):
                     raise HTTPException(403, f"Insufficient permissions for {request.url.path}")
-            
+
             # Step 5: Feature Access - Check subscription (skip for admin endpoints)
             if not is_admin_endpoint and tenant_id:
                 feature_access = await self._validate_feature_access(tenant_id, request.url.path)
@@ -662,23 +703,23 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                             "upgrade_url": f"/v1/tenants/{tenant_id}/subscription/upgrade"
                         }
                     )
-            
+
             # Step 6: Add context to request
             request.state.user = user
             request.state.tenant_id = tenant_id
             request.state.roles = user_roles
-            
+
             # Step 7: Process request
             response = await call_next(request)
-            
+
             # Step 8: Usage Tracking - Track API usage asynchronously
             if tenant_id and tenant_id != "platform":
                 asyncio.create_task(
                     self._track_api_usage(request, response, user, tenant_id, start_time)
                 )
-            
+
             return response
-            
+
         except HTTPException as e:
             return JSONResponse(
                 status_code=e.status_code,
@@ -687,39 +728,39 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             logger.error("Authentication/Authorization middleware error", error=str(e))
             return JSONResponse(
-                status_code=500, 
+                status_code=500,
                 content={"error": "Authentication system error"}
             )
-    
+
     def _is_public_endpoint(self, path: str) -> bool:
         """Check if endpoint is public (no auth required)"""
         # Strip query parameters from path before matching
         clean_path = path.split('?')[0]
         return clean_path in self.public_endpoints
-    
+
     def _is_admin_endpoint(self, path: str) -> bool:
         """Check if endpoint is admin (bypasses feature validation)"""
         return any(path.startswith(endpoint) for endpoint in self.admin_endpoints)
-    
+
     async def _extract_authentication(self, request: Request) -> Dict[str, Any]:
         """Extract authentication context from request"""
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
             raise HTTPException(401, "Missing or invalid Authorization header")
-        
+
         token = auth_header.split(" ")[1]
         return {"token": token, "type": "bearer"}
-    
+
     async def _validate_user_session(self, auth_context: Dict[str, Any]) -> User:
         """Validate user session from token"""
         token = auth_context["token"]
         user = await self.user_service.validate_session(token)
-        
+
         if not user:
             raise HTTPException(401, "Invalid or expired session")
-        
+
         return user
-    
+
     async def _validate_feature_access(self, tenant_id: str, endpoint: str) -> Dict[str, Any]:
         """Validate feature access based on subscription"""
         try:
@@ -732,22 +773,40 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 "feature": "fallback",
                 "reason": "Feature validation error - access granted"
             }
-    
-    async def _track_api_usage(self, request: Request, response, user: User, 
+
+    async def _track_api_usage(self, request: Request, response, user: User,
                               tenant_id: str, start_time: float):
         """Track API usage for billing (async)"""
         try:
-            processing_time = int((time.time() - start_time) * 1000)
-            
-            # Get response size
+            current_time = time.time()
+            processing_time = int((current_time - start_time) * 1000)
+
+            # Get response size safely
             response_size = 0
             if hasattr(response, "body"):
                 response_size = len(response.body)
             elif hasattr(response, "headers"):
                 content_length = response.headers.get("content-length")
                 if content_length:
-                    response_size = int(content_length)
-            
+                    try:
+                        response_size = int(content_length)
+                    except (ValueError, TypeError):
+                        response_size = 0
+
+            # Calculate cost safely (avoid inf/nan values)
+            cost_credits = 0.0
+            try:
+                cost_credits = calculate_request_cost(
+                    request.url.path,
+                    getattr(response, "status_code", 200),
+                    response_size
+                )
+                # Ensure cost is JSON-safe
+                if not isinstance(cost_credits, (int, float)) or cost_credits != cost_credits or abs(cost_credits) == float('inf'):
+                    cost_credits = 0.0
+            except Exception:
+                cost_credits = 0.0
+
             usage_data = {
                 "tenant_id": tenant_id,
                 "user_id": user.id,
@@ -758,20 +817,18 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 "response_size_bytes": response_size,
                 "ip_address": request.client.host if request.client else "unknown",
                 "user_agent": request.headers.get("user-agent", ""),
-                "request_timestamp": datetime.utcnow(),
+                "request_timestamp": datetime.utcnow(),  # Keep as datetime for ClickHouse compatibility
                 "billing_feature": map_endpoint_to_feature(request.url.path),
-                "cost_credits": calculate_request_cost(
-                    request.url.path, 
-                    getattr(response, "status_code", 200),
-                    response_size
-                ),
+                "cost_credits": cost_credits,
                 "customer_id": tenant_id  # customer_id is the same as tenant_id in our architecture
             }
-            
+
             await usage_buffer.add_usage(usage_data)
-            
+
         except Exception as e:
-            logger.error("Usage tracking failed", error=str(e))
+            logger.error("Usage tracking failed", error=str(e), 
+                        tenant_id=tenant_id, 
+                        endpoint=request.url.path)
 
 # =================================================================
 # DEPENDENCY INJECTION
@@ -796,17 +853,17 @@ async def get_current_tenant_id(request: Request) -> str:
         raise HTTPException(400, "X-Customer-ID header required")
     return tenant_id
 
-async def require_platform_admin(user: User = Depends(get_current_user), 
+async def require_platform_admin(user: User = Depends(get_current_user),
                                  request: Request = None) -> User:
     """Require platform admin permissions (tenant-less platform admins)"""
     if not hasattr(request.state, "roles"):
         raise HTTPException(403, "No role information available")
-    
+
     # Platform admins have tenant_id = "platform" (super-tenant)
     platform_roles = [r for r in request.state.roles if r["tenant_id"] == "platform"]
     if not platform_roles:
         raise HTTPException(403, "Platform admin access required")
-    
+
     return user
 
 async def require_tenant_admin(user: User = Depends(get_current_user),
@@ -815,13 +872,13 @@ async def require_tenant_admin(user: User = Depends(get_current_user),
     """Require tenant admin permissions"""
     if not hasattr(request.state, "roles"):
         raise HTTPException(403, "No role information available")
-    
+
     tenant_roles = [r for r in request.state.roles if r["tenant_id"] == tenant_id]
     admin_roles = [r for r in tenant_roles if r["role"] in ["tenant_admin"]]
-    
+
     if not admin_roles:
         raise HTTPException(403, f"Tenant admin access required for {tenant_id}")
-    
+
     return user
 
 # Global instances (using lazy initialization)

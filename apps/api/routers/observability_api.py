@@ -46,7 +46,7 @@ class MetricType(str, Enum):
 class SpanRequest(BaseModel):
     """OpenTelemetry span ingestion request"""
     trace_id: str = Field(..., description="Unique trace identifier")
-    span_id: str = Field(..., description="Unique span identifier") 
+    span_id: str = Field(..., description="Unique span identifier")
     parent_span_id: Optional[str] = Field(None, description="Parent span ID")
     operation_name: str = Field(..., description="Span operation name")
     service_name: str = Field(..., description="Service generating the span")
@@ -108,27 +108,22 @@ class MetricQueryRequest(BaseModel):
     granularity: str = Field("1m", description="Time granularity (1m, 5m, 1h)")
 
 
-# Header dependency for customer isolation
-async def get_customer_id(x_customer_id: str = Header(..., alias="X-Customer-ID")) -> str:
-    """Extract customer ID from request header"""
-    if not x_customer_id:
-        raise HTTPException(status_code=400, detail="X-Customer-ID header is required")
-    return x_customer_id
+# Use proper authentication middleware instead of simple header dependency
 
 
 @router.post("/traces/ingest")
 async def ingest_trace_spans(
     request: BatchSpanRequest,
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID")
 ):
     """Ingest OpenTelemetry trace spans"""
     try:
         observability_service = ObservabilityService()
-        
+
         # Process each span in the batch
         ingested_spans = []
         errors = []
-        
+
         for span_req in request.spans:
             try:
                 # Convert to dict format for service
@@ -147,13 +142,13 @@ async def ingest_trace_spans(
                     'links': span_req.links,
                     'resource': span_req.resource
                 }
-                
+
                 span_id = await observability_service.ingest_trace_span(span_data, customer_id)
                 ingested_spans.append(span_id)
-                
+
             except Exception as e:
                 errors.append(f"Failed to ingest span {span_req.span_id}: {str(e)}")
-        
+
         return JSONResponse(
             status_code=202,
             content={
@@ -163,7 +158,7 @@ async def ingest_trace_spans(
                 "errors": errors
             }
         )
-        
+
     except Exception as e:
         logger.error("Failed to ingest traces", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to ingest traces: {str(e)}")
@@ -172,16 +167,16 @@ async def ingest_trace_spans(
 @router.post("/metrics/ingest")
 async def ingest_metrics(
     request: BatchMetricRequest,
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID")
 ):
     """Ingest time series metrics"""
     try:
         observability_service = ObservabilityService()
-        
+
         # Process each metric in the batch
         ingested_metrics = []
         errors = []
-        
+
         for metric_req in request.metrics:
             try:
                 # Convert to dict format for service
@@ -195,13 +190,13 @@ async def ingest_metrics(
                     'resource': metric_req.resource,
                     'timestamp': metric_req.timestamp.isoformat()
                 }
-                
+
                 metric_id = await observability_service.ingest_metric(metric_data, customer_id)
                 ingested_metrics.append(metric_id)
-                
+
             except Exception as e:
                 errors.append(f"Failed to ingest metric {metric_req.metric_name}: {str(e)}")
-        
+
         return JSONResponse(
             status_code=202,
             content={
@@ -211,7 +206,7 @@ async def ingest_metrics(
                 "errors": errors
             }
         )
-        
+
     except Exception as e:
         logger.error("Failed to ingest metrics", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to ingest metrics: {str(e)}")
@@ -220,41 +215,41 @@ async def ingest_metrics(
 @router.post("/traces/search")
 async def search_traces(
     query: TraceQueryRequest,
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID")
 ):
     """Search traces with filters"""
     try:
         observability_service = ObservabilityService()
-        
+
         # Build filters dict for service
         filters = {}
-        
+
         if query.service_name:
             filters['service_name'] = query.service_name
-        
+
         if query.operation_name:
             filters['operation_name'] = query.operation_name
-        
+
         if query.start_time:
             filters['start_time'] = query.start_time
-        
+
         if query.end_time:
             filters['end_time'] = query.end_time
-        
+
         if query.min_duration_ms:
             filters['min_duration_ms'] = query.min_duration_ms
-        
+
         if query.max_duration_ms:
             filters['max_duration_ms'] = query.max_duration_ms
-        
+
         if query.status:
             filters['status'] = query.status.value
-        
+
         filters['limit'] = query.limit
         filters['offset'] = query.offset
-        
+
         traces = await observability_service.search_traces(customer_id, filters, query.limit)
-        
+
         return {
             "traces": traces,
             "total": len(traces),
@@ -262,7 +257,7 @@ async def search_traces(
             "offset": query.offset,
             "customer_id": customer_id
         }
-        
+
     except Exception as e:
         logger.error("Failed to search traces", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to search traces: {str(e)}")
@@ -271,24 +266,24 @@ async def search_traces(
 @router.get("/traces/{trace_id}")
 async def get_trace_details(
     trace_id: str,
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID")
 ):
     """Get detailed trace information"""
     try:
         observability_service = ObservabilityService()
-        
+
         # Get complete trace
         trace = await observability_service.get_trace_by_id(trace_id, customer_id)
-        
+
         if not trace:
             raise HTTPException(status_code=404, detail="Trace not found")
-        
+
         return {
             "trace_id": trace_id,
             "trace": trace,
             "customer_id": customer_id
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -299,88 +294,88 @@ async def get_trace_details(
 @router.get("/service-map")
 async def get_service_map(
     time_range_hours: int = 24,
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID")
 ):
     """Get service topology and dependencies"""
     try:
         observability_service = ObservabilityService()
-        
+
         services = await observability_service.get_service_topology(customer_id)
-        
+
         return {
             "services": services,
             "time_range_hours": time_range_hours,
             "customer_id": customer_id
         }
-        
+
     except Exception as e:
         logger.error("Failed to get service map", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to get service map: {str(e)}")
+
+
+@router.get("/apm/overview")
+async def get_apm_overview(
+    time_range_hours: int = 24,
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Get APM overview for all services"""
+    try:
+        observability_service = ObservabilityService()
+
+        overview = await observability_service.get_apm_overview(customer_id, time_range_hours)
+
+        return {
+            "overview": overview,
+            "time_range_hours": time_range_hours,
+            "customer_id": customer_id
+        }
+
+    except Exception as e:
+        logger.error("Failed to get APM overview", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to get APM overview: {str(e)}")
 
 
 @router.get("/apm/{service_name}")
 async def get_apm_metrics(
     service_name: str,
     time_range_hours: int = 1,
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID")
 ):
     """Get APM metrics for a specific service"""
     try:
         observability_service = ObservabilityService()
-        
+
         metrics = await observability_service.get_service_apm_metrics(service_name, customer_id, time_range_hours)
-        
+
         return {
             "service_name": service_name,
-            "metrics": asdict(metrics),
+            "metrics": metrics.to_dict(),
             "time_range_hours": time_range_hours,
             "customer_id": customer_id
         }
-        
+
     except Exception as e:
         logger.error("Failed to get APM metrics", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to get APM metrics: {str(e)}")
 
 
-@router.get("/apm/overview")
-async def get_apm_overview(
-    time_range_hours: int = 24,
-    customer_id: str = Depends(get_customer_id)
-):
-    """Get APM overview for all services"""
-    try:
-        observability_service = ObservabilityService()
-        
-        overview = await observability_service.get_apm_overview(customer_id, time_range_hours)
-        
-        return {
-            "overview": overview,
-            "time_range_hours": time_range_hours,
-            "customer_id": customer_id
-        }
-        
-    except Exception as e:
-        logger.error("Failed to get APM overview", error=str(e), customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Failed to get APM overview: {str(e)}")
-
-
 @router.get("/analytics")
 async def get_trace_analytics(
     time_range_hours: int = 24,
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID")
 ):
     """Get comprehensive trace analytics"""
     try:
         observability_service = ObservabilityService()
-        
+
         analytics = await observability_service.get_trace_analytics(customer_id, time_range_hours)
-        
+
         return {
             "analytics": analytics,
             "time_range_hours": time_range_hours,
             "customer_id": customer_id
         }
-        
+
     except Exception as e:
         logger.error("Failed to get trace analytics", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to get trace analytics: {str(e)}")
@@ -389,29 +384,28 @@ async def get_trace_analytics(
 @router.post("/metrics/query")
 async def query_metrics(
     query: MetricQueryRequest,
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID")
 ):
     """Query time series metrics"""
     try:
         observability_service = ObservabilityService()
-        
         # Get basic metrics data
         hours = int((query.end_time - query.start_time).total_seconds() / 3600)
         metrics = await observability_service.get_metrics(customer_id, query.metric_name, hours)
-        
+
         # If aggregation is requested, get aggregated data
         if query.aggregation and query.metric_name:
             aggregated = await observability_service.get_metric_aggregation(
                 customer_id, query.metric_name, query.aggregation, hours
             )
-            
+
             return {
                 "metrics": {query.metric_name: [aggregated]},
                 "aggregation": query.aggregation,
                 "granularity": query.granularity,
                 "customer_id": customer_id
             }
-        
+
         # Group metrics by name
         metrics_data = {}
         for metric in metrics:
@@ -422,14 +416,14 @@ async def query_metrics(
                 "timestamp": metric['timestamp'],
                 "value": metric['value']
             })
-        
+
         return {
             "metrics": metrics_data,
             "aggregation": query.aggregation,
             "granularity": query.granularity,
             "customer_id": customer_id
         }
-        
+
     except Exception as e:
         logger.error("Failed to query metrics", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to query metrics: {str(e)}")
@@ -438,20 +432,20 @@ async def query_metrics(
 @router.get("/service/{service_name}/health")
 async def get_service_health(
     service_name: str,
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID")
 ):
     """Get detailed health status for a service"""
     try:
         observability_service = ObservabilityService()
-        
+
         health = await observability_service.get_service_health_status(service_name, customer_id)
-        
+
         return {
             "service_name": service_name,
             "health": health,
             "customer_id": customer_id
         }
-        
+
     except Exception as e:
         logger.error("Failed to get service health", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to get service health: {str(e)}")
@@ -460,20 +454,20 @@ async def get_service_health(
 @router.get("/trends")
 async def get_performance_trends(
     days: int = 7,
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID")
 ):
     """Get performance trends over time"""
     try:
         observability_service = ObservabilityService()
-        
+
         trends = await observability_service.get_performance_trends(customer_id, days)
-        
+
         return {
             "trends": trends,
             "days": days,
             "customer_id": customer_id
         }
-        
+
     except Exception as e:
         logger.error("Failed to get performance trends", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to get performance trends: {str(e)}")
@@ -484,17 +478,17 @@ async def observability_health():
     """Health check for observability service"""
     try:
         observability_service = ObservabilityService()
-        
+
         # Test database connectivity through service
         test_customer = "health-check-test"
         await observability_service.get_metrics(test_customer, limit=1, hours=1)
-        
+
         return {
             "status": "healthy",
             "message": "Observability service operational",
             "features": [
                 "trace_ingestion",
-                "metrics_ingestion", 
+                "metrics_ingestion",
                 "trace_search",
                 "service_map",
                 "apm_metrics",
@@ -504,7 +498,7 @@ async def observability_health():
                 "performance_trends"
             ]
         }
-        
+
     except Exception as e:
         logger.error("Observability health check failed", error=str(e))
         return {"status": "error", "message": f"Health check failed: {str(e)}"}

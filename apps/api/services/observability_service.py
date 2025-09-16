@@ -11,10 +11,13 @@ This service provides comprehensive observability capabilities including:
 
 import json
 import uuid
-from datetime import datetime, timedelta
+import structlog
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Optional, Union
 from dataclasses import dataclass, asdict
 from dao.observability_dao import ObservabilityDAO
+
+logger = structlog.get_logger(__name__)
 
 
 @dataclass
@@ -67,19 +70,37 @@ class ServiceTopology:
     customer_id: str
 
 
-@dataclass
 class APMMetrics:
     """Application Performance Monitoring metrics"""
-    service_name: str
-    request_rate: float  # requests per second
-    error_rate: float    # error percentage
-    avg_response_time: float  # milliseconds
-    p95_response_time: float  # milliseconds
-    p99_response_time: float  # milliseconds
-    throughput: float    # requests per minute
-    error_count: int
-    total_requests: int
-    time_window: str     # e.g., "1h", "24h"
+    def __init__(self, service_name: str, request_rate: float = 0, error_rate: float = 0, 
+                 avg_response_time: float = 0, p95_response_time: float = 0, 
+                 p99_response_time: float = 0, throughput: float = 0, 
+                 error_count: int = 0, total_requests: int = 0, time_window: str = "1h"):
+        self.service_name = service_name
+        self.request_rate = request_rate  # requests per second
+        self.error_rate = error_rate    # error percentage
+        self.avg_response_time = avg_response_time  # milliseconds
+        self.p95_response_time = p95_response_time  # milliseconds
+        self.p99_response_time = p99_response_time  # milliseconds
+        self.throughput = throughput    # requests per minute
+        self.error_count = error_count
+        self.total_requests = total_requests
+        self.time_window = time_window     # e.g., "1h", "24h"
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert metrics to dictionary for JSON serialization"""
+        return {
+            "service_name": self.service_name,
+            "request_rate": self.request_rate,
+            "error_rate": self.error_rate,
+            "avg_response_time": self.avg_response_time,
+            "p95_response_time": self.p95_response_time,
+            "p99_response_time": self.p99_response_time,
+            "throughput": self.throughput,
+            "error_count": self.error_count,
+            "total_requests": self.total_requests,
+            "time_window": self.time_window
+        }
 
 
 class ObservabilityService:
@@ -280,14 +301,14 @@ class ObservabilityService:
             service_metrics = await self.get_service_apm_metrics(
                 service['service_name'], customer_id, hours
             )
-            overview['services'].append(service_metrics)
+            overview['services'].append(service_metrics.to_dict())
             overview['total_requests'] += service_metrics.total_requests
             overview['total_errors'] += service_metrics.error_count
         
         # Calculate overall averages
         if overview['total_requests'] > 0:
             overview['error_rate'] = (overview['total_errors'] / overview['total_requests']) * 100
-            overview['avg_response_time'] = sum(s.avg_response_time for s in overview['services']) / len(overview['services'])
+            overview['avg_response_time'] = sum(s['avg_response_time'] for s in overview['services']) / len(overview['services'])
         
         return overview
     
@@ -359,7 +380,7 @@ class ObservabilityService:
         return {
             'service_name': service_name,
             'health_status': health_status,
-            'metrics': asdict(apm_metrics),
+            'metrics': apm_metrics.to_dict(),
             'recommendations': self._get_health_recommendations(apm_metrics),
             'last_updated': datetime.utcnow().isoformat()
         }

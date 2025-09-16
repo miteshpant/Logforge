@@ -18,7 +18,6 @@ from routers.storage import router as storage_router
 from routers.alerts import router as alerts_router
 
 # Import API routers for additional functionality
-from routers.test_runner_api import router as test_runner_router
 from routers.security_api import router as security_router
 from routers.observability_api import router as observability_router
 from routers.ai_api import router as ai_router
@@ -75,7 +74,6 @@ app.include_router(role_router)
 app.include_router(usage_router)
 
 # Include additional API routers
-app.include_router(test_runner_router)
 app.include_router(security_router)
 app.include_router(observability_router)
 app.include_router(ai_router)

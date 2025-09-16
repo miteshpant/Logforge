@@ -181,18 +181,33 @@ class UsageService:
     async def get_platform_analytics(self) -> Dict[str, Any]:
         """Get platform-wide usage analytics"""
         try:
+            logger.debug("Starting get_platform_analytics")
+            
             # Get platform statistics
+            logger.debug("Getting platform stats...")
             platform_stats = await self.usage_dao.get_platform_usage_stats()
+            logger.debug(f"Platform stats result: {platform_stats}")
             
             # Get top consuming tenants
+            logger.debug("Getting top consuming tenants...")
             top_tenants = await self.usage_dao.get_top_consuming_tenants(10)
+            logger.debug(f"Top tenants result: {top_tenants}")
             
-            # Calculate platform metrics
+            # Calculate platform metrics with safer handling
+            total_revenue_estimate = 0.0
+            if top_tenants:
+                logger.debug("Calculating revenue estimates...")
+                for tenant in top_tenants:
+                    try:
+                        tenant_revenue = await self._estimate_tenant_revenue(tenant["tenant_id"])
+                        total_revenue_estimate += tenant_revenue
+                        logger.debug(f"Tenant {tenant['tenant_id']} revenue: {tenant_revenue}")
+                    except Exception as e:
+                        logger.warning(f"Failed to estimate revenue for tenant {tenant['tenant_id']}: {e}")
+                        continue
+            
             platform_metrics = {
-                "total_revenue_estimate": sum(
-                    await self._estimate_tenant_revenue(tenant["tenant_id"]) 
-                    for tenant in top_tenants
-                ),
+                "total_revenue_estimate": total_revenue_estimate,
                 "avg_calls_per_tenant": (
                     platform_stats["total_api_calls_month"] / 
                     max(1, platform_stats["active_tenants_this_month"])
@@ -200,15 +215,18 @@ class UsageService:
                 "platform_health_score": self._calculate_platform_health(platform_stats)
             }
             
-            return {
+            result = {
                 "platform_stats": platform_stats,
                 "top_tenants": top_tenants,
                 "metrics": platform_metrics,
                 "analytics_generated_at": datetime.now(timezone.utc).isoformat()
             }
             
+            logger.debug(f"get_platform_analytics completed successfully: {result}")
+            return result
+            
         except Exception as e:
-            logger.error(f"Failed to get platform analytics: {e}")
+            logger.error(f"Failed to get platform analytics: {e}", exc_info=True)
             raise
     
     async def export_usage_report(self, tenant_id: str, format: str = "json", 
