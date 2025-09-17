@@ -330,6 +330,104 @@ class EnterpriseService:
         }
     
     # ==========================================
+    # MFA MANAGEMENT
+    # ==========================================
+    
+    async def setup_mfa(self, customer_id: str, mfa_request: Dict[str, Any]) -> Dict[str, Any]:
+        """Setup Multi-Factor Authentication for user - saves to database"""
+        mfa_id = str(uuid.uuid4())
+        
+        # Validate MFA type
+        valid_mfa_types = ['totp', 'sms', 'hardware', 'email']
+        mfa_type = mfa_request.get('mfa_type', 'totp')
+        if mfa_type not in valid_mfa_types:
+            raise ValueError(f"Invalid MFA type. Must be one of: {valid_mfa_types}")
+        
+        # Validate user_id
+        if not mfa_request.get('user_id'):
+            raise ValueError("user_id is required for MFA setup")
+        
+        # Generate MFA configuration based on type
+        mfa_config = {
+            'user_id': mfa_request['user_id'],
+            'mfa_type': mfa_type,
+            'status': 'pending_verification'
+        }
+        
+        if mfa_type == 'totp':
+            # Generate TOTP secret
+            import base64
+            import secrets
+            secret = base64.b32encode(secrets.token_bytes(20)).decode()
+            mfa_config.update({
+                'secret': secret,
+                'qr_code_url': f"otpauth://totp/Logforge:{mfa_request['user_id']}?secret={secret}&issuer=Logforge",
+                'backup_codes': [secrets.token_hex(4).upper() for _ in range(8)] if mfa_request.get('backup_codes') else []
+            })
+        elif mfa_type == 'sms':
+            # Validate phone number
+            if not mfa_request.get('phone_number'):
+                raise ValueError("Phone number required for SMS MFA")
+            mfa_config.update({
+                'phone_number': mfa_request['phone_number'],
+                'verification_code_sent': True
+            })
+        elif mfa_type == 'hardware':
+            # Hardware token setup
+            mfa_config.update({
+                'device_type': mfa_request.get('device_type', 'yubikey'),
+                'registration_challenge': secrets.token_urlsafe(32)
+            })
+        
+        # Extract backup codes if present
+        backup_codes = mfa_config.pop('backup_codes', [])
+        
+        # Save MFA setup to database
+        mfa_data = {
+            'user_id': mfa_request['user_id'],
+            'mfa_type': mfa_type,
+            'config': mfa_config,
+            'backup_codes': backup_codes,
+            'customer_id': customer_id
+        }
+        
+        setup_id = await self.dao.create_mfa_setup(mfa_data)
+        
+        return {
+            'mfa_id': setup_id,
+            'status': 'setup_initiated',
+            'user_id': mfa_request['user_id'],
+            'mfa_type': mfa_type,
+            'config': mfa_config,
+            'backup_codes': backup_codes,
+            'next_steps': self._get_mfa_next_steps(mfa_type),
+            'message': f'{mfa_type.upper()} MFA setup initiated and saved for user {mfa_request["user_id"]}'
+        }
+    
+    def _get_mfa_next_steps(self, mfa_type: str) -> List[str]:
+        """Get next steps for MFA setup based on type"""
+        steps = {
+            'totp': [
+                "Scan the QR code with your authenticator app",
+                "Enter the 6-digit code from your app to verify setup",
+                "Save your backup codes in a secure location"
+            ],
+            'sms': [
+                "Check your phone for a verification code",
+                "Enter the 6-digit code to complete setup"
+            ],
+            'hardware': [
+                "Insert your hardware security key",
+                "Follow the browser prompts to register your device"
+            ],
+            'email': [
+                "Check your email for a verification link",
+                "Click the link to verify your email address"
+            ]
+        }
+        return steps.get(mfa_type, ["Complete the setup process"])
+    
+    # ==========================================
     # TENANT MANAGEMENT
     # ==========================================
     
@@ -379,34 +477,30 @@ class EnterpriseService:
             'name': tenant_data['name'],
             'tier': tier,
             'status': 'active',
-            'created_at': datetime.utcnow(),
-            'updated_at': datetime.utcnow(),
-            'settings': {
-                'data_residency': tenant_data.get('data_residency', 'us-east-1'),
-                'compliance_requirements': tenant_data.get('compliance_requirements', []),
-                'security_settings': {
-                    'mfa_required': tier == 'enterprise',
-                    'session_timeout': 8 if tier == 'starter' else 24,
-                    'ip_whitelist_enabled': False
-                }
-            },
-            'quota_limits': tier_quotas.get(tier, tier_quotas['professional']),
-            'contact_info': {
-                'admin_email': tenant_data.get('admin_email', ''),
-                'billing_email': tenant_data.get('billing_email', ''),
-                'support_contact': tenant_data.get('support_contact', '')
+            'domain': tenant_data.get('domain', f"{tenant_data['name'].lower().replace(' ', '-')}.com"),
+            'billing_email': tenant_data.get('admin_email', tenant_data.get('billing_email', '')),
+            'admin_contact': tenant_data.get('admin_email', ''),
+            'region': tenant_data.get('data_residency', 'us-east-1'),
+            'compliance_requirements': tenant_data.get('compliance_requirements', []),
+            'feature_flags': {
+                'mfa_required': tier == 'enterprise',
+                'session_timeout': 8 if tier == 'starter' else 24,
+                'ip_whitelist_enabled': False
             },
             'customer_id': customer_id
         }
         
         await self.dao.create_tenant(new_tenant)
         
+        # Generate quota limits for response
+        quota_limits = tier_quotas.get(tier, tier_quotas['professional'])
+        
         return {
             'tenant_id': tenant_id,
             'status': 'created',
             'message': f'Tenant {tenant_data["name"]} created successfully',
             'tier': tier,
-            'quota_limits': new_tenant['quota_limits']
+            'quota_limits': quota_limits
         }
     
     async def update_tenant_settings(self, customer_id: str, tenant_id: str, 

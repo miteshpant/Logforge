@@ -1138,3 +1138,83 @@ CREATE TABLE IF NOT EXISTS tenant_deletions_mt (
 PARTITION BY (customer_id, toYYYYMM(deleted_at))
 ORDER BY (customer_id, tenant_id, deleted_at)
 SETTINGS index_granularity = 8192;
+
+-- =====================================================
+-- 15. ENTERPRISE COMPLIANCE TABLES (enterprise_api.py)
+-- =====================================================
+
+-- Enterprise compliance and legal hold table
+CREATE TABLE IF NOT EXISTS enterprise_compliance_mt (
+    id String,
+    type Enum8('legal_hold' = 1, 'audit_request' = 2, 'compliance_report' = 3, 'data_export' = 4),
+    case_id String,
+    custodian String,
+    reason String,
+    date_range String, -- JSON blob with start/end dates
+    scope String, -- JSON blob with data types and departments
+    status Enum8('active' = 1, 'completed' = 2, 'cancelled' = 3, 'expired' = 4),
+    created_at DateTime64(3) DEFAULT now64(3),
+    updated_at DateTime64(3) DEFAULT now64(3),
+    customer_id String
+) ENGINE = MergeTree()
+PARTITION BY (customer_id, toYYYYMM(created_at))
+ORDER BY (customer_id, type, created_at)
+SETTINGS index_granularity = 8192;
+
+-- Enterprise integrations table
+CREATE TABLE IF NOT EXISTS enterprise_integrations_mt (
+    id String,
+    integration_type Enum8('slack' = 1, 'servicenow' = 2, 'jira' = 3, 'pagerduty' = 4, 'webhook' = 5),
+    name String,
+    config String, -- JSON blob with integration configuration
+    is_enabled UInt8 DEFAULT 1,
+    health_status Enum8('healthy' = 1, 'degraded' = 2, 'unhealthy' = 3, 'unknown' = 4),
+    last_health_check Nullable(DateTime64(3)),
+    created_at DateTime64(3) DEFAULT now64(3),
+    updated_at DateTime64(3) DEFAULT now64(3),
+    customer_id String
+) ENGINE = MergeTree()
+PARTITION BY (customer_id, toYYYYMM(created_at))
+ORDER BY (customer_id, integration_type, id)
+SETTINGS index_granularity = 8192;
+
+-- Enterprise audit logs table
+CREATE TABLE IF NOT EXISTS enterprise_audit_logs_mt (
+    id String,
+    user_id String,
+    tenant_id Nullable(String),
+    action_type Enum8('create' = 1, 'update' = 2, 'delete' = 3, 'view' = 4, 'login' = 5, 'logout' = 6),
+    resource_type String,
+    resource_id Nullable(String),
+    details String, -- JSON blob with action details
+    ip_address String DEFAULT 'unknown',
+    user_agent String DEFAULT '',
+    timestamp DateTime64(3) DEFAULT now64(3),
+    customer_id String
+) ENGINE = MergeTree()
+PARTITION BY (customer_id, toYYYYMM(timestamp))
+ORDER BY (customer_id, timestamp, user_id)
+SETTINGS index_granularity = 8192;
+
+-- API usage table for billing tracking
+CREATE TABLE IF NOT EXISTS api_usage_mt (
+    id String,
+    customer_id String,
+    tenant_id String,
+    user_id Nullable(String),
+    endpoint String,
+    method Enum8('GET' = 1, 'POST' = 2, 'PUT' = 3, 'DELETE' = 4, 'PATCH' = 5),
+    request_timestamp DateTime64(3) DEFAULT now64(3),
+    response_status UInt16,
+    processing_time_ms UInt32,
+    billing_feature String, -- ingestion, query, analytics, alerts, security, storage
+    cost_credits Float64 DEFAULT 0.0,
+    request_size_bytes UInt64 DEFAULT 0,
+    response_size_bytes UInt64 DEFAULT 0,
+    ip_address Nullable(String),
+    user_agent Nullable(String)
+) ENGINE = MergeTree()
+PARTITION BY (customer_id, toYYYYMM(request_timestamp))
+ORDER BY (customer_id, tenant_id, request_timestamp, endpoint)
+TTL toDateTime(request_timestamp) + INTERVAL 2 YEAR
+SETTINGS index_granularity = 8192;

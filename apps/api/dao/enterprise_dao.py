@@ -253,31 +253,114 @@ class EnterpriseDAO:
         return True
 
     # ==========================================
+    # MFA OPERATIONS
+    # ==========================================
+
+    async def create_mfa_setup(self, mfa_data: Dict[str, Any]) -> str:
+        """Create MFA setup record"""
+        query = """
+        INSERT INTO mfa_setups_mt (
+            user_id, mfa_type, config, backup_codes, is_verified, customer_id
+        ) VALUES (
+            %(user_id)s, %(mfa_type)s, %(config)s, %(backup_codes)s, %(is_verified)s, %(customer_id)s
+        )
+        """
+
+        params = {
+            'user_id': mfa_data['user_id'],
+            'mfa_type': mfa_data['mfa_type'],
+            'config': json.dumps(mfa_data['config']),
+            'backup_codes': mfa_data.get('backup_codes', []),
+            'is_verified': 0,  # Always start as unverified
+            'customer_id': mfa_data['customer_id']
+        }
+
+        await self.db.execute_query(query, params)
+        return f"{mfa_data['user_id']}_{mfa_data['mfa_type']}"
+
+    async def get_mfa_setups(self, customer_id: str, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get MFA setups for customer/user"""
+        where_conditions = ["customer_id = %(customer_id)s"]
+        params = {'customer_id': customer_id}
+
+        if user_id:
+            where_conditions.append("user_id = %(user_id)s")
+            params['user_id'] = user_id
+
+        where_clause = " AND ".join(where_conditions)
+
+        query = f"""
+        SELECT user_id, mfa_type, config, backup_codes, is_verified, created_at, verified_at
+        FROM mfa_setups_mt
+        WHERE {where_clause}
+        ORDER BY created_at DESC
+        """
+
+        results = await self.db.fetch_all(query, params)
+
+        # Parse JSON fields
+        mfa_setups = []
+        for result in results:
+            mfa_setup = dict(result)
+            mfa_setup['config'] = json.loads(mfa_setup['config'])
+            mfa_setups.append(mfa_setup)
+
+        return mfa_setups
+
+    async def update_mfa_verification(self, user_id: str, mfa_type: str, customer_id: str) -> bool:
+        """Update MFA setup verification status"""
+        query = """
+        ALTER TABLE mfa_setups_mt
+        UPDATE is_verified = 1, verified_at = now64(3)
+        WHERE customer_id = %(customer_id)s AND user_id = %(user_id)s AND mfa_type = %(mfa_type)s
+        """
+
+        params = {'customer_id': customer_id, 'user_id': user_id, 'mfa_type': mfa_type}
+        await self.db.execute_query(query, params)
+        return True
+
+    # ==========================================
     # TENANT OPERATIONS
     # ==========================================
 
     async def create_tenant(self, tenant_data: Dict[str, Any]) -> str:
         """Create new tenant"""
-        query = """
+        # Convert feature_flags to proper ClickHouse Map format
+        feature_flags = tenant_data.get('feature_flags', {})
+        # Convert to ClickHouse map() function format: map('key1', 'value1', 'key2', 'value2', ...)
+        map_args = []
+        for k, v in feature_flags.items():
+            map_args.extend([str(k), str(v)])
+        
+        # Build the map function call
+        if map_args:
+            feature_flags_expr = f"map({', '.join(repr(arg) for arg in map_args)})"
+        else:
+            feature_flags_expr = "map()"
+
+        # Use raw SQL for the map expression
+        query = f"""
         INSERT INTO tenants_mt (
-            id, name, tier, status, created_at, updated_at,
-            settings, quota_limits, contact_info, customer_id
+            id, organization_name, domain, subscription_tier, status, 
+            billing_email, admin_contact, region, compliance_requirements, 
+            feature_flags, customer_id
         ) VALUES (
-            %(id)s, %(name)s, %(tier)s, %(status)s, %(created_at)s, %(updated_at)s,
-            %(settings)s, %(quota_limits)s, %(contact_info)s, %(customer_id)s
+            %(id)s, %(organization_name)s, %(domain)s, %(subscription_tier)s, %(status)s,
+            %(billing_email)s, %(admin_contact)s, %(region)s, %(compliance_requirements)s,
+            {feature_flags_expr}, %(customer_id)s
         )
         """
 
         params = {
             'id': tenant_data['id'],
-            'name': tenant_data['name'],
-            'tier': tenant_data.get('tier', 'professional'),
+            'organization_name': tenant_data['name'],
+            'domain': tenant_data.get('domain', f"{tenant_data['name'].lower().replace(' ', '-')}.com"),
+            'subscription_tier': tenant_data.get('tier', 'professional'),
             'status': tenant_data.get('status', 'active'),
-            'created_at': tenant_data['created_at'],
-            'updated_at': tenant_data['updated_at'],
-            'settings': json.dumps(tenant_data.get('settings', {})),
-            'quota_limits': json.dumps(tenant_data.get('quota_limits', {})),
-            'contact_info': json.dumps(tenant_data.get('contact_info', {})),
+            'billing_email': tenant_data.get('billing_email', ''),
+            'admin_contact': tenant_data.get('admin_contact', ''),
+            'region': tenant_data.get('region', 'us-east-1'),
+            'compliance_requirements': tenant_data.get('compliance_requirements', []),
             'customer_id': tenant_data['customer_id']
         }
 
@@ -295,8 +378,8 @@ class EnterpriseDAO:
         where_clause = " AND ".join(where_conditions)
 
         query = f"""
-        SELECT id, name, tier, status, created_at, updated_at,
-               settings, quota_limits, contact_info
+        SELECT id, organization_name, domain, subscription_tier, status, created_at, updated_at,
+               billing_email, admin_contact, region, compliance_requirements, feature_flags
         FROM tenants_mt
         WHERE {where_clause}
         ORDER BY created_at DESC
@@ -304,13 +387,30 @@ class EnterpriseDAO:
 
         results = await self.db.fetch_all(query, params)
 
-        # Parse JSON fields
+        # Return tenants with proper field mapping
         tenants = []
         for result in results:
             tenant = dict(result)
-            tenant['settings'] = json.loads(tenant['settings'])
-            tenant['quota_limits'] = json.loads(tenant['quota_limits'])
-            tenant['contact_info'] = json.loads(tenant['contact_info'])
+            # Map database fields to API response fields
+            tenant['name'] = tenant['organization_name']
+            tenant['tier'] = tenant['subscription_tier']
+            tenant['contact_info'] = {
+                'billing_email': tenant['billing_email'],
+                'admin_contact': tenant['admin_contact']
+            }
+            tenant['settings'] = {
+                'region': tenant['region'],
+                'compliance_requirements': tenant['compliance_requirements'],
+                'feature_flags': tenant['feature_flags']
+            }
+            # Remove database-specific fields from response
+            del tenant['organization_name']
+            del tenant['subscription_tier']
+            del tenant['billing_email']
+            del tenant['admin_contact']
+            del tenant['region']
+            del tenant['compliance_requirements']
+            del tenant['feature_flags']
             tenants.append(tenant)
 
         return tenants
@@ -318,8 +418,8 @@ class EnterpriseDAO:
     async def get_tenant_by_id(self, tenant_id: str, customer_id: str) -> Optional[Dict[str, Any]]:
         """Get tenant by ID"""
         query = """
-        SELECT id, name, tier, status, created_at, updated_at,
-               settings, quota_limits, contact_info
+        SELECT id, organization_name, domain, subscription_tier, status, created_at, updated_at,
+               billing_email, admin_contact, region, compliance_requirements, feature_flags
         FROM tenants_mt
         WHERE customer_id = %(customer_id)s AND id = %(tenant_id)s
         """
@@ -329,9 +429,26 @@ class EnterpriseDAO:
 
         if result:
             tenant = dict(result)
-            tenant['settings'] = json.loads(tenant['settings'])
-            tenant['quota_limits'] = json.loads(tenant['quota_limits'])
-            tenant['contact_info'] = json.loads(tenant['contact_info'])
+            # Map database fields to API response fields
+            tenant['name'] = tenant['organization_name']
+            tenant['tier'] = tenant['subscription_tier']
+            tenant['contact_info'] = {
+                'billing_email': tenant['billing_email'],
+                'admin_contact': tenant['admin_contact']
+            }
+            tenant['settings'] = {
+                'region': tenant['region'],
+                'compliance_requirements': tenant['compliance_requirements'],
+                'feature_flags': tenant['feature_flags']
+            }
+            # Remove database-specific fields from response
+            del tenant['organization_name']
+            del tenant['subscription_tier']
+            del tenant['billing_email']
+            del tenant['admin_contact']
+            del tenant['region']
+            del tenant['compliance_requirements']
+            del tenant['feature_flags']
             return tenant
 
         return None
@@ -342,13 +459,37 @@ class EnterpriseDAO:
         set_clauses = []
         params = {'customer_id': customer_id, 'tenant_id': tenant_id}
 
+        # Map API fields to database fields
+        field_mapping = {
+            'name': 'organization_name',
+            'tier': 'subscription_tier',
+            'status': 'status',
+            'domain': 'domain',
+            'billing_email': 'billing_email',
+            'admin_contact': 'admin_contact',
+            'region': 'region',
+            'compliance_requirements': 'compliance_requirements',
+            'feature_flags': 'feature_flags'
+        }
+
         for key, value in updates.items():
-            if key in ['name', 'tier', 'status']:
-                set_clauses.append(f"{key} = %({key})s")
+            # Handle nested settings/contact_info updates
+            if key == 'settings':
+                for setting_key, setting_value in value.items():
+                    if setting_key in field_mapping:
+                        db_field = field_mapping[setting_key]
+                        set_clauses.append(f"{db_field} = %({setting_key})s")
+                        params[setting_key] = setting_value
+            elif key == 'contact_info':
+                for contact_key, contact_value in value.items():
+                    if contact_key in field_mapping:
+                        db_field = field_mapping[contact_key]
+                        set_clauses.append(f"{db_field} = %({contact_key})s")
+                        params[contact_key] = contact_value
+            elif key in field_mapping:
+                db_field = field_mapping[key]
+                set_clauses.append(f"{db_field} = %({key})s")
                 params[key] = value
-            elif key in ['settings', 'quota_limits', 'contact_info']:
-                set_clauses.append(f"{key} = %({key})s")
-                params[key] = json.dumps(value)
 
         if not set_clauses:
             return False
@@ -581,11 +722,11 @@ class EnterpriseDAO:
             params['action_types'] = filters['action_types']
 
         if filters.get('start_time'):
-            where_conditions.append("timestamp >= %(start_time)s")
+            where_conditions.append("timestamp >= parseDateTime64BestEffort(%(start_time)s)")
             params['start_time'] = filters['start_time']
 
         if filters.get('end_time'):
-            where_conditions.append("timestamp <= %(end_time)s")
+            where_conditions.append("timestamp <= parseDateTime64BestEffort(%(end_time)s)")
             params['end_time'] = filters['end_time']
 
         where_clause = " AND ".join(where_conditions)
