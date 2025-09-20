@@ -15,8 +15,12 @@ logger = structlog.get_logger(__name__)
 class UsageService:
     """Business Logic Layer for Usage Analytics and Billing"""
     
-    def __init__(self):
-        self.usage_dao = UsageDAO()
+    def __init__(self, service_name=None, service_key=None):
+        # Allow service-to-service calls with specific credentials
+        if service_name and service_key:
+            self.usage_dao = UsageDAO(service_name=service_name, service_key=service_key)
+        else:
+            self.usage_dao = UsageDAO()
         self._usage_buffer = []
         self._buffer_size = 100
     
@@ -107,14 +111,22 @@ class UsageService:
     async def get_tenant_usage_summary(self, tenant_id: str) -> Dict[str, Any]:
         """Get comprehensive usage summary for tenant"""
         try:
+            logger.info("🔍 STEP 4: Starting get_tenant_usage_summary in UsageService", tenant_id=tenant_id)
+            
             # Get current month usage
+            logger.info("🔍 STEP 5: Calling usage_dao.get_tenant_usage_current_month", tenant_id=tenant_id)
             current_usage = await self.usage_dao.get_tenant_usage_current_month(tenant_id)
+            logger.info("🔍 STEP 5 SUCCESS: Current usage retrieved", tenant_id=tenant_id, current_usage=current_usage)
             
             # Get real-time metrics
+            logger.info("🔍 STEP 6: Calling usage_dao.get_realtime_usage", tenant_id=tenant_id)
             realtime_usage = await self.usage_dao.get_realtime_usage(tenant_id, 60)  # Last hour
+            logger.info("🔍 STEP 6 SUCCESS: Realtime usage retrieved", tenant_id=tenant_id, realtime_usage=realtime_usage)
             
             # Calculate cost estimate
+            logger.info("🔍 STEP 7: Calling usage_dao.calculate_tenant_cost", tenant_id=tenant_id)
             cost_data = await self.usage_dao.calculate_tenant_cost(tenant_id)
+            logger.info("🔍 STEP 7 SUCCESS: Cost data calculated", tenant_id=tenant_id, cost_data=cost_data)
             
             return {
                 "tenant_id": tenant_id,

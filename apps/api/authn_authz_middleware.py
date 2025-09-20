@@ -63,11 +63,11 @@ class UsageBuffer:
                     json_test_data[key] = value.isoformat()
                 else:
                     json_test_data[key] = value
-            
+
             json.dumps(json_test_data)  # This will raise error if values are JSON-unsafe
             logger.debug("DEBUG: Usage data JSON validation passed")
         except (TypeError, ValueError) as e:
-            logger.error("DEBUG: JSON validation failed in add_usage", 
+            logger.error("DEBUG: JSON validation failed in add_usage",
                         error=str(e))
             # Try to sanitize the data (keep original datetime objects for database)
             for key, value in usage_data.items():
@@ -92,7 +92,7 @@ class UsageBuffer:
             await self._insert_usage_batch(self.buffer.copy())
             self.buffer.clear()
             self._last_flush = time.time()
-            logger.info(f"Usage batch flushed", count=len(self.buffer))
+            logger.debug(f"Usage batch flushed", count=len(self.buffer))
         except Exception as e:
             logger.error(f"Usage tracking batch failed", error=str(e))
             # Keep buffer for retry on next flush
@@ -106,7 +106,7 @@ class UsageBuffer:
 
             # Use batch insert for usage tracking
             result = await db.batch_insert_usage(usage_records)
-            logger.info("Usage batch inserted to database", records=result)
+            logger.debug("Usage batch inserted to database", records=result)
 
         except Exception as e:
             logger.error("Failed to insert usage batch to database", error=str(e), records=len(usage_records))
@@ -352,7 +352,7 @@ ROLE_PERMISSIONS = {
         "security:*:tenant", "users:*:tenant", "settings:*:tenant",
         "storage:*:tenant", "queries:*:tenant", "ai:*:tenant", "enterprise:*:tenant",
         "observability:*:tenant", "roles:*:tenant", "usage:*:tenant", "billing:read:tenant",
-        "costs:*:tenant", "analytics:read:tenant"
+        "costs:*:tenant", "analytics:read:tenant", "tenants:read,write:tenant"
     ],
     UserRole.SECURITY_ANALYST: [
         "security:*:tenant", "logs:read,search:tenant",
@@ -441,6 +441,15 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in ["POST", "PUT", "DELETE"]:
             return "observability:write:tenant"
         return "observability:read:tenant"
+    elif path == "/v1/tenants" or (path.startswith("/v1/tenants") and path.count("/") == 2):
+        # /v1/tenants (list all) requires platform admin
+        # /v1/tenants (create) requires platform admin
+        return "platform:admin:platform"
+    elif path.startswith("/v1/tenants/") and path.count("/") >= 3:
+        # /v1/tenants/{tenant_id}/* allows both platform admin and tenant admin
+        if method in ["POST", "PUT", "DELETE"]:
+            return "tenants:write:tenant"
+        return "tenants:read:tenant"
     elif path.startswith("/v1/roles") or path.startswith("/v1/permissions"):
         if method in ["POST", "PUT", "DELETE"]:
             return "roles:write:tenant"
@@ -528,7 +537,7 @@ class SetupTokenManager:
             "created_at": datetime.utcnow()
         }
 
-        logger.info("Setup token generated", expires_at=expires_at)
+        logger.debug("Setup token generated", expires_at=expires_at)
 
         return {
             "setup_token": token,
@@ -549,7 +558,7 @@ class SetupTokenManager:
 
         # Mark token as used
         token_data["used"] = True
-        logger.info("Setup token consumed", token=token[:8] + "...")
+        logger.debug("Setup token consumed", token=token[:8] + "...")
 
         return True
 
@@ -645,12 +654,12 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
         # Admin endpoints (bypass feature validation)
         self.admin_endpoints = [
-            "/v1/admin/",
-            "/v1/test-runner/"
+            "/v1/admin/"
         ]
 
     async def dispatch(self, request: Request, call_next):
         """Process authentication, authorization, and feature access"""
+        print(f"🚀 MIDDLEWARE DISPATCH CALLED: {request.method} {request.url.path}")  # Debug print
         start_time = time.time()
 
         # Allow CORS preflight requests to pass through without authentication
@@ -667,19 +676,26 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         try:
             # Step 1: Authentication - Extract and validate JWT token
             auth_context = await self._extract_authentication(request)
+            logger.debug("🔍 AUTH STEP 1 SUCCESS: Authentication extracted", path=str(request.url.path))
 
             user = await self._validate_user_session(auth_context)
+            logger.debug("🔍 AUTH STEP 1 SUCCESS: User session validated", user_id=user.id, path=str(request.url.path))
 
             # Step 2: Tenant Context - Extract tenant ID
             tenant_id = request.headers.get("X-Customer-ID")
+            logger.debug("🔍 AUTH STEP 2: Extracted tenant context", tenant_id=tenant_id, path=str(request.url.path))
             if not tenant_id and not request.url.path.startswith("/v1/auth/"):
+                logger.error("🔍 AUTH STEP 2 FAILED: Missing X-Customer-ID header", path=str(request.url.path))
                 raise HTTPException(400, "X-Customer-ID header required")
 
             # Step 3: Authorization - Verify user has access to tenant
             user_roles = []
             if tenant_id:
+                logger.debug("🔍 AUTH STEP 3: Getting user tenant roles", user_id=user.id, tenant_id=tenant_id, path=str(request.url.path))
                 user_roles = await self.user_service.get_user_tenant_roles(user.id, tenant_id)
+                logger.debug("🔍 AUTH STEP 3 RESULT: User tenant roles retrieved", user_id=user.id, tenant_id=tenant_id, user_roles=user_roles, path=str(request.url.path))
                 if not user_roles:
+                    logger.error("🔍 AUTH STEP 3 FAILED: No access to tenant", user_id=user.id, tenant_id=tenant_id, path=str(request.url.path))
                     raise HTTPException(403, f"No access to tenant: {tenant_id}")
 
             # Step 4: Permission Check - Verify endpoint permissions
@@ -721,12 +737,20 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             return response
 
         except HTTPException as e:
+            logger.error("🔍 AUTH HTTP EXCEPTION", status_code=e.status_code, detail=e.detail, path=str(request.url.path))
             return JSONResponse(
                 status_code=e.status_code,
                 content={"error": e.detail}
             )
         except Exception as e:
-            logger.error("Authentication/Authorization middleware error", error=str(e))
+            logger.error("🔍 AUTH SYSTEM ERROR: Unhandled exception in middleware",
+                        error=str(e),
+                        error_type=type(e).__name__,
+                        path=str(request.url.path),
+                        method=request.method,
+                        exc_info=True)
+            import traceback
+            logger.error("🔍 AUTH SYSTEM ERROR: Full traceback", traceback=traceback.format_exc())
             return JSONResponse(
                 status_code=500,
                 content={"error": "Authentication system error"}
@@ -812,7 +836,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 "user_id": user.id,
                 "endpoint": request.url.path,
                 "method": request.method,
-                "status_code": getattr(response, "status_code", 200),
+                "response_status": getattr(response, "status_code", 200),
                 "processing_time_ms": processing_time,
                 "response_size_bytes": response_size,
                 "ip_address": request.client.host if request.client else "unknown",
@@ -826,8 +850,8 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             await usage_buffer.add_usage(usage_data)
 
         except Exception as e:
-            logger.error("Usage tracking failed", error=str(e), 
-                        tenant_id=tenant_id, 
+            logger.error("Usage tracking failed", error=str(e),
+                        tenant_id=tenant_id,
                         endpoint=request.url.path)
 
 # =================================================================
@@ -887,5 +911,7 @@ setup_token_manager = get_setup_token_manager()
 
 def setup_unified_auth_middleware(app):
     """Setup unified authentication and authorization middleware"""
+    print("🔧 REGISTERING UnifiedAuthMiddleware...")  # Debug print
     app.add_middleware(UnifiedAuthMiddleware)
-    logger.info("Unified Authentication & Authorization middleware configured")
+    logger.debug("Unified Authentication & Authorization middleware configured")
+    print("✅ UnifiedAuthMiddleware REGISTERED!")  # Debug print

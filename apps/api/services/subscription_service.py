@@ -250,36 +250,23 @@ class SubscriptionService:
 
     async def get_tenant_subscription(self, tenant_id: str) -> Optional[TenantSubscription]:
         """Get tenant subscription details"""
-        try:
-            db_subscription = await self.subscription_dao.get_subscription_by_tenant(tenant_id)
+        db_subscription = await self.subscription_dao.get_subscription_by_tenant(tenant_id)
 
-            if not db_subscription:
-                # Return default subscription for testing/fallback
-                return TenantSubscription(
-                    tenant_id=tenant_id,
-                    subscribed_features=["*"],  # Default: all features
-                    subscription_tier=SubscriptionTier.ENTERPRISE,
-                    billing_cycle=BillingCycle.MONTHLY,
-                    status=SubscriptionStatus.ACTIVE,
-                    started_at=datetime.now(timezone.utc)
-                )
-
-            return TenantSubscription(
-                tenant_id=db_subscription["tenant_id"],
-                subscribed_features=db_subscription["subscribed_features"],
-                subscription_tier=SubscriptionTier(db_subscription["subscription_tier"]),
-                billing_cycle=BillingCycle(db_subscription["billing_cycle"]),
-                status=SubscriptionStatus(db_subscription["status"]),
-                started_at=db_subscription["started_at"],
-                expires_at=db_subscription.get("expires_at"),
-                auto_renew=db_subscription.get("auto_renew", True),
-                monthly_spend_limit=db_subscription.get("monthly_spend_limit"),
-                overage_allowed=db_subscription.get("overage_allowed", False)
-            )
-
-        except Exception as e:
-            logger.error("Failed to get tenant subscription", error=str(e), tenant_id=tenant_id)
+        if not db_subscription:
             return None
+
+        return TenantSubscription(
+            tenant_id=db_subscription["tenant_id"],
+            subscribed_features=db_subscription["subscribed_features"],
+            subscription_tier=SubscriptionTier(db_subscription["subscription_tier"]),
+            billing_cycle=BillingCycle(db_subscription["billing_cycle"]),
+            status=SubscriptionStatus(db_subscription["status"]),
+            started_at=db_subscription["started_at"],
+            expires_at=db_subscription.get("expires_at"),
+            auto_renew=db_subscription.get("auto_renew", True),
+            monthly_spend_limit=db_subscription.get("monthly_spend_limit"),
+            overage_allowed=db_subscription.get("overage_allowed", False)
+        )
 
     async def create_subscription(self, tenant_id: str, subscription_request: TenantSubscriptionRequest) -> TenantSubscription:
         """Create or update tenant subscription"""
@@ -409,33 +396,28 @@ class SubscriptionService:
         if period == "current":
             period = self._get_current_billing_period()
 
-        try:
-            db_usage = await self.subscription_dao.get_tenant_usage(tenant_id, period)
+        db_usage = await self.subscription_dao.get_tenant_usage(tenant_id, period)
 
-            feature_usage = []
-            total_cost = 0.0
+        feature_usage = []
+        total_cost = 0.0
 
-            for row in db_usage:
-                usage_item = {
-                    "feature_name": row["feature_name"],
-                    "quantity": row["total_quantity"],
-                    "cost": float(row["total_cost"]),
-                    "usage_events": row["usage_events"]
-                }
-                feature_usage.append(usage_item)
-                total_cost += usage_item["cost"]
-
-            return {
-                "tenant_id": tenant_id,
-                "billing_period": period,
-                "feature_usage": feature_usage,
-                "total_cost": total_cost,
-                "currency": "USD"
+        for row in db_usage:
+            usage_item = {
+                "feature_name": row["feature_name"],
+                "quantity": row["total_quantity"],
+                "cost": float(row["total_cost"]),
+                "usage_events": row["usage_events"]
             }
+            feature_usage.append(usage_item)
+            total_cost += usage_item["cost"]
 
-        except Exception as e:
-            logger.error("Failed to get tenant usage", error=str(e), tenant_id=tenant_id)
-            return {"error": str(e)}
+        return {
+            "tenant_id": tenant_id,
+            "billing_period": period,
+            "feature_usage": feature_usage,
+            "total_cost": total_cost,
+            "currency": "USD"
+        }
 
     def _get_current_billing_period(self) -> str:
         """Get current billing period (YYYY-MM format)"""
@@ -452,3 +434,39 @@ class SubscriptionService:
         # Get current usage
         usage = await self.get_tenant_usage(tenant_id, "current")
         logger.info("Final bill generated", tenant_id=tenant_id, total_cost=usage.get('total_cost', 0))
+    
+    async def get_billing_history(self, tenant_id: str, limit: int = 12) -> List[Dict[str, Any]]:
+        """Get tenant billing history"""
+        return await self.subscription_dao.get_billing_history(tenant_id, limit)
+    
+    async def get_all_feature_rates(self) -> List[Dict[str, Any]]:
+        """Get all feature rates"""
+        return await self.subscription_dao.get_all_feature_rates()
+    
+    async def get_rate_history(self, feature_name: str) -> List[Dict[str, Any]]:
+        """Get feature rate history"""
+        return await self.subscription_dao.get_rate_history(feature_name)
+    
+    async def get_deletion_status(self, tenant_id: str) -> Dict[str, Any]:
+        """Get tenant deletion status"""
+        return await self.subscription_dao.get_deletion_status(tenant_id)
+    
+    async def admin_list_tenants_with_billing(self, include_deleted: bool = False, page: int = 1, page_size: int = 50) -> Dict[str, Any]:
+        """Admin list all tenants with billing info"""
+        return await self.subscription_dao.admin_list_tenants_with_billing(include_deleted, page, page_size)
+    
+    async def get_subscription_audit_trail(self, tenant_id: Optional[str] = None, start_date: Optional[str] = None, end_date: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get subscription change audit trail"""
+        return await self.subscription_dao.get_subscription_audit_trail(tenant_id, start_date, end_date)
+    
+    async def generate_compliance_report(self, report_request: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate compliance report"""
+        return await self.subscription_dao.generate_compliance_report(report_request)
+    
+    async def get_retention_compliance_status(self, tenant_id: Optional[str] = None) -> Dict[str, Any]:
+        """Get data retention compliance status"""
+        return await self.subscription_dao.get_retention_compliance_status(tenant_id)
+    
+    async def admin_billing_override(self, tenant_id: str, override_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Admin override billing amount"""
+        return await self.subscription_dao.admin_billing_override(tenant_id, override_data)

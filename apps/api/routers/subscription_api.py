@@ -17,7 +17,7 @@ from models import (
 from subscription_service import subscription_service
 from tenant_dependencies import RequiredTenant
 
-router = APIRouter()
+router = APIRouter(prefix="/v1", tags=["subscription"])
 
 # =====================================
 # Tenant Subscription Management
@@ -39,7 +39,19 @@ async def get_tenant_subscription(
             )
         
         # Get current usage
-        usage = await subscription_service.get_tenant_usage(tenant_id)
+        try:
+            usage = await subscription_service.get_tenant_usage(tenant_id)
+        except Exception:
+            # If usage retrieval fails, use empty usage data
+            usage = {"feature_usage": [], "total_cost": 0.0}
+        
+        # Convert feature_usage list to current_usage dict format expected by the model
+        feature_usage = usage.get("feature_usage", [])
+        current_usage = {}
+        for feature in feature_usage:
+            feature_name = feature.get("feature_name", "unknown")
+            quantity = feature.get("quantity", 0)
+            current_usage[feature_name] = int(quantity)
         
         return TenantSubscriptionResponse(
             tenant_id=subscription.tenant_id,
@@ -51,8 +63,11 @@ async def get_tenant_subscription(
             expires_at=subscription.expires_at,
             auto_renew=subscription.auto_renew,
             monthly_spend_limit=subscription.monthly_spend_limit,
-            current_usage=usage.get("feature_usage", {})
+            current_usage=current_usage
         )
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404) as-is
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get subscription: {str(e)}")
 
@@ -226,23 +241,13 @@ async def get_billing_history(
     _: str = RequiredTenant
 ):
     """Get tenant billing history"""
-    try:
-        # Mock billing history for now
-        return {
-            "tenant_id": tenant_id,
-            "bills": [
-                {
-                    "bill_id": str(uuid.uuid4()),
-                    "billing_period": "2025-08",
-                    "total_amount": 45.67,
-                    "status": "paid",
-                    "generated_at": "2025-09-01T00:00:00Z"
-                }
-            ],
-            "total_bills": 1
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get billing history: {str(e)}")
+    billing_history = await subscription_service.get_billing_history(tenant_id, limit)
+    
+    return {
+        "tenant_id": tenant_id,
+        "bills": billing_history,
+        "total_bills": len(billing_history)
+    }
 
 # =====================================
 # Admin Rate Configuration
@@ -253,42 +258,13 @@ async def list_feature_rates(
     request: Request
 ):
     """List all feature rates (admin only)"""
-    try:
-        # Mock rates for now - would query from database
-        rates = [
-            {
-                "feature_name": "ingestion.basic",
-                "pricing_model": "per_unit",
-                "base_rate": 0.001,
-                "tier_rates": {"starter": 0.002, "professional": 0.0015, "enterprise": 0.001},
-                "currency": "USD",
-                "description": "Cost per log ingested"
-            },
-            {
-                "feature_name": "alerts.basic",
-                "pricing_model": "fixed_monthly",
-                "base_rate": 19.99,
-                "tier_rates": {"starter": 9.99, "professional": 19.99, "enterprise": 49.99},
-                "currency": "USD",
-                "description": "Monthly alert subscription"
-            },
-            {
-                "feature_name": "security.events",
-                "pricing_model": "per_unit", 
-                "base_rate": 0.05,
-                "tier_rates": {"enterprise": 0.03},
-                "currency": "USD",
-                "description": "Cost per security event processed"
-            }
-        ]
-        
-        return {
-            "rates": rates,
-            "total_count": len(rates),
-            "currency": "USD"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to list rates: {str(e)}")
+    rates = await subscription_service.get_all_feature_rates()
+    
+    return {
+        "rates": rates,
+        "total_count": len(rates),
+        "currency": "USD"
+    }
 
 @router.post("/admin/rates", status_code=201)
 async def create_feature_rate(
@@ -354,27 +330,17 @@ async def get_rate_history(
     request: Request
 ):
     """Get feature rate history (admin only)"""
-    try:
-        # Mock rate history for now
-        return {
-            "feature_name": feature_name,
-            "rate_history": [
-                {
-                    "effective_date": "2025-09-01T00:00:00Z",
-                    "base_rate": 0.001,
-                    "changed_by": "admin",
-                    "reason": "Initial rate setting"
-                }
-            ]
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get rate history: {str(e)}")
+    rate_history = await subscription_service.get_rate_history(feature_name)
+    return {
+        "feature_name": feature_name,
+        "rate_history": rate_history
+    }
 
 # =====================================
 # Tenant Deletion
 # =====================================
 
-@router.delete("/tenants/{tenant_id}")
+@router.delete("/tenants/{tenant_id}/subscription")
 async def delete_tenant(
     tenant_id: str,
     deletion_request: TenantDeletionRequest,
@@ -386,13 +352,15 @@ async def delete_tenant(
         # Get admin user from request (would implement proper auth)
         deleted_by = request.headers.get("X-Admin-User", "admin")
         
+        print(f"DEBUG: About to call delete_tenant for {tenant_id}")
         deletion_record = await subscription_service.delete_tenant(
             tenant_id, 
             deletion_request, 
             deleted_by
         )
+        print(f"DEBUG: Got deletion_record: {deletion_record}")
         
-        return {
+        response = {
             "tenant_id": tenant_id,
             "deletion_type": deletion_record.deletion_type.value,
             "deleted_at": deletion_record.deleted_at.isoformat(),
@@ -400,7 +368,12 @@ async def delete_tenant(
             "final_bill_generated": deletion_record.final_bill_generated,
             "message": f"Tenant {deletion_record.deletion_type.value.replace('_', ' ')} completed successfully"
         }
+        print(f"DEBUG: Returning response: {response}")
+        return response
     except Exception as e:
+        print(f"DEBUG: Exception in delete_tenant: {str(e)}")
+        import traceback
+        print(f"DEBUG: Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Failed to delete tenant: {str(e)}")
 
 @router.get("/tenants/{tenant_id}/deletion/status")
@@ -409,16 +382,8 @@ async def get_deletion_status(
     request: Request
 ):
     """Get tenant deletion status"""
-    try:
-        # Mock deletion status for now
-        return {
-            "tenant_id": tenant_id,
-            "deletion_status": "not_deleted",
-            "deletion_record": None,
-            "message": "Tenant is active"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get deletion status: {str(e)}")
+    deletion_status = await subscription_service.get_deletion_status(tenant_id)
+    return deletion_status
 
 # =====================================
 # Admin Tenant Management
@@ -432,24 +397,8 @@ async def admin_list_tenants(
     page_size: int = 50
 ):
     """Admin list all tenants with billing info"""
-    try:
-        # Mock tenant list for now
-        return {
-            "tenants": [
-                {
-                    "tenant_id": tid["tenant_id"],
-                    "subscription_tier": tid["tier"],
-                    "current_spend": 45.67,
-                    "status": "active"
-                }
-                for tid in subscription_service.feature_bundles.keys()
-            ],
-            "total_count": len(subscription_service.feature_bundles),
-            "page": page,
-            "page_size": page_size
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to list tenants: {str(e)}")
+    tenant_list = await subscription_service.admin_list_tenants_with_billing(include_deleted, page, page_size)
+    return tenant_list
 
 @router.get("/admin/tenants/{tenant_id}/details")
 async def admin_get_tenant_details(
@@ -514,21 +463,8 @@ async def admin_billing_override(
     request: Request
 ):
     """Admin override billing amount"""
-    try:
-        override_id = str(uuid.uuid4())
-        
-        return {
-            "override_id": override_id,
-            "tenant_id": tenant_id,
-            "billing_period": override_data["billing_period"],
-            "original_amount": 45.67,  # Would calculate from usage
-            "override_amount": override_data["override_amount"],
-            "reason": override_data["reason"],
-            "approved_by": override_data.get("approved_by", "admin"),
-            "applied_at": datetime.now().isoformat()
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to override billing: {str(e)}")
+    override_result = await subscription_service.admin_billing_override(tenant_id, override_data)
+    return override_result
 
 # =====================================
 # Compliance & Audit
@@ -542,26 +478,11 @@ async def get_subscription_audit_trail(
     request: Request = None
 ):
     """Get subscription change audit trail"""
-    try:
-        # Mock audit trail for now
-        return {
-            "audit_events": [
-                {
-                    "event_id": str(uuid.uuid4()),
-                    "tenant_id": tenant_id or "example-tenant",
-                    "event_type": "subscription_created",
-                    "details": {
-                        "tier": "professional",
-                        "features": ["ingestion.*", "queries.*"]
-                    },
-                    "timestamp": datetime.now().isoformat(),
-                    "admin_user": "admin"
-                }
-            ],
-            "total_events": 1
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get audit trail: {str(e)}")
+    audit_events = await subscription_service.get_subscription_audit_trail(tenant_id, start_date, end_date)
+    return {
+        "audit_events": audit_events,
+        "total_events": len(audit_events)
+    }
 
 @router.post("/admin/compliance/reports")
 async def generate_compliance_report(
@@ -569,21 +490,8 @@ async def generate_compliance_report(
     request: Request
 ):
     """Generate compliance report"""
-    try:
-        report_id = str(uuid.uuid4())
-        
-        return {
-            "report_id": report_id,
-            "report_type": report_request["report_type"],
-            "tenant_id": report_request.get("tenant_id"),
-            "period": report_request.get("period"),
-            "compliance_status": "compliant",
-            "generated_at": datetime.now().isoformat(),
-            "findings": [],
-            "recommendations": []
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate compliance report: {str(e)}")
+    compliance_report = await subscription_service.generate_compliance_report(report_request)
+    return compliance_report
 
 @router.get("/admin/compliance/retention-status")
 async def get_retention_compliance_status(
@@ -591,17 +499,8 @@ async def get_retention_compliance_status(
     request: Request = None
 ):
     """Get data retention compliance status"""
-    try:
-        return {
-            "tenant_id": tenant_id,
-            "retention_compliant": True,
-            "usage_records_retained": True,
-            "log_data_cleanup_status": "completed",
-            "compliance_frameworks": ["SOX", "GDPR"],
-            "last_audit": datetime.now().isoformat()
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get retention status: {str(e)}")
+    retention_status = await subscription_service.get_retention_compliance_status(tenant_id)
+    return retention_status
 
 # =====================================
 # Feature Access Utilities

@@ -263,12 +263,13 @@ CREATE TABLE IF NOT EXISTS tenants_mt (
     id String,
     organization_name String,
     domain String,
-    subscription_tier Enum8('starter' = 1, 'professional' = 2, 'enterprise' = 3),
+    subscription_tier Enum8('enterprise' = 1, 'smb' = 2, 'startup' = 3, 'non_profit' = 4, 'government' = 5, 'education' = 6, 'healthcare' = 7, 'financial' = 8),
     status Enum8('active' = 1, 'inactive' = 2, 'suspended' = 3, 'pending' = 4),
     created_at DateTime64(3) DEFAULT now64(3),
     updated_at DateTime64(3) DEFAULT now64(3),
     billing_email String,
     admin_contact String,
+    industry String DEFAULT '',
     region String DEFAULT 'us-east-1',
     compliance_requirements Array(String) DEFAULT [],
     feature_flags Map(String, String) DEFAULT map(),
@@ -280,6 +281,7 @@ SETTINGS index_granularity = 8192;
 
 -- Tenant configuration settings
 CREATE TABLE IF NOT EXISTS tenant_configs_mt (
+    id String,
     tenant_id String,
     config_key String,
     config_value String,
@@ -295,8 +297,9 @@ SETTINGS index_granularity = 8192;
 
 -- Tenant quotas and limits
 CREATE TABLE IF NOT EXISTS tenant_quotas_mt (
+    id String,
     tenant_id String,
-    quota_type Enum8('daily_ingestion' = 1, 'monthly_ingestion' = 2, 'storage_gb' = 3, 'api_calls' = 4, 'users' = 5),
+    quota_type Enum8('daily_ingestion' = 1, 'monthly_ingestion' = 2, 'storage_gb' = 3, 'api_calls' = 4, 'users' = 5, 'alerts' = 6),
     quota_limit UInt64,
     current_usage UInt64 DEFAULT 0,
     reset_period Enum8('daily' = 1, 'monthly' = 2, 'never' = 3),
@@ -1065,7 +1068,7 @@ CREATE TABLE IF NOT EXISTS tenant_subscriptions_mt (
     id String,
     tenant_id String,
     subscribed_features Array(String),
-    subscription_tier Enum8('starter' = 1, 'professional' = 2, 'enterprise' = 3),
+    subscription_tier Enum8('enterprise' = 1, 'smb' = 2, 'startup' = 3, 'non_profit' = 4, 'government' = 5, 'education' = 6, 'healthcare' = 7, 'financial' = 8),
     billing_cycle Enum8('monthly' = 1, 'quarterly' = 2, 'yearly' = 3),
     status Enum8('active' = 1, 'inactive' = 2, 'cancelled' = 3, 'suspended' = 4),
     started_at DateTime64(3) DEFAULT now64(3),

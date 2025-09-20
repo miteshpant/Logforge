@@ -19,8 +19,12 @@ logger = structlog.get_logger(__name__)
 class UsageDAO:
     """Data Access Object for Usage Analytics and Billing"""
     
-    def __init__(self):
-        self.db = DatabaseLayer("UsageDAO", "usage-dao-service-key")
+    def __init__(self, service_name=None, service_key=None):
+        # Allow service-to-service calls with specific credentials
+        if service_name and service_key:
+            self.db = DatabaseLayer(service_name, service_key)
+        else:
+            self.db = DatabaseLayer("UsageDAO", "usage-dao-service-key")
     
     # Usage Records Operations
     
@@ -115,7 +119,9 @@ class UsageDAO:
     async def get_tenant_usage_current_month(self, tenant_id: str) -> Dict[str, Any]:
         """Get current month usage statistics for tenant"""
         try:
+            logger.info("🔍 STEP 8: Starting get_tenant_usage_current_month in UsageDAO", tenant_id=tenant_id)
             current_month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            logger.info("🔍 STEP 8: Current month start calculated", tenant_id=tenant_id, current_month_start=current_month_start)
             
             # Query for current month usage
             query = """
@@ -139,7 +145,9 @@ class UsageDAO:
                 "current_month_start": current_month_start
             }
             
+            logger.info("🔍 STEP 9: Executing database query", tenant_id=tenant_id, query=query[:100], params=params)
             results = await self.db.fetch_all(query, params)
+            logger.info("🔍 STEP 9 SUCCESS: Database query completed", tenant_id=tenant_id, result_count=len(results), results=results)
             
             # Process results into structured format
             feature_breakdown = {}

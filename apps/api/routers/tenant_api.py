@@ -28,7 +28,7 @@ async def create_tenant(request: TenantCreate) -> TenantResponse:
     """Create a new tenant with UUID generation"""
     try:
         tenant = await tenant_service.create_tenant(request)
-        
+
         return TenantResponse(
             tenant_id=tenant.tenant_id,
             name=tenant.name,
@@ -70,7 +70,11 @@ async def get_tenant(tenant_id: str) -> TenantResponse:
         tenant = await tenant_service.get_tenant(tenant_id)
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
-        
+
+        # Return 404 for decommissioned/inactive tenants (they exist but are not accessible)
+        if tenant.status == TenantStatus.INACTIVE:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+
         return TenantResponse(
             tenant_id=tenant.tenant_id,
             name=tenant.name,
@@ -95,7 +99,7 @@ async def update_tenant(tenant_id: str, request: TenantUpdate) -> TenantResponse
         tenant = await tenant_service.update_tenant(tenant_id, request)
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
-        
+
         return TenantResponse(
             tenant_id=tenant.tenant_id,
             name=tenant.name,
@@ -175,6 +179,7 @@ async def get_storage_status(tenant_id: str) -> StorageStatusResponse:
 @router.get("/{tenant_id}/usage")
 async def get_tenant_usage(tenant_id: str) -> TenantUsageResponse:
     """Get tenant usage statistics and billing data"""
+    print(f"DEBUG I am here for {tenant_id}")
     try:
         return await tenant_service.get_tenant_usage(tenant_id)
     except ValueError as e:
@@ -290,10 +295,11 @@ async def validate_tenant(tenant_id: str) -> Dict[str, Any]:
     """Validate tenant UUID and existence"""
     try:
         is_valid = await tenant_service.validate_tenant_uuid(tenant_id)
+        # For database-backed implementation, validate_tenant_uuid already checks existence
         return {
             "tenant_id": tenant_id,
             "valid": is_valid,
-            "exists": tenant_id in tenant_service.tenants,
+            "exists": is_valid,  # If valid, then it exists in database
             "validated_at": datetime.now().isoformat()
         }
     except Exception as e:

@@ -93,7 +93,7 @@ class BaseTestSuite:
                 }
                 role_id = await db.create_user_role(role_data)
                 self.test_cleanup_data.append(('role', role_id))
-                print(f"   ✅ Created role assignment: {role} (Role ID: {role_id})")
+                print(f"   ✅ Created role assignment: {role} for tenant: {tenant_id_for_role} (Role ID: {role_id})")
             
             return self.test_user_id, self.test_tenant_id
             
@@ -262,7 +262,16 @@ class BaseTestSuite:
             elif method.upper() == 'PUT':
                 return await client.put(url, **kwargs)
             elif method.upper() == 'DELETE':
-                return await client.delete(url, **kwargs)
+                # For DELETE requests with JSON data, use the generic request method
+                if 'json' in kwargs:
+                    import json as json_module
+                    content = json_module.dumps(kwargs.pop('json'))
+                    if 'headers' not in kwargs:
+                        kwargs['headers'] = {}
+                    kwargs['headers']['Content-Type'] = 'application/json'
+                    return await client.request('DELETE', url, content=content, **kwargs)
+                else:
+                    return await client.delete(url, **kwargs)
             else:
                 raise ValueError(f"Unsupported HTTP method: {method}")
     

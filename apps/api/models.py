@@ -343,6 +343,7 @@ class StorageBackendType(str, Enum):
     GCS = "gcs"
     AZURE = "azure"
     MINIO = "minio"
+    CLICKHOUSE = "clickhouse"
 
 class TenantCreate(BaseModel):
     """Tenant creation request"""
@@ -401,19 +402,24 @@ class StorageConfig(BaseModel):
 
 class TenantQuotas(BaseModel):
     """Tenant quota configuration"""
-    monthly_log_limit: Optional[int] = Field(None, description="Monthly log ingestion limit")
-    storage_limit_gb: Optional[int] = Field(None, description="Storage limit in GB")
-    retention_days: int = Field(30, description="Log retention period in days")
-    query_rate_limit: Optional[int] = Field(1000, description="Queries per minute limit")
+    max_data_ingestion_gb_per_day: Optional[int] = Field(None, description="Maximum data ingestion per day in GB")
+    max_queries_per_hour: Optional[int] = Field(1000, description="Maximum queries per hour")
+    max_storage_gb: Optional[int] = Field(None, description="Maximum storage in GB")
+    max_alerts: Optional[int] = Field(50, description="Maximum number of alerts")
+    max_users: Optional[int] = Field(25, description="Maximum number of users")
 
 class TenantConfig(BaseModel):
     """Tenant configuration settings"""
+    tenant_id: Optional[str] = Field(None, description="Tenant identifier")
     timezone: str = Field("UTC", description="Default timezone")
-    data_residency: str = Field("US", description="Data residency requirement")
-    compliance_frameworks: List[str] = Field(default_factory=list, description="Active compliance frameworks")
-    encryption_required: bool = Field(True, description="Require encryption")
-    retention_policy: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Data retention policy")
-    notification_preferences: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Notification settings")
+    log_retention_days: int = Field(90, description="Log retention period in days")
+    encryption_enabled: bool = Field(True, description="Whether encryption is enabled")
+    notification_settings: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Notification settings")
+    custom_branding: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Custom branding settings")
+    alert_settings: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Alert configuration")
+    integration_settings: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Integration settings")
+    security_settings: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Security settings")
+    ui_preferences: Optional[Dict[str, Any]] = Field(default_factory=dict, description="UI preferences")
 
 class LegalHoldRequest(BaseModel):
     """Legal hold creation request"""
@@ -466,11 +472,11 @@ class TenantResponse(BaseModel):
 
 class TenantListResponse(BaseModel):
     """Tenant list response"""
-    tenants: List[TenantResponse] = Field(description="List of tenants")
-    tenants: List[TenantResponse] = []
+    tenants: List[TenantResponse] = Field(default_factory=list, description="List of tenants")
     total_count: int = Field(0, description="Total tenant count")
     page: int = Field(1, description="Current page")
     page_size: int = Field(50, description="Page size")
+    total_pages: int = Field(1, description="Total number of pages")
 
 class TenantStatsResponse(BaseModel):
     """Tenant statistics response"""
@@ -485,18 +491,26 @@ class TenantStatsResponse(BaseModel):
 class TenantUsageResponse(BaseModel):
     """Tenant usage and billing response"""
     tenant_id: str
-    log_count_today: int = Field(0, description="Logs ingested today")
-    log_count_month: int = Field(0, description="Logs ingested this month")
-    storage_used_gb: float = Field(0.0, description="Storage used in GB")
-    query_count: int = Field(0, description="Queries executed")
-    api_calls: int = Field(0, description="API calls made")
-    billing_period: str = Field("", description="Current billing period")
+    current_period: str = Field("", description="Current billing period")
+    data_ingested_bytes: int = Field(0, description="Data ingested in bytes")
+    queries_executed: int = Field(0, description="Queries executed")
+    alerts_triggered: int = Field(0, description="Alerts triggered")
+    storage_used_bytes: int = Field(0, description="Storage used in bytes")
+    cost_breakdown: Dict[str, float] = Field(default_factory=dict, description="Cost breakdown by feature")
 
 class TenantHealthResponse(BaseModel):
     """Tenant health monitoring response"""
     tenant_id: str
-    status: str = Field("healthy", description="Overall health status")
+    overall_health: str = Field("healthy", description="Overall health status")
+    service_status: Dict[str, str] = Field(default_factory=dict, description="Individual service statuses")
+    storage_health: str = Field("healthy", description="Storage system health")
     ingestion_health: str = Field("healthy", description="Log ingestion health")
+    query_health: str = Field("healthy", description="Query engine health")
+    alert_health: str = Field("healthy", description="Alert system health")
+    active_alerts: int = Field(0, description="Number of active alerts")
+    last_check: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Last health check timestamp")
+    uptime_percentage: Optional[float] = Field(None, description="System uptime percentage")
+    issues: List[str] = Field(default_factory=list, description="Current health issues")
 
 # =================================================================
 # M8 USER SERVICE & AUTHENTICATION MODELS
@@ -752,9 +766,11 @@ class UsageHistoryResponse(BaseModel):
 class StorageStatusResponse(BaseModel):
     """Storage status response"""
     tenant_id: str
-    backend_type: StorageBackendType
-    storage_used_gb: float = Field(0.0, description="Storage used in GB")
-    storage_limit_gb: Optional[int] = Field(None, description="Storage limit in GB")
+    storage_backend: StorageBackendType = Field(..., description="Storage backend type")
+    total_size_bytes: float = Field(0.0, description="Total storage size in bytes")
+    hot_storage_bytes: float = Field(0.0, description="Hot storage bytes")
+    warm_storage_bytes: float = Field(0.0, description="Warm storage bytes") 
+    cold_storage_bytes: float = Field(0.0, description="Cold storage bytes")
     health_status: str = Field("healthy", description="Storage health status")
     connection_status: str = Field("connected", description="Connection status")
     last_backup: Optional[datetime] = Field(None, description="Last backup timestamp")
@@ -772,7 +788,8 @@ class SubscriptionTier(str, Enum):
 class BillingCycle(str, Enum):
     """Billing cycle options"""
     MONTHLY = "monthly"
-    ANNUAL = "annual"
+    QUARTERLY = "quarterly" 
+    YEARLY = "yearly"
 
 class SubscriptionStatus(str, Enum):
     """Subscription status"""

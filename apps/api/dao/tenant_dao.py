@@ -36,6 +36,7 @@ class TenantDAO:
                 'status': tenant_data.get('status', STATUS_ACTIVE),
                 'billing_email': tenant_data['billing_email'],
                 'admin_contact': tenant_data['admin_contact'],
+                'industry': tenant_data.get('industry', ''),
                 'region': tenant_data.get('region', 'us-east-1'),
                 'compliance_requirements': tenant_data.get('compliance_requirements', []),
                 'feature_flags': tenant_data.get('feature_flags', {}),
@@ -47,9 +48,9 @@ class TenantDAO:
             await self.db.execute_query(
                 f"""INSERT INTO {TENANTS_TABLE} 
                    (id, organization_name, domain, subscription_tier, status, billing_email, 
-                    admin_contact, region, compliance_requirements, feature_flags, customer_id, created_at, updated_at)
+                    admin_contact, industry, region, compliance_requirements, feature_flags, customer_id, created_at, updated_at)
                    VALUES (%(id)s, %(organization_name)s, %(domain)s, %(subscription_tier)s, %(status)s,
-                   %(billing_email)s, %(admin_contact)s, %(region)s, %(compliance_requirements)s, 
+                   %(billing_email)s, %(admin_contact)s, %(industry)s, %(region)s, %(compliance_requirements)s, 
                    %(feature_flags)s, %(customer_id)s, %(created_at)s, %(updated_at)s)""",
                 db_tenant_data
             )
@@ -96,11 +97,20 @@ class TenantDAO:
     async def update_tenant(self, tenant_id: str, update_data: Dict[str, Any]) -> bool:
         """Update tenant in database"""
         try:
+            # First, get the existing tenant to find the customer_id
+            existing_tenant = await self.get_tenant_by_id(tenant_id)
+            if not existing_tenant:
+                logger.error("Tenant not found for update", tenant_id=tenant_id)
+                return False
+            
+            customer_id = existing_tenant['customer_id']
+            logger.info("DEBUG: Updating tenant", tenant_id=tenant_id, customer_id=customer_id, update_data=update_data)
+            
             update_data['updated_at'] = datetime.now(timezone.utc)
             
             # Build dynamic update query
             set_clauses = []
-            params = {'tenant_id': tenant_id}
+            params = {'tenant_id': tenant_id, 'customer_id': customer_id}
             
             for field, value in update_data.items():
                 if field != 'id':  # Don't update ID
@@ -110,8 +120,23 @@ class TenantDAO:
             if not set_clauses:
                 return False
                 
-            query = f"UPDATE {TENANTS_TABLE} SET {', '.join(set_clauses)} WHERE id = %(tenant_id)s"
-            await self.db.execute_query(query, params)
+            # ClickHouse requires ALTER TABLE ... UPDATE syntax with customer_id for multi-tenant isolation
+            query = f"ALTER TABLE {TENANTS_TABLE} UPDATE {', '.join(set_clauses)} WHERE id = %(tenant_id)s AND customer_id = %(customer_id)s"
+            logger.info("DEBUG: Executing UPDATE query", query=query, params=params)
+            
+            result = await self.db.execute_query(query, params)
+            logger.info("DEBUG: UPDATE query result", result=result)
+            
+            # Force ClickHouse to sync the changes - this ensures read-after-write consistency
+            await self.db.execute_query("SYSTEM FLUSH LOGS", {})
+            
+            # Add a small delay to ensure ClickHouse has committed the changes
+            import asyncio
+            await asyncio.sleep(0.1)
+            
+            # Verify the update by fetching the tenant again
+            updated_tenant = await self.get_tenant_by_id(tenant_id)
+            logger.info("DEBUG: Tenant after update", updated_tenant=updated_tenant)
             
             logger.info("Tenant updated in database", tenant_id=tenant_id)
             return True
@@ -136,11 +161,17 @@ class TenantDAO:
             return False
     
     async def list_tenants(self, limit: int = 50, offset: int = 0, 
-                          status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+                          status_filter: Optional[str] = None, customer_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """List tenants with pagination and filtering"""
         try:
+            # Include customer_id filtering for proper multi-tenant isolation
             query = f"SELECT * FROM {TENANTS_TABLE} WHERE 1=1"
             params = {'limit': limit, 'offset': offset}
+            
+            # If customer_id is provided, filter by it (for platform admin, we still want all tenants)
+            if customer_id:
+                query += " AND customer_id = %(customer_id)s"
+                params['customer_id'] = customer_id
             
             if status_filter:
                 query += " AND status = %(status)s"
@@ -148,7 +179,13 @@ class TenantDAO:
             
             query += " ORDER BY created_at DESC LIMIT %(limit)s OFFSET %(offset)s"
             
+            logger.info("DEBUG: Listing tenants", query=query, params=params)
             result = await self.db.execute_query(query, params)
+            logger.info("DEBUG: List tenants result", result_count=len(result) if result else 0)
+            
+            if result and len(result) > 0:
+                logger.info("DEBUG: First tenant sample", sample=dict(result[0]))
+            
             return [dict(row) for row in result] if result else []
             
         except Exception as e:
@@ -183,7 +220,7 @@ class TenantDAO:
                 'tenant_id': quota_data['tenant_id'],
                 'quota_type': quota_data['quota_type'],
                 'quota_limit': quota_data['quota_limit'],
-                'quota_used': quota_data.get('quota_used', 0),
+                'current_usage': quota_data.get('quota_used', 0),
                 'reset_period': quota_data.get('reset_period', 'monthly'),
                 'customer_id': quota_data.get('customer_id', quota_data['tenant_id']),
                 'created_at': datetime.now(timezone.utc),
@@ -192,8 +229,8 @@ class TenantDAO:
             
             await self.db.execute_query(
                 f"""INSERT INTO {TENANT_QUOTAS_TABLE} 
-                   (id, tenant_id, quota_type, quota_limit, quota_used, reset_period, customer_id, created_at, updated_at)
-                   VALUES (%(id)s, %(tenant_id)s, %(quota_type)s, %(quota_limit)s, %(quota_used)s, 
+                   (id, tenant_id, quota_type, quota_limit, current_usage, reset_period, customer_id, created_at, updated_at)
+                   VALUES (%(id)s, %(tenant_id)s, %(quota_type)s, %(quota_limit)s, %(current_usage)s, 
                    %(reset_period)s, %(customer_id)s, %(created_at)s, %(updated_at)s)""",
                 db_quota_data
             )
@@ -234,7 +271,8 @@ class TenantDAO:
             if not set_clauses:
                 return False
                 
-            query = f"""UPDATE {TENANT_QUOTAS_TABLE} SET {', '.join(set_clauses)} 
+            # ClickHouse requires ALTER TABLE ... UPDATE syntax
+            query = f"""ALTER TABLE {TENANT_QUOTAS_TABLE} UPDATE {', '.join(set_clauses)} 
                        WHERE tenant_id = %(tenant_id)s AND quota_type = %(quota_type)s"""
             
             await self.db.execute_query(query, params)
@@ -291,11 +329,12 @@ class TenantDAO:
             return []
     
     async def update_tenant_config(self, tenant_id: str, config_key: str, config_value: str) -> bool:
-        """Update specific tenant configuration"""
+        """Update or insert tenant configuration (UPSERT)"""
         try:
-            await self.db.execute_query(
-                f"""UPDATE {TENANT_CONFIGS_TABLE} 
-                   SET config_value = %(config_value)s, updated_at = %(updated_at)s
+            # First, try to update existing config
+            result = await self.db.execute_query(
+                f"""ALTER TABLE {TENANT_CONFIGS_TABLE} 
+                   UPDATE config_value = %(config_value)s, updated_at = %(updated_at)s
                    WHERE tenant_id = %(tenant_id)s AND config_key = %(config_key)s""",
                 {
                     "tenant_id": tenant_id,
@@ -305,8 +344,36 @@ class TenantDAO:
                 }
             )
             
+            # Check if any rows were updated - if not, insert new config
+            logger.info(f"🔧 DAO CONFIG UPDATE: Update result for {config_key}", result=result)
+            
+            # If no rows were affected, insert new config
+            # We'll always try INSERT in case UPDATE didn't affect any rows
+            try:
+                import uuid
+                await self.db.execute_query(
+                    f"""INSERT INTO {TENANT_CONFIGS_TABLE} 
+                       (id, tenant_id, config_key, config_value, config_type, created_at, updated_at, created_by, customer_id)
+                       VALUES (%(id)s, %(tenant_id)s, %(config_key)s, %(config_value)s, %(config_type)s, %(created_at)s, %(updated_at)s, %(created_by)s, %(customer_id)s)""",
+                    {
+                        "id": str(uuid.uuid4()),
+                        "tenant_id": tenant_id,
+                        "config_key": config_key,
+                        "config_value": config_value,
+                        "config_type": "json",  # For nested configs
+                        "created_at": datetime.now(timezone.utc),
+                        "updated_at": datetime.now(timezone.utc),
+                        "created_by": "system",
+                        "customer_id": tenant_id
+                    }
+                )
+                logger.info(f"🔧 DAO CONFIG INSERT: Inserted new config {config_key}")
+            except Exception as insert_error:
+                # If INSERT fails due to duplicate key, that's fine - UPDATE worked
+                logger.info(f"🔧 DAO CONFIG INSERT: Insert failed (likely duplicate), UPDATE must have worked for {config_key}", error=str(insert_error))
+                
             return True
             
         except Exception as e:
-            logger.error("Failed to update tenant config", error=str(e))
+            logger.error("Failed to update/insert tenant config", error=str(e), config_key=config_key)
             return False

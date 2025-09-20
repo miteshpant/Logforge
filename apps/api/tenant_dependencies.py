@@ -58,7 +58,8 @@ async def get_validated_tenant_id(
     return validated_id
 
 async def require_valid_tenant(
-    x_customer_id: str = Header(..., alias="X-Customer-ID")
+    x_customer_id: str = Header(..., alias="X-Customer-ID"),
+    request: Request = None
 ) -> str:
     """Require valid tenant UUID (no fallback to default)"""
     
@@ -67,6 +68,28 @@ async def require_valid_tenant(
             status_code=400,
             detail="X-Customer-ID header is required"
         )
+    
+    # Allow "platform" only for platform admin operations
+    if x_customer_id == "platform":
+        # Validate user has platform admin roles
+        if not hasattr(request.state, "roles"):
+            logger.warning("Platform access attempted without role information", tenant_id=x_customer_id)
+            raise HTTPException(
+                status_code=403,
+                detail="Platform access requires authentication"
+            )
+        
+        # Check if user has platform admin roles
+        platform_roles = [r for r in request.state.roles if r["tenant_id"] == "platform"]
+        if not platform_roles:
+            logger.warning("Platform access attempted by non-platform admin", tenant_id=x_customer_id, user_roles=[r["role"] for r in request.state.roles])
+            raise HTTPException(
+                status_code=403,
+                detail="Platform admin access required"
+            )
+        
+        logger.info("Platform admin access granted", tenant_id=x_customer_id, platform_roles=[r["role"] for r in platform_roles])
+        return x_customer_id
     
     # Validate tenant UUID
     is_valid = await tenant_service.validate_tenant_uuid(x_customer_id)

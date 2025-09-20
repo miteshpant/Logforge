@@ -515,3 +515,87 @@ class AlertDAO:
         except Exception as e:
             logger.error(f"Failed to get alert stats for customer {customer_id}: {e}")
             raise
+    
+    async def get_recent_alert_instances(self, customer_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get recent alert instances for tenant alerts summary"""
+        try:
+            query = f"""
+            SELECT 
+                ai.id as alert_id,
+                ar.name as rule_name,
+                ar.severity,
+                ai.triggered_at,
+                ai.status,
+                ai.trigger_data
+            FROM {ALERT_INSTANCES_TABLE} ai
+            LEFT JOIN {ALERT_RULES_TABLE} ar ON ai.rule_id = ar.id
+            WHERE ai.customer_id = %(customer_id)s
+            ORDER BY ai.triggered_at DESC
+            LIMIT %(limit)s
+            """
+            
+            results = await self.db.fetch_all(query, {"customer_id": customer_id, "limit": limit})
+            
+            # Format the results
+            formatted_alerts = []
+            for alert in results:
+                # Map database status to API status
+                status = alert["status"]
+                if status == "triggered":
+                    status = "active"
+                
+                formatted_alerts.append({
+                    "rule_name": alert.get("rule_name", "Unknown Rule"),
+                    "severity": alert.get("severity", "info"),
+                    "triggered_at": alert.get("triggered_at", "").isoformat() if alert.get("triggered_at") else "",
+                    "status": status
+                })
+            
+            return formatted_alerts
+            
+        except Exception as e:
+            logger.error(f"Failed to get recent alert instances for customer {customer_id}: {e}")
+            return []
+    
+    async def get_escalation_policies(self, customer_id: str) -> Dict[str, Any]:
+        """Get escalation policies configuration from alert rules data"""
+        # Query alert rules to understand current escalation configuration
+        query = f"""
+        SELECT 
+            COUNT() as total_rules,
+            countIf(is_enabled = 1) as enabled_rules,
+            arrayReduce('max', groupArray(cooldown_minutes)) as max_cooldown,
+            arrayReduce('min', groupArray(cooldown_minutes)) as min_cooldown,
+            groupUniqArray(severity) as severities
+        FROM {ALERT_RULES_TABLE}
+        WHERE customer_id = %(customer_id)s
+        """
+        
+        result = await self.db.execute_query(query, {"customer_id": customer_id})
+        
+        if result:
+            rule_stats = result[0]
+            
+            # Build escalation policy based on existing alert configuration
+            return {
+                "enabled": rule_stats.get("enabled_rules", 0) > 0,
+                "rules_configured": rule_stats.get("total_rules", 0),
+                "escalation_levels": list(rule_stats.get("severities", [])),
+                "cooldown_config": {
+                    "min_cooldown_minutes": rule_stats.get("min_cooldown", 5),
+                    "max_cooldown_minutes": rule_stats.get("max_cooldown", 60)
+                },
+                "notification_flow": ["immediate", "escalation", "resolution"]
+            }
+        else:
+            # No rules exist - return actual empty state
+            return {
+                "enabled": False,
+                "rules_configured": 0,
+                "escalation_levels": [],
+                "cooldown_config": {
+                    "min_cooldown_minutes": 5,
+                    "max_cooldown_minutes": 60
+                },
+                "notification_flow": ["immediate", "escalation", "resolution"]
+            }
