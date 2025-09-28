@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { ArrowLeft, Plus, ExternalLink, Eye, CreditCard, Search, ChevronUp, ChevronDown, ChevronRight, ChevronLeft } from 'lucide-react'
-import { fetchTenants, fetchTenantUsage, createTenant, apiRequest } from '@/lib/api'
+import { fetchTenants, fetchTenantUsage, createTenant, createTenantWithAdmin, apiRequest } from '@/lib/api'
 
 interface Tenant {
   tenant_id: string
@@ -134,6 +134,7 @@ function OnboardingModal({ isOpen, onClose, onSuccess }: OnboardingModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
   const [showSuccess, setShowSuccess] = useState(false)
+  const [successInfo, setSuccessInfo] = useState<any>(null)
 
   // Dropdown options
   const subscriptionTiers = [
@@ -231,9 +232,14 @@ function OnboardingModal({ isOpen, onClose, onSuccess }: OnboardingModalProps) {
         compliance_requirements: formData.complianceRequirements
       }
       
-      await createTenant(tenantData)
+      // Use enhanced tenant creation with admin user
+      const result = await createTenantWithAdmin(tenantData)
+      console.log('🎉 Tenant creation workflow completed:', result)
       
-      // Show success state briefly
+      // Store success info for display
+      setSuccessInfo(result)
+      
+      // Show success state with admin user info
       setShowSuccess(true)
       
       // Close modal and reset form after success

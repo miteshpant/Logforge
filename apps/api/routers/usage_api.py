@@ -164,6 +164,30 @@ async def generate_invoice(
             last_month = datetime.now(timezone.utc).replace(day=1) - timedelta(days=1)
             month = last_month.strftime("%Y-%m")
 
+        # IDEMPOTENCY CHECK - Check if invoice already exists for this period
+        from dao.usage_dao import UsageDAO
+        usage_dao = UsageDAO()
+        
+        existing_invoice = await usage_dao.get_existing_bill(tenant_id, month)
+        if existing_invoice:
+            logger.info("Invoice already exists for period", 
+                       tenant_id=tenant_id, 
+                       billing_period=month,
+                       existing_invoice_id=existing_invoice["id"])
+            
+            return {
+                "invoice_id": existing_invoice["id"],
+                "tenant_id": tenant_id,
+                "billing_period": month,
+                "total_cost": existing_invoice.get("total_amount", 0.0),
+                "currency": existing_invoice.get("currency", "USD"),
+                "line_items": existing_invoice.get("usage_breakdown", {}),
+                "generated_at": existing_invoice["generated_at"],
+                "generated_by": existing_invoice.get("customer_id"),
+                "status": "already_exists",
+                "message": f"Invoice already generated for period {month}"
+            }
+
         # Get usage data for the month
         # Get actual usage data from database
         usage_data = await usage_service.export_usage_report(tenant_id, "json", month)

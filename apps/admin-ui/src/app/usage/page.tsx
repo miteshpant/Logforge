@@ -7,7 +7,14 @@ import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { ArrowLeft, Download, Receipt, TrendingUp, Database, Activity, DollarSign } from 'lucide-react'
-import { fetchTenants, fetchTenantUsage } from '@/lib/api'
+import { 
+  fetchTenants, 
+  fetchTenantUsage, 
+  fetchPlatformUsageStats,
+  fetchCurrentUsage,
+  generateInvoice,
+  exportUsageData
+} from '@/lib/api'
 
 interface Tenant {
   tenant_id: string
@@ -45,6 +52,7 @@ export default function UsageAnalyticsPage() {
   const [usageStats, setUsageStats] = useState<UsageStats[]>([])
   const [loading, setLoading] = useState(true)
   const [exportStatus, setExportStatus] = useState<string | null>(null)
+  const [apiError, setApiError] = useState<string | null>(null)
 
   useEffect(() => {
     console.log('Period changed to:', selectedPeriod)
@@ -54,19 +62,40 @@ export default function UsageAnalyticsPage() {
   const fetchUsageData = async () => {
     try {
       setLoading(true)
+      setApiError(null) // Clear any previous errors
+      
+      // Fetch platform-wide usage statistics first
+      let platformStats = null
+      try {
+        platformStats = await fetchPlatformUsageStats()
+        console.log('Platform usage stats:', platformStats)
+      } catch (error) {
+        console.error('Failed to fetch platform usage stats:', error)
+        setApiError('Failed to fetch platform statistics. Using fallback calculations.')
+      }
       
       // Fetch all tenants
       const tenantsData = await fetchTenants()
-      setTenants(tenantsData.tenants || [])
+      const tenantsList = tenantsData.tenants || []
+      setTenants(tenantsList)
       
-      // Fetch usage data for each tenant
-      const usagePromises = tenantsData.tenants.map(async (tenant: Tenant) => {
+      // Fetch current usage data for each tenant using the correct API
+      const usagePromises = tenantsList.map(async (tenant: Tenant) => {
         try {
-          const usageData = await fetchTenantUsage(tenant.tenant_id)
-          return { [tenant.tenant_id]: usageData }
+          const currentUsage = await fetchCurrentUsage(tenant.tenant_id)
+          console.log(`Usage data for ${tenant.name}:`, currentUsage)
+          return { [tenant.tenant_id]: currentUsage }
         } catch (error) {
-          console.error(`Failed to fetch usage for tenant ${tenant.tenant_id}:`, error)
-          return { [tenant.tenant_id]: null }
+          console.error(`Failed to fetch current usage for tenant ${tenant.tenant_id}:`, error)
+          // Fallback to tenant usage endpoint
+          try {
+            const usageData = await fetchTenantUsage(tenant.tenant_id)
+            return { [tenant.tenant_id]: usageData }
+          } catch (fallbackError) {
+            console.error(`Fallback failed for tenant ${tenant.tenant_id}:`, fallbackError)
+            setApiError(`Failed to fetch usage data for ${tenant.name}. Some data may be incomplete.`)
+            return { [tenant.tenant_id]: null }
+          }
         }
       })
       
@@ -74,19 +103,35 @@ export default function UsageAnalyticsPage() {
       const combinedUsage = usageResults.reduce((acc, curr) => ({ ...acc, ...curr }), {})
       setTenantUsages(combinedUsage)
       
-      // Calculate platform-wide statistics
-      const totalTenants = tenantsData.tenants.length
-      const totalRevenue = tenantsData.tenants.reduce((sum: number, tenant: Tenant) => {
-        const cost = tenant.type === 'enterprise' ? 997 : tenant.type === 'smb' ? 499 : 99
-        return sum + cost
-      }, 0)
+      // Use platform stats if available, otherwise calculate from tenant data
+      let totalRevenue = 0
+      let totalApiCalls = 0
+      let totalStorage = 0
+      let totalDataIngested = 0
       
-      const totalApiCalls = Object.values(combinedUsage).reduce((sum, usage: any) => 
-        sum + (usage?.api_calls || 0), 0)
+      if (platformStats) {
+        totalRevenue = platformStats.total_revenue || 0
+        totalApiCalls = platformStats.total_api_calls || 0
+        totalStorage = platformStats.total_storage_gb || 0
+        totalDataIngested = platformStats.total_data_ingested || 0
+      } else {
+        // Calculate from individual tenant data
+        totalRevenue = tenantsList.reduce((sum: number, tenant: Tenant) => {
+          const cost = tenant.type === 'enterprise' ? 997 : tenant.type === 'smb' ? 499 : 99
+          return sum + cost
+        }, 0)
+        
+        totalApiCalls = Object.values(combinedUsage).reduce((sum, usage: any) => 
+          sum + (usage?.api_calls || 0), 0)
+        
+        totalStorage = Object.values(combinedUsage).reduce((sum, usage: any) => 
+          sum + (usage?.storage_used_gb || 0), 0)
+          
+        totalDataIngested = Object.values(combinedUsage).reduce((sum, usage: any) => 
+          sum + (usage?.log_count_month || 0), 0)
+      }
       
-      const totalStorage = Object.values(combinedUsage).reduce((sum, usage: any) => 
-        sum + (usage?.storage_used_gb || 0), 0)
-      
+      const totalTenants = tenantsList.length
       const avgRevenue = totalTenants > 0 ? Math.round(totalRevenue / totalTenants) : 0
       
       setUsageStats([
@@ -118,6 +163,14 @@ export default function UsageAnalyticsPage() {
       
     } catch (error) {
       console.error('Failed to fetch usage data:', error)
+      setApiError(`Critical error loading usage analytics: ${error.message || 'Unknown error'}. Please check API connectivity.`)
+      // Set fallback stats on error
+      setUsageStats([
+        { title: "Total Revenue", value: "$0", description: "API Error", icon: DollarSign },
+        { title: "Total API Calls", value: "0", description: "API Error", icon: Activity },
+        { title: "Total Storage", value: "0GB", description: "API Error", icon: Database },
+        { title: "Avg Revenue/Tenant", value: "$0", description: "API Error", icon: TrendingUp }
+      ])
     } finally {
       setLoading(false)
     }
@@ -187,24 +240,54 @@ export default function UsageAnalyticsPage() {
     return [headers, ...rows].map(row => row.join(',')).join('\n')
   }
 
-  const generateTenantBill = (tenantId: string, tenantName: string) => {
-    console.log('Generate tenant bill clicked for:', tenantName, tenantId)
-    setExportStatus(`Generating bill for ${tenantName}...`)
-    
-    setTimeout(() => {
-      setExportStatus(`Bill generated successfully for ${tenantName}`)
-      setTimeout(() => setExportStatus(null), 3000)
-    }, 1500)
+  const generateTenantBill = async (tenantId: string, tenantName: string) => {
+    try {
+      console.log('Generate tenant bill clicked for:', tenantName, tenantId)
+      setExportStatus(`Generating bill for ${tenantName}...`)
+      
+      // Call the real API to generate invoice
+      const invoice = await generateInvoice(tenantId)
+      console.log('Invoice generated:', invoice)
+      
+      setExportStatus(`Bill generated successfully for ${tenantName} (Invoice #${invoice.id || 'N/A'})`)
+      setTimeout(() => setExportStatus(null), 4000)
+    } catch (error) {
+      console.error('Failed to generate bill:', error)
+      setApiError(`Failed to generate bill for ${tenantName}: ${error.message || 'Unknown error'}`)
+      setExportStatus(null)
+    }
   }
 
   const handleGenerateAllBills = async () => {
-    console.log('Generate all bills clicked, tenants count:', tenants.length)
-    setExportStatus('Generating bills for all tenants...')
-    
-    setTimeout(() => {
-      setExportStatus(`Generated ${tenants.length} bills successfully!`)
-      setTimeout(() => setExportStatus(null), 3000)
-    }, 2000)
+    try {
+      console.log('Generate all bills clicked, tenants count:', tenants.length)
+      setExportStatus('Generating bills for all tenants...')
+      
+      const billPromises = tenants.map(async (tenant) => {
+        try {
+          const invoice = await generateInvoice(tenant.tenant_id)
+          return { success: true, tenant: tenant.name, invoice }
+        } catch (error) {
+          console.error(`Failed to generate bill for ${tenant.name}:`, error)
+          return { success: false, tenant: tenant.name, error }
+        }
+      })
+      
+      const results = await Promise.all(billPromises)
+      const successful = results.filter(r => r.success).length
+      const failed = results.filter(r => !r.success).length
+      
+      if (failed > 0) {
+        setApiError(`Generated ${successful} bills successfully, ${failed} failed. Check individual tenant billing.`)
+      }
+      
+      setExportStatus(`Generated ${successful}/${tenants.length} bills successfully!`)
+      setTimeout(() => setExportStatus(null), 4000)
+    } catch (error) {
+      console.error('Failed to generate bills:', error)
+      setApiError(`Failed to generate bills: ${error.message || 'Unknown error'}`)
+      setExportStatus(null)
+    }
   }
 
   return (
@@ -233,6 +316,27 @@ export default function UsageAnalyticsPage() {
               <p className={exportStatus.includes('Failed') ? 'text-red-800' : 'text-green-800'}>
                 {exportStatus}
               </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* API Error Alert */}
+      {apiError && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4">
+            <div className="flex items-center">
+              <Activity className="h-5 w-5 text-red-600 mr-2" />
+              <div className="flex-1">
+                <p className="text-red-800 font-medium">API Error</p>
+                <p className="text-red-700 text-sm">{apiError}</p>
+              </div>
+              <button 
+                onClick={() => setApiError(null)}
+                className="text-red-600 hover:text-red-800 ml-4"
+              >
+                ×
+              </button>
             </div>
           </CardContent>
         </Card>

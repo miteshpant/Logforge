@@ -767,6 +767,12 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 asyncio.create_task(
                     self._track_api_usage(request, response, user, tenant_id, start_time)
                 )
+            
+            # Step 9: Audit Logging - Track admin activities for platform admins
+            if user_roles and any(role["tenant_id"] == "platform" for role in user_roles):
+                asyncio.create_task(
+                    self._track_audit_activity(request, response, user, tenant_id, user_roles)
+                )
 
             return response
 
@@ -887,6 +893,147 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.error("Usage tracking failed", error=str(e),
                         tenant_id=tenant_id,
                         endpoint=request.url.path)
+
+    async def _track_audit_activity(self, request: Request, response, user: User,
+                                   tenant_id: str, user_roles: List[Dict[str, Any]]):
+        """Track audit activity for platform admins (async)"""
+        try:
+            # Determine action type based on HTTP method
+            method_to_action = {
+                "POST": "create",
+                "PUT": "update", 
+                "PATCH": "update",
+                "DELETE": "delete",
+                "GET": "view"
+            }
+            action_type = method_to_action.get(request.method, "view")
+            
+            # Determine resource type and ID from endpoint
+            resource_type = "unknown"
+            resource_id = None
+            
+            path = request.url.path
+            if path.startswith("/v1/tenants/"):
+                resource_type = "tenant"
+                # Extract tenant ID from path if present
+                path_parts = path.split("/")
+                if len(path_parts) >= 3 and path_parts[2] != "stats":
+                    resource_id = path_parts[2]
+            elif path.startswith("/v1/users/"):
+                resource_type = "user"
+                path_parts = path.split("/")
+                if len(path_parts) >= 3:
+                    resource_id = path_parts[2]
+            elif path.startswith("/v1/admin/"):
+                resource_type = "admin_panel"
+            elif path.startswith("/v1/billing/"):
+                resource_type = "billing"
+            elif path.startswith("/v1/usage/"):
+                resource_type = "usage_analytics"
+            elif path.startswith("/v1/analytics/"):
+                resource_type = "platform_analytics" 
+            elif path.startswith("/v1/enterprise/"):
+                resource_type = "enterprise_config"
+            else:
+                # Use the path to determine resource
+                resource_type = path.split("/")[2] if len(path.split("/")) > 2 else "platform"
+
+            # Get request body for details (if available and safe)
+            request_details = {
+                "endpoint": path,
+                "method": request.method,
+                "status_code": getattr(response, "status_code", 200),
+                "user_agent": request.headers.get("user-agent", ""),
+                "target_tenant": tenant_id,
+                "platform_roles": [role["role"] for role in user_roles if role["tenant_id"] == "platform"]
+            }
+
+            # Add query parameters if present
+            if request.url.query:
+                request_details["query_params"] = str(request.url.query)
+
+            # Try to get request body for certain operations (be careful with large payloads)
+            if action_type in ["create", "update"] and request.method in ["POST", "PUT", "PATCH"]:
+                try:
+                    # Only for small payloads to avoid memory issues
+                    content_length = request.headers.get("content-length")
+                    if content_length and int(content_length) < 10000:  # 10KB limit
+                        # Note: request.body() can only be called once, so we might not have access
+                        # This is a limitation of FastAPI middleware - body is already consumed
+                        request_details["has_request_body"] = True
+                        request_details["content_length"] = int(content_length)
+                except:
+                    pass
+
+            # Import json for serialization
+            import json
+            details_json = json.dumps(request_details)
+
+            # Create audit log entry
+            audit_entry = {
+                "id": str(uuid.uuid4()),
+                "user_id": user.id,
+                "tenant_id": tenant_id if tenant_id != "platform" else None,  # NULL for platform operations
+                "action_type": action_type,
+                "resource_type": resource_type,
+                "resource_id": resource_id,
+                "details": details_json,
+                "ip_address": request.client.host if request.client else "unknown",
+                "user_agent": request.headers.get("user-agent", ""),
+                "timestamp": datetime.utcnow(),
+                "customer_id": "platform"  # All admin activities go to platform customer
+            }
+
+            # Insert audit log to database
+            await self._insert_audit_log(audit_entry)
+
+        except Exception as e:
+            logger.error("Audit logging failed", error=str(e),
+                        user_id=user.id,
+                        endpoint=request.url.path)
+
+    async def _insert_audit_log(self, audit_entry: Dict[str, Any]):
+        """Insert audit log entry to database"""
+        try:
+            # Initialize DatabaseLayer for audit logging
+            service_key = os.getenv("AUDIT_SERVICE_KEY", "audit-service-key-dev")
+            db = DatabaseLayer("AuditService", service_key)
+
+            # Insert into enterprise_audit_logs_mt table
+            insert_query = """
+                INSERT INTO enterprise_audit_logs_mt 
+                (id, user_id, tenant_id, action_type, resource_type, resource_id, 
+                 details, ip_address, user_agent, timestamp, customer_id)
+                VALUES 
+                (%(id)s, %(user_id)s, %(tenant_id)s, %(action_type)s, %(resource_type)s, 
+                 %(resource_id)s, %(details)s, %(ip_address)s, %(user_agent)s, %(timestamp)s, %(customer_id)s)
+            """
+
+            # Convert action_type to enum value for ClickHouse
+            action_type_map = {
+                "create": 1,
+                "update": 2,
+                "delete": 3,
+                "view": 4,
+                "login": 5,
+                "logout": 6
+            }
+            
+            # Prepare data for ClickHouse
+            clickhouse_data = audit_entry.copy()
+            clickhouse_data["action_type"] = action_type_map.get(audit_entry["action_type"], 4)  # Default to 'view'
+
+            await db.execute_update(insert_query, clickhouse_data)
+            logger.debug("Audit log entry inserted", 
+                        user_id=audit_entry["user_id"],
+                        action=audit_entry["action_type"], 
+                        resource=audit_entry["resource_type"])
+
+        except Exception as e:
+            logger.error("Failed to insert audit log entry to database", 
+                        error=str(e), 
+                        user_id=audit_entry["user_id"])
+            # Continue without failing - audit logging should not block requests
 
 # =================================================================
 # DEPENDENCY INJECTION

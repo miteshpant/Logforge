@@ -55,7 +55,8 @@ class DatabaseLayer:
         'EnterpriseDAO': os.getenv('ENTERPRISE_SERVICE_KEY', 'enterprise-dao-service-key'),
         'SubscriptionDAO': os.getenv('SUBSCRIPTION_SERVICE_KEY', 'subscription-dao-service-key'),
         'PlatformSetup': os.getenv('PLATFORM_SETUP_KEY', 'platform-setup-key'),
-        'IngestionTestService': 'ingestion-test-service-key'
+        'IngestionTestService': 'ingestion-test-service-key',
+        'AuditService': os.getenv('AUDIT_SERVICE_KEY', 'audit-service-key-dev')
     }
     
     # Table access control by service
@@ -87,7 +88,8 @@ class DatabaseLayer:
         'EnterpriseDAO': ['auth_providers_mt', 'api_keys_enterprise_mt', 'tenants_mt', 'enterprise_compliance_mt', 'enterprise_integrations_mt', 'enterprise_audit_logs_mt', 'api_usage_mt'],
         'SubscriptionDAO': ['tenant_subscriptions_mt', 'feature_rates_mt', 'usage_records_mt', 'tenant_deletions_mt'],
         'PlatformSetup': ['users_mt', 'user_tenant_roles_mt', 'user_sessions_mt'],
-        'IngestionTestService': ['*']  # Test service can access all tables
+        'IngestionTestService': ['*'],  # Test service can access all tables
+        'AuditService': ['enterprise_audit_logs_mt']
     }
     
     # Dangerous operations requiring admin privileges
@@ -731,7 +733,7 @@ class DatabaseLayer:
                 record.setdefault('id', str(uuid.uuid4()))
                 record.setdefault('created_at', datetime.utcnow())
             
-            inserted = await self.execute_insert('api_usage_audit_mt', chunk)
+            inserted = await self.execute_insert('api_usage_mt', chunk)
             total_inserted += inserted
         
         return total_inserted
@@ -743,9 +745,9 @@ class DatabaseLayer:
                 tenant_id,
                 count(*) as total_requests,
                 sum(response_size_bytes) as total_bytes,
-                avg(response_time_ms) as avg_processing_time,
-                countIf(response_status < 400) * 100.0 / count(*) as success_rate
-            FROM api_usage_audit_mt 
+                avg(processing_time_ms) as avg_processing_time,
+                countIf(status_code < 400) * 100.0 / count(*) as success_rate
+            FROM api_usage_mt 
             WHERE tenant_id = %(tenant_id)s
             AND request_timestamp >= %(start_date)s
             AND request_timestamp <= %(end_date)s

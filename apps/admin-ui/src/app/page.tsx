@@ -14,7 +14,7 @@ import {
   Database,
   Activity
 } from 'lucide-react'
-import { apiRequest } from '@/lib/api'
+import { apiRequest, fetchTenantStats } from '@/lib/api'
 
 interface PlatformStat {
   title: string

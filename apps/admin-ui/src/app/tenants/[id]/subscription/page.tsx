@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ArrowLeft, CreditCard, CheckCircle, AlertTriangle, Calendar, DollarSign, User, Settings } from 'lucide-react'
+import { ArrowLeft, CreditCard, CheckCircle, AlertTriangle, Calendar, DollarSign, User, Settings, ChevronDown, ChevronRight, Download, Eye } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { authService } from '@/lib/auth'
 
@@ -96,6 +96,12 @@ export default function SubscriptionManagementPage() {
   const [promoCode, setPromoCode] = useState<string>('')
   const [promoDiscount, setPromoDiscount] = useState<number>(0)
   const [promoError, setPromoError] = useState<string>('')
+  
+  // Billing breakdown state
+  const [expandedBills, setExpandedBills] = useState<Set<string>>(new Set())
+  const [billBreakdowns, setBillBreakdowns] = useState<Record<string, any>>({})
+  const [loadingBreakdown, setLoadingBreakdown] = useState<Set<string>>(new Set())
+  const [downloadingPDF, setDownloadingPDF] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     fetchSubscriptionData()
@@ -197,6 +203,182 @@ export default function SubscriptionManagementPage() {
       setError('Failed to generate bill: ' + (error instanceof Error ? error.message : 'Unknown error'))
     } finally {
       setActionLoading(false)
+    }
+  }
+
+  const fetchBillBreakdown = async (billId: string) => {
+    if (billBreakdowns[billId]) {
+      // Already fetched, just toggle
+      toggleBillExpansion(billId)
+      return
+    }
+
+    try {
+      setLoadingBreakdown(prev => new Set([...prev, billId]))
+      
+      // Check if breakdown is already in the bill data
+      const existingBill = billingHistory.find(bill => 
+        (bill.bill_id || bill.id || bill.invoice_id) === billId
+      )
+      
+      if (existingBill) {
+        // Use the rich billing data that's already available
+        const billBreakdown: any = {}
+        
+        // Add base fee if present
+        if (existingBill.base_fee && existingBill.base_fee > 0) {
+          billBreakdown.base_fee = {
+            description: `${existingBill.subscription_tier?.toUpperCase() || 'SUBSCRIPTION'} Base Fee`,
+            amount: existingBill.base_fee,
+            unit_price: existingBill.base_fee,
+            quantity: 1,
+            unit: 'subscription'
+          }
+        }
+        
+        // Add usage charges if present
+        if (existingBill.usage_charges && existingBill.usage_charges > 0) {
+          billBreakdown.usage_charges = {
+            description: 'Usage-based Charges',
+            amount: existingBill.usage_charges,
+            unit_price: existingBill.usage_charges,
+            quantity: 1,
+            unit: 'usage'
+          }
+        }
+        
+        // Add tier discount if present
+        if (existingBill.tier_discount && existingBill.tier_discount > 0) {
+          billBreakdown.tier_discount = {
+            description: 'Tier Discount',
+            amount: -existingBill.tier_discount,
+            unit_price: -existingBill.tier_discount,
+            quantity: 1,
+            unit: 'discount'
+          }
+        }
+        
+        // Add promo discount if present
+        if (existingBill.promo_discount && existingBill.promo_discount > 0) {
+          billBreakdown.promo_discount = {
+            description: existingBill.promo_code ? `Promo Code: ${existingBill.promo_code}` : 'Promotional Discount',
+            amount: -existingBill.promo_discount,
+            unit_price: -existingBill.promo_discount,
+            quantity: 1,
+            unit: 'discount'
+          }
+        }
+        
+        // Add usage breakdown details if present
+        if (existingBill.usage_breakdown && Array.isArray(existingBill.usage_breakdown) && existingBill.usage_breakdown.length > 0) {
+          existingBill.usage_breakdown.forEach((item: any, index: number) => {
+            billBreakdown[`usage_detail_${index}`] = {
+              description: item.description || item.feature || `Usage Detail ${index + 1}`,
+              amount: item.amount || item.cost || 0,
+              unit_price: item.unit_price || item.rate || 0,
+              quantity: item.quantity || item.usage || 0,
+              unit: item.unit || 'calls'
+            }
+          })
+        }
+        
+        const breakdown = {
+          bill_id: billId,
+          total_amount: existingBill.total_amount,
+          subtotal: existingBill.subtotal,
+          currency: existingBill.currency || 'USD',
+          subscription_tier: existingBill.subscription_tier,
+          breakdown: billBreakdown
+        }
+        setBillBreakdowns(prev => ({ ...prev, [billId]: breakdown }))
+        setExpandedBills(prev => new Set([...prev, billId]))
+      } else {
+        // Try to fetch fresh bill details from generate endpoint
+        try {
+          const billDetails = await apiRequest(`/v1/billing/generate/${tenantId}`, {
+            method: 'POST',
+            body: JSON.stringify({
+              bill_id: billId,
+              regenerate: false // Just get existing bill details
+            })
+          })
+          
+          const breakdown = {
+            bill_id: billId,
+            total_amount: billDetails.total_cost || existingBill?.total_amount || 0,
+            currency: billDetails.currency || 'USD',
+            breakdown: billDetails.line_items || {}
+          }
+          setBillBreakdowns(prev => ({ ...prev, [billId]: breakdown }))
+          setExpandedBills(prev => new Set([...prev, billId]))
+        } catch (detailError) {
+          console.error('Failed to fetch bill details:', detailError)
+          // Show message that breakdown is not available
+          setBillBreakdowns(prev => ({ ...prev, [billId]: null }))
+          setExpandedBills(prev => new Set([...prev, billId]))
+        }
+      }
+      
+    } catch (error) {
+      console.error('Failed to fetch bill breakdown:', error)
+      setError('Failed to fetch bill breakdown: ' + (error instanceof Error ? error.message : 'API endpoint not available'))
+    } finally {
+      setLoadingBreakdown(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(billId)
+        return newSet
+      })
+    }
+  }
+
+  const toggleBillExpansion = (billId: string) => {
+    setExpandedBills(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(billId)) {
+        newSet.delete(billId)
+      } else {
+        newSet.add(billId)
+      }
+      return newSet
+    })
+  }
+
+  const downloadBillPDF = async (billId: string) => {
+    try {
+      setDownloadingPDF(prev => new Set([...prev, billId]))
+      
+      // Fetch PDF from billing API
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7080'}/v1/billing/bills/${billId}/pdf`, {
+        headers: {
+          'Authorization': `Bearer ${authService.getToken()}`,
+          'X-Customer-ID': 'platform'
+        }
+      })
+      
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `bill-${billId}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+      } else {
+        const errorText = await response.text()
+        throw new Error(`HTTP ${response.status}: ${errorText}`)
+      }
+      
+    } catch (error) {
+      console.error('Failed to download PDF:', error)
+      setError('Failed to download PDF: ' + (error instanceof Error ? error.message : 'API endpoint not available'))
+    } finally {
+      setDownloadingPDF(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(billId)
+        return newSet
+      })
     }
   }
 
@@ -575,35 +757,131 @@ export default function SubscriptionManagementPage() {
         </CardHeader>
         <CardContent>
           {billingHistory.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-2">Bill ID</th>
-                    <th className="text-left py-2">Period</th>
-                    <th className="text-left py-2">Amount</th>
-                    <th className="text-left py-2">Generated</th>
-                    <th className="text-left py-2">Due Date</th>
-                    <th className="text-left py-2">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {billingHistory.slice(0, 10).map((bill) => (
-                    <tr key={bill.bill_id} className="border-b">
-                      <td className="py-2 font-mono text-xs">{bill.bill_id.slice(0, 8)}...</td>
-                      <td className="py-2">{bill.billing_period}</td>
-                      <td className="py-2 font-semibold">${bill.total_amount.toFixed(2)}</td>
-                      <td className="py-2">{new Date(bill.generated_at).toLocaleDateString()}</td>
-                      <td className="py-2">{new Date(bill.due_date).toLocaleDateString()}</td>
-                      <td className="py-2">
-                        <Badge variant={bill.status === 'paid' ? 'green' : 'yellow'}>
-                          {bill.status || 'pending'}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-4">
+              {billingHistory.slice(0, 10).map((bill, index) => {
+                // Handle different possible ID field names and ensure safe access
+                const billId = bill.bill_id || bill.id || bill.invoice_id || `bill_${index}`
+                const billIdDisplay = billId && typeof billId === 'string' ? billId.slice(0, 8) + '...' : billId || 'N/A'
+                const isExpanded = expandedBills.has(billId)
+                const isLoadingBreakdown = loadingBreakdown.has(billId)
+                const isDownloadingPDF = downloadingPDF.has(billId)
+                const breakdown = billBreakdowns[billId]
+                
+                return (
+                  <div key={billId || index} className="border rounded-lg p-4 space-y-3">
+                    {/* Bill Summary Row */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-mono text-sm font-medium">{billIdDisplay}</span>
+                          <Badge variant={bill.status === 'paid' ? 'green' : 'yellow'}>
+                            {bill.status || 'pending'}
+                          </Badge>
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {bill.billing_period || 'N/A'}
+                        </div>
+                        <div className="text-lg font-semibold text-gray-900">
+                          ${(bill.total_amount || bill.amount || 0).toFixed ? (bill.total_amount || bill.amount || 0).toFixed(2) : '0.00'}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2">
+                        <div className="text-sm text-gray-500">
+                          Due: {bill.due_date ? new Date(bill.due_date).toLocaleDateString() : 'N/A'}
+                        </div>
+                        
+                        {/* Action Buttons */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => fetchBillBreakdown(billId)}
+                          disabled={isLoadingBreakdown}
+                          className="flex items-center"
+                        >
+                          {isLoadingBreakdown ? (
+                            <>
+                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600 mr-1"></div>
+                              Loading...
+                            </>
+                          ) : (
+                            <>
+                              {isExpanded ? <ChevronDown className="h-3 w-3 mr-1" /> : <ChevronRight className="h-3 w-3 mr-1" />}
+                              <Eye className="h-3 w-3 mr-1" />
+                              Details
+                            </>
+                          )}
+                        </Button>
+                        
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => downloadBillPDF(billId)}
+                          disabled={isDownloadingPDF}
+                          className="flex items-center"
+                        >
+                          {isDownloadingPDF ? (
+                            <>
+                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600 mr-1"></div>
+                              Downloading...
+                            </>
+                          ) : (
+                            <>
+                              <Download className="h-3 w-3 mr-1" />
+                              PDF
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    {/* Bill Breakdown (Expandable) */}
+                    {isExpanded && breakdown && (
+                      <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                        <h4 className="font-medium text-gray-900 mb-3">Bill Breakdown</h4>
+                        <div className="space-y-3">
+                          {breakdown.breakdown && Object.entries(breakdown.breakdown).map(([key, item]: [string, any]) => (
+                            <div key={key} className="flex items-center justify-between py-2 border-b border-gray-200 last:border-0">
+                              <div className="flex-1">
+                                <div className="font-medium text-sm text-gray-900">
+                                  {item.description || key.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                                </div>
+                                {item.quantity && item.unit && (
+                                  <div className="text-xs text-gray-500">
+                                    {item.quantity.toLocaleString()} {item.unit} × ${item.unit_price?.toFixed ? item.unit_price.toFixed(3) : '0.000'}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="font-semibold text-sm text-gray-900">
+                                ${item.amount?.toFixed ? item.amount.toFixed(2) : '0.00'}
+                              </div>
+                            </div>
+                          ))}
+                          
+                          {/* Total */}
+                          <div className="flex items-center justify-between pt-3 border-t-2 border-gray-300">
+                            <div className="font-semibold text-base text-gray-900">
+                              Total Amount
+                            </div>
+                            <div className="font-bold text-lg text-gray-900">
+                              ${breakdown.total_amount?.toFixed ? breakdown.total_amount.toFixed(2) : '0.00'} {breakdown.currency || 'USD'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Show message if expanded but no breakdown available */}
+                    {isExpanded && !breakdown && !isLoadingBreakdown && (
+                      <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-sm text-yellow-800">
+                          Bill breakdown details are not available for this invoice.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           ) : (
             <p className="text-gray-500 text-center py-8">No billing history available</p>

@@ -760,4 +760,192 @@ ORDER BY (customer_id, code, created_at)
 
 ---
 
+### Bill PDF Generation Endpoint Missing
+**Issue**: Admin UI billing section has PDF download functionality but backend API endpoint doesn't exist  
+**Location**: `/apps/admin-ui/src/app/tenants/[id]/subscription/page.tsx` - Bill PDF download feature  
+**Priority**: Medium (billing and audit requirements)  
+**Date Added**: September 28, 2025  
+**Description**: Billing history section includes PDF download buttons for each invoice, but the corresponding backend API endpoint `/v1/billing/bills/{billId}/pdf` returns 404 Not Found.
+
+**Current Implementation**:
+- **Frontend**: PDF download button with loading states and error handling
+- **API Call**: `GET /v1/billing/bills/{billId}/pdf` expecting binary PDF response
+- **Backend**: Endpoint doesn't exist, returns 404 error
+
+**Missing Backend Components**:
+1. **API Endpoint**: `GET /v1/billing/bills/{billId}/pdf` in subscription or usage router
+2. **PDF Generation**: Library integration for PDF creation (reportlab, weasyprint, or similar)
+3. **Bill Template**: Professional invoice template with company branding
+4. **Security**: Proper authorization to ensure users can only download their bills
+
+**Error Details**:
+```
+Failed to download PDF: HTTP 404: {"detail":"Not Found"}
+```
+
+**Frontend Implementation Reference**:
+```typescript
+// /apps/admin-ui/src/app/tenants/[id]/subscription/page.tsx - Line ~350
+const downloadBillPDF = async (billId: string) => {
+  const response = await fetch(`/v1/billing/bills/${billId}/pdf`, {
+    headers: {
+      'Authorization': `Bearer ${authService.getToken()}`,
+      'X-Customer-ID': 'platform'
+    }
+  })
+  // Expects binary PDF blob response
+}
+```
+
+**Required API Implementation**:
+```python
+@router.get("/billing/bills/{bill_id}/pdf")
+async def download_bill_pdf(
+    bill_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Generate and download PDF invoice for bill"""
+    # 1. Fetch bill details from database
+    # 2. Verify user has access to this bill
+    # 3. Generate PDF using template
+    # 4. Return PDF as binary response with proper headers
+```
+
+**PDF Generation Requirements**:
+- **Company Branding**: Logforge logo and company information
+- **Bill Details**: All breakdown items, amounts, dates, payment terms
+- **Professional Format**: Standard invoice layout with line items
+- **File Naming**: `logforge-invoice-{bill_id}.pdf`
+- **Content-Type**: `application/pdf` with proper disposition headers
+
+**Security Considerations**:
+- **Authorization**: Verify user has access to specific tenant's bills
+- **Platform Admin**: Can download any tenant's bills for support
+- **Tenant Admin**: Can only download their organization's bills
+- **Rate Limiting**: Prevent bulk PDF generation abuse
+
+**Integration Points**:
+- **Bill Data**: Use existing billing history API data structure
+- **User Permissions**: Integrate with current RBAC system
+- **File Storage**: Option to cache generated PDFs for performance
+- **Audit Trail**: Log PDF download events for compliance
+
+**Implementation Approach**:
+1. **Immediate**: Add placeholder endpoint returning simple text file
+2. **Phase 1**: Basic PDF generation with bill data in tabular format
+3. **Phase 2**: Professional invoice template with branding
+4. **Phase 3**: Advanced features (watermarks, digital signatures)
+
+**Business Impact**: 
+- **Audit Requirements**: Many enterprises require PDF invoices for accounting
+- **Customer Experience**: Standard expectation for billing transparency
+- **Compliance**: Some regulations require downloadable billing documents
+- **Support**: PDF invoices reduce billing support tickets
+
+**Workaround**: Currently users see error message when attempting PDF download
+
+**Future Enhancement**: Implement complete PDF generation system with professional invoice templates and proper backend API endpoint
+
+---
+
+### AdminActivityLog Filters Not Working 
+**Issue**: Audit log explorer filters (action type, risk level, user ID) not properly filtering results  
+**Location**: `/apps/admin-ui/src/components/AdminActivityLog.tsx` - Filter components and API integration  
+**Priority**: Medium (user experience and functionality)  
+**Date Reported**: September 28, 2025  
+**Description**: The floating admin activity log explorer has filter controls that appear functional but do not actually filter the audit log results.
+
+**Expected Behavior**:
+- **Action Filter**: Selecting specific action types (login, logout, data_access, admin_action, etc.) should filter audit events
+- **Risk Filter**: Selecting risk levels (low, medium, high, critical) should filter by event severity
+- **User Filter**: Entering user ID should filter events for specific users
+- **Time Filter**: Already working correctly (1h, 4h, 24h, 7d)
+
+**Actual Behavior**:
+- All filters except time filter appear to be ignored
+- Same audit events display regardless of filter selections
+- Filter state is maintained in UI but not passed effectively to backend API
+
+**Technical Analysis**:
+- **Frontend State**: Filter values properly stored in React state
+- **API Parameters**: Filters may not be correctly passed to `fetchAdminAuditLogs()` function
+- **Backend Processing**: Enterprise audit logs API may not be processing filter parameters
+
+**Investigation Required**:
+1. **API Parameter Mapping**: Verify filter parameters passed correctly to backend
+2. **Backend Filter Logic**: Check if enterprise service processes action_types, risk_level filters
+3. **Database Query**: Ensure audit log queries include WHERE clauses for filters
+
+**Impact**:
+- **Admin Productivity**: Cannot quickly find specific audit events
+- **Security Monitoring**: Difficult to investigate specific user activities or action types
+- **Compliance**: Reduced ability to generate filtered audit reports
+
+**Reproduction Steps**:
+1. Open admin UI and access floating activity log
+2. Select specific action type filter (e.g., "Admin Action")
+3. Observe that all event types still display
+4. Try other filters with same result
+
+**Future Enhancement**: Fix filter parameter passing and backend filter processing for full audit log filtering capabilities
+
+---
+
+### AdminActivityLog Timestamp Display Shows UTC Instead of Local Time
+**Issue**: Audit log timestamps display in UTC format instead of user's local timezone  
+**Location**: `/apps/admin-ui/src/components/AdminActivityLog.tsx` - Timestamp formatting function  
+**Priority**: Medium (user experience and usability)  
+**Date Reported**: September 28, 2025  
+**Description**: The admin activity log explorer shows timestamps in UTC format, making it difficult for administrators to correlate events with local activities.
+
+**Expected Behavior**:
+- **Local Time Display**: Timestamps should show in user's local timezone
+- **Readable Format**: Human-friendly format like "Sep 28, 2025 2:13:27 PM"
+- **Timezone Indication**: Optionally show timezone abbreviation (PST, EST, etc.)
+
+**Actual Behavior**:
+- **UTC Raw Format**: Shows "2025-09-28 21:13:27.000000" 
+- **No Timezone Context**: Users must manually convert UTC to local time
+- **Difficult Correlation**: Hard to match with local business hours or user activities
+
+**Technical Details**:
+- **Current Code**: `formatTimestamp(timestamp: string)` using `new Date(timestamp).toLocaleString()`
+- **Data Source**: Backend sends UTC timestamps from database
+- **Browser Support**: Modern browsers support timezone conversion
+
+**Current Implementation**:
+```typescript
+const formatTimestamp = (timestamp: string) => {
+  return new Date(timestamp).toLocaleString()
+}
+```
+
+**Improved Implementation Needed**:
+```typescript
+const formatTimestamp = (timestamp: string) => {
+  return new Date(timestamp).toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short', 
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'short'
+  })
+}
+```
+
+**Impact**:
+- **User Experience**: Administrators struggle to understand when events occurred
+- **Incident Response**: Difficult to correlate audit events with security incidents
+- **Operational Efficiency**: Time zone conversion adds cognitive overhead
+
+**Example Improvement**:
+- **Before**: "2025-09-28 21:13:27.000000"  
+- **After**: "Sep 28, 2025, 2:13:27 PM PST"
+
+**Future Enhancement**: Implement proper local timezone display with readable formatting and optional timezone indicators
+
+---
+
 

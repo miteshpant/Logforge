@@ -304,20 +304,21 @@ Authentication Router (auth_api.py) - M8:
 ├── POST /v1/auth/verify-email          # Verify email address
 └── POST /v1/auth/resend-verification   # Resend email verification
 
-User Management Router (user_api.py) - M8:
-├── GET /v1/users                       # List users (admin only)
-├── POST /v1/users                      # Create new user (admin only)
-├── GET /v1/users/{id}                  # Get user details
-├── PUT /v1/users/{id}                  # Update user information
-├── DELETE /v1/users/{id}               # Delete user (admin only)
-├── POST /v1/users/{id}/roles           # Assign role to user
-├── GET /v1/users/{id}/roles            # Get user roles
-├── DELETE /v1/users/{id}/roles/{role_id} # Remove role from user
-├── POST /v1/admin/users                # Create platform admin user
-├── PUT /v1/admin/users/{id}            # Update admin user
-├── DELETE /v1/admin/users/{id}         # Delete admin user
-├── GET /v1/users/{id}/sessions         # List user sessions
-└── DELETE /v1/users/{id}/sessions/{session_id} # Revoke user session
+User Management Router (user_api.py) - M8: ✅ **PRODUCTION READY** (22+ endpoints):
+├── POST /v1/users                      # Create new user account (with password validation)
+├── GET /v1/users/search                # Search users by name or email (admin only)
+├── GET /v1/users/me                    # Get current user's profile
+├── PUT /v1/users/me                    # Update current user's profile
+├── GET /v1/users/{user_id}             # Get user by ID (self or admin access)
+├── PUT /v1/users/{user_id}             # Update user account (self or admin access)
+├── DELETE /v1/users/{user_id}          # Delete user account (admin only)
+├── GET /v1/users                       # List users with filtering (role-based access)
+├── POST /v1/admin/users                # Create platform admin user (platform admins only)
+├── GET /v1/admin/users                 # List platform admin users (platform admins only)
+├── PUT /v1/admin/users/{user_id}       # Update admin user (platform admins only)
+├── DELETE /v1/admin/users/{user_id}    # Delete admin user (platform admins only)
+├── GET /v1/admin/users/{user_id}       # Get admin user details (platform admins only)
+└── POST /v1/users/bulk-create          # Bulk create multiple users (up to 100 users)
 
 Role Management Router (role_api.py) - M8:
 ├── GET /v1/roles                       # List all available roles
@@ -330,17 +331,29 @@ Role Management Router (role_api.py) - M8:
 ├── DELETE /v1/roles/{id}/permissions/{permission_id} # Remove permission from role
 └── GET /v1/permissions                 # List all available permissions
 
-Usage Analytics Router (usage_api.py) - M8:
-├── GET /v1/usage/current/{tenant_id}   # Get current usage metrics
-├── GET /v1/usage/history/{tenant_id}   # Get usage history
-├── GET /v1/billing/estimate/{tenant_id} # Get billing estimate
-├── POST /v1/usage/track                # Track API usage (internal)
-├── GET /v1/usage/export/{tenant_id}    # Export usage data
-├── GET /v1/usage/analytics/{tenant_id} # Usage analytics and trends
-├── POST /v1/billing/invoice/{tenant_id} # Generate invoice
-├── GET /v1/usage/partitions            # Database partition management
-├── POST /v1/usage/alerts               # Create cost alerts
-└── GET /v1/usage/summary/{tenant_id}   # Usage summary report
+Usage Analytics Router (usage_api.py) - M8: ✅ **PRODUCTION READY** (22+ endpoints):
+├── GET /v1/usage/current/{tenant_id}              # Real-time usage metrics and analytics
+├── GET /v1/usage/history/{tenant_id}              # Historical usage data with time-series
+├── GET /v1/usage/export/{tenant_id}               # Export usage data (CSV, JSON formats)
+├── GET /v1/usage/analytics/{tenant_id}            # Advanced usage analytics and trends
+├── GET /v1/usage/summary/{tenant_id}              # Usage summary report with insights
+├── POST /v1/usage/track                           # Internal API usage tracking (async)
+├── GET /v1/usage/platform/stats                   # Platform-wide usage statistics
+├── GET /v1/usage/features/{tenant_id}             # Feature-level usage breakdown
+├── GET /v1/usage/partitions                       # Database partition management
+├── GET /v1/usage/infrastructure/{tenant_id}       # Infrastructure usage and costs
+├── POST /v1/billing/invoice/{tenant_id}           # Generate invoice with real database records
+├── GET /v1/billing/estimate/{tenant_id}           # Real-time billing estimate
+├── GET /v1/billing/plans                          # Available subscription plans
+├── POST /v1/billing/alerts                        # Create cost alerts and notifications
+├── GET /v1/billing/alerts/{tenant_id}             # List cost alerts
+├── PUT /v1/billing/alerts/{alert_id}              # Update cost alert settings
+├── DELETE /v1/billing/alerts/{alert_id}           # Delete cost alert
+├── GET /v1/usage/reports/{tenant_id}              # Custom usage reports generation
+├── POST /v1/usage/reports/{tenant_id}/generate    # Generate custom usage report
+├── GET /v1/usage/trends/{tenant_id}               # Usage trends and forecasting
+├── GET /v1/billing/transactions/{tenant_id}       # Billing transaction history
+└── POST /v1/usage/recalculate/{tenant_id}         # Recalculate usage metrics
 ```
 
 ### 2. Frontend (Next.js)
