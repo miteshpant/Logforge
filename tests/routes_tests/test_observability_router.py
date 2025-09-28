@@ -23,6 +23,75 @@ class ObservabilityRouterTestSuite(BaseTestSuite):
 
     def __init__(self):
         super().__init__("ObservabilityRouter")
+    
+    async def setup_observability_subscription(self):
+        """Setup observability subscription with required features"""
+        try:
+            print(f"   🔧 Setting up observability subscription using proven pattern...")
+            
+            # STEP 1: Create proper tenant via API (to get UUID format)
+            tenant_create_request = {
+                "name": f"Observability Test Org {self.test_id}",
+                "type": "smb",  # SMB tier supports observability features
+                "primary_contact_name": f"Test Admin {self.test_id}",
+                "primary_contact_email": self.test_user_email,
+                "industry": "technology",
+                "address": f"123 Test St, Suite {self.test_id}",
+                "company_size": 100,
+                "website": f"https://observability-test-{self.test_id}.com",
+                "notes": "Created for observability router testing"
+            }
+            
+            tenant_response = await self.make_authenticated_request(
+                "POST",
+                "/v1/tenants",
+                json=tenant_create_request
+            )
+            
+            if tenant_response.status_code != 201:
+                raise Exception(f"Failed to create tenant: {tenant_response.status_code} - {tenant_response.text}")
+            
+            tenant_data = tenant_response.json()
+            uuid_tenant_id = tenant_data["tenant_id"]
+            print(f"   ✅ Tenant created with UUID: {uuid_tenant_id}")
+            
+            # STEP 2: Update all references to use UUID tenant_id format
+            self.test_tenant_id = uuid_tenant_id
+            self.auth_headers["X-Customer-ID"] = uuid_tenant_id
+            
+            # STEP 3: Create subscription with ALL observability features
+            observability_subscription_request = {
+                "subscribed_features": [
+                    "observability.*",  # ALL observability features via wildcard
+                    "queries.*",       # Observability needs queries for data access
+                    "ingestion.*",     # Need data ingestion for traces and metrics
+                    "storage.*",       # Observability needs storage access
+                    "alerts.*"         # Observability may integrate with alerts
+                ],
+                "subscription_tier": "smb",  # SMB tier supports advanced observability features
+                "billing_cycle": "monthly",
+                "auto_renew": True
+            }
+            
+            # Create subscription using the UUID tenant_id with PUT method
+            subscription_response = await self.make_authenticated_request(
+                "PUT",
+                f"/v1/tenants/{uuid_tenant_id}/subscription",
+                json=observability_subscription_request
+            )
+            
+            if subscription_response.status_code != 200:
+                raise Exception(f"Failed to create observability subscription: {subscription_response.status_code} - {subscription_response.text}")
+            
+            subscription_data = subscription_response.json()
+            print(f"   ✅ Observability subscription created: {subscription_data.get('subscription_tier', 'N/A')}")
+            print(f"   📦 Features: {subscription_data.get('subscribed_features', [])}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"   ❌ Failed to setup observability subscription: {e}")
+            raise Exception(f"Observability subscription setup failed: {e}")
 
     async def test_trace_ingestion_endpoint(self):
         """Test POST /v1/observability/traces/ingest - Ingest OpenTelemetry traces"""
@@ -906,10 +975,10 @@ class ObservabilityRouterTestSuite(BaseTestSuite):
         print(f"\n🚀 Starting Observability Router Test Suite (Test ID: {self.test_id})")
         print("=" * 60)
 
-        # Create test user and tenant for authentication
+        # Setup authentication with platform admin permissions and observability subscription
         try:
-            await self.create_test_user_and_tenant(['tenant_admin'])
-            await self.setup_auth()
+            await self.setup_auth(roles=['super_admin', 'tenant_admin'])
+            await self.setup_observability_subscription()
 
         except Exception as e:
             print(f"❌ Failed to setup test environment: {e}")

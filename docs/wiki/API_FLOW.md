@@ -120,15 +120,15 @@ graph TB
 - **`storage_config.py`** - Multi-cloud storage configuration
 - **`ttl_manager.py`** - Data lifecycle and retention management
 
-#### API Endpoints:
+#### API Routers & Endpoints (16 Routers, 227+ Endpoints):
 
 ```
-Health & Status:
-├── GET /health                    # System health check
-├── GET /openapi.json             # OpenAPI schema
-└── GET /docs                     # Swagger UI
+Health Router (health.py):
+├── GET /health                    # Real-time system health with database connectivity
+├── GET /health/detailed          # Comprehensive health with metrics and diagnostics
+└── GET /                         # Root endpoint with platform info and feature list
 
-Log Ingestion:
+Log Ingestion Router (ingestion.py):
 ├── POST /v1/ingest/logs          # Generic JSON log ingestion
 ├── POST /v1/ingest/logs/batch    # High-performance batch ingestion
 ├── POST /v1/ingest/otlp          # OpenTelemetry Protocol logs
@@ -139,146 +139,208 @@ Log Ingestion:
 ├── POST /v1/ingest/structured    # Application JSON logs
 └── POST /v1/ingest               # Auto-detect format and parse
 
-Query & Search (M2):
+Query Router (query.py):
 ├── POST /v1/query/advanced       # Advanced log querying with filters, aggregations, time-series
 ├── GET /v1/logs                  # Simple log retrieval
+├── GET /v1/saved-queries         # List saved queries
+├── POST /v1/saved-queries        # Save query for reuse
+├── GET /v1/saved-queries/{id}    # Get specific saved query
+├── DELETE /v1/saved-queries/{id} # Delete saved query
+└── POST /v1/query/cache/cleanup  # Cache cleanup operations
 
-Tenant Management:
-├── POST /v1/tenants              # Create new tenant (generates UUID)
-├── GET /v1/tenants               # List tenants  
-├── GET /v1/tenants/{id}          # Get tenant details
-├── PUT /v1/tenants/{id}          # Update tenant
-└── DELETE /v1/tenants/{id}       # Delete tenant
-├── GET /v1/dashboards           # List available enterprise dashboards
-├── GET /v1/dashboards/{id}      # Get specific dashboard definition
-├── GET /v1/dashboards/{id}/data # Get dashboard data with filters
-├── POST /v1/export              # Export query results (JSON, CSV)
-├── GET /v1/saved-queries        # List saved queries
-└── POST /v1/saved-queries       # Save query for reuse
+Dashboard Router (dashboard.py):
+├── GET /v1/dashboards            # List available enterprise dashboards
+├── GET /v1/dashboards/{id}       # Get specific dashboard definition
+├── GET /v1/dashboards/{id}/data  # Get dashboard data with filters
+├── POST /v1/export               # Export query results (JSON, CSV)
+├── GET /v1/dashboards/{id}/realtime # Real-time dashboard data updates
+└── GET /v1/dashboards/health     # Dashboard service health
 
-Alert Management (M3):
-├── GET /v1/alerts/rules         # List all alert rules
-├── POST /v1/alerts/rules        # Create new alert rule
-├── GET /v1/alerts/rules/{id}    # Get specific alert rule
-├── PUT /v1/alerts/rules/{id}    # Update alert rule
-├── DELETE /v1/alerts/rules/{id} # Delete alert rule
-├── POST /v1/alerts/rules/{id}/test # Test rule against current data
-├── GET /v1/alerts/history       # Alert trigger history
-├── GET /v1/alerts/channels      # List notification channels
-├── POST /v1/alerts/channels     # Create notification channel
-├── PUT /v1/alerts/channels/{id} # Update notification channel
-├── DELETE /v1/alerts/channels/{id} # Delete notification channel
-├── GET /v1/alerts/metrics       # Alert performance metrics
-├── POST /v1/alerts/acknowledge  # Acknowledge alert
-├── POST /v1/alerts/silence      # Silence alert rule
-└── GET /v1/alerts/escalation    # Escalation policies
+Storage Router (storage.py):
+├── GET /v1/storage/health              # Storage system health and capacity
+├── GET /v1/storage/policies            # List retention policies
+├── POST /v1/storage/policies           # Create retention policy
+├── GET /v1/storage/policies/{name}     # Get specific policy
+├── PUT /v1/storage/policies/{name}     # Update retention policy
+├── DELETE /v1/storage/policies/{name}  # Delete retention policy
+├── GET /v1/storage/usage               # Storage usage statistics
+├── POST /v1/storage/archive            # Manual data archival trigger
+├── GET /v1/storage/backends            # List storage backends
+├── POST /v1/storage/backends           # Create storage backend
+├── GET /v1/storage/operations          # List data operations
+├── POST /v1/storage/operations/archive # Archive data manually
+├── GET /v1/storage/quotas              # Storage quotas and limits
+├── POST /v1/storage/quotas             # Set storage quotas
+└── GET /v1/storage/health/infrastructure # System-wide infrastructure health (admin only)
 
-Security Analytics (M4 - SIEM):
-├── GET /v1/security/health           # Security analytics health check
-├── GET /v1/security/dashboard        # Security overview dashboard with MITRE ATT&CK mapping
-├── GET /v1/security/sigma-rules      # List all Sigma detection rules
-├── POST /v1/security/sigma-rules     # Create custom Sigma rules
-├── GET /v1/security/sigma-rules/{id} # Get specific Sigma rule details
+Alerts Router (alerts.py):
+├── GET /v1/alerts/rules                # List all alert rules
+├── POST /v1/alerts/rules               # Create new alert rule
+├── GET /v1/alerts/rules/{id}           # Get specific alert rule
+├── PUT /v1/alerts/rules/{id}           # Update alert rule
+├── DELETE /v1/alerts/rules/{id}        # Delete alert rule
+├── POST /v1/alerts/rules/{id}/test     # Test rule against current data
+├── GET /v1/alerts/history              # Alert trigger history
+├── GET /v1/alerts/channels             # List notification channels
+├── POST /v1/alerts/channels            # Create notification channel
+├── PUT /v1/alerts/channels/{id}        # Update notification channel
+├── DELETE /v1/alerts/channels/{id}     # Delete notification channel
+├── GET /v1/alerts/metrics              # Alert performance metrics
+├── POST /v1/alerts/acknowledge         # Acknowledge alert
+├── POST /v1/alerts/silence             # Silence alert rule
+└── GET /v1/alerts/escalation           # Escalation policies
+
+Security Analytics Router (security_api.py) - M4 SIEM:
+├── GET /v1/security/health             # Security analytics health check
+├── GET /v1/security/dashboard          # Security overview dashboard with MITRE ATT&CK
+├── GET /v1/security/sigma-rules        # List all Sigma detection rules
+├── POST /v1/security/sigma-rules       # Create custom Sigma rules
+├── GET /v1/security/sigma-rules/{id}   # Get specific Sigma rule details
 ├── POST /v1/security/sigma-rules/{id}/test # Test rule evaluation
-├── GET /v1/security/events           # List security events/detections
-├── PUT /v1/security/events/{id}/status # Update event status (investigating, resolved, etc.)
-├── POST /v1/security/threat-hunting  # Execute threat hunting campaigns
-├── GET /v1/security/threat-intel     # List threat intelligence indicators
+├── PUT /v1/security/sigma-rules/{id}   # Update Sigma rule
+├── DELETE /v1/security/sigma-rules/{id} # Delete Sigma rule
+├── GET /v1/security/events             # List security events/detections
+├── PUT /v1/security/events/{id}/status # Update event status (investigating, resolved)
+├── POST /v1/security/threat-hunting    # Execute threat hunting campaigns
+├── GET /v1/security/threat-intel       # List threat intelligence indicators
 └── GET /v1/security/mitre-attack/techniques # MITRE ATT&CK technique mappings
 
-Observability & APM (M5):
-├── GET /v1/observability/health      # Observability engine health check
+Observability Router (observability_api.py) - M5 APM:
+├── GET /v1/observability/health        # Observability engine health check
 ├── POST /v1/observability/traces/ingest # Ingest OpenTelemetry trace spans
 ├── POST /v1/observability/traces/search # Search traces with filters
 ├── GET /v1/observability/traces/{trace_id} # Get trace details with span correlation
 ├── POST /v1/observability/metrics/ingest # Ingest time-series metrics data
 ├── POST /v1/observability/metrics/query # Query metrics with aggregations
-├── GET /v1/observability/service-map # Get service topology and dependencies
-└── GET /v1/observability/apm/{service} # Get APM metrics for specific service
+├── GET /v1/observability/service-map   # Get service topology and dependencies
+├── GET /v1/observability/apm/{service} # Get APM metrics for specific service
+├── GET /v1/observability/trends        # Performance trends and analytics
+└── GET /v1/observability/alerts        # Observability-specific alerts
 
-AI Assistant & RCA (M6):
-├── GET /v1/ai/health                 # AI engine health and model status
-├── POST /v1/ai/query                 # Natural language to SQL query conversion
-├── GET /v1/ai/query/suggestions      # Intelligent query suggestions by role
-├── GET /v1/ai/query/{id}/history     # Query refinement history and performance
-├── POST /v1/ai/analyze-incident      # Automated root cause analysis
-├── POST /v1/ai/analyze-symptoms      # Symptom analysis without formal incident
-├── GET /v1/ai/incidents/{id}/analysis # Retrieve existing RCA analysis
-├── POST /v1/ai/correlate             # Event correlation and pattern analysis
-├── GET /v1/ai/anomalies              # Anomaly detection across systems
-├── POST /v1/ai/predict               # Failure prediction and forecasting
-├── GET /v1/ai/baselines              # Learned baselines and behavior patterns
-├── POST /v1/ai/investigate/start     # Start guided investigation session
+AI Assistant Router (ai_api.py) - M6 RCA:
+├── GET /v1/ai/health                   # AI engine health and model status
+├── POST /v1/ai/query                   # Natural language to SQL query conversion
+├── GET /v1/ai/query/suggestions        # Intelligent query suggestions by role
+├── GET /v1/ai/query/{id}/history       # Query refinement history and performance
+├── POST /v1/ai/analyze-incident        # Automated root cause analysis
+├── POST /v1/ai/analyze-symptoms        # Symptom analysis without formal incident
+├── GET /v1/ai/incidents/{id}/analysis  # Retrieve existing RCA analysis
+├── POST /v1/ai/correlate               # Event correlation and pattern analysis
+├── GET /v1/ai/anomalies                # Anomaly detection across systems
+├── POST /v1/ai/predict                 # Failure prediction and forecasting
+├── GET /v1/ai/baselines                # Learned baselines and behavior patterns
+├── POST /v1/ai/investigate/start       # Start guided investigation session
 ├── POST /v1/ai/investigate/{id}/evidence # Add evidence to investigation
 ├── GET /v1/ai/investigate/{id}/recommendations # AI-powered investigation steps
-├── GET /v1/ai/knowledge/search       # Search solution knowledge base
-├── POST /v1/ai/knowledge/solutions   # Add solutions to knowledge base  
-├── POST /v1/ai/business-impact       # Calculate business impact of issues
-├── GET /v1/ai/metrics/business       # Business-context performance metrics
-├── GET /v1/ai/insights/operational   # Operational improvement recommendations
-├── POST /v1/ai/integrations/slack    # Slack conversational AI integration
-└── POST /v1/ai/learn/incident        # Submit incident data for model training
+├── GET /v1/ai/knowledge/search         # Search solution knowledge base
+├── POST /v1/ai/knowledge/solutions     # Add solutions to knowledge base  
+├── POST /v1/ai/business-impact         # Calculate business impact of issues
+├── GET /v1/ai/metrics/business         # Business-context performance metrics
+├── GET /v1/ai/insights/operational     # Operational improvement recommendations
+├── POST /v1/ai/integrations/slack      # Slack conversational AI integration
+└── POST /v1/ai/learn/incident          # Submit incident data for model training
 
-Enterprise Readiness (M7):
+Enterprise Router (enterprise_api.py) - M7:
 ├── POST /v1/enterprise/auth/oidc/configure # Configure OIDC provider
-├── GET /v1/enterprise/auth/providers  # List authentication providers
-├── POST /v1/enterprise/auth/api-keys  # Generate scoped API keys
-├── GET /v1/enterprise/auth/api-keys   # List API keys
+├── GET /v1/enterprise/auth/providers   # List authentication providers
+├── POST /v1/enterprise/auth/api-keys   # Generate scoped API keys
+├── GET /v1/enterprise/auth/api-keys    # List API keys
 ├── DELETE /v1/enterprise/auth/api-keys/{key_id} # Revoke API key
-├── POST /v1/enterprise/auth/mfa/setup # Setup Multi-Factor Authentication
-├── GET /v1/enterprise/rbac/roles      # List available roles
-├── POST /v1/enterprise/rbac/roles     # Create custom role
+├── POST /v1/enterprise/auth/mfa/setup  # Setup Multi-Factor Authentication
+├── GET /v1/enterprise/rbac/roles       # List available roles
+├── POST /v1/enterprise/rbac/roles      # Create custom role
 ├── PUT /v1/enterprise/rbac/users/{user_id}/roles # Assign roles to user
 ├── GET /v1/enterprise/rbac/permissions # Get user permissions
-├── GET /v1/enterprise/tenants         # List customer tenants
-├── POST /v1/enterprise/tenants        # Create new tenant
+├── GET /v1/enterprise/tenants          # List customer tenants
+├── POST /v1/enterprise/tenants         # Create new tenant
 ├── PUT /v1/enterprise/tenants/{tenant_id}/settings # Update tenant settings
 ├── GET /v1/enterprise/compliance/reports # Generate compliance reports
 ├── POST /v1/enterprise/compliance/legal-hold # Place legal hold on data
-├── GET /v1/enterprise/audit-logs      # Retrieve audit trail
-├── GET /v1/enterprise/integrations    # List available integrations
+├── GET /v1/enterprise/audit-logs       # Retrieve audit trail
+├── GET /v1/enterprise/integrations     # List available integrations
 ├── POST /v1/enterprise/integrations/{type}/configure # Configure integration
 ├── GET /v1/enterprise/integrations/{type}/status # Check integration health
-├── GET /v1/enterprise/usage/billing   # Billing and usage metrics
-├── GET /v1/enterprise/system/health   # Enterprise system health
-└── POST /v1/enterprise/backup/configure # Configure backup policies
+├── GET /v1/enterprise/usage/billing    # Billing and usage metrics
+├── GET /v1/enterprise/system/health    # Enterprise system health
+├── POST /v1/enterprise/backup/configure # Configure backup policies
+└── GET /v1/enterprise/health           # Enterprise module health check
 
-User Service & Authentication (M8):
-├── POST /v1/auth/setup/init          # Initialize platform setup (get setup token)
-├── POST /v1/auth/setup               # Create initial admin user with setup token
-├── POST /v1/auth/login               # User authentication (get JWT token)
-├── POST /v1/auth/logout              # Session termination
-├── POST /v1/auth/refresh             # Refresh JWT token
-├── GET /v1/auth/me                   # Get current user profile
-├── POST /v1/auth/invite              # Invite user to tenant (admin only)
-├── POST /v1/auth/accept-invite       # Accept invitation and create account
-├── POST /v1/auth/password/reset      # Request password reset
+Tenant Management Router (tenant_api.py):
+├── POST /v1/tenants                    # Create new tenant (generates UUID)
+├── GET /v1/tenants                     # List tenants
+├── GET /v1/tenants/{id}                # Get tenant details
+├── PUT /v1/tenants/{id}                # Update tenant
+├── DELETE /v1/tenants/{id}             # Delete tenant
+├── POST /v1/tenants/onboard            # Create tenant with admin invitation
+├── GET /v1/tenants/{id}/users          # List tenant users
+├── POST /v1/tenants/{id}/invite        # Invite user to tenant
+├── GET /v1/tenants/{id}/usage          # Tenant usage statistics
+└── POST /v1/tenants/{id}/settings      # Update tenant settings
+
+Subscription Router (subscription_api.py):
+├── GET /v1/subscriptions               # List subscriptions
+├── POST /v1/subscriptions              # Create subscription
+├── GET /v1/subscriptions/{id}          # Get subscription details
+├── PUT /v1/subscriptions/{id}          # Update subscription
+├── DELETE /v1/subscriptions/{id}       # Cancel subscription
+├── GET /v1/features/available          # List all available features
+├── POST /v1/features/validate          # Validate feature access
+├── GET /v1/billing/usage/{tenant_id}   # Get billing usage for tenant
+├── POST /v1/billing/invoice/{tenant_id} # Generate invoice
+└── GET /v1/subscriptions/{id}/usage    # Subscription usage details
+
+Authentication Router (auth_api.py) - M8:
+├── POST /v1/auth/setup/init            # Initialize platform setup (get setup token)
+├── POST /v1/auth/setup                 # Create initial admin user with setup token
+├── POST /v1/auth/login                 # User authentication (get JWT token)
+├── POST /v1/auth/logout                # Session termination and token invalidation
+├── POST /v1/auth/refresh               # Refresh JWT token before expiry
+├── GET /v1/auth/me                     # Get current user profile and permissions
+├── POST /v1/auth/invite                # Invite user to tenant (admin only)
+├── POST /v1/auth/accept-invite         # Accept invitation and create account
+├── POST /v1/auth/password/reset        # Request password reset
 ├── POST /v1/auth/password/reset-confirm # Confirm password reset with token
-├── GET /v1/users                     # List users (admin only)
-├── POST /v1/users                    # Create new user (admin only)
-├── GET /v1/users/{id}                # Get user details
-├── PUT /v1/users/{id}                # Update user information
-├── DELETE /v1/users/{id}             # Delete user (admin only)
-├── POST /v1/users/{id}/roles         # Assign role to user
-├── GET /v1/users/{id}/roles          # Get user roles
-├── DELETE /v1/users/{id}/roles       # Remove role from user
-├── POST /v1/admin/users              # Create platform admin user
-├── POST /v1/tenants/onboard          # Create tenant with admin invitation
-├── GET /v1/usage/current/{tenant_id} # Get current usage metrics
-├── GET /v1/usage/history/{tenant_id} # Get usage history
-└── GET /v1/billing/estimate/{tenant_id} # Get billing estimate
+├── POST /v1/auth/password/change       # Change password (authenticated)
+├── POST /v1/auth/verify-email          # Verify email address
+└── POST /v1/auth/resend-verification   # Resend email verification
 
-Test Runner (Development):
-├── GET /v1/test/suites               # List available test suites
-├── POST /v1/test/run/{suite_name}    # Execute specific test suite
-├── GET /v1/test/results/{test_id}    # Get test execution results
-└── GET /v1/test/status/{test_id}     # Get test execution status
+User Management Router (user_api.py) - M8:
+├── GET /v1/users                       # List users (admin only)
+├── POST /v1/users                      # Create new user (admin only)
+├── GET /v1/users/{id}                  # Get user details
+├── PUT /v1/users/{id}                  # Update user information
+├── DELETE /v1/users/{id}               # Delete user (admin only)
+├── POST /v1/users/{id}/roles           # Assign role to user
+├── GET /v1/users/{id}/roles            # Get user roles
+├── DELETE /v1/users/{id}/roles/{role_id} # Remove role from user
+├── POST /v1/admin/users                # Create platform admin user
+├── PUT /v1/admin/users/{id}            # Update admin user
+├── DELETE /v1/admin/users/{id}         # Delete admin user
+├── GET /v1/users/{id}/sessions         # List user sessions
+└── DELETE /v1/users/{id}/sessions/{session_id} # Revoke user session
 
-Storage Management:
-├── GET /v1/storage/health        # Storage system health check
-├── POST /v1/storage/policies     # Apply retention policies
-├── GET /v1/storage/usage         # Storage usage statistics
-└── POST /v1/storage/archive      # Manual data archival
+Role Management Router (role_api.py) - M8:
+├── GET /v1/roles                       # List all available roles
+├── POST /v1/roles                      # Create custom role (admin only)
+├── GET /v1/roles/{id}                  # Get role details and permissions
+├── PUT /v1/roles/{id}                  # Update role (admin only)
+├── DELETE /v1/roles/{id}               # Delete custom role (admin only)
+├── GET /v1/roles/{id}/users            # List users with this role
+├── POST /v1/roles/{id}/permissions     # Add permissions to role
+├── DELETE /v1/roles/{id}/permissions/{permission_id} # Remove permission from role
+└── GET /v1/permissions                 # List all available permissions
+
+Usage Analytics Router (usage_api.py) - M8:
+├── GET /v1/usage/current/{tenant_id}   # Get current usage metrics
+├── GET /v1/usage/history/{tenant_id}   # Get usage history
+├── GET /v1/billing/estimate/{tenant_id} # Get billing estimate
+├── POST /v1/usage/track                # Track API usage (internal)
+├── GET /v1/usage/export/{tenant_id}    # Export usage data
+├── GET /v1/usage/analytics/{tenant_id} # Usage analytics and trends
+├── POST /v1/billing/invoice/{tenant_id} # Generate invoice
+├── GET /v1/usage/partitions            # Database partition management
+├── POST /v1/usage/alerts               # Create cost alerts
+└── GET /v1/usage/summary/{tenant_id}   # Usage summary report
 ```
 
 ### 2. Frontend (Next.js)

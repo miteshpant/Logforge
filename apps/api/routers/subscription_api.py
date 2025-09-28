@@ -8,6 +8,9 @@ import uuid
 from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import JSONResponse
 from typing import Dict, Any, List, Optional
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 from models import (
     TenantSubscriptionRequest, TenantSubscriptionResponse, FeatureRateRequest,
@@ -95,6 +98,25 @@ async def update_tenant_subscription(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update subscription: {str(e)}")
+
+@router.get("/features/tier/{tier}")
+async def get_features_for_tier(tier: str):
+    """Get feature list for a subscription tier"""
+    try:
+        features = subscription_service.get_features_for_tier(tier)
+        
+        if not features:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No features found for tier: {tier}"
+            )
+        
+        return {
+            "tier": tier,
+            "features": features
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get features for tier: {str(e)}")
 
 @router.get("/tenants/{tenant_id}/features")
 async def get_tenant_features(
@@ -211,27 +233,101 @@ async def generate_bill(
     bill_request: Dict[str, Any],
     _: str = RequiredTenant
 ):
-    """Generate bill for tenant"""
+    """Generate bill for tenant using real usage data and YAML pricing"""
     try:
+        from dao.usage_dao import UsageDAO
+        from services.billing_service import BillingService
+        import yaml
+        import os
+        
+        # Initialize services
+        usage_dao = UsageDAO()
+        billing_service = BillingService()
+        
         billing_period = bill_request.get("billing_period", "current")
         include_details = bill_request.get("include_usage_details", True)
+        promo_code = bill_request.get("promo_code")
         
-        # Get usage for billing period
-        usage = await subscription_service.get_tenant_usage(tenant_id, billing_period)
+        # Parse billing period
+        if billing_period == "current":
+            current_date = datetime.now()
+            year, month = current_date.year, current_date.month
+            billing_period = f"{year}-{month:02d}"
+        else:
+            year, month = map(int, billing_period.split("-"))
         
-        bill_id = str(uuid.uuid4())
+        # Check if bill already exists (idempotent)
+        existing_bill = await usage_dao.get_existing_bill(tenant_id, billing_period)
+        if existing_bill:
+            logger.info("Bill already exists for period", tenant_id=tenant_id, billing_period=billing_period)
+            return {
+                "bill_id": existing_bill["id"],
+                "tenant_id": tenant_id,
+                "billing_period": billing_period,
+                "status": "already_exists",
+                "message": "Bill already generated for this period",
+                "existing_bill": existing_bill
+            }
         
+        # Get tenant subscription tier
+        subscription = await subscription_service.get_tenant_subscription(tenant_id)
+        if not subscription:
+            raise HTTPException(
+                status_code=404, 
+                detail="No subscription found for tenant. Cannot generate bill without active subscription."
+            )
+        subscription_tier = subscription.subscription_tier.value
+        
+        # Get real usage data from database
+        usage_stats = await usage_dao.get_monthly_usage_stats(tenant_id, year, month)
+        
+        # Calculate bill using YAML pricing and real usage
+        bill_details = await billing_service.calculate_bill(
+            tenant_id=tenant_id,
+            subscription_tier=subscription_tier,
+            usage_data=usage_stats,
+            promo_code=promo_code
+        )
+        
+        # Create bill record in database
+        bill_record = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "billing_period": billing_period,
+            "subscription_tier": subscription_tier,
+            "base_fee": bill_details["billing_breakdown"]["base_fee"],
+            "usage_charges": bill_details["billing_breakdown"]["usage_charges"],
+            "tier_discount": bill_details["billing_breakdown"]["tier_discount"],
+            "promo_discount": bill_details["billing_breakdown"]["promo_discount"],
+            "subtotal": bill_details["billing_breakdown"]["subtotal"],
+            "total_amount": bill_details["billing_breakdown"]["total_amount"],
+            "currency": bill_details["currency"],
+            "status": "generated",
+            "usage_breakdown": bill_details["usage_details"],
+            "promo_code": promo_code,
+            "generated_at": datetime.now().isoformat(),
+            "due_date": (datetime.now() + timedelta(days=30)).isoformat()
+        }
+        
+        bill_id = await usage_dao.create_bill(bill_record)
+        
+        # Return comprehensive bill response
         return {
             "bill_id": bill_id,
             "tenant_id": tenant_id,
             "billing_period": billing_period,
-            "total_amount": usage.get("total_cost", 0.0),
-            "currency": "USD",
-            "generated_at": datetime.now().isoformat(),
-            "due_date": (datetime.now() + timedelta(days=30)).isoformat(),
-            "usage_details": usage.get("feature_usage", []) if include_details else None
+            "subscription_tier": subscription_tier,
+            "billing_breakdown": bill_details["billing_breakdown"],
+            "usage_details": bill_details["usage_details"] if include_details else None,
+            "currency": bill_details["currency"],
+            "generated_at": bill_record["generated_at"],
+            "due_date": bill_record["due_date"],
+            "status": "generated",
+            "promo_code": promo_code if promo_code else None
         }
+        
     except Exception as e:
+        logger.error("Failed to generate bill", error=str(e), tenant_id=tenant_id)
         raise HTTPException(status_code=500, detail=f"Failed to generate bill: {str(e)}")
 
 @router.get("/tenants/{tenant_id}/billing/history")
@@ -240,14 +336,21 @@ async def get_billing_history(
     limit: int = 12,
     _: str = RequiredTenant
 ):
-    """Get tenant billing history"""
-    billing_history = await subscription_service.get_billing_history(tenant_id, limit)
-    
-    return {
-        "tenant_id": tenant_id,
-        "bills": billing_history,
-        "total_bills": len(billing_history)
-    }
+    """Get tenant billing history from database"""
+    try:
+        from dao.usage_dao import UsageDAO
+        
+        usage_dao = UsageDAO()
+        bills = await usage_dao.get_tenant_bills(tenant_id, limit)
+        
+        return {
+            "tenant_id": tenant_id,
+            "bills": bills,
+            "total_bills": len(bills)
+        }
+    except Exception as e:
+        logger.error("Failed to get billing history", error=str(e), tenant_id=tenant_id)
+        raise HTTPException(status_code=500, detail=f"Failed to get billing history: {str(e)}")
 
 # =====================================
 # Admin Rate Configuration
@@ -352,13 +455,11 @@ async def delete_tenant(
         # Get admin user from request (would implement proper auth)
         deleted_by = request.headers.get("X-Admin-User", "admin")
         
-        print(f"DEBUG: About to call delete_tenant for {tenant_id}")
         deletion_record = await subscription_service.delete_tenant(
             tenant_id, 
             deletion_request, 
             deleted_by
         )
-        print(f"DEBUG: Got deletion_record: {deletion_record}")
         
         response = {
             "tenant_id": tenant_id,
@@ -368,12 +469,8 @@ async def delete_tenant(
             "final_bill_generated": deletion_record.final_bill_generated,
             "message": f"Tenant {deletion_record.deletion_type.value.replace('_', ' ')} completed successfully"
         }
-        print(f"DEBUG: Returning response: {response}")
         return response
     except Exception as e:
-        print(f"DEBUG: Exception in delete_tenant: {str(e)}")
-        import traceback
-        print(f"DEBUG: Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Failed to delete tenant: {str(e)}")
 
 @router.get("/tenants/{tenant_id}/deletion/status")
@@ -403,7 +500,8 @@ async def admin_list_tenants(
 @router.get("/admin/tenants/{tenant_id}/details")
 async def admin_get_tenant_details(
     tenant_id: str,
-    request: Request
+    request: Request,
+    _: str = RequiredTenant
 ):
     """Admin get detailed tenant information"""
     try:
@@ -460,7 +558,8 @@ async def admin_force_subscription_change(
 async def admin_billing_override(
     tenant_id: str,
     override_data: Dict[str, Any],
-    request: Request
+    request: Request,
+    _: str = RequiredTenant
 ):
     """Admin override billing amount"""
     override_result = await subscription_service.admin_billing_override(tenant_id, override_data)

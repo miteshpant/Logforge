@@ -38,6 +38,7 @@ class DatabaseLayer:
         'TestService': 'test-service-key',  # For testing only
         # Additional Services
         'UsageService': os.getenv('USAGE_SERVICE_KEY', 'usage-service-key-dev'),
+        'HealthService': os.getenv('HEALTH_SERVICE_KEY', 'health-service-key-dev'),
         # DAO Services
         'UserDAO': os.getenv('USER_SERVICE_KEY', 'user-dao-service-key'),
         'TenantDAO': os.getenv('TENANT_SERVICE_KEY', 'tenant-dao-service-key'), 
@@ -69,6 +70,7 @@ class DatabaseLayer:
         'TestService': ['*'],  # Test service can access all tables
         # Additional Services
         'UsageService': ['api_usage_mt', 'tenants_mt'],
+        'HealthService': ['logs_raw_mt', 'logs_normalized_mt', 'users_mt', 'roles_mt', 'alert_rules_mt'],
         # DAO Services - inherit permissions from parent services
         'UserDAO': ['users_mt', 'user_sessions_mt', 'user_tenant_roles_mt', 'user_invitations_mt'],
         'TenantDAO': ['tenants_mt', 'tenant_configs_mt', 'tenant_quotas_mt'], 
@@ -78,7 +80,7 @@ class DatabaseLayer:
         'DashboardDAO': ['dashboards_mt', 'dashboard_widgets_mt', 'dashboard_shares_mt', 'logs_normalized_mt'],
         'StorageDAO': ['retention_policies_mt', 'storage_backends_mt', 'storage_operations_mt', 'storage_quotas_mt', 'data_archives_mt', 'logs_raw_mt', 'logs_normalized_mt'],
         'AlertDAO': ['alert_rules_mt', 'alert_instances_mt', 'notification_channels_mt', 'alert_rule_states_mt'],
-        'UsageDAO': ['api_usage_audit_mt', 'tenants_mt', 'users_mt'],
+        'UsageDAO': ['api_usage_audit_mt', 'tenants_mt', 'users_mt', 'tenant_bills_mt', 'logs_raw_mt'],
         'SecurityDAO': ['sigma_rules_mt', 'security_events_mt', 'threat_intel_mt'],
         'ObservabilityDAO': ['traces_mt', 'metrics_mt', 'service_topology_mt', 'service_dependencies_mt'],
         'AIDAO': ['ai_investigations_mt', 'ai_analyses_mt', 'ai_baselines_mt', 'ai_query_history_mt'],
@@ -729,7 +731,7 @@ class DatabaseLayer:
                 record.setdefault('id', str(uuid.uuid4()))
                 record.setdefault('created_at', datetime.utcnow())
             
-            inserted = await self.execute_insert('api_usage_mt', chunk)
+            inserted = await self.execute_insert('api_usage_audit_mt', chunk)
             total_inserted += inserted
         
         return total_inserted
@@ -741,9 +743,9 @@ class DatabaseLayer:
                 tenant_id,
                 count(*) as total_requests,
                 sum(response_size_bytes) as total_bytes,
-                avg(processing_time_ms) as avg_processing_time,
-                countIf(status_code < 400) * 100.0 / count(*) as success_rate
-            FROM api_usage_mt 
+                avg(response_time_ms) as avg_processing_time,
+                countIf(response_status < 400) * 100.0 / count(*) as success_rate
+            FROM api_usage_audit_mt 
             WHERE tenant_id = %(tenant_id)s
             AND request_timestamp >= %(start_date)s
             AND request_timestamp <= %(end_date)s

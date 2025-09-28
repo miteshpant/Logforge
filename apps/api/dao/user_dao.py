@@ -322,3 +322,100 @@ class UserDAO:
         except Exception as e:
             logger.error("Failed to get user tenant roles", error=str(e), user_id=user_id, tenant_id=tenant_id)
             return []
+    
+    # Additional session methods needed by UserService
+    async def create_session(self, session_data: Dict[str, Any]) -> str:
+        """Create session using DatabaseLayer"""
+        return await self.db.create_session(session_data)
+    
+    async def get_session(self, session_token: str) -> Optional[Dict[str, Any]]:
+        """Get session using DatabaseLayer"""
+        return await self.db.get_session(session_token)
+    
+    async def revoke_session(self, session_token: str) -> bool:
+        """Revoke session using DatabaseLayer"""
+        return await self.db.revoke_session(session_token)
+    
+    async def update_session_activity(self, session_token: str) -> bool:
+        """Update session activity using DatabaseLayer"""
+        return await self.db.update_session_activity(session_token)
+    
+    async def get_user_by_reset_token(self, reset_token: str) -> Optional[Dict[str, Any]]:
+        """Get user by password reset token"""
+        try:
+            query = """
+                SELECT * FROM users_mt 
+                WHERE password_reset_token = %(reset_token)s 
+                AND password_reset_expires > now()
+                AND status = 'active'
+                LIMIT 1
+            """
+            result = await self.db.execute_query(query, {"reset_token": reset_token})
+            
+            if result and len(result) > 0:
+                return dict(result[0])
+            return None
+            
+        except Exception as e:
+            logger.error("Failed to get user by reset token in DAO", error=str(e))
+            return None
+    
+    async def list_platform_admin_users(self, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
+        """List users with platform admin roles"""
+        try:
+            query = """
+                SELECT DISTINCT u.* 
+                FROM users_mt u
+                JOIN user_tenant_roles_mt r ON u.id = r.user_id
+                WHERE r.tenant_id = 'platform'
+                AND r.status = 'active'
+                AND (r.expires_at IS NULL OR r.expires_at > now())
+                AND u.status = 'active'
+                ORDER BY u.created_at DESC
+                LIMIT %(limit)s OFFSET %(offset)s
+            """
+            
+            result = await self.db.execute_query(query, {'limit': limit, 'offset': offset})
+            return [dict(row) for row in result] if result else []
+            
+        except Exception as e:
+            logger.error("Failed to list platform admin users", error=str(e))
+            return []
+    
+    async def verify_user_has_platform_roles(self, user_id: str) -> bool:
+        """Verify if user has any platform admin roles"""
+        try:
+            query = """
+                SELECT COUNT(*) as count 
+                FROM user_tenant_roles_mt 
+                WHERE user_id = %(user_id)s 
+                AND tenant_id = 'platform'
+                AND status = 'active'
+                AND (expires_at IS NULL OR expires_at > now())
+            """
+            
+            result = await self.db.execute_query(query, {"user_id": user_id})
+            return result[0]['count'] > 0 if result else False
+            
+        except Exception as e:
+            logger.error("Failed to verify platform roles", error=str(e), user_id=user_id)
+            return False
+    
+    async def count_super_admins(self) -> int:
+        """Count active super admin users to prevent lockout"""
+        try:
+            query = """
+                SELECT COUNT(*) as count 
+                FROM user_tenant_roles_mt 
+                WHERE tenant_id = 'platform'
+                AND role = 'super_admin'
+                AND status = 'active'
+                AND (expires_at IS NULL OR expires_at > now())
+            """
+            
+            result = await self.db.execute_query(query, {})
+            return result[0]['count'] if result else 0
+            
+        except Exception as e:
+            logger.error("Failed to count super admins", error=str(e))
+            return 0

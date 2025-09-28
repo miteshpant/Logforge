@@ -2,9 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { 
   Users, 
   BarChart3, 
@@ -14,11 +12,9 @@ import {
   Shield,
   DollarSign,
   Database,
-  Activity,
-  LogOut
+  Activity
 } from 'lucide-react'
-import { fetchTenants, apiRequest } from '@/lib/api'
-import { authService } from '@/lib/auth'
+import { apiRequest } from '@/lib/api'
 
 interface PlatformStat {
   title: string
@@ -75,98 +71,94 @@ const navigationCards = [
 export default function AdminDashboard() {
   const [platformStats, setPlatformStats] = useState<PlatformStat[]>([])
   const [loading, setLoading] = useState(true)
-  const router = useRouter()
-  const currentUser = authService.getCurrentUser()
 
   useEffect(() => {
-    fetchPlatformStats()
-  }, [])
-
-  const handleLogout = () => {
-    authService.logout()
-    router.push('/login')
-  }
-
-  const fetchPlatformStats = async () => {
-    try {
-      setLoading(true)
+    let isMounted = true
+    let hasStartedFetch = false
+    
+    const fetchPlatformStats = async () => {
+      // Prevent duplicate fetches in React Strict Mode
+      if (hasStartedFetch) return
+      hasStartedFetch = true
       
-      // Use actual APIs from the user story
-      const [healthData, tenantsData, usageData] = await Promise.all([
-        apiRequest('/health').catch(e => ({ status: 'error', services: {} })),
-        fetchTenants().catch(e => ({ tenants: [] })),
-        apiRequest('/v1/analytics/usage-trends').catch(e => ({ total_revenue: 0, total_data: '0TB' }))
-      ])
-      
-      const totalTenants = tenantsData.tenants?.length || 0
-      const activeTenants = tenantsData.tenants?.filter((t: any) => t.status === 'active').length || 0
-      
-      // Calculate uptime from health data
-      const isHealthy = healthData.status === 'healthy'
-      const uptime = isHealthy ? '99.97%' : 'Degraded'
+      try {
+        setLoading(true)
+        
+        // Use actual APIs from the user story
+        const [healthData, tenantStatsData, usageData] = await Promise.all([
+          apiRequest('/health').catch(e => ({ status: 'error', services: {} })),
+          apiRequest('/v1/tenants/stats').catch(e => ({ total_tenants: 0, active_tenants: 0 })),
+          apiRequest('/v1/analytics/usage-trends').catch(e => ({ total_revenue: 0, total_data: '0TB' }))
+        ])
+        
+        // Only update state if component is still mounted
+        if (!isMounted) return
+        
+        const totalTenants = tenantStatsData.total_tenants || 0
+        const activeTenants = tenantStatsData.active_tenants || 0
+        
+        // Calculate uptime from health data
+        const isHealthy = healthData.status === 'healthy'
+        const uptime = isHealthy ? '99.97%' : 'Degraded'
 
-      setPlatformStats([
-        {
-          title: "Active Tenants",
-          value: activeTenants.toString(),
-          description: "Currently active tenants",
-          icon: Users
-        },
-        {
-          title: "Monthly Revenue", 
-          value: usageData.total_revenue ? `$${usageData.total_revenue.toLocaleString()}` : '$0',
-          description: "Platform monthly revenue",
-          icon: DollarSign
-        },
-        {
-          title: "Total Data Ingested",
-          value: usageData.total_data || '0TB',
-          description: "Platform data volume",
-          icon: Database
-        },
-        {
-          title: "System Uptime",
-          value: uptime,
-          description: "Platform operational status",
-          icon: Activity
+        setPlatformStats([
+          {
+            title: "Active Tenants",
+            value: activeTenants.toString(),
+            description: "Currently active tenants",
+            icon: Users
+          },
+          {
+            title: "Monthly Revenue", 
+            value: usageData.total_revenue ? `$${usageData.total_revenue.toLocaleString()}` : '$0',
+            description: "Platform monthly revenue",
+            icon: DollarSign
+          },
+          {
+            title: "Total Data Ingested",
+            value: usageData.total_data || '0TB',
+            description: "Platform data volume",
+            icon: Database
+          },
+          {
+            title: "System Uptime",
+            value: uptime,
+            description: "Platform operational status",
+            icon: Activity
+          }
+        ])
+        
+      } catch (error) {
+        if (!isMounted) return
+        
+        console.error('Failed to fetch platform statistics:', error)
+        setPlatformStats([
+          { title: "Active Tenants", value: "0", description: "API Error", icon: Users },
+          { title: "Monthly Revenue", value: "$0", description: "API Error", icon: DollarSign },
+          { title: "Total Data", value: "0TB", description: "API Error", icon: Database },
+          { title: "System Health", value: "Error", description: "Check API connection", icon: Activity }
+        ])
+      } finally {
+        if (isMounted) {
+          setLoading(false)
         }
-      ])
-      
-    } catch (error) {
-      console.error('Failed to fetch platform statistics:', error)
-      setPlatformStats([
-        { title: "Active Tenants", value: "0", description: "API Error", icon: Users },
-        { title: "Monthly Revenue", value: "$0", description: "API Error", icon: DollarSign },
-        { title: "Total Data", value: "0TB", description: "API Error", icon: Database },
-        { title: "System Health", value: "Error", description: "Check API connection", icon: Activity }
-      ])
-    } finally {
-      setLoading(false)
+      }
     }
-  }
+
+    fetchPlatformStats()
+
+    // Cleanup function to prevent state updates if component unmounts
+    return () => {
+      isMounted = false
+    }
+  }, []) // Empty dependency array ensures this only runs once
 
   return (
     <div className="space-y-8">
-      {/* Header with Logout */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">MrLogSec Admin Dashboard</h1>
-          <p className="text-gray-600">Manage tenants, monitor usage, and oversee platform operations</p>
-        </div>
-        <div className="flex items-center space-x-4">
-          <span className="text-sm text-gray-500">
-            Welcome, {currentUser?.name || currentUser?.email}
-          </span>
-          <Button 
-            onClick={handleLogout} 
-            variant="outline" 
-            size="sm"
-            className="flex items-center space-x-2"
-          >
-            <LogOut className="h-4 w-4" />
-            <span>Logout</span>
-          </Button>
-        </div>
+      {/* Header */}
+      <div className="space-y-2">
+        <h1 className="text-3xl font-bold text-gray-900">Platform Dashboard</h1>
+        <p className="text-gray-600">Monitor platform health, manage tenants, and oversee operations</p>
       </div>
 
       {/* Platform Statistics */}

@@ -377,3 +377,39 @@ class TenantDAO:
         except Exception as e:
             logger.error("Failed to update/insert tenant config", error=str(e), config_key=config_key)
             return False
+    
+    async def get_tenant_counts_by_status(self) -> Dict[str, int]:
+        """Get lightweight tenant counts by status for dashboard (performance optimized)"""
+        try:
+            query = f"""
+            SELECT 
+                status,
+                count() as count
+            FROM {TENANTS_TABLE}
+            GROUP BY status
+            """
+            
+            results = await self.db.fetch_all(query, {})
+            
+            # Convert results to dictionary with all statuses
+            counts = {
+                "total": 0,
+                "active": 0,
+                "inactive": 0,
+                "pending": 0,
+                "suspended": 0
+            }
+            
+            for row in results:
+                status = row.get("status", "unknown")
+                count = row.get("count", 0)
+                counts["total"] += count
+                
+                if status in counts:
+                    counts[status] = count
+            
+            return counts
+            
+        except Exception as e:
+            logger.error("Failed to get tenant counts by status", error=str(e))
+            raise

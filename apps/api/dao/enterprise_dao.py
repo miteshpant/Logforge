@@ -12,10 +12,13 @@ Handles database operations for:
 
 import json
 import uuid
+import structlog
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 
 from database_layer import DatabaseLayer
+
+logger = structlog.get_logger()
 
 
 class EnterpriseDAO:
@@ -117,10 +120,10 @@ class EnterpriseDAO:
 
         for key, value in updates.items():
             if key in ['name', 'is_enabled', 'is_default']:
-                set_clauses.append(f"{key} = %({key})s")
+                set_clauses.append(key + " = %(" + key + ")s")
                 params[key] = value
             elif key in ['config', 'user_mapping', 'group_mapping']:
-                set_clauses.append(f"{key} = %({key})s")
+                set_clauses.append(key + " = %(" + key + ")s")
                 params[key] = json.dumps(value)
 
         if not set_clauses:
@@ -134,8 +137,14 @@ class EnterpriseDAO:
         WHERE customer_id = %(customer_id)s AND id = %(provider_id)s
         """
 
-        await self.db.execute_query(query, params)
-        return True
+        logger.debug("Executing update_auth_provider query", query=query, params=params)
+        try:
+            await self.db.execute_query(query, params)
+            logger.debug("update_auth_provider query succeeded")
+            return True
+        except Exception as e:
+            logger.error("update_auth_provider query failed", error=str(e), query=query, params=params)
+            raise
 
     async def delete_auth_provider(self, provider_id: str, customer_id: str) -> bool:
         """Delete authentication provider"""
@@ -478,17 +487,17 @@ class EnterpriseDAO:
                 for setting_key, setting_value in value.items():
                     if setting_key in field_mapping:
                         db_field = field_mapping[setting_key]
-                        set_clauses.append(f"{db_field} = %({setting_key})s")
+                        set_clauses.append(db_field + " = %(" + setting_key + ")s")
                         params[setting_key] = setting_value
             elif key == 'contact_info':
                 for contact_key, contact_value in value.items():
                     if contact_key in field_mapping:
                         db_field = field_mapping[contact_key]
-                        set_clauses.append(f"{db_field} = %({contact_key})s")
+                        set_clauses.append(db_field + " = %(" + contact_key + ")s")
                         params[contact_key] = contact_value
             elif key in field_mapping:
                 db_field = field_mapping[key]
-                set_clauses.append(f"{db_field} = %({key})s")
+                set_clauses.append(db_field + " = %(" + key + ")s")
                 params[key] = value
 
         if not set_clauses:
@@ -863,3 +872,222 @@ class EnterpriseDAO:
             },
             'health_timestamp': datetime.utcnow().isoformat()
         }
+    
+    # ==========================================
+    # USER ROLE MANAGEMENT OPERATIONS
+    # ==========================================
+    
+    async def get_user_role_assignments(self, customer_id: str, user_id: str) -> List[Dict[str, Any]]:
+        """Get user role assignments from database"""
+        try:
+            query = """
+                SELECT role_assignments
+                FROM users_mt 
+                WHERE customer_id = %(customer_id)s AND id = %(user_id)s
+            """
+            result = await self.db.execute_query(query, {"customer_id": customer_id, "user_id": user_id})
+            
+            if not result:
+                return []
+            
+            role_assignments = result[0].get("role_assignments", [])
+            if isinstance(role_assignments, str):
+                import json
+                role_assignments = json.loads(role_assignments)
+            
+            return role_assignments if isinstance(role_assignments, list) else []
+            
+        except Exception as e:
+            logger.error("Failed to get user role assignments in DAO", error=str(e))
+            return []
+    
+    # ==========================================
+    # COMPLIANCE ANALYSIS OPERATIONS
+    # ==========================================
+    
+    async def get_failed_authentication_count(self, customer_id: str, start_date: datetime, end_date: datetime) -> int:
+        """Get count of failed authentication attempts"""
+        query = """
+            SELECT count(*) as failed_attempts
+            FROM logs_normalized_mt 
+            WHERE customer_id = %(customer_id)s
+                AND ts >= %(start_date)s 
+                AND ts <= %(end_date)s
+                AND level = 'ERROR'
+                AND (msg LIKE '%%authentication failed%%' OR msg LIKE '%%login failed%%')
+        """
+        logger.debug("Executing get_failed_authentication_count query", query=query, customer_id=customer_id)
+        try:
+            result = await self.db.execute_query(query, {
+                "customer_id": customer_id, "start_date": start_date, "end_date": end_date
+            })
+            logger.debug("get_failed_authentication_count result", result=result)
+            return result[0]["failed_attempts"] if result else 0
+        except Exception as e:
+            logger.error("get_failed_authentication_count query failed", error=str(e), query=query)
+            raise
+    
+    async def get_privilege_escalation_count(self, customer_id: str, start_date: datetime, end_date: datetime) -> int:
+        """Get count of privilege escalation events"""
+        query = """
+            SELECT count(*) as escalation_events
+            FROM logs_normalized_mt 
+            WHERE customer_id = %(customer_id)s
+                AND ts >= %(start_date)s 
+                AND ts <= %(end_date)s
+                AND (msg LIKE '%%privilege%%' OR msg LIKE '%%sudo%%' OR msg LIKE '%%admin%%')
+        """
+        result = await self.db.execute_query(query, {
+            "customer_id": customer_id, "start_date": start_date, "end_date": end_date
+        })
+        return result[0]["escalation_events"] if result else 0
+    
+    async def get_total_log_count(self, customer_id: str, start_date: datetime, end_date: datetime) -> int:
+        """Get total log count for period"""
+        query = """
+            SELECT count(*) as total_logs
+            FROM logs_normalized_mt 
+            WHERE customer_id = %(customer_id)s
+                AND ts >= %(start_date)s 
+                AND ts <= %(end_date)s
+        """
+        result = await self.db.execute_query(query, {
+            "customer_id": customer_id, "start_date": start_date, "end_date": end_date
+        })
+        return result[0]["total_logs"] if result else 0
+    
+    async def get_data_modification_count(self, customer_id: str, start_date: datetime, end_date: datetime) -> int:
+        """Get count of data modification events"""
+        query = """
+            SELECT count(*) as modification_events
+            FROM logs_normalized_mt 
+            WHERE customer_id = %(customer_id)s
+                AND ts >= %(start_date)s 
+                AND ts <= %(end_date)s
+                AND (msg LIKE '%%UPDATE%%' OR msg LIKE '%%DELETE%%' OR msg LIKE '%%INSERT%%' 
+                     OR msg LIKE '%%modified%%' OR msg LIKE '%%changed%%')
+        """
+        result = await self.db.execute_query(query, {
+            "customer_id": customer_id, "start_date": start_date, "end_date": end_date
+        })
+        return result[0]["modification_events"] if result else 0
+    
+    async def get_backup_event_count(self, customer_id: str, start_date: datetime, end_date: datetime) -> int:
+        """Get count of backup events"""
+        query = """
+            SELECT count(*) as backup_events
+            FROM logs_normalized_mt 
+            WHERE customer_id = %(customer_id)s
+                AND ts >= %(start_date)s 
+                AND ts <= %(end_date)s
+                AND (msg LIKE '%%backup%%' OR service = 'backup')
+        """
+        result = await self.db.execute_query(query, {
+            "customer_id": customer_id, "start_date": start_date, "end_date": end_date
+        })
+        return result[0]["backup_events"] if result else 0
+    
+    async def get_encryption_event_count(self, customer_id: str, start_date: datetime, end_date: datetime) -> int:
+        """Get count of encryption events"""
+        query = """
+            SELECT count(*) as encryption_events
+            FROM logs_normalized_mt 
+            WHERE customer_id = %(customer_id)s
+                AND ts >= %(start_date)s 
+                AND ts <= %(end_date)s
+                AND (msg LIKE '%%encrypt%%' OR msg LIKE '%%TLS%%' OR msg LIKE '%%SSL%%')
+        """
+        result = await self.db.execute_query(query, {
+            "customer_id": customer_id, "start_date": start_date, "end_date": end_date
+        })
+        return result[0]["encryption_events"] if result else 0
+    
+    async def get_data_deletion_count(self, customer_id: str, start_date: datetime, end_date: datetime) -> int:
+        """Get count of data deletion requests"""
+        query = """
+            SELECT count(*) as deletion_requests
+            FROM logs_normalized_mt 
+            WHERE customer_id = %(customer_id)s
+                AND ts >= %(start_date)s 
+                AND ts <= %(end_date)s
+                AND (msg LIKE '%%delete%%' OR msg LIKE '%%erasure%%' OR msg LIKE '%%gdpr%%')
+        """
+        result = await self.db.execute_query(query, {
+            "customer_id": customer_id, "start_date": start_date, "end_date": end_date
+        })
+        return result[0]["deletion_requests"] if result else 0
+    
+    async def get_firewall_event_count(self, customer_id: str, start_date: datetime, end_date: datetime) -> int:
+        """Get count of firewall events"""
+        query = """
+            SELECT count(*) as firewall_events
+            FROM logs_normalized_mt 
+            WHERE customer_id = %(customer_id)s
+                AND ts >= %(start_date)s 
+                AND ts <= %(end_date)s
+                AND (service = 'firewall' OR msg LIKE '%%firewall%%' OR msg LIKE '%%blocked%%')
+        """
+        result = await self.db.execute_query(query, {
+            "customer_id": customer_id, "start_date": start_date, "end_date": end_date
+        })
+        return result[0]["firewall_events"] if result else 0
+    
+    async def get_access_control_event_count(self, customer_id: str, start_date: datetime, end_date: datetime) -> int:
+        """Get count of access control events"""
+        query = """
+            SELECT count(*) as access_events
+            FROM logs_normalized_mt 
+            WHERE customer_id = %(customer_id)s
+                AND ts >= %(start_date)s 
+                AND ts <= %(end_date)s
+                AND (msg LIKE '%%access%%' OR msg LIKE '%%authorization%%' OR msg LIKE '%%permission%%')
+        """
+        result = await self.db.execute_query(query, {
+            "customer_id": customer_id, "start_date": start_date, "end_date": end_date
+        })
+        return result[0]["access_events"] if result else 0
+    
+    async def get_training_event_count(self, customer_id: str, start_date: datetime, end_date: datetime) -> int:
+        """Get count of training/security events"""
+        query = """
+            SELECT count(*) as training_events
+            FROM logs_normalized_mt 
+            WHERE customer_id = %(customer_id)s
+                AND ts >= %(start_date)s 
+                AND ts <= %(end_date)s
+                AND (msg LIKE '%%training%%' OR msg LIKE '%%security%%' OR msg LIKE '%%hipaa%%')
+        """
+        result = await self.db.execute_query(query, {
+            "customer_id": customer_id, "start_date": start_date, "end_date": end_date
+        })
+        return result[0]["training_events"] if result else 0
+    
+    async def get_physical_access_event_count(self, customer_id: str, start_date: datetime, end_date: datetime) -> int:
+        """Get count of physical access events"""
+        query = """
+            SELECT count(*) as physical_events
+            FROM logs_normalized_mt 
+            WHERE customer_id = %(customer_id)s
+                AND ts >= %(start_date)s 
+                AND ts <= %(end_date)s
+                AND (msg LIKE '%%physical%%' OR msg LIKE '%%facility%%' OR msg LIKE '%%datacenter%%')
+        """
+        result = await self.db.execute_query(query, {
+            "customer_id": customer_id, "start_date": start_date, "end_date": end_date
+        })
+        return result[0]["physical_events"] if result else 0
+    
+    async def get_audit_event_count(self, customer_id: str, start_date: datetime, end_date: datetime) -> int:
+        """Get count of audit events"""
+        query = """
+            SELECT count(*) as audit_events
+            FROM logs_normalized_mt 
+            WHERE customer_id = %(customer_id)s
+                AND ts >= %(start_date)s 
+                AND ts <= %(end_date)s
+                AND (msg LIKE '%%audit%%' OR service = 'audit')
+        """
+        result = await self.db.execute_query(query, {
+            "customer_id": customer_id, "start_date": start_date, "end_date": end_date
+        })
+        return result[0]["audit_events"] if result else 0

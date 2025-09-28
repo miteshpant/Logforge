@@ -88,7 +88,6 @@ services:
       - "7080:8080"
     volumes:
       - ../../apps/api:/app
-      - ../../config:/app/config
     environment:
       - PYTHONPATH=/app
       - CLICKHOUSE_HOST=clickhouse

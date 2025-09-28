@@ -22,6 +22,74 @@ class IngestionRouterTestSuite(BaseTestSuite):
 
     def __init__(self):
         super().__init__("IngestionRouter")
+    
+    async def setup_ingestion_subscription(self):
+        """Setup ingestion subscription with required features"""
+        try:
+            print(f"   🔧 Setting up ingestion subscription using proven pattern...")
+            
+            # STEP 1: Create proper tenant via API (to get UUID format)
+            tenant_create_request = {
+                "name": f"Ingestion Test Org {self.test_id}",
+                "type": "startup",
+                "primary_contact_name": f"Test Admin {self.test_id}",
+                "primary_contact_email": self.test_user_email,
+                "industry": "technology",
+                "address": f"123 Test St, Suite {self.test_id}",
+                "company_size": 50,
+                "website": f"https://ingestion-test-{self.test_id}.com",
+                "notes": "Created for ingestion router testing"
+            }
+            
+            tenant_response = await self.make_authenticated_request(
+                "POST",
+                "/v1/tenants",
+                json=tenant_create_request
+            )
+            
+            if tenant_response.status_code != 201:
+                raise Exception(f"Failed to create tenant: {tenant_response.status_code} - {tenant_response.text}")
+            
+            tenant_data = tenant_response.json()
+            uuid_tenant_id = tenant_data["tenant_id"]
+            print(f"   ✅ Tenant created with UUID: {uuid_tenant_id}")
+            
+            # STEP 3: Update all references to use UUID tenant_id format
+            self.test_tenant_id = uuid_tenant_id
+            self.auth_headers["X-Customer-ID"] = uuid_tenant_id
+            
+            # STEP 3: Create subscription with ALL ingestion features
+            ingestion_subscription_request = {
+                "subscribed_features": [
+                    "ingestion.*",    # ALL ingestion features via wildcard
+                    "queries.*",     # Ingestion may need query validation
+                    "storage.*",     # Ingestion needs storage access
+                    "alerts.*"       # Ingestion may trigger alerts
+                ],
+                "subscription_tier": "startup",
+                "billing_cycle": "monthly",
+                "auto_renew": True
+            }
+            
+            # Create subscription using the UUID tenant_id with PUT method
+            subscription_response = await self.make_authenticated_request(
+                "PUT",
+                f"/v1/tenants/{uuid_tenant_id}/subscription",
+                json=ingestion_subscription_request
+            )
+            
+            if subscription_response.status_code != 200:
+                raise Exception(f"Failed to create ingestion subscription: {subscription_response.status_code} - {subscription_response.text}")
+            
+            subscription_data = subscription_response.json()
+            print(f"   ✅ Ingestion subscription created: {subscription_data.get('subscription_tier', 'N/A')}")
+            print(f"   📦 Features: {subscription_data.get('subscribed_features', [])}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"   ❌ Failed to setup ingestion subscription: {e}")
+            raise Exception(f"Ingestion subscription setup failed: {e}")
 
     async def test_single_log_ingestion(self):
         """Test POST /v1/ingest/logs - Single LogEntry ingestion"""
@@ -431,8 +499,9 @@ async def run_ingestion_router_tests():
     test_suite = IngestionRouterTestSuite()
 
     try:
-        # Setup authentication
-        await test_suite.setup_auth()
+        # Setup authentication with platform admin permissions (needed for tenant creation)
+        await test_suite.setup_auth(roles=['super_admin', 'tenant_admin'])
+        await test_suite.setup_ingestion_subscription()
 
         # Run all tests
         tests = [

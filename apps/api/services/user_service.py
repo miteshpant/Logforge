@@ -371,13 +371,8 @@ class UserService:
                 "customer_id": "platform"
             }
             
-            # TODO: Add create_session method to UserDAO
-            # For now, use direct database access
-            import os
-            from database_layer import DatabaseLayer
-            service_key = os.getenv("USER_SERVICE_KEY", "user-service-key-dev")
-            db = DatabaseLayer("UserService", service_key)
-            await db.create_session(session_db_data)
+            # Save session via DAO
+            await self.user_dao.create_session(session_db_data)
             
             logger.info("Session created", user_id=user.id, session_id=session.id)
             return session_data
@@ -389,14 +384,8 @@ class UserService:
     async def revoke_session(self, token: str) -> bool:
         """Revoke user session by token"""
         try:
-            # TODO: Add revoke_session method to UserDAO  
-            # For now, use direct database access
-            import os
-            from database_layer import DatabaseLayer
-            service_key = os.getenv("USER_SERVICE_KEY", "user-service-key-dev")
-            db = DatabaseLayer("UserService", service_key)
-            
-            success = await db.revoke_session(token)
+            # Revoke session via DAO
+            success = await self.user_dao.revoke_session(token)
             if success:
                 logger.info("Session revoked successfully", token=token[:8] + "...")
             else:
@@ -414,24 +403,10 @@ class UserService:
                 return None
                 
             # Query user with valid reset token via DAO
-            # TODO: Add get_user_by_reset_token method to UserDAO
-            # For now, use direct database access
-            import os
-            from database_layer import DatabaseLayer
-            service_key = os.getenv("USER_SERVICE_KEY", "user-service-key-dev")
-            db = DatabaseLayer("UserService", service_key)
+            # Get user by reset token via DAO
+            user_data = await self.user_dao.get_user_by_reset_token(reset_token)
             
-            query = """
-                SELECT * FROM users_mt 
-                WHERE password_reset_token = %(reset_token)s 
-                AND password_reset_expires > now()
-                AND status = 'active'
-                LIMIT 1
-            """
-            user_data_list = await db.execute_query(query, {"reset_token": reset_token})
-            
-            if user_data_list and len(user_data_list) > 0:
-                user_data = user_data_list[0]
+            if user_data:
                 return User(
                     id=user_data["id"],
                     email=user_data["email"],
@@ -494,18 +469,14 @@ class UserService:
         try:
             from authn_authz_middleware import decode_jwt_token
             from models import SessionStatus
-            import os
-            from database_layer import DatabaseLayer
             
             # Let JWT decode exceptions propagate (they raise HTTPException)
             payload = decode_jwt_token(token)
             user_id = payload["user_id"]
             
-            # Check session exists and is active using DatabaseLayer
+            # Check session exists and is active using DAO
             try:
-                service_key = os.getenv("USER_SERVICE_KEY", "user-service-key-dev")
-                db = DatabaseLayer("UserService", service_key)
-                session_data = await db.get_session(token)
+                session_data = await self.user_dao.get_session(token)
                 
                 if session_data and session_data["status"] == SessionStatus.ACTIVE.value:
                     # Update last activity in database asynchronously without blocking
@@ -529,11 +500,7 @@ class UserService:
     async def _update_session_activity_async(self, token: str):
         """Update session activity asynchronously without blocking validation"""
         try:
-            import os
-            from database_layer import DatabaseLayer
-            service_key = os.getenv("USER_SERVICE_KEY", "user-service-key-dev")
-            db = DatabaseLayer("UserService", service_key)
-            await db.update_session_activity(token)
+            await self.user_dao.update_session_activity(token)
             logger.debug("Session activity updated asynchronously", token=token[:8] + "...")
         except Exception as e:
             logger.error("Failed to update session activity asynchronously", token=token[:8] + "...", error=str(e))
@@ -546,3 +513,74 @@ class UserService:
             logger.error("Failed to get user tenant roles via service", 
                        user_id=user_id, tenant_id=tenant_id, error=str(e))
             return []
+    
+    async def list_platform_admin_users(self, page: int = 1, page_size: int = DEFAULT_PAGE_SIZE) -> Dict[str, Any]:
+        """List users with platform admin roles"""
+        try:
+            # Validate pagination parameters
+            page_size = min(max(1, page_size), MAX_PAGE_SIZE)
+            offset = max(0, (page - 1) * page_size)
+            
+            # Get platform admin users
+            db_users = await self.user_dao.list_platform_admin_users(page_size, offset)
+            
+            # Convert to User models
+            users = []
+            for db_user in db_users:
+                user = User(
+                    id=db_user['id'],
+                    email=db_user['email'],
+                    name=db_user['name'],
+                    password_hash=db_user['password_hash'],
+                    status=UserStatus(db_user['status']),
+                    created_at=db_user['created_at'],
+                    updated_at=db_user['updated_at'],
+                    last_login_at=db_user.get('last_login_at'),
+                    email_verified_at=db_user.get('email_verified_at')
+                )
+                users.append(user)
+            
+            # Count total platform admins (simplified for now)
+            total_count = len(users)  # This is not perfect but avoids an extra query
+            
+            return {
+                "users": users,
+                "total_count": total_count,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": (total_count + page_size - 1) // page_size if total_count > 0 else 0
+            }
+            
+        except Exception as e:
+            logger.error("Failed to list platform admin users", error=str(e))
+            return {
+                "users": [],
+                "total_count": 0,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": 0
+            }
+    
+    async def verify_user_has_platform_roles(self, user_id: str) -> bool:
+        """Verify if user has any platform admin roles"""
+        try:
+            return await self.user_dao.verify_user_has_platform_roles(user_id)
+        except Exception as e:
+            logger.error("Failed to verify platform roles", error=str(e), user_id=user_id)
+            return False
+    
+    async def check_super_admin_count(self) -> int:
+        """Count active super admin users to prevent lockout"""
+        try:
+            return await self.user_dao.count_super_admins()
+        except Exception as e:
+            logger.error("Failed to count super admins", error=str(e))
+            return 0
+    
+    async def revoke_all_user_sessions_for_security(self, user_id: str, current_session_token: str = None) -> int:
+        """Revoke all user sessions for security purposes"""
+        try:
+            return await self.user_dao.revoke_all_user_sessions(user_id, current_session_token)
+        except Exception as e:
+            logger.error("Failed to revoke all sessions for security", error=str(e), user_id=user_id)
+            return 0

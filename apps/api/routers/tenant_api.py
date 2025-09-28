@@ -63,6 +63,15 @@ async def list_tenants(
         logger.error("Tenant listing failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/stats")
+async def get_tenant_stats() -> Dict[str, Any]:
+    """Get lightweight tenant statistics for dashboard (performance optimized)"""
+    try:
+        return await tenant_service.get_tenant_stats()
+    except Exception as e:
+        logger.error("Tenant stats retrieval failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/{tenant_id}")
 async def get_tenant(tenant_id: str) -> TenantResponse:
     """Get tenant details by ID"""
@@ -179,7 +188,6 @@ async def get_storage_status(tenant_id: str) -> StorageStatusResponse:
 @router.get("/{tenant_id}/usage")
 async def get_tenant_usage(tenant_id: str) -> TenantUsageResponse:
     """Get tenant usage statistics and billing data"""
-    print(f"DEBUG I am here for {tenant_id}")
     try:
         return await tenant_service.get_tenant_usage(tenant_id)
     except ValueError as e:

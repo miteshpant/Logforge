@@ -781,9 +781,16 @@ class StorageStatusResponse(BaseModel):
 
 class SubscriptionTier(str, Enum):
     """Subscription tier levels"""
+    STARTUP = "startup"
     STARTER = "starter"
+    SMB = "smb"
     PROFESSIONAL = "professional" 
     ENTERPRISE = "enterprise"
+    NON_PROFIT = "non_profit"
+    GOVERNMENT = "government"
+    EDUCATION = "education"
+    HEALTHCARE = "healthcare"
+    FINANCIAL = "financial"
 
 class BillingCycle(str, Enum):
     """Billing cycle options"""

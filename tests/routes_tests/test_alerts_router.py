@@ -931,6 +931,77 @@ class AlertsRouterTestSuite(BaseTestSuite):
             print(f"   ❌ Validation and error handling test error: {e}")
             self.test_results["validation_and_error_handling"] = f"ERROR: {e}"
 
+    async def setup_alerts_subscription(self):
+        """Set up alerts subscription for testing alert features - PROPER APPROACH"""
+        try:
+            print(f"   🔧 Setting up alerts subscription using proven pattern...")
+            
+            # STEP 1: Create proper tenant via API (to get UUID format)
+            tenant_create_request = {
+                "name": f"Alerts Test Org {self.test_id}",
+                "type": "smb",  # SMB tier supports alerts.basic features
+                "primary_contact_name": f"Test Admin {self.test_id}",
+                "primary_contact_email": self.test_user_email,
+                "industry": "technology",
+                "address": f"123 Test St, Suite {self.test_id}",
+                "company_size": 100,
+                "website": f"https://alerts-test-{self.test_id}.com",
+                "notes": "Created for alerts router testing"
+            }
+
+            create_tenant_response = await self.make_authenticated_request(
+                "POST", 
+                "/v1/tenants",
+                json=tenant_create_request
+            )
+
+            if create_tenant_response.status_code != 201:
+                print(f"❌ Failed to create tenant: {create_tenant_response.status_code} - {create_tenant_response.text}")
+                raise Exception(f"Tenant creation failed: {create_tenant_response.text}")
+
+            tenant_data = create_tenant_response.json()
+            uuid_tenant_id = tenant_data["tenant_id"]
+            
+            # STEP 2: Update all references to use UUID tenant_id 
+            self.original_tenant_id = self.test_tenant_id  # Save original for cleanup
+            self.test_tenant_id = uuid_tenant_id
+            self.auth_headers["X-Customer-ID"] = uuid_tenant_id
+            
+            print(f"   ✅ Created UUID tenant: {uuid_tenant_id}")
+            
+            # STEP 3: Create subscription with ALL alerts features
+            alerts_subscription_request = {
+                "subscribed_features": [
+                    "alerts.*",     # ALL alerts features via wildcard
+                    "ingestion.*",  # Need ingestion for alerts to work
+                    "queries.*",    # Need queries for alert evaluation
+                    "security.*"    # Some alerts might need security features
+                ],
+                "subscription_tier": "smb",  # SMB tier supports alerts.basic
+                "billing_cycle": "monthly", 
+                "monthly_spend_limit": 1000.0,  # Reasonable limit for SMB
+                "auto_renew": True
+            }
+            
+            create_subscription_response = await self.make_authenticated_request(
+                "PUT",
+                f"/v1/tenants/{uuid_tenant_id}/subscription",
+                json=alerts_subscription_request
+            )
+            
+            if create_subscription_response.status_code != 200:
+                print(f"❌ Failed to create subscription: {create_subscription_response.status_code} - {create_subscription_response.text}")
+                raise Exception(f"Subscription creation failed: {create_subscription_response.text}")
+                
+            subscription_data = create_subscription_response.json()
+            print(f"   ✅ Created alerts subscription with features: {subscription_data['subscribed_features']}")
+            
+            return uuid_tenant_id
+
+        except Exception as e:
+            print(f"❌ Failed to setup alerts subscription: {e}")
+            raise
+
     async def run_all_tests(self):
         """Execute all alerts router tests"""
         print(f"\n🚀 Starting Alerts Router Test Suite (Test ID: {self.test_id})")
@@ -938,8 +1009,30 @@ class AlertsRouterTestSuite(BaseTestSuite):
 
         # Create test user and tenant for authentication
         try:
-            await self.create_test_user_and_tenant(['tenant_admin'])
-            await self.setup_auth()
+            # Create user with both platform admin and tenant admin roles (needed for tenant creation)
+            user_id, tenant_id = await self.create_test_user_and_tenant(['super_admin', 'tenant_admin'])
+            
+            # CRITICAL: Don't call setup_auth() - it creates SECOND user! Create session directly
+            self.test_user_id = user_id
+            self.test_tenant_id = tenant_id
+            
+            print(f"   ✅ Using tenant admin user: {user_id}")
+            print(f"   ✅ Using tenant: {tenant_id}")
+            
+            # Create session directly for tenant admin user (don't call setup_auth!)
+            await self.create_test_session()
+            
+            # Setup auth headers manually
+            self.auth_headers = {
+                "Authorization": f"Bearer {self.auth_token}",
+                "X-Customer-ID": self.test_tenant_id
+            }
+            
+            print(f"   ✅ Created session for tenant admin user")
+            
+            # Set up alerts subscription
+            await self.setup_alerts_subscription()
+            
         except Exception as e:
             print(f"❌ Failed to setup test environment: {e}")
             return

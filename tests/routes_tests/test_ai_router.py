@@ -5,7 +5,9 @@ Tests all AI router endpoints and validates API responses based on actual router
 """
 
 import asyncio
+import httpx
 import json
+import random
 import sys
 import os
 import time
@@ -22,6 +24,96 @@ class AIRouterTestSuite(BaseTestSuite):
 
     def __init__(self):
         super().__init__("AIRouter")
+
+    async def setup_ai_subscription(self):
+        """Set up AI subscription for testing AI features - PROPER APPROACH"""
+        try:
+            print(f"   🔧 Setting up AI subscription using proven pattern...")
+
+            # STEP 1: Create proper tenant via API (to get UUID format)
+            tenant_create_request = {
+                "name": f"AI Test Org {self.test_id}",
+                "type": "enterprise",  # Enterprise tier supports AI features
+                "primary_contact_name": f"Test AI Admin {self.test_id}",
+                "primary_contact_email": self.test_user_email,
+                "industry": "technology",
+                "address": f"123 AI Test St, Suite {self.test_id}",
+                "company_size": 100,
+                "website": f"https://ai-test-{self.test_id}.com",
+                "notes": "Created for AI router testing"
+            }
+
+            create_tenant_response = await self.make_authenticated_request(
+                "POST",
+                "/v1/tenants",
+                json=tenant_create_request
+            )
+
+            if create_tenant_response.status_code != 201:
+                print(f"❌ Failed to create tenant: {create_tenant_response.status_code} - {create_tenant_response.text}")
+                raise Exception(f"Tenant creation failed: {create_tenant_response.text}")
+
+            tenant_data = create_tenant_response.json()
+            uuid_tenant_id = tenant_data["tenant_id"]
+
+            # STEP 2: Update all references to use UUID tenant_id
+            self.original_tenant_id = self.test_tenant_id  # Save original for cleanup
+            self.test_tenant_id = uuid_tenant_id
+            self.auth_headers["X-Customer-ID"] = uuid_tenant_id
+
+            print(f"   ✅ Created UUID tenant: {uuid_tenant_id}")
+
+            # STEP 3: Create enterprise subscription with ALL AI features
+            ai_subscription_request = {
+                "subscribed_features": [
+                    "ai.*",  # ALL AI features via wildcard
+                    "ai_assistant.basic",      # /v1/ai/health
+                    "ai_assistant.query",      # /v1/ai/query
+                    "ai_assistant.analysis",   # /v1/ai/analysis
+                    "ai_assistant.rca",        # /v1/ai/rca
+                    "ai_assistant.anomaly",    # /v1/ai/anomaly
+                    "ai_assistant.investigation", # /v1/ai/investigation
+                    "ai_assistant",
+                    "natural_language_query",
+                    "ai_analytics",
+                    "predictive_analytics",
+                    "anomaly_detection",
+                    "ai_investigation",
+                    "ml_baselines",
+                    "knowledge_management",
+                    "ai_insights",
+                    "incident_analysis",
+                    "root_cause_analysis",
+                    "ingestion.*",  # Basic features needed
+                    "queries.*",
+                    "alerts.*",
+                    "security.*"
+                ],
+                "subscription_tier": "enterprise",  # Enterprise tier supports advanced AI features
+                "billing_cycle": "monthly",
+                "monthly_spend_limit": 10000.0,  # High limit for AI features
+                "auto_renew": True
+            }
+
+            # Create subscription using the UUID tenant_id with PUT method
+            subscription_response = await self.make_authenticated_request(
+                "PUT",
+                f"/v1/tenants/{uuid_tenant_id}/subscription",
+                json=ai_subscription_request
+            )
+
+            if subscription_response.status_code != 200:
+                raise Exception(f"Failed to create AI subscription: {subscription_response.status_code} - {subscription_response.text}")
+
+            subscription_data = subscription_response.json()
+            print(f"   ✅ AI subscription created: {subscription_data.get('subscription_tier', 'N/A')}")
+            print(f"   📦 Features: {subscription_data.get('subscribed_features', [])}")
+
+            return uuid_tenant_id
+
+        except Exception as e:
+            print(f"   ❌ Failed to setup AI subscription: {e}")
+            raise Exception(f"AI subscription setup failed: {e}")
 
     async def test_natural_language_query_endpoint(self):
         """Test POST /v1/ai/query - Natural language query processing"""
@@ -52,8 +144,8 @@ class AIRouterTestSuite(BaseTestSuite):
 
             # Validate NLQueryResult structure
             required_fields = [
-                "query_id", "original_question", "generated_sql", 
-                "explanation", "results", "suggestions", 
+                "query_id", "original_question", "generated_sql",
+                "explanation", "results", "suggestions",
                 "confidence_score", "execution_time_ms", "customer_id"
             ]
             for field in required_fields:
@@ -183,8 +275,8 @@ class AIRouterTestSuite(BaseTestSuite):
 
             # Validate analysis response
             analysis_fields = [
-                "analysis_id", "incident_id", "primary_cause", 
-                "contributing_factors", "timeline", "business_impact", 
+                "analysis_id", "incident_id", "primary_cause",
+                "contributing_factors", "timeline", "business_impact",
                 "recommendations", "similar_incidents", "customer_id"
             ]
             for field in analysis_fields:
@@ -418,7 +510,7 @@ class AIRouterTestSuite(BaseTestSuite):
                         "message": "Database connection failed"
                     },
                     {
-                        "id": "event2", 
+                        "id": "event2",
                         "timestamp": (datetime.utcnow() + timedelta(minutes=2)).isoformat(),
                         "service": "payment-api",
                         "severity": "high",
@@ -449,7 +541,7 @@ class AIRouterTestSuite(BaseTestSuite):
 
             # Validate correlation response structure
             correlation_fields = [
-                "correlations", "total_events", "correlation_window", 
+                "correlations", "total_events", "correlation_window",
                 "confidence_threshold", "analysis_timestamp", "customer_id"
             ]
             for field in correlation_fields:
@@ -501,7 +593,7 @@ class AIRouterTestSuite(BaseTestSuite):
             # Validate optimization response
             assert "optimization_plan" in optimize_data
             assert "customer_id" in optimize_data
-            
+
             optimization_plan = optimize_data["optimization_plan"]
             plan_fields = ["service_name", "optimization_type", "optimizations", "generated_at"]
             for field in plan_fields:
@@ -670,11 +762,45 @@ class AIRouterTestSuite(BaseTestSuite):
         print("\n🧪 Testing Multi-Tenant Isolation...")
 
         try:
-            # Create a test user and tenant for this specific test
-            test_user_id, test_tenant_id = await self.create_test_user_and_tenant(
-                roles=['tenant_admin'],
-                user_name_suffix='AIIsolation'
-            )
+            # Create a SEPARATE test user and tenant for this specific test (NOT reusing the main super admin user)
+            # Generate a unique test ID for this isolation test to avoid conflicts
+            isolation_test_id = random.randint(10000, 99999)
+
+            # Create completely separate user with NO super admin privileges
+            from database_layer import DatabaseLayer
+            from authn_authz_middleware import hash_password
+
+            db = DatabaseLayer('TestService', 'test-service-key')
+
+            # Create unique tenant-only user
+            isolation_password = f"IsolationPass{isolation_test_id}!"
+            isolation_user_email = f"isolation-user-{isolation_test_id}@test.local"
+            isolation_tenant_id = f"isolation-tenant-{isolation_test_id}"
+
+            isolation_user_data = {
+                'email': isolation_user_email,
+                'name': f'Isolation Test User {isolation_test_id}',
+                'password_hash': hash_password(isolation_password),
+                'status': 1,  # active
+                'customer_id': isolation_tenant_id
+            }
+
+            isolation_user_id = await db.create_user(isolation_user_data)
+            print(f"🔧 Created isolation user: {isolation_user_email} (ID: {isolation_user_id})")
+
+            # Create ONLY tenant_admin role (NO super_admin!)
+            role_data = {
+                'user_id': isolation_user_id,
+                'tenant_id': isolation_tenant_id,
+                'role': 'tenant_admin',
+                'granted_by': isolation_user_id,
+                'customer_id': isolation_tenant_id
+            }
+            role_id = await db.create_user_role(role_data)
+            print(f"🔧 Created tenant_admin role for isolation user (Role ID: {role_id})")
+
+            test_user_id = isolation_user_id
+            test_tenant_id = isolation_tenant_id
 
             # Create a baseline for current tenant
             baseline_request = {
@@ -693,17 +819,36 @@ class AIRouterTestSuite(BaseTestSuite):
 
             assert baseline_response.status_code == 200, f"Expected 200, got {baseline_response.status_code}: {baseline_response.text}"
 
+            # Create session for tenant-only user (NOT the super admin main session)
+            # Use the isolation user credentials that were just created
+            tenant_user_email = isolation_user_email
+            tenant_user_password = isolation_password
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                tenant_session_response = await client.post(
+                    f"{self.base_url}/v1/auth/login",
+                    json={
+                        "email": tenant_user_email,
+                        "password": tenant_user_password
+                    }
+                )
+            assert tenant_session_response.status_code == 200, f"Failed to login tenant user: {tenant_session_response.text}"
+            tenant_session_data = tenant_session_response.json()
+            tenant_auth_token = tenant_session_data["access_token"]
+
             # Try to access with different tenant (should be blocked by middleware)
             different_tenant_id = f"different-tenant-{self.test_id}"
-            
+
             # Make request with different customer ID header to test tenant isolation
-            isolated_response = await self.make_authenticated_request(
-                "GET",
-                "/v1/ai/baselines",
-                headers={
-                    "X-Customer-ID": different_tenant_id  # Override tenant ID
-                }
-            )
+            # Use tenant-only user session (NOT super admin session which has cross-tenant access)
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                isolated_response = await client.get(
+                    f"{self.base_url}/v1/ai/baselines",
+                    headers={
+                        "Authorization": f"Bearer {tenant_auth_token}",
+                        "X-Customer-ID": different_tenant_id  # Override tenant ID - this should be blocked!
+                    }
+                )
 
             # Should return 403 due to tenant isolation (middleware blocks access)
             assert isolated_response.status_code == 403, f"Cross-tenant access should be blocked, got {isolated_response.status_code}: {isolated_response.text}"
@@ -722,8 +867,30 @@ class AIRouterTestSuite(BaseTestSuite):
 
         # Create test user and tenant for authentication
         try:
-            await self.create_test_user_and_tenant(['tenant_admin'])
-            await self.setup_auth()
+            # Create user with both platform admin and tenant admin roles (needed for tenant creation)
+            user_id, tenant_id = await self.create_test_user_and_tenant(['super_admin', 'tenant_admin'])
+
+            # CRITICAL: Don't call setup_auth() - it creates SECOND user! Create session directly
+            self.test_user_id = user_id  # Use the platform admin user
+            self.test_tenant_id = tenant_id
+            self.tenant_id = tenant_id
+
+            print(f"   ✅ Using platform admin user: {user_id}")
+            print(f"   ✅ Using tenant: {tenant_id}")
+
+            # Create session directly for platform admin user (don't call setup_auth!)
+            await self.create_test_session()
+
+            # Setup auth headers manually
+            self.auth_headers = {
+                "Authorization": f"Bearer {self.auth_token}",
+                "X-Customer-ID": self.test_tenant_id
+            }
+
+            print(f"   ✅ Created session for platform admin user")
+
+            # Set up AI subscription
+            await self.setup_ai_subscription()
         except Exception as e:
             print(f"❌ Failed to setup test environment: {e}")
             return
@@ -771,7 +938,7 @@ class AIRouterTestSuite(BaseTestSuite):
         for test_name, result in self.test_results.items():
             status = "✅ PASS" if result == "PASS" else "❌ FAIL"
             print(f"{status:8} | {test_name:<40} | {result}")
-            
+
             if result == "PASS":
                 passed += 1
             else:
@@ -779,7 +946,7 @@ class AIRouterTestSuite(BaseTestSuite):
 
         print("=" * 60)
         print(f"📊 TOTAL: {passed + failed} tests | ✅ PASSED: {passed} | ❌ FAILED: {failed}")
-        
+
         if failed == 0:
             print("🎉 ALL AI ROUTER TESTS PASSED!")
         else:
@@ -791,11 +958,11 @@ async def run_ai_router_tests():
     """Main test runner function for integration with run_route_tests.py"""
     suite = AIRouterTestSuite()
     await suite.run_all_tests()
-    
+
     # Return True if all tests passed, False otherwise
     passed_tests = sum(1 for result in suite.test_results.values() if result == "PASS")
     total_tests = len(suite.test_results)
-    
+
     return passed_tests == total_tests
 
 async def main():

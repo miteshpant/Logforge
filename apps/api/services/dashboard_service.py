@@ -4,8 +4,9 @@ Handles dashboard management, validation, and integration with dashboard engine
 """
 
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
 import structlog
+import os
 
 from dao.dashboard_dao import DashboardDAO
 
@@ -18,6 +19,8 @@ class DashboardService:
         self.dashboard_dao = DashboardDAO()
         # Dashboard engine will be injected
         self.dashboard_engine = None
+        self.service_name = "DashboardService"
+        self.service_key = os.getenv('DASHBOARD_SERVICE_KEY', 'dashboard-service-key-dev')
     
     def set_dashboard_engine(self, dashboard_engine):
         """Set dashboard engine for data generation"""
@@ -280,47 +283,31 @@ class DashboardService:
     
     async def _generate_widget_data(self, widget: Dict[str, Any], customer_id: str, 
                                    time_range: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Generate data for a widget based on its query definition"""
+        """Generate data for a widget based on its query definition using DAO"""
         try:
-            # This would integrate with the query engine to execute the widget's query
-            # For now, return mock data based on widget type
-            
             widget_type = widget.get("type", "chart")
             query_definition = widget.get("query_definition", {})
+            widget_id = widget.get("id", "unknown")
             
-            if widget_type == "line_chart":
-                return {
-                    "series": [
-                        {"name": "Errors", "data": [10, 15, 8, 22, 18, 25]},
-                        {"name": "Warnings", "data": [5, 8, 12, 15, 10, 14]}
-                    ],
-                    "labels": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
-                    "query_definition": query_definition
-                }
-            elif widget_type == "bar_chart":
-                return {
-                    "series": [{"name": "Count", "data": [45, 32, 28, 15, 8]}],
-                    "labels": ["ERROR", "WARN", "INFO", "DEBUG", "TRACE"],
-                    "query_definition": query_definition
-                }
-            elif widget_type == "metric":
-                return {
-                    "value": 1250,
-                    "change": "+12.5%",
-                    "trend": "up",
-                    "query_definition": query_definition
-                }
-            elif widget_type == "table":
-                return {
-                    "headers": ["Timestamp", "Level", "Service", "Message"],
-                    "rows": [
-                        ["2024-01-01 10:00:00", "ERROR", "api", "Database connection failed"],
-                        ["2024-01-01 10:01:00", "WARN", "auth", "Login attempt from unknown IP"],
-                        ["2024-01-01 10:02:00", "INFO", "api", "Request processed successfully"]
-                    ],
-                    "query_definition": query_definition
-                }
+            # Build time range for queries (default 24 hours)
+            if not time_range:
+                end_time = datetime.utcnow()
+                start_time = end_time - timedelta(hours=24)
             else:
+                start_time = datetime.fromisoformat(time_range["start_time"].replace("Z", "+00:00"))
+                end_time = datetime.fromisoformat(time_range["end_time"].replace("Z", "+00:00"))
+            
+            # Execute query based on widget type using DAO
+            if widget_type == "line_chart":
+                return await self._generate_line_chart_data(customer_id, query_definition, start_time, end_time)
+            elif widget_type == "bar_chart":
+                return await self._generate_bar_chart_data(customer_id, query_definition, start_time, end_time)
+            elif widget_type == "metric":
+                return await self._generate_metric_data(customer_id, query_definition, start_time, end_time)
+            elif widget_type == "table":
+                return await self._generate_table_data(customer_id, query_definition, start_time, end_time)
+            else:
+                logger.warning("Unsupported widget type", widget_type=widget_type, widget_id=widget_id)
                 return {
                     "message": f"Widget type '{widget_type}' not implemented",
                     "query_definition": query_definition
@@ -329,6 +316,82 @@ class DashboardService:
         except Exception as e:
             logger.error("Failed to generate widget data", error=str(e), widget_id=widget.get("id"))
             return {"error": str(e)}
+    
+    async def _generate_line_chart_data(self, customer_id: str, query_definition: Dict[str, Any], 
+                                       start_time: datetime, end_time: datetime) -> Dict[str, Any]:
+        """Generate line chart data using DAO"""
+        try:
+            # Get time series data via DAO
+            result = await self.dashboard_dao.get_time_series_data(
+                customer_id, query_definition, start_time, end_time
+            )
+            
+            # Return formatted data from DAO
+            if result:
+                return result
+            
+            return {"series": [], "labels": [], "query_definition": query_definition}
+            
+        except Exception as e:
+            logger.error("Failed to generate line chart data", error=str(e))
+            return {"series": [], "labels": [], "query_definition": query_definition, "error": str(e)}
+    
+    async def _generate_bar_chart_data(self, customer_id: str, query_definition: Dict[str, Any],
+                                      start_time: datetime, end_time: datetime) -> Dict[str, Any]:
+        """Generate bar chart data using DAO"""
+        try:
+            # Get categorical aggregation data via DAO
+            result = await self.dashboard_dao.get_categorical_data(
+                customer_id, query_definition, start_time, end_time
+            )
+            
+            # Return formatted data from DAO
+            if result:
+                return result
+            
+            return {"series": [], "labels": [], "query_definition": query_definition}
+            
+        except Exception as e:
+            logger.error("Failed to generate bar chart data", error=str(e))
+            return {"series": [], "labels": [], "query_definition": query_definition, "error": str(e)}
+    
+    async def _generate_metric_data(self, customer_id: str, query_definition: Dict[str, Any],
+                                   start_time: datetime, end_time: datetime) -> Dict[str, Any]:
+        """Generate single metric data using DAO"""
+        try:
+            # Get metric data via DAO
+            result = await self.dashboard_dao.get_metric_data(
+                customer_id, query_definition, start_time, end_time
+            )
+            
+            # Return formatted data from DAO
+            if result:
+                return result
+            
+            return {"value": 0, "formatted_value": "0", "change": "0%", "trend": "stable", "query_definition": query_definition}
+            
+        except Exception as e:
+            logger.error("Failed to generate metric data", error=str(e))
+            return {"value": 0, "formatted_value": "0", "change": "0%", "trend": "stable", "query_definition": query_definition, "error": str(e)}
+    
+    async def _generate_table_data(self, customer_id: str, query_definition: Dict[str, Any],
+                                  start_time: datetime, end_time: datetime) -> Dict[str, Any]:
+        """Generate table data using DAO"""
+        try:
+            # Get table data via DAO
+            result = await self.dashboard_dao.get_table_data(
+                customer_id, query_definition, start_time, end_time
+            )
+            
+            # Return formatted data from DAO
+            if result:
+                return result
+            
+            return {"headers": [], "rows": [], "total": 0, "query_definition": query_definition}
+            
+        except Exception as e:
+            logger.error("Failed to generate table data", error=str(e))
+            return {"headers": [], "rows": [], "total": 0, "query_definition": query_definition, "error": str(e)}
     
     # Widget management methods
     

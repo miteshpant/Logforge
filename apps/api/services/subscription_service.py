@@ -29,10 +29,23 @@ class SubscriptionService:
     def _initialize_feature_bundles(self) -> Dict[str, List[str]]:
         """Initialize subscription tier feature bundles"""
         return {
+            "startup": [
+                "ingestion.basic",      # Basic log ingestion
+                "storage.hot",          # ClickHouse hot storage
+                "queries.basic"         # Basic search queries
+            ],
             "starter": [
                 "ingestion.basic",      # Basic log ingestion
                 "storage.hot",          # ClickHouse hot storage
                 "queries.basic"         # Basic search queries
+            ],
+            "smb": [
+                "ingestion.*",          # All ingestion features
+                "storage.*",            # All storage features
+                "queries.*",            # All query features
+                "alerts.basic",         # Basic alerting
+                "dashboards.readonly",  # View-only dashboards
+                "export.basic"          # Basic data export
             ],
             "professional": [
                 "ingestion.*",          # All ingestion features
@@ -44,6 +57,47 @@ class SubscriptionService:
             ],
             "enterprise": [
                 "*"                     # All features (wildcard)
+            ],
+            "non_profit": [
+                "ingestion.basic",      # Basic log ingestion
+                "storage.hot",          # ClickHouse hot storage
+                "queries.basic",        # Basic search queries
+                "alerts.basic"          # Basic alerting for non-profits
+            ],
+            "government": [
+                "ingestion.*",          # All ingestion features
+                "storage.*",            # All storage features
+                "queries.*",            # All query features
+                "alerts.*",             # All alerting features
+                "dashboards.*",         # All dashboard features
+                "security.*",           # All security features
+                "export.basic"          # Basic data export
+            ],
+            "education": [
+                "ingestion.basic",      # Basic log ingestion
+                "storage.hot",          # ClickHouse hot storage
+                "queries.basic",        # Basic search queries
+                "alerts.basic",         # Basic alerting
+                "dashboards.readonly"   # View-only dashboards
+            ],
+            "healthcare": [
+                "ingestion.*",          # All ingestion features
+                "storage.*",            # All storage features
+                "queries.*",            # All query features
+                "alerts.*",             # All alerting features
+                "dashboards.*",         # All dashboard features
+                "security.*",           # All security features (HIPAA compliance)
+                "export.basic"          # Basic data export
+            ],
+            "financial": [
+                "ingestion.*",          # All ingestion features
+                "storage.*",            # All storage features
+                "queries.*",            # All query features
+                "alerts.*",             # All alerting features
+                "dashboards.*",         # All dashboard features
+                "security.*",           # All security features (SOX/PCI compliance)
+                "observability.*",      # All observability features
+                "export.*"              # All export features
             ]
         }
 
@@ -136,6 +190,10 @@ class SubscriptionService:
 
         # No feature restriction for unmapped endpoints (like health checks)
         return None
+
+    def get_features_for_tier(self, tier: str) -> List[str]:
+        """Get feature list for a subscription tier"""
+        return self.feature_bundles.get(tier, [])
 
     def has_feature_access(self, subscribed_features: List[str], required_feature: str) -> bool:
         """Check if subscribed features include required feature (with wildcard support)"""
@@ -298,6 +356,37 @@ class SubscriptionService:
         await self.subscription_dao.create_subscription(subscription_data)
 
         return subscription
+
+    async def create_subscription_for_tier(self, tenant_id: str, subscription_tier: str, billing_cycle: str = "monthly", auto_renew: bool = True) -> TenantSubscription:
+        """Create subscription with automatic feature assignment based on tier"""
+        # Get features for the tier from the bundle system
+        features = self.get_features_for_tier(subscription_tier)
+        
+        if not features:
+            # Fallback for unknown tiers
+            logger.warning(f"Unknown subscription tier: {subscription_tier}, using basic features")
+            features = ["ingestion.basic", "storage.hot", "queries.basic"]
+        
+        # Create subscription data directly
+        subscription_data = {
+            'tenant_id': tenant_id,
+            'subscribed_features': features,
+            'subscription_tier': subscription_tier,
+            'billing_cycle': billing_cycle,
+            'status': 'active',
+            'started_at': datetime.now(timezone.utc),
+            'expires_at': None,
+            'auto_renew': auto_renew,
+            'monthly_spend_limit': None,
+            'overage_allowed': False,
+            'customer_id': tenant_id
+        }
+        
+        # Store directly using DAO
+        await self.subscription_dao.create_subscription(subscription_data)
+        
+        # Return created subscription
+        return await self.get_tenant_subscription(tenant_id)
 
     async def get_feature_rate(self, feature: str, tenant_id: str) -> Optional[FeatureRate]:
         """Get current feature rate for tenant"""

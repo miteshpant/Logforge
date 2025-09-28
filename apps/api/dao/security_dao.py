@@ -356,31 +356,45 @@ class SecurityDAO:
             
             query = """
             INSERT INTO threat_intel_mt (
-                id, customer_id, indicator_type, value, threat_type, severity,
-                confidence, source, description, tags, first_seen, last_seen,
-                created_at, updated_at
+                id, customer_id, indicator_type, indicator_value, threat_type, 
+                confidence_score, source, first_seen, last_seen, tags, context, is_active
             ) VALUES (
-                %(id)s, %(customer_id)s, %(indicator_type)s, %(value)s, %(threat_type)s,
-                %(severity)s, %(confidence)s, %(source)s, %(description)s, %(tags)s,
-                %(first_seen)s, %(last_seen)s, %(created_at)s, %(updated_at)s
+                %(id)s, %(customer_id)s, %(indicator_type)s, %(indicator_value)s, %(threat_type)s,
+                %(confidence_score)s, %(source)s, %(first_seen)s, %(last_seen)s, %(tags)s, %(context)s, %(is_active)s
             )
             """
+            
+             # Map the threat_type to the database enum values
+            threat_type_value = indicator_data.get("threat_type", ["malware"])
+            if isinstance(threat_type_value, list) and threat_type_value:
+                threat_type_enum = threat_type_value[0]  # Use first value for enum
+            else:
+                threat_type_enum = "malware"
+            
+            # Ensure threat_type is valid enum
+            valid_threat_types = ["malware", "c2", "phishing", "scanning", "bot"]
+            if threat_type_enum not in valid_threat_types:
+                threat_type_enum = "malware"
+            
+            # Map indicator_type to valid enum
+            indicator_type_value = indicator_data.get("indicator_type", "domain")
+            valid_indicator_types = ["domain", "ip", "hash", "url", "email", "filename"]
+            if indicator_type_value not in valid_indicator_types:
+                indicator_type_value = "domain"
             
             params = {
                 "id": indicator_id,
                 "customer_id": indicator_data.get("customer_id", "default"),
-                "indicator_type": indicator_data.get("indicator_type", "unknown"),
-                "value": indicator_data.get("value", ""),
-                "threat_type": json.dumps(indicator_data.get("threat_type", [])),
-                "severity": indicator_data.get("severity", "medium"),
-                "confidence": indicator_data.get("confidence", 50),
-                "source": indicator_data.get("source", "unknown"),
-                "description": indicator_data.get("description"),
-                "tags": json.dumps(indicator_data.get("tags", [])),
+                "indicator_type": indicator_type_value,
+                "indicator_value": indicator_data.get("value", indicator_data.get("indicator_value", "")),
+                "threat_type": threat_type_enum,  # Use enum value, not JSON array
+                "confidence_score": min(100, max(0, indicator_data.get("confidence", 50))),  # Ensure 0-100 range
+                "source": indicator_data.get("source", "logforge-default"),
                 "first_seen": indicator_data.get("first_seen", datetime.now(timezone.utc)),
                 "last_seen": indicator_data.get("last_seen", datetime.now(timezone.utc)),
-                "created_at": datetime.now(timezone.utc),
-                "updated_at": datetime.now(timezone.utc)
+                "tags": indicator_data.get("tags", []),  # ClickHouse Array(String) type
+                "context": json.dumps(indicator_data.get("description", "")),  # Use context for additional data
+                "is_active": 1  # Default to active
             }
             
             await self.db.execute_query(query, params)

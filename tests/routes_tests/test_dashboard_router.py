@@ -23,6 +23,137 @@ class DashboardRouterTestSuite(BaseTestSuite):
     def __init__(self):
         super().__init__("DashboardRouter")
 
+    async def setup_dashboard_subscription(self):
+        """Set up dashboard subscription for testing dashboard features - PROPER APPROACH"""
+        try:
+            print(f"   🔧 Setting up dashboard subscription using proven pattern...")
+            
+            # STEP 1: Create proper tenant via API (to get UUID format)
+            tenant_create_request = {
+                "name": f"Dashboard Test Org {self.test_id}",
+                "type": "smb",  # SMB tier supports dashboard features
+                "primary_contact_name": f"Test Admin {self.test_id}",
+                "primary_contact_email": self.test_user_email,
+                "industry": "technology",
+                "address": f"123 Test St, Suite {self.test_id}",
+                "company_size": 100,
+                "website": f"https://dashboard-test-{self.test_id}.com",
+                "notes": "Created for dashboard router testing"
+            }
+
+            create_tenant_response = await self.make_authenticated_request(
+                "POST", 
+                "/v1/tenants",
+                json=tenant_create_request
+            )
+
+            if create_tenant_response.status_code != 201:
+                print(f"❌ Failed to create tenant: {create_tenant_response.status_code} - {create_tenant_response.text}")
+                raise Exception(f"Tenant creation failed: {create_tenant_response.text}")
+
+            tenant_data = create_tenant_response.json()
+            uuid_tenant_id = tenant_data["tenant_id"]
+            
+            # STEP 2: Update all references to use UUID tenant_id 
+            self.original_tenant_id = self.test_tenant_id  # Save original for cleanup
+            self.test_tenant_id = uuid_tenant_id
+            self.auth_headers["X-Customer-ID"] = uuid_tenant_id
+            
+            print(f"   ✅ Created UUID tenant: {uuid_tenant_id}")
+            
+            # STEP 3: Create subscription with ALL dashboard features
+            dashboard_subscription_request = {
+                "subscribed_features": [
+                    "dashboards.*",  # ALL dashboard features via wildcard
+                    "queries.*",     # Dashboards need queries to work
+                    "ingestion.*",   # Need data ingestion for dashboards
+                    "alerts.*",      # Dashboard widgets might show alerts
+                    "security.*"     # Security dashboards need security features
+                ],
+                "subscription_tier": "smb",  # SMB tier supports advanced features
+                "billing_cycle": "monthly", 
+                "monthly_spend_limit": 1000.0,  # Reasonable limit for SMB
+                "auto_renew": True
+            }
+            
+            create_subscription_response = await self.make_authenticated_request(
+                "PUT",
+                f"/v1/tenants/{uuid_tenant_id}/subscription",
+                json=dashboard_subscription_request
+            )
+            
+            if create_subscription_response.status_code != 200:
+                print(f"❌ Failed to create subscription: {create_subscription_response.status_code} - {create_subscription_response.text}")
+                raise Exception(f"Subscription creation failed: {create_subscription_response.text}")
+                
+            subscription_data = create_subscription_response.json()
+            print(f"   ✅ Created dashboard subscription with features: {subscription_data['subscribed_features']}")
+            
+            return uuid_tenant_id
+
+        except Exception as e:
+            print(f"❌ Failed to setup dashboard subscription: {e}")
+            raise
+
+    async def run_all_tests(self, test_methods):
+        """Execute all dashboard router tests with proper subscription setup"""
+        print(f"\n🚀 Starting Dashboard Router Test Suite (Test ID: {self.test_id})")
+        print("=" * 60)
+
+        # Create test user and tenant for authentication
+        try:
+            # Create user with both platform admin and tenant admin roles (needed for tenant creation)
+            user_id, tenant_id = await self.create_test_user_and_tenant(['super_admin', 'tenant_admin'])
+            
+            # CRITICAL: Don't call setup_auth() - it creates SECOND user! Create session directly
+            self.test_user_id = user_id
+            self.test_tenant_id = tenant_id
+            
+            print(f"   ✅ Using platform admin user: {user_id}")
+            print(f"   ✅ Using tenant: {tenant_id}")
+            
+            # Create session directly for platform admin user (don't call setup_auth!)
+            await self.create_test_session()
+            
+            # Setup auth headers manually
+            self.auth_headers = {
+                "Authorization": f"Bearer {self.auth_token}",
+                "X-Customer-ID": self.test_tenant_id
+            }
+            
+            print(f"   ✅ Created session for platform admin user")
+            
+            # Set up dashboard subscription
+            await self.setup_dashboard_subscription()
+            
+        except Exception as e:
+            print(f"❌ Failed to setup test environment: {e}")
+            return False
+
+        # Run all tests sequentially
+        for test_func in test_methods:
+            try:
+                await test_func()
+            except Exception as e:
+                print(f"❌ Test {test_func.__name__} failed with exception: {str(e)}")
+                test_name = test_func.__name__.replace("test_", "").replace("_endpoint", "")
+                if test_name not in self.test_results:
+                    self.test_results[test_name] = f"FAIL: {str(e)}"
+        
+        # Print summary
+        passed, total = self.print_test_summary()
+        
+        # Always clean up test data
+        await self.cleanup_test_data()
+        
+        # Return success status
+        if passed == total:
+            print(f"✅ Dashboard Router: ALL TESTS PASSED")
+            return True
+        else:
+            print(f"❌ Dashboard Router: SOME TESTS FAILED")
+            return False
+
     async def test_create_dashboard_endpoint(self):
         """Test POST /v1/dashboards - Create a new dashboard"""
         print("\n🧪 Testing Create Dashboard Endpoint...")

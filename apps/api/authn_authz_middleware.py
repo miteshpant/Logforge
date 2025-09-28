@@ -564,9 +564,29 @@ class SetupTokenManager:
 
     def has_setup_completed(self) -> bool:
         """Check if initial setup has been completed"""
-        # TODO: Check if any super_admin users exist in database
-        # For now, check if any tokens have been used
-        return any(token_data["used"] for token_data in self.setup_tokens.values())
+        try:
+            # Check if any super_admin users exist in the database
+            query = """
+                SELECT count() FROM users_mt 
+                WHERE customer_id = 'platform' 
+                AND id IN (
+                    SELECT user_id FROM user_tenant_roles_mt 
+                    WHERE role = 'super_admin' AND status = 'active'
+                )
+            """
+            result = self.db.client.query(query)
+            super_admin_count = result.result_rows[0][0] if result.result_rows else 0
+            
+            # Setup is completed if there's at least one active super admin
+            setup_completed = super_admin_count > 0
+            logger.debug("Setup completion check", super_admin_count=super_admin_count, completed=setup_completed)
+            
+            return setup_completed
+            
+        except Exception as e:
+            logger.error("Failed to check setup completion", error=str(e))
+            # Fallback: check if any tokens have been used (old behavior)
+            return any(token_data["used"] for token_data in self.setup_tokens.values())
 
 # Global setup token manager (lazy initialization)
 setup_token_manager = None
@@ -691,12 +711,26 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             # Step 3: Authorization - Verify user has access to tenant
             user_roles = []
             if tenant_id:
+                print(f"🔍 DEBUG: TENANT VALIDATION START")
+                print(f"🔍 DEBUG: User ID: {user.id}")
+                print(f"🔍 DEBUG: X-Customer-ID Header: {tenant_id}")
+                print(f"🔍 DEBUG: Request Path: {request.url.path}")
+                
                 logger.debug("🔍 AUTH STEP 3: Getting user tenant roles", user_id=user.id, tenant_id=tenant_id, path=str(request.url.path))
                 user_roles = await self.user_service.get_user_tenant_roles(user.id, tenant_id)
+                
+                print(f"🔍 DEBUG: User Roles for Tenant {tenant_id}: {user_roles}")
+                print(f"🔍 DEBUG: Number of roles found: {len(user_roles) if user_roles else 0}")
+                
                 logger.debug("🔍 AUTH STEP 3 RESULT: User tenant roles retrieved", user_id=user.id, tenant_id=tenant_id, user_roles=user_roles, path=str(request.url.path))
                 if not user_roles:
+                    print(f"🔍 DEBUG: ❌ NO ROLES FOUND - Should return 403!")
+                    print(f"🔍 DEBUG: User {user.id} has no access to tenant {tenant_id}")
                     logger.error("🔍 AUTH STEP 3 FAILED: No access to tenant", user_id=user.id, tenant_id=tenant_id, path=str(request.url.path))
                     raise HTTPException(403, f"No access to tenant: {tenant_id}")
+                else:
+                    print(f"🔍 DEBUG: ✅ ROLES FOUND - Access granted")
+                    print(f"🔍 DEBUG: User {user.id} has access to tenant {tenant_id} with roles: {user_roles}")
 
             # Step 4: Permission Check - Verify endpoint permissions
             # Skip permission checks for auth endpoints (they are user-level operations)

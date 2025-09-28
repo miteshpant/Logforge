@@ -1,0 +1,269 @@
+# Logforge Usage-Based Pricing Configuration
+# This file defines pricing for all features and subscription tiers
+# Can be replaced with database table in the future
+
+pricing_version: "1.0"
+currency: "USD"
+last_updated: "2025-09-22"
+
+# Base subscription fees (minimal monthly charges)
+subscription_tiers:
+  startup:
+    base_fee: 25.00
+    description: "Basic tier for small teams"
+    
+  smb:
+    base_fee: 99.00
+    description: "Small/medium business tier"
+    
+  enterprise:
+    base_fee: 299.00
+    description: "Enterprise tier with volume discounts"
+    
+  non_profit:
+    base_fee: 15.00
+    description: "Special pricing for non-profit organizations"
+    
+  government:
+    base_fee: 199.00
+    description: "Government/public sector pricing"
+    
+  education:
+    base_fee: 39.00
+    description: "Educational institution pricing"
+    
+  healthcare:
+    base_fee: 199.00
+    description: "Healthcare industry with compliance features"
+    
+  financial:
+    base_fee: 399.00
+    description: "Financial services with enhanced security"
+
+# Per-unit pricing for each feature
+feature_pricing:
+  # Data Ingestion (per GB)
+  "ingestion.basic":
+    unit: "GB"
+    base_price: 0.50
+    description: "Basic log ingestion"
+    
+  "ingestion.batch":
+    unit: "GB" 
+    base_price: 0.40
+    description: "Batch log ingestion"
+    
+  "ingestion.bulk":
+    unit: "GB"
+    base_price: 0.30
+    description: "Bulk log ingestion"
+    
+  "ingestion.enterprise":
+    unit: "GB"
+    base_price: 0.25
+    description: "Enterprise ingestion with optimization"
+
+  # Storage (per GB per month)
+  "storage.hot":
+    unit: "GB/month"
+    base_price: 0.10
+    description: "Hot storage (ClickHouse)"
+    
+  "storage.warm":
+    unit: "GB/month" 
+    base_price: 0.05
+    description: "Warm storage (S3/GCS)"
+    
+  "storage.cold":
+    unit: "GB/month"
+    base_price: 0.02
+    description: "Cold storage (Glacier/Archive)"
+
+  # Query Operations (per 1000 queries)
+  "queries.basic":
+    unit: "1000 queries"
+    base_price: 2.00
+    description: "Basic search queries"
+    
+  "queries.advanced":
+    unit: "1000 queries"
+    base_price: 5.00
+    description: "Advanced aggregation queries"
+
+  # API Calls (per 1000 calls)
+  "api.calls":
+    unit: "1000 calls"
+    base_price: 1.50
+    description: "API endpoint calls"
+
+  # Alerts (per alert triggered)
+  "alerts.basic":
+    unit: "alert"
+    base_price: 0.10
+    description: "Basic alert triggers"
+    
+  "alerts.advanced":
+    unit: "alert"
+    base_price: 0.25
+    description: "Advanced alert with ML detection"
+
+  # Dashboards (per dashboard per month)
+  "dashboards.readonly":
+    unit: "dashboard/month"
+    base_price: 5.00
+    description: "Read-only dashboard access"
+    
+  "dashboards.edit":
+    unit: "dashboard/month"
+    base_price: 15.00
+    description: "Editable dashboard with sharing"
+
+  # Security Features
+  "security.basic":
+    unit: "1000 events"
+    base_price: 3.00
+    description: "Basic security event processing"
+    
+  "security.events":
+    unit: "1000 events"
+    base_price: 5.00
+    description: "Advanced security event correlation"
+    
+  "security.rules":
+    unit: "rule/month"
+    base_price: 10.00
+    description: "Custom security rules"
+
+  # Observability Features
+  "observability.traces":
+    unit: "1000 spans"
+    base_price: 2.00
+    description: "Distributed tracing spans"
+    
+  "observability.metrics":
+    unit: "1000 metrics"
+    base_price: 1.00
+    description: "Custom metrics ingestion"
+
+  # AI Assistant Features
+  "ai_assistant.query":
+    unit: "query"
+    base_price: 0.50
+    description: "Natural language query"
+    
+  "ai_assistant.analysis":
+    unit: "analysis"
+    base_price: 2.00
+    description: "AI-powered log analysis"
+
+  # Export Features
+  "export.basic":
+    unit: "GB"
+    base_price: 1.00
+    description: "Basic data export"
+    
+  "export.advanced":
+    unit: "GB"
+    base_price: 0.75
+    description: "Advanced export with formats"
+
+# Tier-based discounts (percentage off base prices)
+tier_discounts:
+  startup:
+    discount_percent: 0
+    volume_discounts:
+      - threshold: 100  # GB
+        discount_percent: 5
+      - threshold: 500
+        discount_percent: 10
+        
+  smb:
+    discount_percent: 10
+    volume_discounts:
+      - threshold: 200
+        discount_percent: 15
+      - threshold: 1000
+        discount_percent: 20
+        
+  enterprise:
+    discount_percent: 25
+    volume_discounts:
+      - threshold: 500
+        discount_percent: 30
+      - threshold: 2000
+        discount_percent: 35
+      - threshold: 5000
+        discount_percent: 40
+        
+  non_profit:
+    discount_percent: 30
+    volume_discounts: []
+    
+  government:
+    discount_percent: 15
+    volume_discounts:
+      - threshold: 1000
+        discount_percent: 25
+        
+  education:
+    discount_percent: 40
+    volume_discounts: []
+    
+  healthcare:
+    discount_percent: 20
+    volume_discounts:
+      - threshold: 1000
+        discount_percent: 30
+        
+  financial:
+    discount_percent: 15
+    volume_discounts:
+      - threshold: 2000
+        discount_percent: 25
+
+# Promotional codes for additional discounts
+promo_codes:
+  WELCOME25:
+    discount_percent: 25
+    valid_until: "2025-12-31"
+    max_uses: 1000
+    description: "Welcome discount for new customers"
+    
+  STUDENT50:
+    discount_percent: 50
+    valid_until: "2025-12-31"
+    max_uses: 500
+    applicable_tiers: ["startup", "education"]
+    description: "Student discount"
+    
+  BLACKFRIDAY:
+    discount_percent: 40
+    valid_until: "2025-11-30"
+    max_uses: 2000
+    description: "Black Friday special"
+    
+  ENTERPRISE20:
+    discount_percent: 20
+    valid_until: "2025-06-30"
+    max_uses: 100
+    applicable_tiers: ["enterprise", "financial"]
+    description: "Enterprise sales discount"
+
+# Free tier limits (monthly allowances)
+free_tier_limits:
+  ingestion: 5  # GB
+  storage: 10   # GB
+  queries: 1000
+  api_calls: 5000
+  alerts: 50
+  dashboards: 2
+
+# Overage pricing (when exceeding free limits)
+overage_multiplier: 1.5  # 50% premium for overage usage
+
+# Billing settings
+billing:
+  minimum_charge: 5.00  # Minimum monthly charge
+  currency: "USD"
+  payment_terms: "Net 30"
+  decimal_places: 2

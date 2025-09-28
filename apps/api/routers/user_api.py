@@ -446,13 +446,10 @@ async def list_admin_users(
 ):
     """List platform admin users (platform admins only)"""
     try:
-        # Query database for users (simplified - in production would filter by platform roles)
-        result = await user_service.list_users(page, page_size, None, None)  # Use API parameters
+        # Query database for users with platform admin roles
+        result = await user_service.list_platform_admin_users(page, page_size)
         users = result["users"]
         total_count = result["total_count"]
-        
-        # This is a simplified implementation - in reality, we'd join with user_tenant_roles
-        # For now, return all users (would need proper role checking in production)
         
         user_responses = [
             UserResponse(
@@ -490,7 +487,10 @@ async def update_admin_user(
         if not user:
             raise HTTPException(404, f"Admin user {user_id} not found")
         
-        # TODO: Verify target user has platform roles
+        # Verify target user has platform roles
+        has_platform_roles = await user_service.verify_user_has_platform_roles(user_id)
+        if not has_platform_roles:
+            raise HTTPException(403, "Target user does not have platform admin roles")
         
         # Apply updates
         update_data = user_update.dict(exclude_none=True)
@@ -542,8 +542,15 @@ async def delete_admin_user(
         if user.id == current_admin.id:
             raise HTTPException(400, "Cannot delete your own admin account")
         
-        # TODO: Verify target user has platform roles
-        # TODO: Check if this is the last super_admin (prevent lockout)
+        # Verify target user has platform roles
+        has_platform_roles = await user_service.verify_user_has_platform_roles(user_id)
+        if not has_platform_roles:
+            raise HTTPException(403, "Target user does not have platform admin roles")
+        
+        # Check if this is the last super_admin (prevent lockout)
+        super_admin_count = await user_service.check_super_admin_count()
+        if super_admin_count <= 1:
+            raise HTTPException(400, "Cannot delete the last super admin - this would lock out the platform")
         
         # Soft delete
         user.status = UserStatus.INACTIVE
@@ -554,7 +561,10 @@ async def delete_admin_user(
             "status": user.status,
             "updated_at": user.updated_at
         })
-        # TODO: Revoke all sessions for security
+        
+        # Revoke all sessions for security
+        revoked_sessions = await user_service.revoke_all_user_sessions_for_security(user_id)
+        logger.info("User sessions revoked for security", user_id=user_id, revoked_count=revoked_sessions)
         
         logger.info("Admin user deleted",
                    user_id=user.id,
@@ -579,7 +589,10 @@ async def get_admin_user(
         if not user:
             raise HTTPException(404, f"Admin user {user_id} not found")
         
-        # TODO: Verify target user has platform roles
+        # Verify target user has platform roles
+        has_platform_roles = await user_service.verify_user_has_platform_roles(user_id)
+        if not has_platform_roles:
+            raise HTTPException(403, "Target user does not have platform admin roles")
         
         return UserResponse(
             id=user.id,

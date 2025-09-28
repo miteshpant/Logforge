@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any, List
 import structlog
 
 from services.ai_service import AIService
+from authn_authz_middleware import get_current_user
 
 logger = structlog.get_logger(__name__)
 
@@ -83,27 +84,18 @@ class QueryFeedbackRequest(BaseModel):
     feedback_notes: str = Field("", description="Feedback notes")
 
 
-# Header dependency for customer isolation
-async def get_customer_id(x_customer_id: str = Header(..., alias="X-Customer-ID")) -> str:
-    """Extract customer ID from request header"""
-    if not x_customer_id:
-        raise HTTPException(status_code=400, detail="X-Customer-ID header is required")
-    return x_customer_id
-
-
-async def get_user_id(request: Request) -> str:
-    """Extract user ID from request context"""
-    # This would normally come from authentication middleware
-    return request.headers.get("X-User-ID", "default-user")
+# Authentication handled by get_current_user middleware
 
 
 @router.post("/query")
 async def process_natural_language_query(
     request: NLQueryRequest,
-    customer_id: str = Depends(get_customer_id),
-    user_id: str = Depends(get_user_id)
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
 ):
     """Process natural language question and generate insights"""
+    user_id = current_user.id
+    
     try:
         ai_service = AIService()
         
@@ -135,10 +127,12 @@ async def process_natural_language_query(
 @router.get("/query/history")
 async def get_query_history(
     limit: int = 50,
-    customer_id: str = Depends(get_customer_id),
-    user_id: str = Depends(get_user_id)
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
 ):
     """Get user's natural language query history"""
+    user_id = current_user.id
+    
     try:
         ai_service = AIService()
         
@@ -159,9 +153,11 @@ async def get_query_history(
 @router.post("/query/feedback")
 async def submit_query_feedback(
     request: QueryFeedbackRequest,
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
 ):
     """Submit feedback for a query"""
+    
     try:
         ai_service = AIService()
         
@@ -185,10 +181,12 @@ async def submit_query_feedback(
 @router.post("/investigate")
 async def start_investigation(
     request: InvestigationRequest,
-    customer_id: str = Depends(get_customer_id),
-    user_id: str = Depends(get_user_id)
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
 ):
     """Start AI-powered investigation"""
+    user_id = current_user.id
+    
     try:
         ai_service = AIService()
         
@@ -222,9 +220,11 @@ async def start_investigation(
 @router.get("/investigate/{investigation_id}")
 async def get_investigation_status(
     investigation_id: str,
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
 ):
     """Get investigation status and results"""
+    
     try:
         ai_service = AIService()
         
@@ -255,10 +255,12 @@ async def get_investigation_status(
 @router.post("/analyze")
 async def analyze_incident(
     request: AnalysisRequest,
-    customer_id: str = Depends(get_customer_id),
-    user_id: str = Depends(get_user_id)
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
 ):
     """Perform automated root cause analysis"""
+    user_id = current_user.id
+    
     try:
         ai_service = AIService()
         
@@ -289,9 +291,11 @@ async def analyze_incident(
 @router.post("/baselines")
 async def save_baseline(
     request: BaselineRequest,
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
 ):
     """Save ML model baseline"""
+    
     try:
         ai_service = AIService()
         
@@ -320,9 +324,11 @@ async def save_baseline(
 async def list_baselines(
     service_name: Optional[str] = None,
     baseline_type: Optional[str] = None,
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
 ):
     """List ML model baselines"""
+    
     try:
         ai_service = AIService()
         
@@ -346,9 +352,11 @@ async def list_baselines(
 @router.post("/anomalies/detect")
 async def detect_anomalies(
     request: AnomalyDetectionRequest,
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
 ):
     """Detect anomalies using ML baselines"""
+    
     try:
         ai_service = AIService()
         
@@ -376,9 +384,11 @@ async def detect_anomalies(
 @router.post("/knowledge/search")
 async def search_knowledge_base(
     request: KnowledgeSearchRequest,
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
 ):
     """Search knowledge base for solutions"""
+    
     try:
         ai_service = AIService()
         
@@ -405,9 +415,11 @@ async def search_knowledge_base(
 @router.post("/knowledge/solutions")
 async def add_solution(
     request: SolutionRequest,
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
 ):
     """Add solution to knowledge base"""
+    
     try:
         ai_service = AIService()
         
@@ -435,9 +447,11 @@ async def add_solution(
 
 @router.get("/insights")
 async def get_operational_insights(
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
 ):
     """Get operational insights and recommendations"""
+    
     try:
         ai_service = AIService()
         
@@ -459,9 +473,11 @@ async def get_operational_insights(
 @router.post("/correlate")
 async def correlate_events(
     request: CorrelationRequest,
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
 ):
     """Find correlations between events and metrics"""
+    
     try:
         ai_service = AIService()
         
@@ -521,9 +537,11 @@ async def ai_health():
 async def predict_incidents(
     time_horizon: str = "24h",
     confidence_threshold: float = 0.7,
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
 ):
     """Predict potential incidents using ML models"""
+    
     try:
         ai_service = AIService()
         
@@ -551,9 +569,11 @@ async def predict_incidents(
 async def optimize_performance(
     service_name: str,
     optimization_type: str = "cost_performance",
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
 ):
     """Generate performance optimization recommendations"""
+    
     try:
         ai_service = AIService()
         
@@ -575,9 +595,11 @@ async def optimize_performance(
 
 @router.get("/models")
 async def list_ai_models(
-    customer_id: str = Depends(get_customer_id)
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
 ):
     """List available AI models and their status"""
+    
     try:
         ai_service = AIService()
         

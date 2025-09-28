@@ -28,15 +28,15 @@ class UsageRouterTestSuite(BaseTestSuite):
         """Create a platform admin user with proper 'platform' tenant assignment"""
         from database_layer import DatabaseLayer
         from authn_authz_middleware import hash_password
-        
+
         try:
             # Create unique user for this test
             user_email = f"test-platform-admin-{user_name_suffix}-{self.test_id}@example.com"
             test_password = f"TestPlatformPass{self.test_id}!"
-            
+
             # Initialize database layer with test service privileges
             db = DatabaseLayer("TestService", "test-service-key")
-            
+
             # Create platform admin user using DatabaseLayer methods
             user_data = {
                 'email': user_email,
@@ -45,10 +45,10 @@ class UsageRouterTestSuite(BaseTestSuite):
                 'status': 1,  # active
                 'customer_id': 'platform'  # Platform tenant
             }
-            
+
             user_id = await db.create_user(user_data)
             print(f"   ✅ Created platform admin user: {user_email} (ID: {user_id})")
-            
+
             # Assign platform admin role using DatabaseLayer methods
             role_data = {
                 'user_id': user_id,
@@ -57,15 +57,15 @@ class UsageRouterTestSuite(BaseTestSuite):
                 'granted_by': user_id,
                 'customer_id': 'platform'
             }
-            
+
             role_id = await db.create_user_role(role_data)
             print(f"   ✅ Created platform admin role assignment: super_admin (Role ID: {role_id})")
-            
+
             # Track user for cleanup
             self.platform_admin_users.append(user_id)
-            
+
             return user_id
-            
+
         except Exception as e:
             print(f"Failed to create platform admin user: {e}")
             raise
@@ -79,7 +79,7 @@ class UsageRouterTestSuite(BaseTestSuite):
         try:
             # Debug: Print authentication details
             print(f"   🔍 Debug: test_tenant_id={self.test_tenant_id}, test_user_id={self.test_user_id}")
-            
+
             # Test getting current usage for own tenant
             response = await self.make_authenticated_request(
                 "GET",
@@ -214,12 +214,12 @@ class UsageRouterTestSuite(BaseTestSuite):
                 "Authorization": f"Bearer {platform_admin_session}",
                 "X-Customer-ID": self.test_tenant_id
             }
-            
+
             admin_response = await self.make_authenticated_request(
                 "POST",
                 f"/v1/billing/generate/{self.test_tenant_id}"
             )
-            
+
             # Restore original auth headers
             self.auth_headers = original_headers
 
@@ -262,16 +262,16 @@ class UsageRouterTestSuite(BaseTestSuite):
 
             # Create platform admin for this test
             platform_admin_id = await self.create_platform_admin_user('TrendsAdmin')
-            
+
             # Create session for the platform admin
             from services.user_service import UserService
             from models import User, UserStatus
             from database_layer import DatabaseLayer
-            
+
             # Get platform admin user data
             db = DatabaseLayer("TestService", "test-service-key")
             user_data = await db.get_user_by_id(platform_admin_id)
-            
+
             # Create User object for session creation
             user = User(
                 id=user_data['id'],
@@ -280,7 +280,7 @@ class UsageRouterTestSuite(BaseTestSuite):
                 password_hash=user_data['password_hash'],
                 status=UserStatus.ACTIVE
             )
-            
+
             # Create session using UserService
             user_service = UserService()
             session_data = await user_service.create_session(user, '127.0.0.1', 'usage-test-client')
@@ -292,7 +292,7 @@ class UsageRouterTestSuite(BaseTestSuite):
                 "Authorization": f"Bearer {platform_admin_session}",
                 "X-Customer-ID": "platform"
             }
-            
+
             admin_response = await self.make_authenticated_request(
                 "GET",
                 "/v1/analytics/usage-trends"
@@ -322,7 +322,7 @@ class UsageRouterTestSuite(BaseTestSuite):
             )
 
             assert custom_response.status_code == 200, f"Custom months trends failed: {custom_response.status_code}: {custom_response.text}"
-            
+
             # Restore original auth headers after all platform admin tests
             self.auth_headers = original_headers
 
@@ -453,10 +453,10 @@ class UsageRouterTestSuite(BaseTestSuite):
 
             assert csv_data["tenant_id"] == self.test_tenant_id, "Tenant ID should match"
             assert csv_data["export_format"] == "csv", "Export format should match"
-            
+
             # Debug: Print actual vs expected user IDs
             print(f"   🔍 Debug export: expected user_id={self.test_user_id}, actual generated_by={csv_data.get('generated_by')}")
-            
+
             # Validate generated_by is present and not empty (actual user ID might vary)
             assert csv_data.get("generated_by"), "Generated by should be present and not empty"
             assert isinstance(csv_data["estimated_records"], int), "Estimated records should be integer"
@@ -526,19 +526,19 @@ class UsageRouterTestSuite(BaseTestSuite):
 
             platform_admin_session = await self.create_test_session()
 
-            # Test with platform admin - switch auth headers  
+            # Test with platform admin - switch auth headers
             original_headers = self.auth_headers.copy()
             self.auth_headers = {
                 "Authorization": f"Bearer {platform_admin_session}",
                 "X-Customer-ID": self.test_tenant_id
             }
-            
+
             admin_response = await self.make_authenticated_request(
                 "POST",
                 "/v1/admin/audit/bulk-insert",
                 json=audit_data
             )
-            
+
             # Restore original auth headers
             self.auth_headers = original_headers
 
@@ -589,12 +589,12 @@ class UsageRouterTestSuite(BaseTestSuite):
                 "Authorization": f"Bearer {platform_admin_session}",
                 "X-Customer-ID": self.test_tenant_id
             }
-            
+
             admin_response = await self.make_authenticated_request(
                 "GET",
                 "/v1/admin/database/partitions"
             )
-            
+
             # Restore original auth headers
             self.auth_headers = original_headers
 
@@ -705,10 +705,10 @@ class UsageRouterTestSuite(BaseTestSuite):
             assert response_data["tenant_id"] == self.test_tenant_id, "Tenant ID should match"
             assert response_data["threshold_amount"] == 100.0, "Threshold amount should match"
             assert response_data["notification_email"] == cost_alert_params["notification_email"], "Email should match"
-            
+
             # Debug: Print actual vs expected user IDs
             print(f"   🔍 Debug cost alert: expected user_id={self.test_user_id}, actual created_by={response_data.get('created_by')}")
-            
+
             # Validate created_by is present and not empty (actual user ID might vary)
             assert response_data.get("created_by"), "Created by should be present and not empty"
             assert response_data["status"] == "active", "Status should be active"
@@ -749,12 +749,12 @@ class UsageRouterTestSuite(BaseTestSuite):
                 "Authorization": f"Bearer {platform_admin_session}",
                 "X-Customer-ID": self.test_tenant_id
             }
-            
+
             admin_response = await self.make_authenticated_request(
                 "POST",
                 "/v1/admin/usage/flush-buffer"
             )
-            
+
             # Restore original auth headers
             self.auth_headers = original_headers
 
@@ -804,12 +804,12 @@ class UsageRouterTestSuite(BaseTestSuite):
                 "Authorization": f"Bearer {platform_admin_session}",
                 "X-Customer-ID": self.test_tenant_id
             }
-            
+
             admin_response = await self.make_authenticated_request(
                 "GET",
                 "/v1/admin/usage/buffer-status"
             )
-            
+
             # Restore original auth headers
             self.auth_headers = original_headers
 
@@ -970,33 +970,33 @@ class UsageRouterTestSuite(BaseTestSuite):
             # Current Usage Endpoints
             self.test_get_current_usage_endpoint,
             self.test_get_usage_history_endpoint,
-            
+
             # Billing Endpoints
             self.test_get_billing_estimate_endpoint,
             self.test_generate_invoice_endpoint,
-            
+
             # Platform Analytics (Admin Only)
             self.test_get_platform_usage_trends_endpoint,
             self.test_get_feature_usage_analytics_endpoint,
-            
+
             # Real-time Usage
             self.test_get_realtime_usage_endpoint,
-            
+
             # Usage Export
             self.test_export_usage_data_endpoint,
-            
+
             # Admin Usage Management
             self.test_bulk_insert_audit_records_endpoint,
             self.test_get_database_partitions_endpoint,
-            
+
             # Cost Management
             self.test_get_cost_breakdown_endpoint,
             self.test_create_cost_alert_endpoint,
-            
+
             # Usage Buffer Management
             self.test_flush_usage_buffer_endpoint,
             self.test_get_usage_buffer_status_endpoint,
-            
+
             # Security and Validation
             self.test_cross_tenant_access_protection,
             self.test_validation_and_error_handling
@@ -1022,10 +1022,10 @@ class UsageRouterTestSuite(BaseTestSuite):
         try:
             # Clean up platform admin users first
             await self.cleanup_platform_admin_users()
-            
+
             # Call parent cleanup for regular test users and tenants
             await super().cleanup_test_data()
-            
+
         except Exception as e:
             print(f"⚠️  Cleanup error: {e}")
 
@@ -1033,13 +1033,13 @@ class UsageRouterTestSuite(BaseTestSuite):
         """Clean up platform admin users created during tests"""
         if not self.platform_admin_users:
             return
-            
+
         try:
             from database_layer import DatabaseLayer
             db = DatabaseLayer("TestService", "test-service-key")
-            
+
             print(f"\n🧹 Cleaning up {len(self.platform_admin_users)} platform admin users...")
-            
+
             for user_id in self.platform_admin_users:
                 try:
                     # Delete user roles using proper DatabaseLayer method
@@ -1047,27 +1047,27 @@ class UsageRouterTestSuite(BaseTestSuite):
                         "DELETE FROM user_tenant_roles_mt WHERE user_id = %(user_id)s",
                         {"user_id": user_id}
                     )
-                    
+
                     # Delete user sessions using proper DatabaseLayer method
                     await db.execute_query(
                         "DELETE FROM user_sessions_mt WHERE user_id = %(user_id)s",
                         {"user_id": user_id}
                     )
-                    
+
                     # Delete user using proper DatabaseLayer method
                     await db.execute_query(
                         "DELETE FROM users_mt WHERE id = %(user_id)s",
                         {"user_id": user_id}
                     )
-                    
+
                     print(f"   ✅ Cleaned up platform admin user: {user_id}")
-                    
+
                 except Exception as e:
                     print(f"   ⚠️  Failed to cleanup platform admin user {user_id}: {e}")
-            
+
             # Clear the tracking list
             self.platform_admin_users.clear()
-            
+
         except Exception as e:
             print(f"   ❌ Platform admin cleanup error: {e}")
 
@@ -1083,7 +1083,7 @@ class UsageRouterTestSuite(BaseTestSuite):
         for test_name, result in self.test_results.items():
             status = "✅ PASS" if result == "PASS" else "❌ FAIL"
             print(f"{status:8} | {test_name:<45} | {result}")
-            
+
             if result == "PASS":
                 passed += 1
             else:
@@ -1091,7 +1091,7 @@ class UsageRouterTestSuite(BaseTestSuite):
 
         print("=" * 60)
         print(f"📊 TOTAL: {passed + failed} tests | ✅ PASSED: {passed} | ❌ FAILED: {failed}")
-        
+
         if failed == 0:
             print("🎉 ALL USAGE ROUTER TESTS PASSED!")
         else:
@@ -1103,11 +1103,11 @@ async def run_usage_router_tests():
     """Main test runner function for integration with run_route_tests.py"""
     suite = UsageRouterTestSuite()
     await suite.run_all_tests()
-    
+
     # Return True if all tests passed, False otherwise
     passed_tests = sum(1 for result in suite.test_results.values() if result == "PASS")
     total_tests = len(suite.test_results)
-    
+
     return passed_tests == total_tests
 
 async def main():

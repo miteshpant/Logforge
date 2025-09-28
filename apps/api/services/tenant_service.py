@@ -18,6 +18,7 @@ from services.storage_service import StorageService
 from services.usage_service import UsageService
 from services.observability_service import ObservabilityService
 from services.alert_service import AlertService
+from services.subscription_service import SubscriptionService
 
 logger = structlog.get_logger()
 
@@ -34,6 +35,7 @@ class TenantService:
         self._usage_service = None
         self.observability_service = ObservabilityService()
         self.alert_service = AlertService()
+        self.subscription_service = SubscriptionService()
     
     @property
     def usage_service(self):
@@ -66,6 +68,9 @@ class TenantService:
             
             # Create default configs for new tenant
             await self._create_default_configs(db_tenant['id'])
+            
+            # Create default subscription for new tenant
+            await self._create_default_subscription(db_tenant['id'], tenant_data.type.value if tenant_data.type else 'starter')
             
             # Convert to Tenant model
             tenant = Tenant(
@@ -158,6 +163,27 @@ class TenantService:
         except Exception as e:
             logger.error("Failed to create default configs", error=str(e), tenant_id=tenant_id)
             # Don't fail tenant creation if config creation fails
+    
+    async def _create_default_subscription(self, tenant_id: str, subscription_tier: str):
+        """Create default subscription for new tenant using subscription service feature bundles"""
+        try:
+            # Use the subscription service's convenient method that automatically 
+            # assigns features based on tier from the centralized bundle system
+            subscription = await self.subscription_service.create_subscription_for_tier(
+                tenant_id=tenant_id,
+                subscription_tier=subscription_tier,
+                billing_cycle='monthly',
+                auto_renew=True
+            )
+            
+            logger.info("Default subscription created", 
+                       tenant_id=tenant_id, 
+                       tier=subscription_tier, 
+                       features=subscription.subscribed_features if subscription else [])
+            
+        except Exception as e:
+            logger.error("Failed to create default subscription", error=str(e), tenant_id=tenant_id)
+            # Don't fail tenant creation if subscription creation fails
     
     async def get_tenant_by_id(self, tenant_id: str) -> Optional[Tenant]:
         """Get tenant by ID from database"""
@@ -505,13 +531,36 @@ class TenantService:
             if not tenant:
                 raise ValueError("Tenant not found")
             
-            # In production, would test actual storage connection
+            # Test actual storage connection with real latency measurement
+            import time
+            start_time = time.time()
+            
+            # Test database connectivity by running a simple query
+            await self.tenant_dao.db.execute_query(
+                "SELECT count() as health_check FROM logs_raw_mt WHERE customer_id = %(tenant_id)s LIMIT 1",
+                {"tenant_id": tenant_id}
+            )
+            
+            # Calculate real latency
+            latency_ms = int((time.time() - start_time) * 1000)
+            
+            # Determine backend health based on latency
+            if latency_ms < 100:
+                backend_health = "healthy"
+                connection_status = "success"
+            elif latency_ms < 1000:
+                backend_health = "degraded"
+                connection_status = "success"
+            else:
+                backend_health = "unhealthy"
+                connection_status = "slow"
+            
             result = {
                 "tenant_id": tenant_id,
-                "connection_status": "success",
-                "latency_ms": 45,
+                "connection_status": connection_status,
+                "latency_ms": latency_ms,
                 "test_timestamp": datetime.now(timezone.utc).isoformat(),
-                "backend_health": "healthy"
+                "backend_health": backend_health
             }
             
             return result
@@ -795,14 +844,19 @@ class TenantService:
             else:
                 overall_health = "healthy"
             
-            # Calculate uptime percentage (simplified calculation)
-            uptime_percentage = 99.0  # Default value
-            if overall_health == "healthy":
-                uptime_percentage = 99.9
-            elif overall_health == "degraded":
-                uptime_percentage = 95.0
+            # Calculate uptime percentage based on real health check results
+            # Count successful health checks vs total checks
+            total_checks = len(health_statuses)
+            healthy_checks = health_statuses.count("healthy")
+            degraded_checks = health_statuses.count("degraded")
+            
+            if total_checks == 0:
+                uptime_percentage = 50.0  # Unknown state
             else:
-                uptime_percentage = 85.0
+                # Calculate percentage based on health check results
+                # Healthy = 100%, Degraded = 70%, Unhealthy = 0%
+                health_score = (healthy_checks * 100 + degraded_checks * 70) / total_checks
+                uptime_percentage = min(99.9, max(50.0, health_score))
             
             return TenantHealthResponse(
                 tenant_id=tenant_id,
@@ -997,6 +1051,25 @@ class TenantService:
         except Exception as e:
             logger.error("Failed to validate tenant UUID", error=str(e), tenant_id=tenant_id)
             return False
+    
+    async def get_tenant_stats(self) -> Dict[str, Any]:
+        """Get lightweight tenant statistics for dashboard (no full tenant data)"""
+        try:
+            # Get counts by status from DAO
+            stats = await self.tenant_dao.get_tenant_counts_by_status()
+            
+            return {
+                "total_tenants": stats.get("total", 0),
+                "active_tenants": stats.get("active", 0),
+                "inactive_tenants": stats.get("inactive", 0),
+                "pending_tenants": stats.get("pending", 0),
+                "suspended_tenants": stats.get("suspended", 0),
+                "calculated_at": datetime.now(timezone.utc).isoformat()
+            }
+            
+        except Exception as e:
+            logger.error("Failed to get tenant statistics", error=str(e))
+            raise e
     
     @property
     def tenants(self) -> Dict[str, Any]:

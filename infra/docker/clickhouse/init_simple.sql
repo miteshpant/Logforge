@@ -250,6 +250,151 @@ TTL toDateTime(occurred_at) + toIntervalMonth(6)
 SETTINGS index_granularity = 8192;
 
 -- =====================================================
+-- USER MANAGEMENT TABLES (Required for authentication)
+-- =====================================================
+
+-- Users table for authentication and user management
+CREATE TABLE IF NOT EXISTS users_mt (
+    id String,
+    email String,
+    name String,
+    password_hash String,
+    status Enum8('active'=1, 'inactive'=2, 'pending'=3, 'suspended'=4),
+    created_at DateTime64(3) DEFAULT now64(3),
+    updated_at DateTime64(3) DEFAULT now64(3),
+    last_login_at Nullable(DateTime64(3)),
+    password_reset_token Nullable(String),
+    password_reset_expires Nullable(DateTime64(3)),
+    email_verified_at Nullable(DateTime64(3)),
+    setup_token Nullable(String),
+    setup_token_expires Nullable(DateTime64(3)),
+    customer_id String DEFAULT 'platform'
+) ENGINE = MergeTree() 
+PARTITION BY toYYYYMM(created_at)
+ORDER BY (customer_id, id)
+SETTINGS index_granularity = 8192;
+
+-- User sessions table for JWT token management
+CREATE TABLE IF NOT EXISTS user_sessions_mt (
+    id String,
+    user_id String,
+    session_token String,
+    ip_address String,
+    user_agent String,
+    created_at DateTime64(3) DEFAULT now64(3),
+    last_activity DateTime64(3) DEFAULT now64(3),
+    expires_at DateTime64(3),
+    status Enum8('active'=1, 'expired'=2, 'revoked'=3),
+    customer_id String DEFAULT 'platform'
+) ENGINE = MergeTree() 
+PARTITION BY toYYYYMM(created_at)
+ORDER BY (customer_id, user_id, session_token)
+SETTINGS index_granularity = 8192;
+
+-- User tenant roles table for role-based access control
+CREATE TABLE IF NOT EXISTS user_tenant_roles_mt (
+    id String,
+    user_id String,
+    tenant_id String,
+    role String,
+    granted_by String,
+    granted_at DateTime64(3) DEFAULT now64(3),
+    expires_at Nullable(DateTime64(3)),
+    status Enum8('active'=1, 'inactive'=2, 'expired'=3),
+    created_at DateTime64(3) DEFAULT now64(3),
+    updated_at DateTime64(3) DEFAULT now64(3),
+    customer_id String DEFAULT 'platform'
+) ENGINE = MergeTree() 
+PARTITION BY toYYYYMM(created_at)
+ORDER BY (customer_id, user_id, tenant_id)
+SETTINGS index_granularity = 8192;
+
+-- =====================================================
+-- MISSING REQUIRED TABLES (Referenced by services)
+-- =====================================================
+
+-- Alert events table (used by AlertService)
+CREATE TABLE IF NOT EXISTS alert_events_mt (
+    id String,
+    rule_id String,
+    event_type Enum8('triggered' = 1, 'resolved' = 2, 'acknowledged' = 3),
+    severity Enum8('low' = 1, 'medium' = 2, 'high' = 3, 'critical' = 4),
+    message String,
+    details String, -- JSON blob
+    triggered_at DateTime64(3) DEFAULT now64(3),
+    resolved_at Nullable(DateTime64(3)),
+    customer_id String
+) ENGINE = MergeTree()
+PARTITION BY (customer_id, toYYYYMM(triggered_at))
+ORDER BY (customer_id, rule_id, triggered_at)
+SETTINGS index_granularity = 8192;
+
+-- Alert notifications table (used by AlertService)
+CREATE TABLE IF NOT EXISTS alert_notifications_mt (
+    id String,
+    alert_event_id String,
+    channel_id String,
+    notification_type Enum8('email' = 1, 'slack' = 2, 'webhook' = 3, 'pagerduty' = 4),
+    status Enum8('pending' = 1, 'sent' = 2, 'failed' = 3, 'delivered' = 4),
+    sent_at Nullable(DateTime64(3)),
+    delivery_attempts UInt8 DEFAULT 0,
+    error_message Nullable(String),
+    customer_id String,
+    created_at DateTime64(3) DEFAULT now64(3)
+) ENGINE = MergeTree()
+PARTITION BY (customer_id, toYYYYMM(created_at))
+ORDER BY (customer_id, alert_event_id, created_at)
+SETTINGS index_granularity = 8192;
+
+-- Ingestion statistics table (used by IngestionService/IngestionDAO)
+CREATE TABLE IF NOT EXISTS ingestion_stats_mt (
+    id String,
+    endpoint String,
+    format_type String,
+    records_ingested UInt64,
+    bytes_ingested UInt64,
+    processing_time_ms UInt32,
+    errors_count UInt32 DEFAULT 0,
+    timestamp DateTime64(3) DEFAULT now64(3),
+    customer_id String
+) ENGINE = MergeTree()
+PARTITION BY (customer_id, toYYYYMM(timestamp))
+ORDER BY (customer_id, endpoint, timestamp)
+SETTINGS index_granularity = 8192;
+
+-- Roles table (used by HealthService)
+CREATE TABLE IF NOT EXISTS roles_mt (
+    id String,
+    name String,
+    description String,
+    permissions Array(String),
+    is_system_role UInt8 DEFAULT 0,
+    created_at DateTime64(3) DEFAULT now64(3),
+    updated_at DateTime64(3) DEFAULT now64(3),
+    customer_id String DEFAULT 'platform'
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(created_at)
+ORDER BY (customer_id, id)
+SETTINGS index_granularity = 8192;
+
+-- Storage metadata table (used by StorageService)
+CREATE TABLE IF NOT EXISTS storage_metadata_mt (
+    id String,
+    storage_path String,
+    storage_type Enum8('hot' = 1, 'warm' = 2, 'cold' = 3, 'archive' = 4),
+    file_size_bytes UInt64,
+    compressed_size_bytes UInt64,
+    record_count UInt64,
+    created_at DateTime64(3) DEFAULT now64(3),
+    last_accessed Nullable(DateTime64(3)),
+    checksum String,
+    customer_id String
+) ENGINE = MergeTree()
+PARTITION BY (customer_id, toYYYYMM(created_at))
+ORDER BY (customer_id, storage_type, created_at)
+SETTINGS index_granularity = 8192;
+
+-- =====================================================
 -- SERVICE TABLES FOR LOGFORGE PLATFORM ENGINES  
 -- This consolidates all service tables from logforge-service-tables.sql
 -- =====================================================
@@ -1221,3 +1366,51 @@ PARTITION BY (customer_id, toYYYYMM(request_timestamp))
 ORDER BY (customer_id, tenant_id, request_timestamp, endpoint)
 TTL toDateTime(request_timestamp) + INTERVAL 2 YEAR
 SETTINGS index_granularity = 8192;
+
+-- Tenant bills table for usage-based billing
+CREATE TABLE IF NOT EXISTS tenant_bills_mt (
+    id String,
+    tenant_id String,
+    billing_period String, -- YYYY-MM format
+    subscription_tier String,
+    base_fee Float64,
+    usage_charges Float64,
+    tier_discount Float64 DEFAULT 0.0,
+    promo_discount Float64 DEFAULT 0.0,
+    subtotal Float64,
+    total_amount Float64,
+    currency String DEFAULT 'USD',
+    status Enum8('generated' = 1, 'sent' = 2, 'paid' = 3, 'overdue' = 4, 'cancelled' = 5),
+    usage_breakdown String, -- JSON blob with detailed usage breakdown
+    promo_code Nullable(String),
+    generated_at DateTime64(3) DEFAULT now64(3),
+    due_date DateTime64(3),
+    paid_at Nullable(DateTime64(3)),
+    customer_id String
+) ENGINE = MergeTree()
+PARTITION BY (customer_id, toYYYYMM(generated_at))
+ORDER BY (customer_id, tenant_id, billing_period, generated_at)
+SETTINGS index_granularity = 8192;
+
+-- Billing overrides table for admin adjustments
+CREATE TABLE IF NOT EXISTS billing_overrides_mt (
+    id String,
+    tenant_id String,
+    billing_period Nullable(String), -- YYYY-MM format
+    original_amount Float64 DEFAULT 0.0,
+    override_amount Float64,
+    reason String,
+    approved_by String,
+    customer_id String,
+    created_at DateTime64(3) DEFAULT now64(3),
+    updated_at DateTime64(3) DEFAULT now64(3),
+    status Enum8('applied' = 1, 'pending' = 2, 'cancelled' = 3) DEFAULT 'applied'
+) ENGINE = MergeTree()
+PARTITION BY (customer_id, toYYYYMM(created_at))
+ORDER BY (customer_id, tenant_id, created_at)
+SETTINGS index_granularity = 8192;
+
+-- Insert default storage cost rate for all subscription tiers
+INSERT INTO feature_rates_mt (id, feature_name, pricing_model, base_rate, tier_rates, currency, effective_date, created_by, description, customer_id)
+VALUES 
+    ('rate-storage-cost-per-gb', 'storage.cost_per_gb', 'per_unit', 0.023, '{"enterprise": 0.023, "smb": 0.025, "startup": 0.027, "non_profit": 0.020, "government": 0.021, "education": 0.019, "healthcare": 0.022, "financial": 0.024}', 'USD', now(), 'system', 'Storage cost per GB', 'platform');

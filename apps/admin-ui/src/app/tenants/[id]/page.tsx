@@ -6,8 +6,12 @@ import { useParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, Edit, Mail, Calendar, Building, Globe, CreditCard } from 'lucide-react'
-import { fetchTenants, fetchTenantUsage } from '@/lib/api'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ArrowLeft, Edit, Mail, Calendar, Building, Globe, CreditCard, X } from 'lucide-react'
+import { fetchTenant, fetchTenantUsage, apiRequest } from '@/lib/api'
+import { authService } from '@/lib/auth'
 
 interface Tenant {
   tenant_id: string
@@ -49,6 +53,12 @@ const formatSubscriptionDisplay = (type: string) => {
   }
 }
 
+const industries = [
+  'technology', 'healthcare', 'financial', 'retail', 'manufacturing', 
+  'education', 'government', 'non-profit', 'media', 'telecommunications',
+  'energy', 'transportation', 'real-estate', 'consulting', 'other'
+]
+
 export default function TenantDetailsPage() {
   const params = useParams()
   const tenantId = params.id as string
@@ -57,6 +67,18 @@ export default function TenantDetailsPage() {
   const [usage, setUsage] = useState<TenantUsage | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    primary_contact_name: '',
+    primary_contact_email: '',
+    industry: '',
+    status: '',
+    subscription_tier: ''
+  })
+  const [editLoading, setEditLoading] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+  const [editSuccess, setEditSuccess] = useState<string | null>(null)
 
   useEffect(() => {
     fetchTenantDetails()
@@ -67,16 +89,15 @@ export default function TenantDetailsPage() {
       setLoading(true)
       setError(null)
       
-      // Fetch all tenants and find the specific one
-      const tenantsData = await fetchTenants()
-      const foundTenant = tenantsData.tenants?.find((t: Tenant) => t.tenant_id === tenantId)
+      // Fetch specific tenant directly
+      const tenantData = await fetchTenant(tenantId)
       
-      if (!foundTenant) {
+      if (!tenantData) {
         setError('Tenant not found')
         return
       }
       
-      setTenant(foundTenant)
+      setTenant(tenantData)
       
       // Fetch usage data
       try {
@@ -139,6 +160,107 @@ export default function TenantDetailsPage() {
     }
   }
 
+  const handleEditTenant = () => {
+    if (tenant) {
+      setEditFormData({
+        name: tenant.name,
+        primary_contact_name: tenant.primary_contact_name,
+        primary_contact_email: tenant.primary_contact_email,
+        industry: tenant.industry,
+        status: tenant.status,
+        subscription_tier: tenant.type
+      })
+      setEditError(null)
+      setEditSuccess(null)
+      setShowEditModal(true)
+    }
+  }
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setEditLoading(true)
+    setEditError(null)
+    setEditSuccess(null)
+
+    try {
+      // Debug authentication
+      const token = authService.getToken()
+      const user = authService.getCurrentUser()
+      console.log('🔧 DEBUG: Current token:', token ? 'Present' : 'Missing')
+      console.log('🔧 DEBUG: Current user:', user)
+      console.log('🔧 DEBUG: Is authenticated:', authService.isAuthenticated())
+
+      const updateData = {
+        organization_name: editFormData.name,
+        primary_contact_name: editFormData.primary_contact_name,
+        primary_contact_email: editFormData.primary_contact_email,
+        industry: editFormData.industry,
+        status: editFormData.status,
+        subscription_tier: editFormData.subscription_tier
+      }
+
+      console.log('🔧 DEBUG: Update data:', updateData)
+
+      const response = await apiRequest(`/v1/tenants/${tenantId}`, {
+        method: 'PUT',
+        body: JSON.stringify(updateData),
+      })
+
+      setEditSuccess('Tenant updated successfully!')
+      
+      // Refresh tenant data
+      setTimeout(() => {
+        setShowEditModal(false)
+        fetchTenantDetails()
+      }, 1500)
+
+    } catch (error: any) {
+      console.error('🔧 DEBUG: Full error object:', error)
+      console.error('🔧 DEBUG: Error message:', error.message)
+      
+      // Check if it's a 401 authentication error or token expiry
+      if (error.message && (error.message.includes('401') || error.message.includes('Failed to fetch'))) {
+        // Check if token is expired
+        const token = authService.getToken()
+        if (!token) {
+          setEditError('Your session has expired. Please log in again.')
+          setTimeout(() => {
+            window.location.href = '/login'
+          }, 2000)
+        } else {
+          setEditError('Authentication failed. Please try logging in again.')
+        }
+      } else if (error.response?.data?.detail) {
+        if (Array.isArray(error.response.data.detail)) {
+          const errorMessages = error.response.data.detail.map((err: any) => 
+            `${err.loc ? err.loc.join('.') : 'Field'}: ${err.msg}`
+          ).join(', ')
+          setEditError(`Validation error: ${errorMessages}`)
+        } else {
+          setEditError(`Error: ${error.response.data.detail}`)
+        }
+      } else {
+        setEditError(`Failed to update tenant: ${error.message}`)
+      }
+    } finally {
+      setEditLoading(false)
+    }
+  }
+
+  const closeEditModal = () => {
+    setShowEditModal(false)
+    setEditError(null)
+    setEditSuccess(null)
+    setEditFormData({
+      name: '',
+      primary_contact_name: '',
+      primary_contact_email: '',
+      industry: '',
+      status: '',
+      subscription_tier: ''
+    })
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -149,15 +271,27 @@ export default function TenantDetailsPage() {
             ← Back to Tenants
           </Link>
         </div>
-        <Button variant="outline" className="flex items-center">
-          <Edit className="h-4 w-4 mr-2" />
-          Edit Tenant
-        </Button>
+        <div className="flex items-center space-x-3">
+          <Link href={`/tenants/${tenant.tenant_id}/subscription`}>
+            <Button variant="outline" className="flex items-center">
+              <CreditCard className="h-4 w-4 mr-2" />
+              Manage Subscription
+            </Button>
+          </Link>
+          <Button 
+            variant="outline" 
+            className="flex items-center"
+            onClick={handleEditTenant}
+          >
+            <Edit className="h-4 w-4 mr-2" />
+            Edit Tenant
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col space-y-2">
         <h1 className="text-3xl font-bold text-gray-900">{tenant.name}</h1>
-        <p className="text-gray-600">Tenant Details & Usage Analytics</p>
+        <p className="text-gray-600">Tenant Details & Configuration</p>
       </div>
 
       {/* Tenant Information */}
@@ -235,23 +369,23 @@ export default function TenantDetailsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="bg-blue-50 p-4 rounded-lg">
                 <h3 className="text-sm font-medium text-blue-600">Logs Today</h3>
-                <p className="text-2xl font-bold text-blue-900">{usage.log_count_today.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-blue-900">{(usage?.log_count_today || 0).toLocaleString()}</p>
               </div>
               <div className="bg-green-50 p-4 rounded-lg">
                 <h3 className="text-sm font-medium text-green-600">Logs This Month</h3>
-                <p className="text-2xl font-bold text-green-900">{usage.log_count_month.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-green-900">{(usage?.log_count_month || 0).toLocaleString()}</p>
               </div>
               <div className="bg-purple-50 p-4 rounded-lg">
                 <h3 className="text-sm font-medium text-purple-600">Storage Used</h3>
-                <p className="text-2xl font-bold text-purple-900">{usage.storage_used_gb.toFixed(1)}GB</p>
+                <p className="text-2xl font-bold text-purple-900">{(usage?.storage_used_gb || 0).toFixed(1)}GB</p>
               </div>
               <div className="bg-orange-50 p-4 rounded-lg">
                 <h3 className="text-sm font-medium text-orange-600">API Calls</h3>
-                <p className="text-2xl font-bold text-orange-900">{usage.api_calls.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-orange-900">{(usage?.api_calls || 0).toLocaleString()}</p>
               </div>
               <div className="bg-indigo-50 p-4 rounded-lg">
                 <h3 className="text-sm font-medium text-indigo-600">Query Count</h3>
-                <p className="text-2xl font-bold text-indigo-900">{usage.query_count.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-indigo-900">{(usage?.query_count || 0).toLocaleString()}</p>
               </div>
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h3 className="text-sm font-medium text-gray-600">Monthly Cost</h3>
@@ -262,28 +396,215 @@ export default function TenantDetailsPage() {
         </Card>
       )}
 
-      {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-3">
-            <Link href={`/tenants/${tenant.tenant_id}/subscription`}>
-              <Button variant="outline" className="flex items-center">
-                <CreditCard className="h-4 w-4 mr-2" />
-                Manage Subscription
-              </Button>
-            </Link>
-            <Link href="/usage">
-              <Button variant="outline" className="flex items-center">
-                <Calendar className="h-4 w-4 mr-2" />
-                Usage Analytics
-              </Button>
-            </Link>
+
+      {/* Edit Tenant Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Edit Tenant</h2>
+                <p className="text-sm text-gray-600 mt-1">Update tenant information and settings</p>
+              </div>
+              <button
+                onClick={closeEditModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubmit} className="p-6 space-y-6">
+              {/* Error and Success Messages */}
+              {editError && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                  <div className="flex">
+                    <div className="ml-3">
+                      <h3 className="text-sm font-medium text-red-800">Error</h3>
+                      <div className="mt-2 text-sm text-red-700">
+                        {editError}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {editSuccess && (
+                <div className="bg-green-50 border border-green-200 rounded-md p-4">
+                  <div className="flex">
+                    <div className="ml-3">
+                      <h3 className="text-sm font-medium text-green-800">Success</h3>
+                      <div className="mt-2 text-sm text-green-700">
+                        {editSuccess}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Read-only fields */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <Label htmlFor="tenant_id" className="text-sm font-medium text-gray-700">
+                    Tenant ID (Read-only)
+                  </Label>
+                  <Input
+                    id="tenant_id"
+                    value={tenant?.tenant_id || ''}
+                    disabled
+                    className="mt-1 bg-gray-50 text-gray-500"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="created_at" className="text-sm font-medium text-gray-700">
+                    Created Date (Read-only)
+                  </Label>
+                  <Input
+                    id="created_at"
+                    value={tenant ? new Date(tenant.created_at).toLocaleDateString() : ''}
+                    disabled
+                    className="mt-1 bg-gray-50 text-gray-500"
+                  />
+                </div>
+              </div>
+
+              {/* Editable fields */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <Label htmlFor="edit_name" className="text-sm font-medium text-gray-700">
+                    Organization Name *
+                  </Label>
+                  <Input
+                    id="edit_name"
+                    value={editFormData.name}
+                    onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                    className="mt-1"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="edit_industry" className="text-sm font-medium text-gray-700">
+                    Industry
+                  </Label>
+                  <Select
+                    value={editFormData.industry}
+                    onValueChange={(value) => setEditFormData({ ...editFormData, industry: value })}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Select industry" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {industries.map(industry => (
+                        <SelectItem key={industry} value={industry}>
+                          {industry.charAt(0).toUpperCase() + industry.slice(1).replace('-', ' ')}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <Label htmlFor="edit_contact_name" className="text-sm font-medium text-gray-700">
+                    Primary Contact Name *
+                  </Label>
+                  <Input
+                    id="edit_contact_name"
+                    value={editFormData.primary_contact_name}
+                    onChange={(e) => setEditFormData({ ...editFormData, primary_contact_name: e.target.value })}
+                    className="mt-1"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="edit_contact_email" className="text-sm font-medium text-gray-700">
+                    Primary Contact Email *
+                  </Label>
+                  <Input
+                    id="edit_contact_email"
+                    type="email"
+                    value={editFormData.primary_contact_email}
+                    onChange={(e) => setEditFormData({ ...editFormData, primary_contact_email: e.target.value })}
+                    className="mt-1"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <Label htmlFor="edit_status" className="text-sm font-medium text-gray-700">
+                    Status *
+                  </Label>
+                  <Select
+                    value={editFormData.status}
+                    onValueChange={(value) => setEditFormData({ ...editFormData, status: value })}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="suspended">Suspended</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="edit_subscription_tier" className="text-sm font-medium text-gray-700">
+                    Subscription Tier *
+                  </Label>
+                  <Select
+                    value={editFormData.subscription_tier}
+                    onValueChange={(value) => setEditFormData({ ...editFormData, subscription_tier: value })}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Select tier" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="startup">Starter</SelectItem>
+                      <SelectItem value="smb">Professional</SelectItem>
+                      <SelectItem value="enterprise">Enterprise</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={closeEditModal}
+                  disabled={editLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={editLoading}
+                  className="min-w-[120px]"
+                >
+                  {editLoading ? (
+                    <div className="flex items-center space-x-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Updating...</span>
+                    </div>
+                  ) : (
+                    'Update Tenant'
+                  )}
+                </Button>
+              </div>
+            </form>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      )}
     </div>
   )
 }

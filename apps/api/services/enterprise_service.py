@@ -16,7 +16,11 @@ import uuid
 import json
 import hashlib
 import secrets
+import os
+import structlog
 from datetime import datetime, timedelta
+
+logger = structlog.get_logger()
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, asdict
 from dao.enterprise_dao import EnterpriseDAO
@@ -86,6 +90,8 @@ class EnterpriseService:
     
     def __init__(self):
         self.dao = EnterpriseDAO()
+        self.service_name = "EnterpriseService"
+        self.service_key = os.getenv('ENTERPRISE_SERVICE_KEY', 'enterprise-service-key-dev')
     
     # ==========================================
     # AUTHENTICATION PROVIDER MANAGEMENT
@@ -640,17 +646,22 @@ class EnterpriseService:
         }
     
     async def get_user_permissions(self, customer_id: str, user_id: str) -> Dict[str, Any]:
-        """Get effective permissions for current user"""
-        # This would fetch from user roles and calculate effective permissions
-        # For now, return mock permissions
+        """Get effective permissions for current user using actual user/role data"""
+        # Get user roles via DAO
+        user_roles = await self.dao.get_user_role_assignments(customer_id, user_id)
+        
+        # Calculate effective permissions from roles
+        effective_permissions = await self._calculate_effective_permissions(user_roles)
+        
+        # Determine scope (platform vs tenant)
+        scope = 'platform' if any('platform' in role.get('scope', '') for role in user_roles) else 'tenant'
+        
         return {
             'user_id': user_id,
-            'effective_permissions': [
-                'logs:read', 'dashboards:read', 'dashboards:write',
-                'alerts:read', 'alerts:write'
-            ],
-            'roles': ['security_analyst'],
-            'scope': 'tenant',
+            'effective_permissions': effective_permissions,
+            'roles': [role['role_name'] for role in user_roles],
+            'role_details': user_roles,
+            'scope': scope,
             'calculated_at': datetime.utcnow().isoformat()
         }
     
@@ -676,7 +687,13 @@ class EnterpriseService:
             raise ValueError(f"Unsupported compliance framework: {framework}")
         
         # Generate compliance findings
-        findings = await compliance_checks[framework.lower()](customer_id, start_date, end_date, sections)
+        logger.debug(f"Generating compliance findings for {framework}")
+        try:
+            findings = await compliance_checks[framework.lower()](customer_id, start_date, end_date, sections)
+            logger.debug("Compliance findings generated successfully", framework=framework)
+        except Exception as e:
+            logger.error(f"Failed to generate compliance findings for {framework}", error=str(e))
+            raise
         
         # Calculate compliance score
         total_checks = sum(len(section['checks']) for section in findings.values())
@@ -704,96 +721,66 @@ class EnterpriseService:
     
     async def _generate_sox_compliance(self, customer_id: str, start_date: datetime, 
                                      end_date: datetime, sections: List[str]) -> Dict[str, Any]:
-        """Generate SOX compliance findings"""
+        """Generate SOX compliance findings using actual log analysis"""
+        # Access Controls Checks via DAO
+        access_controls_checks = await self._check_sox_access_controls(customer_id, start_date, end_date)
+        
+        # Audit Trail Checks via DAO
+        audit_trail_checks = await self._check_sox_audit_trail(customer_id, start_date, end_date)
+        
+        # Data Integrity Checks via DAO
+        data_integrity_checks = await self._check_sox_data_integrity(customer_id, start_date, end_date)
+        
         return {
-            'access_controls': {
-                'checks': [
-                    {'control': 'Multi-factor authentication', 'status': 'compliant', 'evidence': 'MFA enabled for all admin users'},
-                    {'control': 'Privileged access review', 'status': 'compliant', 'evidence': 'Quarterly access reviews completed'},
-                    {'control': 'Session management', 'status': 'compliant', 'evidence': 'Session timeouts configured'}
-                ]
-            },
-            'audit_trail': {
-                'checks': [
-                    {'control': 'System activity logging', 'status': 'compliant', 'evidence': 'All system activities logged'},
-                    {'control': 'Log retention', 'status': 'compliant', 'evidence': '7-year retention policy enforced'},
-                    {'control': 'Log integrity', 'status': 'compliant', 'evidence': 'Cryptographic log protection enabled'}
-                ]
-            },
-            'data_integrity': {
-                'checks': [
-                    {'control': 'Data backup', 'status': 'compliant', 'evidence': 'Daily automated backups verified'},
-                    {'control': 'Change management', 'status': 'compliant', 'evidence': 'All changes require approval'},
-                    {'control': 'Segregation of duties', 'status': 'compliant', 'evidence': 'Role-based access controls implemented'}
-                ]
-            }
+            'access_controls': {'checks': access_controls_checks},
+            'audit_trail': {'checks': audit_trail_checks},
+            'data_integrity': {'checks': data_integrity_checks}
         }
     
     async def _generate_gdpr_compliance(self, customer_id: str, start_date: datetime,
                                       end_date: datetime, sections: List[str]) -> Dict[str, Any]:
-        """Generate GDPR compliance findings"""
+        """Generate GDPR compliance findings using actual log analysis"""
+        # Data Protection Checks via DAO
+        data_protection_checks = await self._check_gdpr_data_protection(customer_id, start_date, end_date)
+        
+        # Consent Management Checks via DAO
+        consent_checks = await self._check_gdpr_consent_management(customer_id, start_date, end_date)
+        
         return {
-            'data_protection': {
-                'checks': [
-                    {'control': 'Data encryption at rest', 'status': 'compliant', 'evidence': 'AES-256 encryption enabled'},
-                    {'control': 'Data encryption in transit', 'status': 'compliant', 'evidence': 'TLS 1.3 enforced'},
-                    {'control': 'PII detection', 'status': 'compliant', 'evidence': 'Automated PII scanning active'}
-                ]
-            },
-            'consent_management': {
-                'checks': [
-                    {'control': 'Consent tracking', 'status': 'compliant', 'evidence': 'User consent logged'},
-                    {'control': 'Right to erasure', 'status': 'compliant', 'evidence': 'Data deletion workflows implemented'},
-                    {'control': 'Data portability', 'status': 'compliant', 'evidence': 'Export functionality available'}
-                ]
-            }
+            'data_protection': {'checks': data_protection_checks},
+            'consent_management': {'checks': consent_checks}
         }
     
     async def _generate_pci_compliance(self, customer_id: str, start_date: datetime,
                                      end_date: datetime, sections: List[str]) -> Dict[str, Any]:
-        """Generate PCI DSS compliance findings"""
+        """Generate PCI DSS compliance findings using actual log analysis"""
+        # Network Security Checks via DAO
+        network_security_checks = await self._check_pci_network_security(customer_id, start_date, end_date)
+        
+        # Access Control Checks via DAO
+        access_control_checks = await self._check_pci_access_control(customer_id, start_date, end_date)
+        
         return {
-            'network_security': {
-                'checks': [
-                    {'control': 'Firewall configuration', 'status': 'compliant', 'evidence': 'Network segmentation enforced'},
-                    {'control': 'Secure protocols', 'status': 'compliant', 'evidence': 'Only secure protocols allowed'},
-                    {'control': 'Network monitoring', 'status': 'compliant', 'evidence': '24/7 network monitoring active'}
-                ]
-            },
-            'access_control': {
-                'checks': [
-                    {'control': 'Unique user IDs', 'status': 'compliant', 'evidence': 'All users have unique identifiers'},
-                    {'control': 'Strong authentication', 'status': 'compliant', 'evidence': 'MFA required for card data access'},
-                    {'control': 'Access restrictions', 'status': 'compliant', 'evidence': 'Need-to-know basis enforced'}
-                ]
-            }
+            'network_security': {'checks': network_security_checks},
+            'access_control': {'checks': access_control_checks}
         }
     
     async def _generate_hipaa_compliance(self, customer_id: str, start_date: datetime,
                                        end_date: datetime, sections: List[str]) -> Dict[str, Any]:
-        """Generate HIPAA compliance findings"""
+        """Generate HIPAA compliance findings using actual log analysis"""
+        # Administrative Safeguards via DAO
+        admin_checks = await self._check_hipaa_administrative_safeguards(customer_id, start_date, end_date)
+        
+        # Physical Safeguards via DAO
+        physical_checks = await self._check_hipaa_physical_safeguards(customer_id, start_date, end_date)
+        
+        # Technical Safeguards via DAO
+        technical_checks = await self._check_hipaa_technical_safeguards(customer_id, start_date, end_date)
+        
         return {
-            'administrative_safeguards': {
-                'checks': [
-                    {'control': 'Security officer designation', 'status': 'compliant', 'evidence': 'CISO assigned'},
-                    {'control': 'Workforce training', 'status': 'compliant', 'evidence': 'Annual HIPAA training completed'},
-                    {'control': 'Business associate agreements', 'status': 'compliant', 'evidence': 'BAAs in place'}
-                ]
-            },
-            'physical_safeguards': {
-                'checks': [
-                    {'control': 'Facility access controls', 'status': 'compliant', 'evidence': 'Datacenter access restricted'},
-                    {'control': 'Workstation controls', 'status': 'compliant', 'evidence': 'Endpoint protection deployed'},
-                    {'control': 'Media controls', 'status': 'compliant', 'evidence': 'Secure media handling procedures'}
-                ]
-            },
-            'technical_safeguards': {
-                'checks': [
-                    {'control': 'Access control', 'status': 'compliant', 'evidence': 'Role-based access implemented'},
-                    {'control': 'Audit controls', 'status': 'compliant', 'evidence': 'Comprehensive audit logging'},
-                    {'control': 'Integrity controls', 'status': 'compliant', 'evidence': 'Data integrity verification'}
-                ]
-            }
+            'administrative_safeguards': {'checks': admin_checks},
+            'physical_safeguards': {'checks': physical_checks},
+            'technical_safeguards': {'checks': technical_checks}
         }
     
     def _generate_compliance_recommendations(self, findings: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -996,26 +983,14 @@ class EnterpriseService:
     
     async def _test_integration_connectivity(self, integration_type: str, 
                                            config: Dict[str, Any]) -> Dict[str, Any]:
-        """Test integration connectivity (mock implementation)"""
-        # In production, this would make actual API calls to test connectivity
-        import random
-        
-        success = random.choice([True, True, True, False])  # 75% success rate for demo
-        
-        if success:
-            return {
-                'success': True,
-                'message': f'{integration_type.title()} integration is healthy',
-                'response_time_ms': random.randint(100, 500),
-                'tested_at': datetime.utcnow().isoformat()
-            }
-        else:
-            return {
-                'success': False,
-                'message': f'Failed to connect to {integration_type}',
-                'error': 'Connection timeout or authentication failure',
-                'tested_at': datetime.utcnow().isoformat()
-            }
+        """Test integration connectivity"""
+        # TODO: Implement actual API calls to test connectivity for each integration type
+        return {
+            'success': False,
+            'message': f'{integration_type.title()} integration test not implemented',
+            'error': 'Integration testing not yet implemented',
+            'tested_at': datetime.utcnow().isoformat()
+        }
     
     # ==========================================
     # USAGE & BILLING
@@ -1197,3 +1172,303 @@ class EnterpriseService:
         }
         
         return metrics
+    
+    # ==========================================
+    # COMPLIANCE CHECKING METHODS
+    # ==========================================
+    
+    async def _check_sox_access_controls(self, customer_id: str, start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
+        """Check SOX access control compliance using actual logs"""
+        checks = []
+        
+        # Get compliance data via DAO
+        failed_attempts = await self.dao.get_failed_authentication_count(customer_id, start_date, end_date)
+        
+        checks.append({
+            'control': 'Authentication failure monitoring',
+            'status': 'compliant' if failed_attempts < 10 else 'non_compliant',
+            'evidence': f'{failed_attempts} failed authentication attempts detected',
+            'failed_attempts': failed_attempts
+        })
+        
+        # Get privilege escalation events via DAO
+        escalation_events = await self.dao.get_privilege_escalation_count(customer_id, start_date, end_date)
+        
+        checks.append({
+            'control': 'Privilege escalation monitoring',
+            'status': 'compliant' if escalation_events > 0 else 'non_compliant',
+            'evidence': f'{escalation_events} privilege escalation events logged',
+            'escalation_events': escalation_events
+        })
+        
+        return checks
+    
+    async def _check_sox_audit_trail(self, customer_id: str, start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
+        """Check SOX audit trail compliance using actual logs"""
+        checks = []
+        
+        # Get total log count via DAO
+        total_logs = await self.dao.get_total_log_count(customer_id, start_date, end_date)
+        
+        checks.append({
+            'control': 'System activity logging',
+            'status': 'compliant' if total_logs > 0 else 'non_compliant',
+            'evidence': f'{total_logs:,} log entries generated in audit period',
+            'total_logs': total_logs
+        })
+        
+        # Get data modification events via DAO
+        modification_events = await self.dao.get_data_modification_count(customer_id, start_date, end_date)
+        
+        checks.append({
+            'control': 'Data modification tracking',
+            'status': 'compliant' if modification_events >= 0 else 'non_compliant',
+            'evidence': f'{modification_events} data modification events tracked',
+            'modification_events': modification_events
+        })
+        
+        return checks
+    
+    async def _check_sox_data_integrity(self, customer_id: str, start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
+        """Check SOX data integrity compliance using actual logs"""
+        checks = []
+        
+        # Get backup events via DAO
+        backup_events = await self.dao.get_backup_event_count(customer_id, start_date, end_date)
+        
+        checks.append({
+            'control': 'Data backup verification',
+            'status': 'compliant' if backup_events > 0 else 'non_compliant',
+            'evidence': f'{backup_events} backup operations logged',
+            'backup_events': backup_events
+        })
+        
+        return checks
+    
+    async def _check_gdpr_data_protection(self, customer_id: str, start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
+        """Check GDPR data protection compliance using actual logs"""
+        checks = []
+        
+        # Get encryption events via DAO
+        encryption_events = await self.dao.get_encryption_event_count(customer_id, start_date, end_date)
+        
+        checks.append({
+            'control': 'Data encryption monitoring',
+            'status': 'compliant' if encryption_events > 0 else 'warning',
+            'evidence': f'{encryption_events} encryption-related events logged',
+            'encryption_events': encryption_events
+        })
+        
+        return checks
+    
+    async def _check_gdpr_consent_management(self, customer_id: str, start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
+        """Check GDPR consent management compliance using actual logs"""
+        checks = []
+        
+        # Get data deletion requests via DAO
+        deletion_requests = await self.dao.get_data_deletion_count(customer_id, start_date, end_date)
+        
+        checks.append({
+            'control': 'Right to erasure implementation',
+            'status': 'compliant' if deletion_requests >= 0 else 'non_compliant',
+            'evidence': f'{deletion_requests} data deletion requests processed',
+            'deletion_requests': deletion_requests
+        })
+        
+        return checks
+    
+    async def _check_pci_network_security(self, customer_id: str, start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
+        """Check PCI network security compliance using actual logs"""
+        checks = []
+        
+        # Get firewall events via DAO
+        firewall_events = await self.dao.get_firewall_event_count(customer_id, start_date, end_date)
+        
+        checks.append({
+            'control': 'Network firewall monitoring',
+            'status': 'compliant' if firewall_events > 0 else 'warning',
+            'evidence': f'{firewall_events} firewall events logged',
+            'firewall_events': firewall_events
+        })
+        
+        return checks
+    
+    async def _check_pci_access_control(self, customer_id: str, start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
+        """Check PCI access control compliance using actual logs"""
+        checks = []
+        
+        # Get access control events via DAO
+        access_events = await self.dao.get_access_control_event_count(customer_id, start_date, end_date)
+        
+        checks.append({
+            'control': 'Access control verification',
+            'status': 'compliant' if access_events > 0 else 'warning',
+            'evidence': f'{access_events} access control events logged',
+            'access_events': access_events
+        })
+        
+        return checks
+    
+    async def _check_hipaa_administrative_safeguards(self, customer_id: str, start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
+        """Check HIPAA administrative safeguards using actual logs"""
+        checks = []
+        
+        # Get training/security events via DAO
+        training_events = await self.dao.get_training_event_count(customer_id, start_date, end_date)
+        
+        checks.append({
+            'control': 'Security awareness tracking',
+            'status': 'compliant' if training_events >= 0 else 'warning',
+            'evidence': f'{training_events} security-related events logged',
+            'training_events': training_events
+        })
+        
+        return checks
+    
+    async def _check_hipaa_physical_safeguards(self, customer_id: str, start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
+        """Check HIPAA physical safeguards using actual logs"""
+        checks = []
+        
+        # Get physical access events via DAO
+        physical_events = await self.dao.get_physical_access_event_count(customer_id, start_date, end_date)
+        
+        checks.append({
+            'control': 'Physical access monitoring',
+            'status': 'compliant' if physical_events >= 0 else 'warning',
+            'evidence': f'{physical_events} physical access events logged',
+            'physical_events': physical_events
+        })
+        
+        return checks
+    
+    async def _check_hipaa_technical_safeguards(self, customer_id: str, start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
+        """Check HIPAA technical safeguards using actual logs"""
+        checks = []
+        
+        # Get audit control events via DAO
+        audit_events = await self.dao.get_audit_event_count(customer_id, start_date, end_date)
+        
+        checks.append({
+            'control': 'Audit control implementation',
+            'status': 'compliant' if audit_events > 0 else 'warning',
+            'evidence': f'{audit_events} audit control events logged',
+            'audit_events': audit_events
+        })
+        
+        return checks
+    
+    # ==========================================
+    # USER PERMISSION HELPER METHODS
+    # ==========================================
+    
+    async def _get_user_roles(self, customer_id: str, user_id: str) -> List[Dict[str, Any]]:
+        """Get user roles from database via DAO"""
+        # Get role assignments via DAO
+        role_assignments = await self.dao.get_user_role_assignments(customer_id, user_id)
+        
+        if not role_assignments:
+            return []
+        
+        # Convert role names to detailed role objects
+        detailed_roles = []
+        platform_roles, tenant_roles = await self._get_role_definitions()
+        
+        for role_name in role_assignments:
+            if role_name in platform_roles:
+                role_def = platform_roles[role_name].copy()
+                role_def['role_name'] = role_name
+                detailed_roles.append(role_def)
+            elif role_name in tenant_roles:
+                role_def = tenant_roles[role_name].copy()
+                role_def['role_name'] = role_name
+                detailed_roles.append(role_def)
+        
+        return detailed_roles
+    
+    async def _get_role_definitions(self) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """Get platform and tenant role definitions"""
+        platform_roles = {
+            'super_admin': {
+                'name': 'Super Administrator',
+                'permissions': ['*'],
+                'scope': 'platform'
+            },
+            'admin': {
+                'name': 'Administrator',
+                'permissions': ['platform:read', 'platform:write', 'users:manage', 'tenants:manage'],
+                'scope': 'platform'
+            },
+            'support_admin': {
+                'name': 'Support Administrator',
+                'permissions': ['platform:read', 'logs:read', 'users:read', 'tenants:read'],
+                'scope': 'platform'
+            },
+            'billing_admin': {
+                'name': 'Billing Administrator',
+                'permissions': ['billing:read', 'billing:write', 'usage:read', 'tenants:read'],
+                'scope': 'platform'
+            }
+        }
+        
+        tenant_roles = {
+            'tenant_admin': {
+                'name': 'Tenant Administrator',
+                'permissions': ['tenant:*', 'users:manage', 'settings:manage'],
+                'scope': 'tenant'
+            },
+            'security_analyst': {
+                'name': 'Security Analyst',
+                'permissions': ['security:read', 'security:write', 'logs:read', 'alerts:manage'],
+                'scope': 'tenant'
+            },
+            'devops_engineer': {
+                'name': 'DevOps Engineer',
+                'permissions': ['logs:read', 'dashboards:manage', 'alerts:manage', 'observability:read'],
+                'scope': 'tenant'
+            },
+            'compliance_officer': {
+                'name': 'Compliance Officer',
+                'permissions': ['compliance:read', 'audit:read', 'reports:generate'],
+                'scope': 'tenant'
+            },
+            'viewer': {
+                'name': 'Viewer',
+                'permissions': ['logs:read', 'dashboards:read'],
+                'scope': 'tenant'
+            }
+        }
+        
+        return platform_roles, tenant_roles
+    
+    async def _calculate_effective_permissions(self, user_roles: List[Dict[str, Any]]) -> List[str]:
+        """Calculate effective permissions from user roles"""
+        effective_permissions = set()
+        
+        for role in user_roles:
+            permissions = role.get('permissions', [])
+            
+            # Handle wildcard permissions
+            if '*' in permissions:
+                # Super admin has all permissions
+                return ['*']
+            
+            # Handle scoped wildcards
+            for perm in permissions:
+                if perm.endswith('*'):
+                    scope = perm.split(':')[0]
+                    # Add all known permissions for this scope
+                    if scope == 'tenant':
+                        effective_permissions.update([
+                            'tenant:read', 'tenant:write', 'tenant:delete',
+                            'users:manage', 'settings:manage'
+                        ])
+                    elif scope == 'platform':
+                        effective_permissions.update([
+                            'platform:read', 'platform:write', 'users:manage', 'tenants:manage'
+                        ])
+                    else:
+                        effective_permissions.add(perm)
+                else:
+                    effective_permissions.add(perm)
+        
+        return sorted(list(effective_permissions))

@@ -1,0 +1,337 @@
+================================================================================
+🧪 COMPREHENSIVE ROUTER TEST COVERAGE ANALYSIS
+================================================================================
+
+📊 OVERVIEW:
+   • Total Routers: 16
+   • Analyzed Routers: 16
+   • Missing Test Files: 0
+
+🎯 DETAILED COVERAGE ANALYSIS:
+--------------------------------------------------------------------------------
+
+❌ AI_API
+   Coverage: 0.0% (0/17 endpoints)
+   Test Methods: 0
+   Edge Cases: 36
+   ❌ Uncovered Endpoints:
+      • POST /correlate
+      • GET /baselines
+      • GET /query/history
+      • POST /anomalies/detect
+      • GET /models
+      • POST /query/feedback
+      • POST /baselines
+      • GET /insights
+      • GET /investigate/{investigation_id}
+      • POST /analyze
+      • POST /knowledge/solutions
+      • GET /health
+      • POST /predict
+      • POST /optimize
+      • POST /knowledge/search
+      • POST /investigate
+      • POST /query
+
+❌ ALERTS
+   Coverage: 0.0% (0/15 endpoints)
+   Test Methods: 0
+   Edge Cases: 64
+   ❌ Uncovered Endpoints:
+      • POST /rules
+      • POST /integrations/webhooks
+      • GET /rules/{rule_id}
+      • GET /notifications/channels
+      • POST /{alert_id}/resolve
+      • POST /{alert_id}/acknowledge
+      • PUT /rules/{rule_id}
+      • DELETE /rules/{rule_id}
+      • GET /rules
+      • GET /stats
+      • GET /integrations/webhooks
+      • GET /health
+      • POST /rules/{rule_id}/test
+      • POST /notifications/channels
+      • GET /{alert_id}
+
+❌ AUTH_API
+   Coverage: 0.0% (0/19 endpoints)
+   Test Methods: 0
+   Edge Cases: 86
+   ❌ Uncovered Endpoints:
+      • POST /password/change
+      • POST /setup
+      • DELETE /sessions/{session_id}
+      • POST /setup/init
+      • POST /logout
+      • GET /me
+      • POST /accept-invite
+      • POST /refresh
+      • GET /sessions
+      • POST /invite
+      • POST /tenant-onboard
+      • POST /reactivate/{user_id}
+      • POST /login
+      • POST /verify-email
+      • POST /password/reset-confirm
+      • POST /verify-email-confirm
+      • DELETE /sessions/all
+      • POST /deactivate
+      • POST /password/reset
+
+❌ DASHBOARD
+   Coverage: 0.0% (0/10 endpoints)
+   Test Methods: 0
+   Edge Cases: 32
+   ❌ Uncovered Endpoints:
+      • GET /{dashboard_id}/data
+      • DELETE /{dashboard_id}/widgets/{widget_id}
+      • DELETE /{dashboard_id}
+      • GET /{dashboard_id}/shares
+      • GET /{dashboard_id}
+      • PUT /{dashboard_id}/widgets/{widget_id}
+      • POST /{dashboard_id}/share
+      • GET /{dashboard_id}/widgets/{widget_id}/data
+      • PUT /{dashboard_id}
+      • POST /{dashboard_id}/widgets
+
+❌ ENTERPRISE_API
+   Coverage: 0.0% (0/24 endpoints)
+   Test Methods: 0
+   Edge Cases: 49
+   ❌ Uncovered Endpoints:
+      • POST /compliance/legal-hold
+      • GET /rbac/roles
+      • GET /audit-logs
+      • GET /system/health
+      • GET /auth/api-keys
+      • GET /compliance/reports
+      • GET /rbac/permissions
+      • POST /rbac/roles
+      • GET /integrations/{integration_type}/status
+      • GET /metrics
+      • GET /integrations
+      • POST /tenants
+      • GET /usage/billing
+      • POST /auth/api-keys
+      • PUT /rbac/users/{user_id}/roles
+      • DELETE /auth/api-keys/{key_id}
+      • POST /auth/oidc/configure
+      • PUT /tenants/{tenant_id}/settings
+      • POST /auth/mfa/setup
+      • POST /integrations/{integration_type}/configure
+      • POST /backup/configure
+      • GET /health
+      • GET /auth/providers
+      • GET /tenants
+
+⚠️ HEALTH
+   Coverage: 66.7% (2/3 endpoints)
+   Test Methods: 0
+   Edge Cases: 8
+   ❌ Uncovered Endpoints:
+      • GET /health/detailed
+   ✅ Covered Endpoints:
+      • GET /
+      • GET /health
+
+❌ INGESTION
+   Coverage: 0.0% (0/9 endpoints)
+   Test Methods: 0
+   Edge Cases: 30
+   ❌ Uncovered Endpoints:
+      • POST /logs
+      • POST /logs/batch
+      • POST /logs/bulk
+      • POST /nginx
+      • POST /syslog
+      • POST /structured
+      • POST /cef
+      • POST /text
+      • POST /otlp
+
+❌ OBSERVABILITY_API
+   Coverage: 0.0% (0/12 endpoints)
+   Test Methods: 0
+   Edge Cases: 51
+   ❌ Uncovered Endpoints:
+      • GET /trends
+      • GET /traces/{trace_id}
+      • POST /metrics/ingest
+      • GET /apm/{service_name}
+      • POST /metrics/query
+      • GET /analytics
+      • GET /apm/overview
+      • GET /service/{service_name}/health
+      • GET /service-map
+      • POST /traces/ingest
+      • GET /health
+      • POST /traces/search
+
+❌ QUERY
+   Coverage: 0.0% (0/11 endpoints)
+   Test Methods: 0
+   Edge Cases: 35
+   ❌ Uncovered Endpoints:
+      • POST /export
+      • GET /query/saved
+      • POST /query/aggregate
+      • POST /query/saved
+      • PUT /query/saved/{query_id}
+      • DELETE /query/saved/{query_id}
+      • GET /logs
+      • POST /query/timeseries
+      • GET /query/saved/{query_id}
+      • POST /query/advanced
+      • POST /query/validate
+
+❌ ROLE_API
+   Coverage: 0.0% (0/13 endpoints)
+   Test Methods: 0
+   Edge Cases: 54
+   ❌ Uncovered Endpoints:
+      • GET /users/{user_id}/effective-permissions
+      • GET /roles
+      • POST /check-permission
+      • POST /users/bulk-assign-roles
+      • GET /roles/analytics
+      • GET /permissions/map
+      • GET /roles/{role}/permissions
+      • DELETE /users/{user_id}/roles/{role_id}
+      • GET /tenants/{tenant_id}/users
+      • POST /tenants/{tenant_id}/users/{user_id}/roles
+      • GET /users/{user_id}/roles
+      • POST /users/{user_id}/roles
+      • POST /validate-access
+
+❌ SECURITY_API
+   Coverage: 0.0% (0/12 endpoints)
+   Test Methods: 0
+   Edge Cases: 66
+   ❌ Uncovered Endpoints:
+      • GET /events
+      • GET /sigma-rules
+      • GET /sigma-rules/{rule_id}
+      • POST /background-hunting
+      • POST /threat-hunting
+      • POST /sigma-rules
+      • PUT /events/{event_id}/status
+      • POST /sigma-rules/{rule_id}/test
+      • GET /health
+      • GET /threat-intel
+      • GET /dashboard
+      • GET /mitre-attack/techniques
+
+❌ STORAGE
+   Coverage: 0.0% (0/8 endpoints)
+   Test Methods: 0
+   Edge Cases: 46
+   ❌ Uncovered Endpoints:
+      • PUT /retention/{customer_id}
+      • GET /retention/{customer_id}
+      • GET /health/infrastructure
+      • POST /archive/{customer_id}
+      • POST /retention/{customer_id}
+      • GET /health
+      • POST /cleanup
+      • GET /health/{target_customer_id}
+
+❌ SUBSCRIPTION_API
+   Coverage: 0.0% (0/23 endpoints)
+   Test Methods: 0
+   Edge Cases: 46
+   ❌ Uncovered Endpoints:
+      • GET /tenants/{tenant_id}/features/{feature_name}/access
+      • PUT /tenants/{tenant_id}/subscription
+      • GET /tenants/{tenant_id}/deletion/status
+      • GET /tenants/{tenant_id}/usage/detailed
+      • POST /admin/tenants/{tenant_id}/billing/override
+      • PUT /admin/rates/{feature_name}
+      • GET /admin/tenants
+      • GET /admin/rates/{feature_name}/history
+      • GET /admin/audit/subscription-changes
+      • POST /admin/rates
+      • GET /admin/tenants/{tenant_id}/details
+      • GET /features/available
+      • GET /features/tier/{tier}
+      • GET /tenants/{tenant_id}/billing/history
+      • GET /admin/rates
+      • GET /admin/compliance/retention-status
+      • GET /tenants/{tenant_id}/usage
+      • POST /admin/compliance/reports
+      • DELETE /tenants/{tenant_id}/subscription
+      • POST /tenants/{tenant_id}/billing/generate
+      • GET /tenants/{tenant_id}/features
+      • GET /tenants/{tenant_id}/subscription
+      • PUT /admin/tenants/{tenant_id}/subscription
+
+❌ TENANT_API
+   Coverage: 0.0% (0/18 endpoints)
+   Test Methods: 0
+   Edge Cases: 39
+   ❌ Uncovered Endpoints:
+      • GET /{tenant_id}/usage
+      • DELETE /{tenant_id}
+      • GET /{tenant_id}/config
+      • PUT /{tenant_id}
+      • POST /{tenant_id}/legal-hold
+      • GET /{tenant_id}/alerts
+      • GET /{tenant_id}
+      • GET /{tenant_id}/quotas
+      • POST /{tenant_id}/storage/test-connection
+      • GET /{tenant_id}/validate
+      • GET /stats
+      • PUT /{tenant_id}/config
+      • GET /{tenant_id}/metrics
+      • GET /{tenant_id}/health
+      • POST /{tenant_id}/storage/configure
+      • GET /{tenant_id}/storage/status
+      • PUT /{tenant_id}/quotas
+      • GET /{tenant_id}/compliance
+
+❌ USAGE_API
+   Coverage: 0.0% (0/14 endpoints)
+   Test Methods: 0
+   Edge Cases: 63
+   ❌ Uncovered Endpoints:
+      • GET /usage/history/{tenant_id}
+      • GET /usage/realtime/{tenant_id}
+      • GET /costs/breakdown/{tenant_id}
+      • GET /billing/estimate/{tenant_id}
+      • GET /analytics/usage-trends
+      • POST /admin/audit/bulk-insert
+      • GET /admin/database/partitions
+      • GET /usage/export/{tenant_id}
+      • POST /costs/alerts/{tenant_id}
+      • GET /analytics/feature-usage
+      • GET /admin/usage/buffer-status
+      • POST /admin/usage/flush-buffer
+      • POST /billing/generate/{tenant_id}
+      • GET /usage/current/{tenant_id}
+
+❌ USER_API
+   Coverage: 0.0% (0/14 endpoints)
+   Test Methods: 0
+   Edge Cases: 55
+   ❌ Uncovered Endpoints:
+      • DELETE /admin/users/{user_id}
+      • GET /users
+      • GET /admin/users
+      • DELETE /users/{user_id}
+      • GET /users/me
+      • PUT /users/me
+      • GET /users/search
+      • GET /users/{user_id}
+      • PUT /admin/users/{user_id}
+      • GET /admin/users/{user_id}
+      • POST /admin/users
+      • POST /users
+      • POST /users/bulk-create
+      • PUT /users/{user_id}
+
+📈 OVERALL STATISTICS:
+   • Average Coverage: 4.2%
+   • Best Coverage: 66.7%
+   • Worst Coverage: 0.0%
+
+================================================================================
