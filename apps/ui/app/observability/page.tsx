@@ -1,567 +1,656 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import React, { useState, useEffect } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
+import DashboardLayout from '@/components/layout/DashboardLayout'
+import { ObservabilityApi, ServiceMap, ServiceNode, Trace, ApmSummary, ErrorAnalysis } from '@/lib/api/observability'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Activity, Zap, Network, BarChart3, Clock, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { 
+  Activity, 
+  AlertTriangle, 
+  BarChart3, 
+  Clock, 
+  RefreshCw,
+  Search,
+  TrendingUp,
+  Database,
+  Globe,
+  Layers,
+  Zap,
+  Target,
+  Eye,
+  ExternalLink,
+  Filter,
+  Download,
+  Network,
+  Server,
+  Timer,
+  Bug,
+  CheckCircle,
+  XCircle,
+  ArrowRight,
+  LineChart
+} from 'lucide-react'
 
-// Types for observability data
-interface Span {
-  trace_id: string
-  span_id: string
-  parent_span_id?: string
-  operation_name: string
-  service_name: string
-  start_time: string
-  end_time?: string
-  duration_ms: number
-  kind: string
-  status: 'ok' | 'error' | 'unset'
-  attributes: Record<string, any>
+interface ServiceMapVisualizationProps {
+  serviceMap: ServiceMap | null
 }
 
-interface Service {
-  name: string
-  total_spans: number
-  avg_latency_ms: number
-  error_rate: number
-  operation_count: number
-}
-
-interface ServiceDependency {
-  from_service: string
-  to_service: string
-  call_count: number
-  avg_latency_ms: number
-}
-
-interface APMMetrics {
-  request_rate: Array<{ time: string; rpm: number }>
-  latency: {
-    p50_ms: number
-    p95_ms: number
-    p99_ms: number
-    avg_ms: number
-  }
-  error_rate: Array<{ time: string; error_rate: number }>
-}
-
-export default function ObservabilityPage() {
-  const [activeTab, setActiveTab] = useState('overview')
-  const [services, setServices] = useState<Service[]>([])
-  const [dependencies, setDependencies] = useState<ServiceDependency[]>([])
-  const [selectedService, setSelectedService] = useState<string>('')
-  const [apmMetrics, setApmMetrics] = useState<APMMetrics | null>(null)
-  const [traces, setTraces] = useState<Span[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [timeRange, setTimeRange] = useState('1h')
-
-  // Search filters
-  const [traceSearch, setTraceSearch] = useState({
-    service_name: '',
-    operation_name: '',
-    status: '',
-    min_duration_ms: '',
-    max_duration_ms: ''
-  })
-
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7080'
-  const customerId = 'demo-customer' // In real app, get from auth context
-
-  useEffect(() => {
-    loadServiceMap()
-  }, [timeRange])
-
-  useEffect(() => {
-    if (selectedService) {
-      loadAPMMetrics(selectedService)
-    }
-  }, [selectedService, timeRange])
-
-  const loadServiceMap = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      const timeRangeHours = timeRange === '1h' ? 1 : timeRange === '24h' ? 24 : 168
-      
-      const response = await fetch(
-        `${baseUrl}/v1/observability/service-map?time_range_hours=${timeRangeHours}`,
-        {
-          headers: {
-            'X-Customer-ID': customerId,
-            'Content-Type': 'application/json'
-          }
-        }
-      )
-
-      if (!response.ok) {
-        throw new Error('Failed to load service map')
-      }
-
-      const data = await response.json()
-      setServices(data.services || [])
-      setDependencies(data.dependencies || [])
-
-      if (data.services?.length > 0 && !selectedService) {
-        setSelectedService(data.services[0].name)
-      }
-
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load service map')
-      console.error('Service map error:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadAPMMetrics = async (serviceName: string) => {
-    try {
-      const timeRangeHours = timeRange === '1h' ? 1 : timeRange === '24h' ? 24 : 168
-      
-      const response = await fetch(
-        `${baseUrl}/v1/observability/apm/${serviceName}?time_range_hours=${timeRangeHours}`,
-        {
-          headers: {
-            'X-Customer-ID': customerId,
-            'Content-Type': 'application/json'
-          }
-        }
-      )
-
-      if (!response.ok) {
-        throw new Error('Failed to load APM metrics')
-      }
-
-      const data = await response.json()
-      setApmMetrics(data.metrics)
-
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load APM metrics')
-      console.error('APM metrics error:', err)
-    }
-  }
-
-  const searchTraces = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      const searchParams: any = {
-        limit: 50
-      }
-
-      if (traceSearch.service_name) searchParams.service_name = traceSearch.service_name
-      if (traceSearch.operation_name) searchParams.operation_name = traceSearch.operation_name
-      if (traceSearch.status) searchParams.status = traceSearch.status
-      if (traceSearch.min_duration_ms) searchParams.min_duration_ms = parseInt(traceSearch.min_duration_ms)
-      if (traceSearch.max_duration_ms) searchParams.max_duration_ms = parseInt(traceSearch.max_duration_ms)
-
-      const response = await fetch(
-        `${baseUrl}/v1/observability/traces/search`,
-        {
-          method: 'POST',
-          headers: {
-            'X-Customer-ID': customerId,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(searchParams)
-        }
-      )
-
-      if (!response.ok) {
-        throw new Error('Failed to search traces')
-      }
-
-      const data = await response.json()
-      setTraces(data.traces || [])
-
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to search traces')
-      console.error('Trace search error:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const formatDuration = (ms: number) => {
-    if (ms < 1) return `${(ms * 1000).toFixed(0)}μs`
-    if (ms < 1000) return `${ms.toFixed(1)}ms`
-    return `${(ms / 1000).toFixed(2)}s`
-  }
-
-  const getStatusIcon = (status: string) => {
+const ServiceMapVisualization: React.FC<ServiceMapVisualizationProps> = ({ serviceMap }) => {
+  const getHealthColor = (status: string) => {
     switch (status) {
-      case 'ok': return <CheckCircle className="w-4 h-4 text-green-500" />
-      case 'error': return <XCircle className="w-4 h-4 text-red-500" />
-      default: return <Clock className="w-4 h-4 text-gray-500" />
+      case 'healthy': return 'bg-green-100 border-green-300 text-green-800'
+      case 'warning': return 'bg-yellow-100 border-yellow-300 text-yellow-800'
+      case 'critical': return 'bg-red-100 border-red-300 text-red-800'
+      default: return 'bg-gray-100 border-gray-300 text-gray-800'
     }
   }
 
-  const getErrorRateColor = (rate: number) => {
-    if (rate < 1) return 'text-green-600'
-    if (rate < 5) return 'text-yellow-600'
-    return 'text-red-600'
+  const getServiceIcon = (type: string) => {
+    switch (type) {
+      case 'web': return <Globe className="w-4 h-4" />
+      case 'database': return <Database className="w-4 h-4" />
+      case 'cache': return <Zap className="w-4 h-4" />
+      case 'queue': return <Layers className="w-4 h-4" />
+      case 'external': return <ExternalLink className="w-4 h-4" />
+      default: return <Server className="w-4 h-4" />
+    }
+  }
+
+  if (!serviceMap) return null
+
+  return (
+    <div className="space-y-4">
+      {/* Service Map Overview */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="p-4">
+          <div className="flex items-center space-x-2">
+            <Server className="w-5 h-5 text-blue-600" />
+            <div>
+              <p className="text-sm font-medium">Total Services</p>
+              <p className="text-xl font-bold">{serviceMap.metrics.total_services}</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center space-x-2">
+            <Activity className="w-5 h-5 text-green-600" />
+            <div>
+              <p className="text-sm font-medium">Total Requests</p>
+              <p className="text-xl font-bold">{serviceMap.metrics.total_requests.toLocaleString()}</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="w-5 h-5 text-orange-600" />
+            <div>
+              <p className="text-sm font-medium">Error Rate</p>
+              <p className="text-xl font-bold">{(serviceMap.metrics.overall_error_rate * 100).toFixed(2)}%</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center space-x-2">
+            <Timer className="w-5 h-5 text-purple-600" />
+            <div>
+              <p className="text-sm font-medium">Avg Response</p>
+              <p className="text-xl font-bold">{serviceMap.metrics.avg_response_time}ms</p>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Service Nodes */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {serviceMap.services.map((service) => (
+          <Card key={service.name} className={`hover:shadow-md transition-shadow border-2 ${getHealthColor(service.health_status)}`}>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  {getServiceIcon(service.type)}
+                  <div>
+                    <CardTitle className="text-base">{service.name}</CardTitle>
+                    <CardDescription className="text-sm capitalize">{service.type} • {service.environment}</CardDescription>
+                  </div>
+                </div>
+                <Badge className={getHealthColor(service.health_status)}>
+                  {service.health_status}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-gray-600">Requests/min:</span>
+                    <span className="font-medium ml-1">{service.metrics.request_rate}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Error Rate:</span>
+                    <span className="font-medium ml-1">{(service.metrics.error_rate * 100).toFixed(1)}%</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Latency:</span>
+                    <span className="font-medium ml-1">{service.metrics.avg_latency}ms</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Apdex:</span>
+                    <span className="font-medium ml-1">{service.metrics.apdex_score.toFixed(2)}</span>
+                  </div>
+                </div>
+                {service.version && (
+                  <div className="text-xs text-gray-500">
+                    Version: {service.version}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+interface TraceCardProps {
+  trace: Trace
+  onViewDetails: (traceId: string) => void
+}
+
+const TraceCard: React.FC<TraceCardProps> = ({ trace, onViewDetails }) => {
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'success': return 'bg-green-100 text-green-800'
+      case 'error': return 'bg-red-100 text-red-800'
+      case 'timeout': return 'bg-orange-100 text-orange-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const getDurationColor = (duration: number) => {
+    if (duration > 1000) return 'text-red-600'
+    if (duration > 500) return 'text-orange-600'
+    return 'text-green-600'
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Observability & APM</h1>
-        <div className="flex items-center gap-4">
-          <Select value={timeRange} onValueChange={setTimeRange}>
-            <SelectTrigger className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="1h">Last 1 hour</SelectItem>
-              <SelectItem value="24h">Last 24 hours</SelectItem>
-              <SelectItem value="7d">Last 7 days</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button 
-            onClick={loadServiceMap}
-            disabled={loading}
-            variant="outline"
-          >
-            {loading ? 'Loading...' : 'Refresh'}
-          </Button>
-        </div>
-      </div>
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
-          <p className="text-red-800">{error}</p>
-        </div>
-      )}
-
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="overview" className="flex items-center gap-2">
-            <Activity className="w-4 h-4" />
-            Overview
-          </TabsTrigger>
-          <TabsTrigger value="services" className="flex items-center gap-2">
-            <Network className="w-4 h-4" />
-            Service Map
-          </TabsTrigger>
-          <TabsTrigger value="apm" className="flex items-center gap-2">
-            <BarChart3 className="w-4 h-4" />
-            APM Metrics
-          </TabsTrigger>
-          <TabsTrigger value="traces" className="flex items-center gap-2">
-            <Zap className="w-4 h-4" />
-            Trace Search
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Services</CardTitle>
-                <Network className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{services.length}</div>
-                <p className="text-xs text-muted-foreground">Active services</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Dependencies</CardTitle>
-                <Activity className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{dependencies.length}</div>
-                <p className="text-xs text-muted-foreground">Service dependencies</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Avg Latency</CardTitle>
-                <Clock className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {services.length > 0 
-                    ? formatDuration(services.reduce((sum, s) => sum + s.avg_latency_ms, 0) / services.length)
-                    : '0ms'
-                  }
-                </div>
-                <p className="text-xs text-muted-foreground">Across all services</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Error Rate</CardTitle>
-                <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {services.length > 0 
-                    ? `${(services.reduce((sum, s) => sum + s.error_rate, 0) / services.length).toFixed(2)}%`
-                    : '0%'
-                  }
-                </div>
-                <p className="text-xs text-muted-foreground">Across all services</p>
-              </CardContent>
-            </Card>
+    <Card className="hover:shadow-md transition-shadow">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Network className="w-4 h-4 text-blue-600" />
+            <div>
+              <CardTitle className="text-base">{trace.operation_name}</CardTitle>
+              <CardDescription className="text-sm">{trace.service_name}</CardDescription>
+            </div>
           </div>
+          <div className="flex space-x-2">
+            <Badge className={getStatusColor(trace.status)}>
+              {trace.status.toUpperCase()}
+            </Badge>
+            <Badge variant="outline" className={getDurationColor(trace.duration)}>
+              {trace.duration}ms
+            </Badge>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          <div className="text-sm text-gray-600">
+            <strong>Trace ID:</strong> <code className="text-xs bg-gray-100 px-1 rounded">{trace.id}</code>
+          </div>
+          <div className="text-sm text-gray-600">
+            <strong>Spans:</strong> {trace.spans.length} spans
+          </div>
+          <div className="text-sm text-gray-600">
+            <strong>Started:</strong> {new Date(trace.start_time).toLocaleString()}
+          </div>
+          {trace.error && (
+            <div className="text-sm text-red-600">
+              <strong>Error:</strong> {trace.error}
+            </div>
+          )}
+          <div className="flex space-x-2">
+            <Button 
+              size="sm" 
+              variant="outline"
+              onClick={() => onViewDetails(trace.id)}
+            >
+              <Eye className="w-4 h-4 mr-1" />
+              View Timeline
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Service Health Overview</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {services.map((service) => (
-                  <div key={service.name} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                      <div>
-                        <div className="font-medium">{service.name}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {service.operation_count} operations
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-6 text-sm">
-                      <div>
-                        <div className="font-medium">{formatDuration(service.avg_latency_ms)}</div>
-                        <div className="text-muted-foreground">Latency</div>
-                      </div>
-                      <div>
-                        <div className={`font-medium ${getErrorRateColor(service.error_rate)}`}>
-                          {service.error_rate.toFixed(2)}%
-                        </div>
-                        <div className="text-muted-foreground">Errors</div>
-                      </div>
-                      <div>
-                        <div className="font-medium">{service.total_spans.toLocaleString()}</div>
-                        <div className="text-muted-foreground">Spans</div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+interface ErrorCardProps {
+  error: ErrorAnalysis
+  onUpdateStatus: (errorId: string, status: ErrorAnalysis['resolution_status']) => void
+}
 
-        <TabsContent value="services" className="space-y-6">
+const ErrorCard: React.FC<ErrorCardProps> = ({ error, onUpdateStatus }) => {
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'open': return 'bg-red-100 text-red-800'
+      case 'investigating': return 'bg-yellow-100 text-yellow-800'
+      case 'resolved': return 'bg-green-100 text-green-800'
+      case 'ignored': return 'bg-gray-100 text-gray-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  return (
+    <Card className="hover:shadow-md transition-shadow">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Bug className="w-4 h-4 text-red-600" />
+            <div>
+              <CardTitle className="text-base">{error.error_type}</CardTitle>
+              <CardDescription className="text-sm">{error.service_name}</CardDescription>
+            </div>
+          </div>
+          <Badge className={getStatusColor(error.resolution_status)}>
+            {error.resolution_status.toUpperCase()}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          <div className="text-sm text-gray-800">
+            {error.message}
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
+            <div>
+              <strong>Occurrences:</strong> {error.occurrence_count}
+            </div>
+            <div>
+              <strong>Affected Users:</strong> {error.affected_users}
+            </div>
+            <div>
+              <strong>First Seen:</strong> {new Date(error.first_seen).toLocaleDateString()}
+            </div>
+            <div>
+              <strong>Last Seen:</strong> {new Date(error.last_seen).toLocaleDateString()}
+            </div>
+          </div>
+          <div className="flex space-x-2">
+            {error.resolution_status === 'open' && (
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => onUpdateStatus(error.error_id, 'investigating')}
+              >
+                Investigate
+              </Button>
+            )}
+            {error.resolution_status !== 'resolved' && (
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => onUpdateStatus(error.error_id, 'resolved')}
+              >
+                <CheckCircle className="w-4 h-4 mr-1" />
+                Resolve
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+export default function ObservabilityPage(): React.ReactElement {
+  const { user, tenant } = useAuth()
+  const [serviceMap, setServiceMap] = useState<ServiceMap | null>(null)
+  const [services, setServices] = useState<ServiceNode[]>([])
+  const [traces, setTraces] = useState<Trace[]>([])
+  const [errors, setErrors] = useState<ErrorAnalysis[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState('overview')
+  const [selectedTimeRange, setSelectedTimeRange] = useState('1h')
+
+  useEffect(() => {
+    loadObservabilityData()
+  }, [selectedTimeRange])
+
+  const loadObservabilityData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const [serviceMapResponse, servicesResponse, tracesResponse, errorsResponse] = await Promise.all([
+        ObservabilityApi.getServiceMap(selectedTimeRange),
+        ObservabilityApi.listServices(),
+        ObservabilityApi.searchTraces({ time_range: selectedTimeRange, limit: 20 }),
+        ObservabilityApi.getErrorAnalysis({ time_range: selectedTimeRange, limit: 20 })
+      ])
+      
+      if (serviceMapResponse.success) {
+        setServiceMap(serviceMapResponse.data)
+      }
+      
+      if (servicesResponse.success) {
+        setServices(servicesResponse.data || [])
+      }
+      
+      if (tracesResponse.success && tracesResponse.data) {
+        setTraces(tracesResponse.data || [])
+      }
+      
+      if (errorsResponse.success && errorsResponse.data) {
+        setErrors(errorsResponse.data || [])
+      }
+    } catch (err: any) {
+      console.error('Failed to load observability data:', err)
+      setError(err.message || 'Failed to load observability data')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const viewTraceDetails = (traceId: string) => {
+    alert(`View Trace Details: ${traceId}\n\nThis would open a detailed trace timeline view showing all spans, timing, and dependencies.`)
+  }
+
+  const updateErrorStatus = async (errorId: string, status: ErrorAnalysis['resolution_status']) => {
+    try {
+      const response = await ObservabilityApi.updateErrorStatus(errorId, status, 'Updated from UI')
+      
+      if (response.success) {
+        setErrors(prev => 
+          prev.map(error => 
+            error.error_id === errorId ? { ...error, resolution_status: status } : error
+          )
+        )
+      }
+    } catch (err: any) {
+      console.error('Failed to update error status:', err)
+      setError(err.message || 'Failed to update error status')
+    }
+  }
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="flex items-center space-x-2">
+            <RefreshCw className="w-6 h-6 animate-spin" />
+            <span>Loading observability data...</span>
+          </div>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  return (
+    <DashboardLayout>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Observability & APM</h1>
+            <p className="text-gray-600 mt-1">
+              Monitor application performance, distributed traces, and service dependencies
+            </p>
+          </div>
+          <div className="flex space-x-2">
+            <select 
+              value={selectedTimeRange}
+              onChange={(e) => setSelectedTimeRange(e.target.value)}
+              className="border rounded px-3 py-2 text-sm"
+            >
+              <option value="15m">Last 15 minutes</option>
+              <option value="1h">Last hour</option>
+              <option value="6h">Last 6 hours</option>
+              <option value="24h">Last 24 hours</option>
+              <option value="7d">Last 7 days</option>
+            </select>
+            <Button variant="outline" onClick={loadObservabilityData}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
+        </div>
+
+        {/* Error Alert */}
+        {error && (
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* APM Overview Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
-            <CardHeader>
-              <CardTitle>Service Dependency Map</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {services.map((service) => (
-                    <Card key={service.name} className="p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-semibold">{service.name}</h3>
-                        <Badge variant="outline">{service.total_spans} spans</Badge>
-                      </div>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span>Latency:</span>
-                          <span>{formatDuration(service.avg_latency_ms)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Error Rate:</span>
-                          <span className={getErrorRateColor(service.error_rate)}>
-                            {service.error_rate.toFixed(2)}%
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Operations:</span>
-                          <span>{service.operation_count}</span>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
+            <CardContent className="p-4">
+              <div className="flex items-center">
+                <Activity className="w-8 h-8 text-blue-600" />
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-gray-600">Total Services</p>
+                  <p className="text-2xl font-bold text-gray-900">{serviceMap?.metrics.total_services || 0}</p>
                 </div>
-
-                {dependencies.length > 0 && (
-                  <div className="mt-8">
-                    <h3 className="text-lg font-semibold mb-4">Service Dependencies</h3>
-                    <div className="space-y-2">
-                      {dependencies.map((dep, index) => (
-                        <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{dep.from_service}</span>
-                            <span>→</span>
-                            <span className="font-medium">{dep.to_service}</span>
-                          </div>
-                          <div className="flex items-center gap-4 text-sm">
-                            <span>{dep.call_count} calls</span>
-                            <span>{formatDuration(dep.avg_latency_ms)} avg</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="apm" className="space-y-6">
+          
           <Card>
-            <CardHeader>
-              <CardTitle>APM Metrics</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-4">
-                <Select value={selectedService} onValueChange={setSelectedService}>
-                  <SelectTrigger className="w-64">
-                    <SelectValue placeholder="Select service..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {services.map((service) => (
-                      <SelectItem key={service.name} value={service.name}>
-                        {service.name}
-                      </SelectItem>
+            <CardContent className="p-4">
+              <div className="flex items-center">
+                <TrendingUp className="w-8 h-8 text-green-600" />
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-gray-600">Requests/min</p>
+                  <p className="text-2xl font-bold text-gray-900">{serviceMap?.metrics.total_requests.toLocaleString() || 0}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center">
+                <Timer className="w-8 h-8 text-purple-600" />
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-gray-600">Avg Response</p>
+                  <p className="text-2xl font-bold text-gray-900">{serviceMap?.metrics.avg_response_time || 0}ms</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center">
+                <AlertTriangle className="w-8 h-8 text-orange-600" />
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-gray-600">Error Rate</p>
+                  <p className="text-2xl font-bold text-gray-900">{((serviceMap?.metrics.overall_error_rate || 0) * 100).toFixed(2)}%</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Observability Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="service-map">Service Map ({serviceMap?.services.length || 0})</TabsTrigger>
+            <TabsTrigger value="traces">Distributed Traces ({traces.length})</TabsTrigger>
+            <TabsTrigger value="errors">Error Analysis ({errors.length})</TabsTrigger>
+            <TabsTrigger value="metrics">Metrics</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="mt-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Service Health Overview */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Service Health Overview</CardTitle>
+                  <CardDescription>Health status of all monitored services</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {services.slice(0, 5).map((service) => {
+                      const getHealthIcon = (status: string) => {
+                        switch (status) {
+                          case 'healthy': return <CheckCircle className="w-4 h-4 text-green-600" />
+                          case 'warning': return <AlertTriangle className="w-4 h-4 text-yellow-600" />
+                          case 'critical': return <XCircle className="w-4 h-4 text-red-600" />
+                          default: return <Clock className="w-4 h-4 text-gray-600" />
+                        }
+                      }
+
+                      return (
+                        <div key={service.name} className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                          <div className="flex items-center space-x-3">
+                            {getHealthIcon(service.health_status)}
+                            <div>
+                              <div className="font-medium">{service.name}</div>
+                              <div className="text-sm text-gray-600 capitalize">{service.type} • {service.environment}</div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-medium">{service.metrics.avg_latency}ms</div>
+                            <div className="text-xs text-gray-500">{(service.metrics.error_rate * 100).toFixed(1)}% errors</div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Recent Errors */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recent Errors</CardTitle>
+                  <CardDescription>Latest application errors requiring attention</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {errors.filter(e => e.resolution_status === 'open').slice(0, 5).map((error) => (
+                      <div key={error.error_id} className="flex items-center justify-between p-3 bg-red-50 rounded border-l-4 border-red-400">
+                        <div>
+                          <div className="font-medium text-red-800">{error.error_type}</div>
+                          <div className="text-sm text-red-600">{error.service_name}</div>
+                          <div className="text-xs text-red-500">{error.occurrence_count} occurrences</div>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => updateErrorStatus(error.error_id, 'investigating')}
+                        >
+                          Investigate
+                        </Button>
+                      </div>
                     ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {apmMetrics && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">P50 Latency</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">
-                        {formatDuration(apmMetrics.latency.p50_ms)}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">P95 Latency</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">
-                        {formatDuration(apmMetrics.latency.p95_ms)}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">P99 Latency</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">
-                        {formatDuration(apmMetrics.latency.p99_ms)}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">Avg Latency</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">
-                        {formatDuration(apmMetrics.latency.avg_ms)}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="traces" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Trace Search</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
-                <Input
-                  placeholder="Service name"
-                  value={traceSearch.service_name}
-                  onChange={(e) => setTraceSearch({...traceSearch, service_name: e.target.value})}
-                />
-                <Input
-                  placeholder="Operation name"
-                  value={traceSearch.operation_name}
-                  onChange={(e) => setTraceSearch({...traceSearch, operation_name: e.target.value})}
-                />
-                <Select 
-                  value={traceSearch.status} 
-                  onValueChange={(value) => setTraceSearch({...traceSearch, status: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">All statuses</SelectItem>
-                    <SelectItem value="ok">OK</SelectItem>
-                    <SelectItem value="error">Error</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Input
-                  placeholder="Min duration (ms)"
-                  type="number"
-                  value={traceSearch.min_duration_ms}
-                  onChange={(e) => setTraceSearch({...traceSearch, min_duration_ms: e.target.value})}
-                />
-                <Button onClick={searchTraces} disabled={loading}>
-                  {loading ? 'Searching...' : 'Search'}
-                </Button>
-              </div>
-
-              <div className="space-y-2">
-                {traces.map((span) => (
-                  <div key={`${span.trace_id}-${span.span_id}`} 
-                       className="p-4 border rounded-lg hover:bg-muted/50">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-3">
-                        {getStatusIcon(span.status)}
-                        <span className="font-medium">{span.service_name}</span>
-                        <Badge variant="outline">{span.operation_name}</Badge>
-                      </div>
-                      <div className="flex items-center gap-4 text-sm">
-                        <span>{formatDuration(span.duration_ms)}</span>
-                        <span className="text-muted-foreground">
-                          {new Date(span.start_time).toLocaleTimeString()}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-xs text-muted-foreground font-mono">
-                      Trace: {span.trace_id}
-                    </div>
                   </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="service-map" className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Service Map & Dependencies</CardTitle>
+                <CardDescription>Visualize service topology and dependencies</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ServiceMapVisualization serviceMap={serviceMap} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="traces" className="mt-6">
+            {traces.length === 0 ? (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <Network className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    No traces found
+                  </h3>
+                  <p className="text-gray-600">
+                    No distributed traces found for the selected time range
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {traces.map((trace) => (
+                  <TraceCard
+                    key={trace.id}
+                    trace={trace}
+                    onViewDetails={viewTraceDetails}
+                  />
                 ))}
-                
-                {traces.length === 0 && !loading && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No traces found. Try adjusting your search criteria.
-                  </div>
-                )}
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-    </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="errors" className="mt-6">
+            {errors.length === 0 ? (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    No errors found
+                  </h3>
+                  <p className="text-gray-600">
+                    No application errors detected in the selected time range
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {errors.map((error) => (
+                  <ErrorCard
+                    key={error.error_id}
+                    error={error}
+                    onUpdateStatus={updateErrorStatus}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="metrics" className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Custom Metrics & KPIs</CardTitle>
+                <CardDescription>Monitor business and application metrics</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8">
+                  <LineChart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    Metrics Dashboard
+                  </h3>
+                  <p className="text-gray-600 mb-4">
+                    Create custom dashboards and track business-critical metrics
+                  </p>
+                  <Button>
+                    <BarChart3 className="w-4 h-4 mr-2" />
+                    Create Custom Dashboard
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </DashboardLayout>
   )
 }

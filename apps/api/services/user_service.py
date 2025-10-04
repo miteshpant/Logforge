@@ -341,14 +341,14 @@ class UserService:
     # SESSION MANAGEMENT METHODS
     # =================================================================
     
-    async def create_session(self, user: User, ip_address: str, user_agent: str) -> Dict[str, Any]:
+    async def create_session(self, user: User, ip_address: str, user_agent: str, tenant_id: str, user_role: str = "user") -> Dict[str, Any]:
         """Create new user session"""
         try:
             from authn_authz_middleware import generate_jwt_token
             from models import UserSession, SessionStatus
             
-            # Generate JWT token
-            session_data = generate_jwt_token(user.id)
+            # Generate JWT token with tenant information and user role
+            session_data = generate_jwt_token(user.id, tenant_id, user_role)
             
             # Create session object
             session = UserSession(
@@ -368,7 +368,7 @@ class UserService:
                 "user_agent": session.user_agent,
                 "expires_at": session.expires_at,
                 "status": session.status.value,
-                "customer_id": "platform"
+                "customer_id": tenant_id  # Use actual tenant_id instead of hardcoded "platform"
             }
             
             # Save session via DAO

@@ -342,7 +342,7 @@ class UsageDAO:
             SELECT
                 COUNT(*) as total_api_calls,
                 COUNT(DISTINCT endpoint) as unique_endpoints,
-                AVG(response_time_ms) as avg_response_time,
+                if(count(*) > 0 AND count(response_time_ms) > 0, AVG(response_time_ms), 0) as avg_response_time,
                 COUNT(CASE WHEN response_status >= 400 THEN 1 END) as error_count,
                 SUM(request_size_bytes) as total_request_bytes,
                 SUM(response_size_bytes) as total_response_bytes,
@@ -405,7 +405,7 @@ class UsageDAO:
                     COUNT(*) as api_calls,
                     feature_type,
                     COUNT(*) as feature_calls,
-                    AVG(response_time_ms) as avg_response_time,
+                    if(count(*) > 0 AND count(response_time_ms) > 0, AVG(response_time_ms), 0) as avg_response_time,
                     SUM(request_size_bytes + response_size_bytes) as total_bytes
                 FROM api_usage_audit_mt
                 WHERE tenant_id = %(tenant_id)s
@@ -465,7 +465,7 @@ class UsageDAO:
             query = """
             SELECT
                 COUNT(*) as api_calls,
-                AVG(response_time_ms) as avg_response_time,
+                if(count(*) > 0 AND count(response_time_ms) > 0, AVG(response_time_ms), 0) as avg_response_time,
                 COUNT(CASE WHEN response_status >= 400 THEN 1 END) * 100.0 / COUNT(*) as error_rate,
                 endpoint,
                 COUNT(*) as endpoint_calls
@@ -575,7 +575,7 @@ class UsageDAO:
             SELECT
                 COUNT(DISTINCT tenant_id) as active_tenants,
                 COUNT(*) as total_api_calls,
-                AVG(response_time_ms) as avg_response_time,
+                if(count(*) > 0 AND count(response_time_ms) > 0, AVG(response_time_ms), 0) as avg_response_time,
                 COUNT(CASE WHEN response_status >= 400 THEN 1 END) as total_errors
             FROM api_usage_audit_mt
             WHERE request_timestamp >= %(current_month_start)s
@@ -621,7 +621,7 @@ class UsageDAO:
             SELECT
                 tenant_id,
                 COUNT(*) as api_calls,
-                AVG(response_time_ms) as avg_response_time
+                if(count(*) > 0 AND count(response_time_ms) > 0, AVG(response_time_ms), 0) as avg_response_time
             FROM api_usage_audit_mt
             WHERE request_timestamp >= %(current_month_start)s
             GROUP BY tenant_id

@@ -774,7 +774,7 @@ class EnterpriseDAO:
             sum(cost_credits) as total_credits,
             count(*) as total_requests,
             sum(response_size_bytes) as total_bytes,
-            avg(processing_time_ms) as avg_processing_time
+            if(count(*) > 0 AND count(processing_time_ms) > 0, avg(processing_time_ms), 0) as avg_processing_time
         FROM api_usage_mt
         WHERE customer_id = %(customer_id)s
           AND request_timestamp >= %(start_time)s

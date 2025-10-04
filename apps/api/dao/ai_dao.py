@@ -505,7 +505,7 @@ class AIDAO:
         query = """
         SELECT 
             count(*) as total_queries,
-            avg(execution_time_ms) as avg_execution_time,
+            if(count(*) > 0, avg(execution_time_ms), 0) as avg_execution_time,
             countIf(execution_status = 'success') as successful_queries,
             countIf(execution_status = 'error') as failed_queries,
             countIf(feedback_score >= 0) as positive_feedback,
@@ -528,7 +528,7 @@ class AIDAO:
             count(*) as total_investigations,
             countIf(status = 'completed') as completed_investigations,
             countIf(status = 'running') as running_investigations,
-            avg(confidence_score) as avg_confidence_score,
+            if(count(*) > 0, avg(confidence_score), 0) as avg_confidence_score,
             count(DISTINCT investigation_type) as unique_types
         FROM ai_investigations_mt
         WHERE customer_id = %(customer_id)s AND started_at >= %(since_date)s
@@ -645,7 +645,7 @@ class AIDAO:
             service,
             count(*) as total_requests,
             countIf(level = 'ERROR') as error_count,
-            avg(status) as avg_duration,
+            if(count(*) > 0 AND count(status) > 0, avg(status), 0) as avg_duration,
             quantile(0.95)(status) as p95_duration
         FROM logs_normalized_mt 
         WHERE customer_id = %(customer_id)s 
@@ -731,7 +731,7 @@ class AIDAO:
             count(*) as error_count,
             groupArray(DISTINCT msg) as error_messages,
             count(DISTINCT src_ip) as unique_sources,
-            avg(status) as avg_status_code
+            if(count(*) > 0 AND count(status) > 0, avg(status), 0) as avg_status_code
         FROM logs_normalized_mt
         WHERE customer_id = %(customer_id)s
           AND ts >= %(start_time)s

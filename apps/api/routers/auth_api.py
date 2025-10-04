@@ -55,11 +55,26 @@ async def login_user(
                           ip_address=request.client.host if request.client else "unknown")
             raise HTTPException(401, "Invalid email or password")
         
-        # Create session
+        # Get user's tenant roles to determine primary tenant context
+        from services.role_service import RoleService
+        role_service = RoleService()
+        user_roles = await role_service.get_user_roles(user.id)
+        
+        # Determine primary tenant ID from user's roles
+        primary_tenant_id = None  # No default - user must have tenant assignment
+        if user_roles:
+            # Use the first role's tenant_id as primary tenant context
+            primary_tenant_id = user_roles[0].tenant_id
+        
+        if not primary_tenant_id:
+            logger.error("User has no tenant role assignments", user_id=user.id, email=user.email)
+            raise HTTPException(403, "User has no tenant role assignments. Contact administrator.")
+        
+        # Create session with tenant context
         ip_address = request.client.host if request.client else "unknown"
         user_agent = request.headers.get("user-agent", "unknown")
         
-        session_data = await user_service.create_session(user, ip_address, user_agent)
+        session_data = await user_service.create_session(user, ip_address, user_agent, primary_tenant_id, user_roles[0].role)
         
         logger.info("User login successful",
                    user_id=user.id,
@@ -115,11 +130,25 @@ async def refresh_session(
 ):
     """Refresh user session with new token"""
     try:
+        # Get user's tenant roles to determine tenant context for refresh
+        from services.role_service import RoleService
+        role_service = RoleService()
+        user_roles = await role_service.get_user_roles(current_user.id)
+        
+        # Determine tenant ID from user's roles
+        primary_tenant_id = None
+        if user_roles:
+            primary_tenant_id = user_roles[0].tenant_id
+        
+        if not primary_tenant_id:
+            logger.error("User has no tenant role assignments during refresh", user_id=current_user.id)
+            raise HTTPException(403, "User has no tenant role assignments. Contact administrator.")
+        
         # Create new session
         ip_address = request.client.host if request.client else "unknown"
         user_agent = request.headers.get("user-agent", "unknown")
         
-        session_data = await user_service.create_session(current_user, ip_address, user_agent)
+        session_data = await user_service.create_session(current_user, ip_address, user_agent, primary_tenant_id, user_roles[0].role)
         
         # Revoke old session
         auth_header = request.headers.get("Authorization", "")

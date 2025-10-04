@@ -90,19 +90,24 @@ const SelectItem = React.forwardRef<
     value: string
     handleSelect?: (value: string) => void
   }
->(({ className, children, value, handleSelect, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn(
-      "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-2 pr-8 text-sm outline-none hover:bg-gray-100 focus:bg-gray-100",
-      className
-    )}
-    onClick={() => handleSelect?.(value)}
-    {...props}
-  >
-    {children}
-  </div>
-))
+>(({ className, children, value, handleSelect, ...props }, ref) => {
+  // Extract handleSelect from props to prevent it from being passed to DOM
+  const { handleSelect: _, ...domProps } = props as any
+  
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-2 pr-8 text-sm outline-none hover:bg-gray-100 focus:bg-gray-100",
+        className
+      )}
+      onClick={() => handleSelect?.(value)}
+      {...domProps}
+    >
+      {children}
+    </div>
+  )
+})
 SelectItem.displayName = "SelectItem"
 
 export { Select, SelectContent, SelectItem, SelectTrigger, SelectValue }

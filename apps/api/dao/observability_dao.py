@@ -384,7 +384,7 @@ class ObservabilityDAO:
             trace_query = """
             SELECT 
                 COUNT(*) as total_spans,
-                AVG(duration_ms) as avg_duration_ms,
+                if(count(*) > 0 AND count(duration_ms) > 0, AVG(duration_ms), 0) as avg_duration_ms,
                 quantile(0.5)(duration_ms) as p50_duration_ms,
                 quantile(0.95)(duration_ms) as p95_duration_ms,
                 quantile(0.99)(duration_ms) as p99_duration_ms,
@@ -428,7 +428,7 @@ class ObservabilityDAO:
             SELECT 
                 COUNT(*) as total_traces,
                 COUNT(DISTINCT trace_id) as unique_traces,
-                AVG(duration_ms) as avg_duration_ms
+                if(count(*) > 0 AND count(duration_ms) > 0, AVG(duration_ms), 0) as avg_duration_ms
             FROM traces_mt 
             WHERE customer_id = %(customer_id)s
             AND start_time >= now() - INTERVAL 24 HOUR
@@ -739,7 +739,7 @@ class ObservabilityDAO:
                 COUNT(*) as total_traces,
                 COUNT(DISTINCT trace_id) as unique_traces,
                 COUNT(DISTINCT service_name) as unique_services,
-                AVG(duration_ms) as avg_duration,
+                if(count(*) > 0 AND count(duration_ms) > 0, AVG(duration_ms), 0) as avg_duration,
                 quantile(0.5)(duration_ms) as p50_duration,
                 quantile(0.95)(duration_ms) as p95_duration,
                 quantile(0.99)(duration_ms) as p99_duration,

@@ -191,8 +191,8 @@ def verify_password(password: str, hashed: str) -> bool:
     """Verify password against hash"""
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
-def generate_jwt_token(user_id: str, expires_in_hours: int = SESSION_EXPIRY_HOURS) -> Dict[str, Any]:
-    """Generate JWT token for user session"""
+def generate_jwt_token(user_id: str, tenant_id: str, user_role: str, expires_in_hours: int = SESSION_EXPIRY_HOURS) -> Dict[str, Any]:
+    """Generate JWT token for user session with tenant context and role"""
     import time
 
     now_timestamp = time.time()
@@ -201,6 +201,8 @@ def generate_jwt_token(user_id: str, expires_in_hours: int = SESSION_EXPIRY_HOUR
 
     payload = {
         "user_id": user_id,
+        "tenant_id": tenant_id,  # Include tenant_id in JWT payload
+        "user_role": user_role,  # Include user's primary role in JWT payload
         "iat": now_timestamp,
         "exp": expires_timestamp,
         "type": "access_token"

@@ -727,7 +727,12 @@ class AIService:
         insights = []
 
         if investigation_stats.get('total_investigations', 0) > 0:
-            completion_rate = investigation_stats.get('completed_investigations', 0) / investigation_stats['total_investigations']
+            total_investigations = investigation_stats.get('total_investigations', 0)
+            completed_investigations = investigation_stats.get('completed_investigations', 0)
+            # Safe division with bounds checking
+            completion_rate = completed_investigations / total_investigations if total_investigations > 0 else 0.0
+            # Ensure rate is within valid bounds
+            completion_rate = max(0.0, min(1.0, completion_rate))
             if completion_rate < 0.8:
                 insights.append({
                     'type': 'warning',
@@ -737,7 +742,12 @@ class AIService:
                 })
 
         if query_stats.get('total_queries', 0) > 0:
-            success_rate = query_stats.get('successful_queries', 0) / query_stats['total_queries']
+            total_queries = query_stats.get('total_queries', 0)
+            successful_queries = query_stats.get('successful_queries', 0)
+            # Safe division with bounds checking
+            success_rate = successful_queries / total_queries if total_queries > 0 else 0.0
+            # Ensure rate is within valid bounds
+            success_rate = max(0.0, min(1.0, success_rate))
             if success_rate < 0.9:
                 insights.append({
                     'type': 'improvement',

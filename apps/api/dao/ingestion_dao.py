@@ -122,7 +122,7 @@ class IngestionDAO:
                        COUNT(*) as total_ingestions,
                        SUM(log_count) as total_logs,
                        SUM(bytes_processed) as total_bytes,
-                       AVG(processing_time_ms) as avg_processing_time,
+                       if(count(*) > 0 AND count(processing_time_ms) > 0, AVG(processing_time_ms), 0) as avg_processing_time,
                        format_detected,
                        COUNT(*) as format_count
                        FROM {INGESTION_STATS_TABLE} 

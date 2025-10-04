@@ -543,7 +543,7 @@ class StorageDAO:
             f"""SELECT 
                 COUNT(*) as total_operations,
                 SUM(CASE WHEN operation_status = 'completed' THEN 1 ELSE 0 END) as successful_operations,
-                AVG(data_size_gb) as avg_file_size_gb,
+                if(count(*) > 0 AND count(data_size_gb) > 0, AVG(data_size_gb), 0) as avg_file_size_gb,
                 SUM(data_size_gb) as total_storage_gb
             FROM {STORAGE_OPERATIONS_TABLE}
             WHERE customer_id = %(customer_id)s
@@ -556,7 +556,7 @@ class StorageDAO:
         retention_result = await self.db.execute_query(
             f"""SELECT 
                 COUNT(*) as total_policies,
-                AVG(CASE WHEN compression_enabled = 1 THEN 1 ELSE 0 END) as compression_enabled_ratio
+                if(count(*) > 0, AVG(CASE WHEN compression_enabled = 1 THEN 1 ELSE 0 END), 0) as compression_enabled_ratio
             FROM {RETENTION_POLICIES_TABLE}
             WHERE customer_id = %(customer_id)s""",
             {"customer_id": customer_id}
