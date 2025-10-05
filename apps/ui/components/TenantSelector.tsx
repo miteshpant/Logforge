@@ -94,18 +94,19 @@ export function TenantSelector() {
           variant="ghost"
           disabled={isSwitching}
           className="flex items-center space-x-2 px-3 py-2 h-auto min-w-0 hover:bg-slate-100"
+          data-testid="tenant-selector"
         >
           <Building2 className="h-4 w-4 text-slate-600" />
           <div className="flex flex-col items-start min-w-0">
-            <span className="text-sm font-medium text-slate-900 truncate max-w-[200px]">
+            <span className="text-sm font-medium text-slate-900 truncate max-w-[200px]" data-testid="current-tenant-name">
               {tenant?.name || getTenantDisplayName(tenantId)}
             </span>
             <div className="flex items-center space-x-1">
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-slate-500" data-testid="current-user-role">
                 {userRole || 'user'}
               </span>
               <span className="text-xs text-slate-400">•</span>
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-slate-500" data-testid="current-subscription-tier">
                 {tenant?.subscription_tier || 'enterprise'}
               </span>
             </div>

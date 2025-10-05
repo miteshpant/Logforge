@@ -104,14 +104,15 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
 
   if (variant === 'compact') {
     return (
-      <div className={`relative ${className}`} ref={dropdownRef}>
+      <div className={`relative ${className}`} ref={dropdownRef} data-testid="time-range-selector">
         <Button
           variant="outline"
           onClick={() => setIsOpen(!isOpen)}
           className="h-9 px-3 bg-white/95 backdrop-blur-sm border-slate-200/60 hover:bg-slate-50/80 hover:border-slate-300/80 transition-all duration-200"
+          data-testid="time-range-button"
         >
           <Clock className="w-4 h-4 mr-2 text-slate-600" />
-          <span className="font-medium text-slate-700">{currentTimeRange.label}</span>
+          <span className="font-medium text-slate-700" data-testid="current-time-range">{currentTimeRange.label}</span>
           <ChevronDown className={`w-4 h-4 ml-2 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
         </Button>
 

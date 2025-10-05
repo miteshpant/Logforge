@@ -31,6 +31,9 @@ from routers.auth_api import router as auth_router
 from routers.role_api import router as role_router
 from routers.usage_api import router as usage_router
 
+# Import Real-Time Streaming API
+from routers.streaming_api import router as streaming_router
+
 # Configure structured logging
 logger = structlog.get_logger()
 

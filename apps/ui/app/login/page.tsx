@@ -110,7 +110,7 @@ export default function LoginPage() {
 
         {/* Right Side - Login Form */}
         <div className="w-full max-w-md mx-auto">
-          <Card className="bg-white/95 backdrop-blur-sm border-0 shadow-2xl">
+          <Card className="bg-white/95 backdrop-blur-sm border-0 shadow-2xl" data-testid="login-form">
             <CardHeader className="space-y-2 text-center">
               <CardTitle className="text-2xl font-bold text-slate-900">Welcome Back</CardTitle>
               <CardDescription className="text-slate-600">
@@ -121,7 +121,7 @@ export default function LoginPage() {
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-6">
                 {error && (
-                  <Alert variant="destructive" className="border-red-200 bg-red-50">
+                  <Alert variant="destructive" className="border-red-200 bg-red-50" data-testid="error-message">
                     <AlertDescription className="text-red-800">
                       {error}
                     </AlertDescription>
@@ -141,6 +141,7 @@ export default function LoginPage() {
                     className="h-11 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
                     required
                     disabled={isSubmitting}
+                    data-testid="email-input"
                   />
                 </div>
 
@@ -157,6 +158,7 @@ export default function LoginPage() {
                     className="h-11 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
                     required
                     disabled={isSubmitting}
+                    data-testid="password-input"
                   />
                 </div>
 
@@ -164,6 +166,7 @@ export default function LoginPage() {
                   type="submit"
                   className="w-full h-11 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 font-medium text-white shadow-lg transition-all duration-200"
                   disabled={isSubmitting || !email || !password}
+                  data-testid="login-button"
                 >
                   {isSubmitting ? (
                     <div className="flex items-center space-x-2">
@@ -175,6 +178,39 @@ export default function LoginPage() {
                   )}
                 </Button>
 
+                {/* Enterprise SSO Options */}
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-slate-200" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-white px-2 text-slate-500">Or continue with</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 border-slate-200 hover:bg-slate-50"
+                    data-testid="sso-saml"
+                    onClick={() => alert('SAML SSO - Contact your administrator to configure')}
+                  >
+                    <Shield className="w-4 h-4 mr-2" />
+                    SAML
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 border-slate-200 hover:bg-slate-50"
+                    data-testid="sso-oidc"
+                    onClick={() => alert('OIDC SSO - Contact your administrator to configure')}
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    OIDC
+                  </Button>
+                </div>
+
                 <div className="text-center pt-4">
                   <p className="text-sm text-slate-500">
                     Need access?{' '}
@@ -182,6 +218,7 @@ export default function LoginPage() {
                       type="button"
                       className="text-blue-600 hover:text-blue-700 font-medium"
                       onClick={() => alert('Contact your administrator for access')}
+                      data-testid="contact-admin"
                     >
                       Contact Administrator
                     </button>
@@ -190,6 +227,14 @@ export default function LoginPage() {
               </form>
             </CardContent>
           </Card>
+          
+          {/* Enterprise Security Notice */}
+          <div className="mt-6 text-center">
+            <div className="inline-flex items-center space-x-2 text-white/70 text-sm">
+              <Shield className="w-4 h-4" />
+              <span>Enterprise-grade security with SOC 2 Type II compliance</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

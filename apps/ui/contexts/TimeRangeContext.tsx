@@ -142,7 +142,7 @@ export const TimeRangeProvider: React.FC<TimeRangeProviderProps> = ({
     setLastRefresh(new Date())
     
     // Trigger all registered refresh callbacks with the NEW time range
-    refreshCallbacks.forEach(callback => {
+    Array.from(refreshCallbacks).forEach(callback => {
       try {
         const result = callback(timeRange)
         if (result instanceof Promise) {
@@ -200,7 +200,7 @@ export const TimeRangeProvider: React.FC<TimeRangeProviderProps> = ({
   const useAutoRefresh = useCallback((refreshFn: (newTimeRange: TimeRange) => void | Promise<void>, dependencies: any[] = []) => {
     useEffect(() => {
       // Register this refresh function
-      setRefreshCallbacks(prev => new Set([...prev, refreshFn]))
+      setRefreshCallbacks(prev => new Set([...Array.from(prev), refreshFn]))
       
       // Cleanup: unregister when component unmounts or dependencies change
       return () => {

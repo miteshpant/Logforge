@@ -344,11 +344,11 @@ export default function ObservabilityPage(): React.ReactElement {
         setServices(servicesResponse.data || [])
       }
       
-      if (tracesResponse.success && tracesResponse.data) {
+      if (tracesResponse && tracesResponse.data) {
         setTraces(tracesResponse.data || [])
       }
       
-      if (errorsResponse.success && errorsResponse.data) {
+      if (errorsResponse && errorsResponse.data) {
         setErrors(errorsResponse.data || [])
       }
     } catch (err: any) {

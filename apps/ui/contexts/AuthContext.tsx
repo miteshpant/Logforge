@@ -4,7 +4,9 @@ import React, { createContext, useContext, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { AuthApi, apiClient } from '@/lib/api'
 import { TenantsApi } from '@/lib/api/tenants'
-import type { AuthContext as AuthContextType, UserProfile, TenantInfo, UserRoleAssignment } from '@/lib/api'
+import type { AuthContext as AuthContextType, UserProfile, TenantInfo } from '@/lib/api'
+import type { UserRoleAssignment } from '@/lib/api/auth'
+import type { Tenant } from '@/lib/api/tenants'
 
 interface AuthProviderState {
   // Authentication state
@@ -84,11 +86,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               throw new Error('Failed to fetch tenant information')
             }
             
-            // Use real tenant data from API (API returns tenant directly, not wrapped)
+            // Use real tenant data from API (API returns tenant in data property)
+            const tenant = tenantData.data
+            if (!tenant) {
+              throw new Error('Tenant data not found')
+            }
+            
             const tenantInfo: TenantInfo = {
-              id: tenantData.tenant_id,
-              name: tenantData.name,
-              subscription_tier: tenantData.type,
+              id: tenant.tenant_id,
+              name: tenant.name,
+              subscription_tier: tenant.type,
               features: ['logs', 'analytics', 'alerts', 'dashboards', 'security'],
               limits: {
                 users: 100,
@@ -138,7 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const loginResponse = await AuthApi.login({ email, password })
       
       if (loginResponse.success && loginResponse.data) {
-        const { access_token, user: userProfile, expires_at } = loginResponse.data
+        const { access_token, user: userProfile, expires_in } = loginResponse.data
         
         // Step 2: Extract tenant_id and user_role from JWT token (backend now includes both)
         const tokenPayload = JSON.parse(atob(access_token.split('.')[1]))
@@ -157,16 +164,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         apiClient.setAuth(access_token, tenantId, undefined)
         
         // Step 6: Fetch actual tenant information from API using tenant ID
+        console.log('🔑 Fetching tenant data for tenantId:', tenantId)
         const tenantData = await TenantsApi.getTenant(tenantId)
+        console.log('🏢 Raw tenant API response:', tenantData)
+        
         if (!tenantData) {
           throw new Error('Failed to fetch tenant information')
         }
         
-        // Use real tenant data from API (API returns tenant directly, not wrapped)
+        // Handle different response formats - backend might return data directly or wrapped
+        let tenant
+        if (tenantData.data) {
+          // Standard ApiResponse<Tenant> format
+          tenant = tenantData.data
+          console.log('🏢 Using tenant from .data property:', tenant)
+        } else if (tenantData.tenant_id) {
+          // Backend returns tenant directly (not wrapped)
+          tenant = tenantData as any
+          console.log('🏢 Using tenant directly from response:', tenant)
+        } else {
+          console.error('🚨 Unexpected tenant response format:', tenantData)
+          throw new Error('Tenant data not found in expected format')
+        }
+        
         const tenantInfo: TenantInfo = {
-          id: tenantData.tenant_id,
-          name: tenantData.name,
-          subscription_tier: tenantData.type,
+          id: tenant.tenant_id,
+          name: tenant.name,
+          subscription_tier: tenant.type,
           features: ['logs', 'analytics', 'alerts', 'dashboards', 'security'],
           limits: {
             users: 100,
@@ -279,11 +303,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Failed to fetch tenant information')
       }
       
-      // Use real tenant data from API (API returns tenant directly, not wrapped)
+      // Use real tenant data from API (API returns tenant in data property)
+      const tenant = tenantData.data
+      if (!tenant) {
+        throw new Error('Tenant data not found')
+      }
+      
       const newTenantInfo: TenantInfo = {
-        id: tenantData.tenant_id,
-        name: tenantData.name,
-        subscription_tier: tenantData.type,
+        id: tenant.tenant_id,
+        name: tenant.name,
+        subscription_tier: tenant.type,
         features: ['logs', 'analytics', 'alerts', 'dashboards', 'security'],
         limits: {
           users: 100,

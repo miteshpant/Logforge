@@ -36,6 +36,7 @@ import {
   Home,
 } from 'lucide-react'
 import { TenantSelector } from '@/components/TenantSelector'
+import PWASupport from '@/components/PWASupport'
 
 const navigation = [
   {
@@ -148,7 +149,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <h1 className="text-xl font-bold text-slate-900">Logforge</h1>
                 <p className="text-xs text-slate-500 flex items-center space-x-1">
                   <Building2 className="w-3 h-3" />
-                  <span>{tenant?.organization_name || 'Loading...'}</span>
+                  <span>{tenant?.name || 'Loading...'}</span>
                 </p>
               </div>
             </div>
@@ -163,7 +164,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto" data-testid="main-navigation">
             {navigation.map((item) => {
               const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
               return (
@@ -178,6 +179,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                     }
                   `}
                   onClick={() => setSidebarOpen(false)}
+                  data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
                 >
                   <item.icon className={`
                     flex-shrink-0 w-5 h-5 mr-3 transition-colors
@@ -191,6 +193,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                         <Badge 
                           variant={item.badge === 'New' ? 'default' : 'secondary'}
                           className="ml-2 text-xs"
+                          data-testid={`badge-${item.badge.toLowerCase()}`}
                         >
                           {item.badge}
                         </Badge>
@@ -209,7 +212,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className="p-4 border-t border-slate-200">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="w-full justify-start h-auto p-3">
+                <Button variant="ghost" className="w-full justify-start h-auto p-3" data-testid="user-menu">
                   <div className="flex items-center space-x-3">
                     <div className="w-8 h-8 bg-gradient-to-br from-slate-400 to-slate-500 rounded-full flex items-center justify-center">
                       <User className="w-4 h-4 text-white" />
@@ -218,8 +221,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                       <p className="text-sm font-medium text-slate-900">
                         {user?.full_name || user?.email || 'Loading...'}
                       </p>
-                      <p className="text-xs text-slate-500 capitalize">
-                        {userRole} • {tenant?.organization_name}
+                      <p className="text-xs text-slate-500 capitalize" data-testid="current-tenant">
+                        {userRole} • {tenant?.name}
                       </p>
                     </div>
                     <ChevronDown className="w-4 h-4 text-slate-400" />
@@ -228,16 +231,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>Account</DropdownMenuLabel>
-                <DropdownMenuItem>
+                <DropdownMenuItem data-testid="profile-settings">
                   <User className="w-4 h-4 mr-2" />
                   Profile Settings
                 </DropdownMenuItem>
-                <DropdownMenuItem>
+                <DropdownMenuItem data-testid="preferences">
                   <Settings className="w-4 h-4 mr-2" />
                   Preferences
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout}>
+                <DropdownMenuItem onClick={handleLogout} data-testid="logout-button">
                   <LogOut className="w-4 h-4 mr-2" />
                   Sign Out
                 </DropdownMenuItem>
@@ -291,6 +294,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           {children}
         </main>
       </div>
+
+      {/* PWA Support - World-Class Mobile Experience */}
+      <PWASupport />
     </div>
   )
 }

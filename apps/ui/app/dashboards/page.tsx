@@ -150,10 +150,10 @@ export default function DashboardsPage() {
         limit: 50
       })
       
-      if (response.success && response.data) {
+      if (response && response.data) {
         setDashboards(response.data || [])
       } else {
-        throw new Error(response.message || 'Failed to load dashboards')
+        throw new Error('Failed to load dashboards')
       }
     } catch (err: any) {
       console.error('Failed to load dashboards:', err)

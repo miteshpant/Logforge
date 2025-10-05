@@ -252,7 +252,7 @@ const AlertEventCard: React.FC<AlertEventCardProps> = ({ event, onAcknowledge, o
           )}
           
           <div className="flex space-x-2">
-            {event.status === 'new' && (
+            {event.status === 'triggered' && (
               <Button 
                 size="sm" 
                 variant="outline"
@@ -310,19 +310,19 @@ export default function AlertsPage(): React.ReactElement {
         AlertsApi.getAlertStats('24h')
       ])
       
-      if (rulesResponse.success && rulesResponse.data) {
+      if (rulesResponse && rulesResponse.data) {
         setAlertRules(rulesResponse.data || [])
       }
       
-      if (eventsResponse.success && eventsResponse.data) {
+      if (eventsResponse && eventsResponse.data) {
         setAlertEvents(eventsResponse.data || [])
       }
       
-      if (templatesResponse.success && templatesResponse.data) {
+      if (templatesResponse && templatesResponse.data) {
         setAlertTemplates(templatesResponse.data || [])
       }
       
-      if (statsResponse.success) {
+      if (statsResponse && statsResponse.data) {
         setAlertStats(statsResponse.data)
       }
     } catch (err: any) {
@@ -408,10 +408,10 @@ export default function AlertsPage(): React.ReactElement {
     }
   }
 
-  const editAlert = (alert: Alert) => {
+  const editAlert = (alertRule: Alert) => {
     // TODO: Implement alert editing modal
-    console.log('Edit alert:', alert)
-    alert(`Edit Alert: ${alert.name}\n\nThis feature will open an alert configuration modal.`)
+    console.log('Edit alert:', alertRule)
+    alert(`Edit Alert: ${alertRule.name}\n\nThis feature will open an alert configuration modal.`)
   }
 
   if (loading) {

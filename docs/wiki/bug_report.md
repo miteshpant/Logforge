@@ -948,4 +948,110 @@ const formatTimestamp = (timestamp: string) => {
 
 ---
 
+### Real-Time Analytics Chart Control Features 
+**Issue**: Chart controls (Settings, Download, Fullscreen) are visible but not implemented  
+**Location**: `/apps/ui/components/AdvancedDataViz.tsx` - Chart control buttons  
+**Priority**: Medium (feature enhancement and user experience)  
+**Date Reported**: January 10, 2025  
+**Description**: Real-time analytics charts display control icons (Settings, Download, Maximize) but these features are not yet implemented, leading to potential user confusion.
+
+**Current Implementation**:
+- **Settings Button**: Visible with Settings icon but no click handler
+- **Download Button**: Visible with Download icon but no export functionality  
+- **Fullscreen Button**: Visible with Maximize2 icon but no fullscreen mode
+- **Location**: Lines 408-418 in AdvancedDataViz component
+
+**Placeholder Code**:
+```typescript
+<Button variant="outline" size="sm" data-testid="chart-settings">
+  <Settings className="w-4 h-4" />
+</Button>
+
+<Button variant="outline" size="sm" data-testid="chart-export">
+  <Download className="w-4 h-4" />
+</Button>
+
+<Button variant="outline" size="sm" data-testid="chart-fullscreen">
+  <Maximize2 className="w-4 h-4" />
+</Button>
+```
+
+**Future Feature Requirements**:
+
+#### 1. **Chart Settings Panel**
+- **Time Range Selector**: Custom time ranges beyond default options
+- **Chart Type Toggle**: Switch between line, area, bar, gauge visualizations
+- **Threshold Configuration**: Adjust warning/critical thresholds
+- **Refresh Interval**: Configure auto-refresh rates (30s, 1m, 5m, manual)
+- **Color Customization**: Theme and color palette options
+- **Data Point Density**: Control data aggregation levels
+
+#### 2. **Data Export Functionality**
+- **CSV Export**: Raw chart data in spreadsheet format
+- **PNG Export**: Chart image download for presentations
+- **PDF Export**: Professional chart reports with metadata
+- **JSON Export**: Raw API data for external analysis
+- **Excel Export**: Formatted spreadsheet with charts and data
+- **Custom Date Ranges**: Export historical data beyond current view
+
+#### 3. **Fullscreen Chart Mode**
+- **Modal Overlay**: Fullscreen chart display with escape key support
+- **Enhanced Detail**: Larger chart with more data points and precision
+- **Advanced Controls**: Additional tools available only in fullscreen
+- **Multiple Charts**: Side-by-side comparison mode
+- **Annotation Tools**: Add notes and markers to specific time points
+- **Zoom and Pan**: Interactive chart navigation
+
+**Implementation Phases**:
+
+#### **Phase 1: Basic Functionality** (2-3 days)
+- Settings panel with basic chart type and refresh interval options
+- Simple CSV data export functionality
+- Basic fullscreen modal with larger chart display
+
+#### **Phase 2: Advanced Export** (3-4 days)  
+- Multiple export formats (PNG, PDF, Excel)
+- Custom date range selection for exports
+- Export with company branding and metadata
+
+#### **Phase 3: Advanced Chart Features** (4-5 days)
+- Custom threshold configuration with real-time validation
+- Advanced color themes and customization
+- Interactive annotations and chart markers
+
+#### **Phase 4: Enterprise Features** (5-6 days)
+- Scheduled report generation and email delivery
+- Chart sharing with secure links
+- Template-based chart configurations
+- Integration with external BI tools
+
+**User Experience Considerations**:
+- **Progressive Disclosure**: Basic features easily accessible, advanced options in settings
+- **Keyboard Shortcuts**: Power user shortcuts for common actions
+- **Mobile Responsive**: Chart controls work on tablet and mobile devices  
+- **Accessibility**: Proper ARIA labels and keyboard navigation
+- **Performance**: Ensure export operations don't block UI interaction
+
+**Technical Implementation Notes**:
+- **Chart Library**: Leverage Canvas-based rendering for export functionality
+- **Export Processing**: Use Web Workers for large data exports to prevent UI blocking
+- **State Management**: Persist user chart preferences across sessions
+- **API Integration**: Extend existing metrics APIs to support custom date ranges
+- **File Handling**: Implement secure file generation and download mechanisms
+
+**Business Value**:
+- **User Productivity**: Faster analysis with customizable charts and export options
+- **Reporting**: Streamlined creation of executive dashboards and reports
+- **Compliance**: Audit-ready data exports for regulatory requirements
+- **Customer Satisfaction**: Professional-grade analytics tools competing with enterprise solutions
+
+**Current User Impact**: 
+- **Minor Confusion**: Users may click non-functional buttons expecting features
+- **Workaround**: Users can screenshot charts or copy data manually
+- **No Breaking Issues**: Chart functionality works correctly, only missing enhancement features
+
+**Future Enhancement**: Implement comprehensive chart control features to provide enterprise-grade analytics capabilities matching industry-leading monitoring platforms
+
+---
+
 

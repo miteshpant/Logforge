@@ -156,15 +156,15 @@ export default function SecurityAnalyticsPage(): React.ReactElement {
         setDashboard(dashboardResponse.data)
       }
       
-      if (eventsResponse.success && eventsResponse.data) {
+      if (eventsResponse && eventsResponse.data) {
         setSecurityEvents(eventsResponse.data || [])
       }
       
-      if (rulesResponse.success && rulesResponse.data) {
+      if (rulesResponse && rulesResponse.data) {
         setSigmaRules(rulesResponse.data || [])
       }
       
-      if (threatIntelResponse.success && threatIntelResponse.data) {
+      if (threatIntelResponse && threatIntelResponse.data) {
         setThreatIntel(threatIntelResponse.data || [])
       }
     } catch (err: any) {
@@ -253,7 +253,7 @@ export default function SecurityAnalyticsPage(): React.ReactElement {
       if (response.success) {
         // Refresh threat hunts
         const huntsResponse = await SecurityApi.listThreatHunts({ limit: 10 })
-        if (huntsResponse.success && huntsResponse.data) {
+        if (huntsResponse && huntsResponse.data) {
           setThreatHunts(huntsResponse.data)
         }
       }
@@ -278,9 +278,9 @@ export default function SecurityAnalyticsPage(): React.ReactElement {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-6" data-testid="security-container">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between" data-testid="security-header">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Security Operations Center</h1>
             <p className="text-gray-600 mt-1">
@@ -359,13 +359,13 @@ export default function SecurityAnalyticsPage(): React.ReactElement {
         </div>
 
         {/* Security Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={setActiveTab} data-testid="security-tabs">
           <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="events">Security Events ({securityEvents.length})</TabsTrigger>
-            <TabsTrigger value="rules">Detection Rules ({sigmaRules.length})</TabsTrigger>
-            <TabsTrigger value="threat-intel">Threat Intelligence ({threatIntel.length})</TabsTrigger>
-            <TabsTrigger value="hunting">Threat Hunting</TabsTrigger>
+            <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
+            <TabsTrigger value="events" data-testid="tab-events">Security Events ({securityEvents.length})</TabsTrigger>
+            <TabsTrigger value="rules" data-testid="tab-rules">Detection Rules ({sigmaRules.length})</TabsTrigger>
+            <TabsTrigger value="threat-intel" data-testid="tab-threat-intel">Threat Intelligence ({threatIntel.length})</TabsTrigger>
+            <TabsTrigger value="hunting" data-testid="tab-hunting">Threat Hunting</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="mt-6">
