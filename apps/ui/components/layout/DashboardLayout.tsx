@@ -229,18 +229,34 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   </div>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>Account</DropdownMenuLabel>
-                <DropdownMenuItem data-testid="profile-settings">
+              <DropdownMenuContent 
+                align="end" 
+                className="w-56 bg-white border border-slate-200 shadow-lg rounded-md p-1 z-50"
+                style={{ backdropFilter: 'none' }}
+              >
+                <DropdownMenuLabel className="px-3 py-2 text-sm font-semibold text-slate-900 bg-slate-50">
+                  Account
+                </DropdownMenuLabel>
+                <DropdownMenuItem 
+                  data-testid="profile-settings"
+                  className="flex items-center px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer rounded-sm"
+                >
                   <User className="w-4 h-4 mr-2" />
                   Profile Settings
                 </DropdownMenuItem>
-                <DropdownMenuItem data-testid="preferences">
+                <DropdownMenuItem 
+                  data-testid="preferences"
+                  className="flex items-center px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer rounded-sm"
+                >
                   <Settings className="w-4 h-4 mr-2" />
                   Preferences
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} data-testid="logout-button">
+                <DropdownMenuSeparator className="my-1 border-slate-200" />
+                <DropdownMenuItem 
+                  onClick={handleLogout} 
+                  data-testid="logout-button"
+                  className="flex items-center px-3 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 cursor-pointer rounded-sm font-medium"
+                >
                   <LogOut className="w-4 h-4 mr-2" />
                   Sign Out
                 </DropdownMenuItem>

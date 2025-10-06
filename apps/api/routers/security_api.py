@@ -7,8 +7,10 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from fastapi import APIRouter, HTTPException, Header, BackgroundTasks, Query, Depends
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import structlog
+import json
 
 from services.security_service import SecurityService, AttackTechnique
 from authn_authz_middleware import get_current_user
@@ -474,6 +476,66 @@ async def list_mitre_techniques() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Failed to list MITRE techniques: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get techniques: {str(e)}")
+
+
+def format_sse_message(event_type: str, data: Any, event_id: Optional[str] = None) -> str:
+    """Format data as Server-Sent Events message"""
+    message = ""
+    if event_id:
+        message += f"id: {event_id}\n"
+    message += f"event: {event_type}\n"
+    message += f"data: {json.dumps(data)}\n\n"
+    return message
+
+
+@router.get("/events/stream")
+async def stream_security_events(
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Stream real-time security events"""
+    try:
+        async def generate_security_events():
+            while True:
+                try:
+                    # Get recent security events
+                    events = await security_service.get_security_events(
+                        customer_id=customer_id,
+                        limit=20,
+                        status_filter=None
+                    )
+                    
+                    # Filter for recent events (last 5 minutes)
+                    recent_events = [
+                        event for event in events
+                        if datetime.fromisoformat(event.get('timestamp', '1970-01-01')) > 
+                           datetime.now() - timedelta(minutes=5)
+                    ]
+                    
+                    if recent_events:
+                        yield format_sse_message("security_events", recent_events)
+                    
+                    await asyncio.sleep(15)  # Update every 15 seconds
+                    
+                except Exception as e:
+                    logger.error("Error streaming security events", error=str(e), customer_id=customer_id)
+                    yield format_sse_message("error", {"message": f"Security events streaming error: {str(e)}"})
+                    break
+        
+        return StreamingResponse(
+            generate_security_events(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+            }
+        )
+        
+    except Exception as e:
+        logger.error("Failed to start security events stream", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to start security events stream: {str(e)}")
+
 
 # Initialize default security content on startup
 @router.on_event("startup")

@@ -3,12 +3,15 @@ M8 API Usage Tracking & Billing API
 FastAPI router for usage analytics, billing estimates, and cost tracking
 """
 
-from fastapi import APIRouter, HTTPException, Request, Depends, Query
+from fastapi import APIRouter, HTTPException, Request, Depends, Query, Header
+from fastapi.responses import StreamingResponse
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta, timezone
 import structlog
 import uuid
 import time
+import json
+import asyncio
 
 from models import (
     UsageCurrentResponse, BillingEstimateResponse, UsageHistoryResponse,
@@ -718,6 +721,64 @@ async def get_usage_buffer_status(
     except Exception as e:
         logger.error("Usage buffer status failed", error=str(e))
         raise HTTPException(500, "Usage buffer status failed")
+
+
+def format_sse_message(event_type: str, data: Any, event_id: Optional[str] = None) -> str:
+    """Format data as Server-Sent Events message"""
+    message = ""
+    if event_id:
+        message += f"id: {event_id}\n"
+    message += f"event: {event_type}\n"
+    message += f"data: {json.dumps(data)}\n\n"
+    return message
+
+
+@router.get("/stream/{tenant_id}")
+async def stream_usage_data(
+    tenant_id: str,
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Stream real-time usage data"""
+    try:
+        # Validate tenant access
+        if customer_id != tenant_id:
+            raise HTTPException(status_code=403, detail="Access denied to tenant data")
+            
+        async def generate_usage():
+            while True:
+                try:
+                    # Get current usage statistics using real UsageService
+                    usage_data = await usage_service.get_usage_summary(
+                        customer_id=tenant_id,
+                        start_date=datetime.now().date() - timedelta(days=1),
+                        end_date=datetime.now().date()
+                    )
+                    
+                    if usage_data:
+                        yield format_sse_message("usage", usage_data)
+                    
+                    await asyncio.sleep(30)  # Update every 30 seconds
+                    
+                except Exception as e:
+                    logger.error("Error streaming usage data", error=str(e), tenant_id=tenant_id)
+                    yield format_sse_message("error", {"message": f"Usage streaming error: {str(e)}"})
+                    break
+        
+        return StreamingResponse(
+            generate_usage(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+            }
+        )
+        
+    except Exception as e:
+        logger.error("Failed to start usage stream", error=str(e), tenant_id=tenant_id)
+        raise HTTPException(status_code=500, detail=f"Failed to start usage stream: {str(e)}")
+
 
 # =================================================================
 # GLOBAL SERVICE INSTANCES

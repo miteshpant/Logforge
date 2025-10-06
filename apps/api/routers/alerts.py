@@ -4,9 +4,12 @@ Alert management API endpoints - M3 core functionality
 
 import time
 import structlog
+import json
+import asyncio
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timezone
-from fastapi import APIRouter, Request, HTTPException
+from datetime import datetime, timezone, timedelta
+from fastapi import APIRouter, Request, HTTPException, Header
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 logger = structlog.get_logger(__name__)
@@ -377,3 +380,62 @@ async def create_webhook(webhook_request: Dict[str, Any], customer_id: str = Mid
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create webhook: {str(e)}")
+
+
+def format_sse_message(event_type: str, data: Any, event_id: Optional[str] = None) -> str:
+    """Format data as Server-Sent Events message"""
+    message = ""
+    if event_id:
+        message += f"id: {event_id}\n"
+    message += f"event: {event_type}\n"
+    message += f"data: {json.dumps(data)}\n\n"
+    return message
+
+
+@router.get("/events/stream")
+async def stream_alerts(
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Stream real-time alert events"""
+    try:
+        async def generate_alerts():
+            while True:
+                try:
+                    # Get recent alerts using the existing alert service
+                    alerts = await alert_service.get_alerts(
+                        customer_id=customer_id,
+                        limit=20,
+                        status_filter=None
+                    )
+                    
+                    # Filter for recent alerts (last 10 minutes)
+                    recent_alerts = [
+                        alert for alert in alerts
+                        if datetime.fromisoformat(alert.get('created_at', '1970-01-01')) > 
+                           datetime.now() - timedelta(minutes=10)
+                    ]
+                    
+                    if recent_alerts:
+                        yield format_sse_message("alerts", recent_alerts)
+                    
+                    await asyncio.sleep(20)  # Update every 20 seconds
+                    
+                except Exception as e:
+                    logger.error("Error streaming alerts", error=str(e), customer_id=customer_id)
+                    yield format_sse_message("error", {"message": f"Alerts streaming error: {str(e)}"})
+                    break
+        
+        return StreamingResponse(
+            generate_alerts(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+            }
+        )
+        
+    except Exception as e:
+        logger.error("Failed to start alerts stream", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to start alerts stream: {str(e)}")

@@ -1,654 +1,340 @@
 """
-Real-Time Streaming API - Server-Sent Events (SSE) Endpoints
-Provides live streaming capabilities for observability, security, alerts, usage, and AI insights
+Streaming API - Server-Sent Events for Real-Time Data
+Real-time streaming endpoints for metrics, traces, security events, alerts, usage, and AI insights
 """
 
-import asyncio
-import json
-import time
-import uuid
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, AsyncGenerator
-from fastapi import APIRouter, HTTPException, Depends, Query, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, Header
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from typing import Optional, Dict, Any, List
 import structlog
+import json
+import asyncio
+from datetime import datetime, timedelta
 
-from authn_authz_middleware import get_current_user
-from models import User
 from services.observability_service import ObservabilityService
 from services.security_service import SecurityService
+from services.alert_service import AlertService
 from services.usage_service import UsageService
-from services.ai_service import AiService
+from services.ai_service import AIService
 
 logger = structlog.get_logger(__name__)
 
-router = APIRouter(prefix="/v1", tags=["streaming"])
+router = APIRouter(prefix="/v1/stream", tags=["streaming"])
 
-# Service instances
-observability_service = ObservabilityService()
-security_service = SecurityService()
-usage_service = UsageService()
-ai_service = AiService()
 
-# SSE response headers
-SSE_HEADERS = {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    "Connection": "keep-alive",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Cache-Control",
-}
-
-# Active streaming connections tracking for cleanup
-active_connections: Dict[str, Dict[str, Any]] = {}
-
-class StreamingResponse(StreamingResponse):
-    """Custom SSE Streaming Response with proper headers"""
-    def __init__(self, content, status_code: int = 200):
-        super().__init__(content=content, status_code=status_code, headers=SSE_HEADERS, media_type="text/event-stream")
-
-def format_sse_message(data: Dict[str, Any], event_type: str = "message") -> str:
+def format_sse_message(event_type: str, data: Any, event_id: Optional[str] = None) -> str:
     """Format data as Server-Sent Events message"""
-    return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+    message = ""
+    if event_id:
+        message += f"id: {event_id}\n"
+    message += f"event: {event_type}\n"
+    message += f"data: {json.dumps(data)}\n\n"
+    return message
 
-async def heartbeat_generator() -> AsyncGenerator[str, None]:
-    """Generate periodic heartbeat messages to keep connection alive"""
-    while True:
-        yield format_sse_message({"type": "heartbeat", "timestamp": datetime.now().isoformat()}, "heartbeat")
-        await asyncio.sleep(30)  # Send heartbeat every 30 seconds
 
-# =================================================================
-# OBSERVABILITY STREAMING ENDPOINTS
-# =================================================================
-
-@router.get("/observability/metrics/stream")
+@router.get("/metrics")
 async def stream_metrics(
-    metrics: str = Query(..., description="Comma-separated list of metric names to stream"),
-    current_user: User = Depends(get_current_user),
-    request: Request = None
+    metric_names: str = "cpu_usage,memory_usage,disk_usage",
+    customer_id: str = Header(..., alias="X-Customer-ID")
 ):
-    """
-    Stream real-time metrics data
-    
-    Streams selected metrics in real-time using Server-Sent Events.
-    Client will receive metric updates as they occur.
-    """
-    connection_id = str(uuid.uuid4())
-    metric_names = [m.strip() for m in metrics.split(',')]
-    
-    logger.info("Starting metrics stream", 
-                connection_id=connection_id, 
-                metrics=metric_names,
-                user_id=current_user.id)
-    
-    async def metrics_stream_generator():
-        try:
-            active_connections[connection_id] = {
-                "type": "metrics",
-                "user_id": current_user.id,
-                "metrics": metric_names,
-                "started_at": datetime.now()
-            }
-            
-            # Send initial connection confirmation
-            yield format_sse_message({
-                "type": "connection_established",
-                "connection_id": connection_id,
-                "metrics": metric_names,
-                "timestamp": datetime.now().isoformat()
-            }, "connection")
-            
-            # Stream metrics data
-            last_update = time.time()
+    """Stream real-time metrics data"""
+    try:
+        observability_service = ObservabilityService()
+        metric_list = metric_names.split(",")
+        
+        async def generate_metrics():
             while True:
                 try:
-                    # Check if client disconnected
-                    if await request.is_disconnected():
-                        logger.info("Client disconnected", connection_id=connection_id)
-                        break
+                    # Get latest metrics for the specified names
+                    metrics = await observability_service.get_metrics(
+                        customer_id=customer_id,
+                        metric_name=None,
+                        hours=1,
+                        limit=100
+                    )
                     
-                    # Generate sample metrics data (replace with real observability service calls)
-                    current_time = datetime.now()
-                    for metric_name in metric_names:
-                        metric_data = await generate_sample_metric(metric_name, current_time)
-                        yield format_sse_message(metric_data, "metric")
+                    # Filter metrics by requested names
+                    filtered_metrics = [
+                        metric for metric in metrics 
+                        if metric.get('name') in metric_list
+                    ]
                     
-                    # Stream interval - every 2 seconds
-                    await asyncio.sleep(2)
+                    if filtered_metrics:
+                        yield format_sse_message("metrics", filtered_metrics)
                     
-                except asyncio.CancelledError:
-                    logger.info("Metrics stream cancelled", connection_id=connection_id)
-                    break
+                    await asyncio.sleep(5)  # Update every 5 seconds
+                    
                 except Exception as e:
-                    logger.error("Error in metrics stream", connection_id=connection_id, error=str(e))
-                    yield format_sse_message({
-                        "type": "error",
-                        "message": f"Stream error: {str(e)}",
-                        "timestamp": datetime.now().isoformat()
-                    }, "error")
+                    logger.error("Error streaming metrics", error=str(e), customer_id=customer_id)
+                    yield format_sse_message("error", {"message": f"Metrics streaming error: {str(e)}"})
                     break
-                    
-        finally:
-            # Cleanup connection
-            if connection_id in active_connections:
-                del active_connections[connection_id]
-            logger.info("Metrics stream ended", connection_id=connection_id)
-    
-    return StreamingResponse(metrics_stream_generator())
+        
+        return StreamingResponse(
+            generate_metrics(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+            }
+        )
+        
+    except Exception as e:
+        logger.error("Failed to start metrics stream", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to start metrics stream: {str(e)}")
 
-@router.get("/observability/traces/stream")
+
+@router.get("/traces")
 async def stream_traces(
-    min_duration: int = Query(100, description="Minimum trace duration in milliseconds"),
-    status: str = Query("error,timeout", description="Comma-separated status filters"),
-    current_user: User = Depends(get_current_user),
-    request: Request = None
+    customer_id: str = Header(..., alias="X-Customer-ID")
 ):
-    """Stream real-time distributed tracing data"""
-    connection_id = str(uuid.uuid4())
-    status_filters = [s.strip() for s in status.split(',')]
-    
-    logger.info("Starting traces stream", 
-                connection_id=connection_id,
-                min_duration=min_duration,
-                status_filters=status_filters,
-                user_id=current_user.id)
-    
-    async def traces_stream_generator():
-        try:
-            active_connections[connection_id] = {
-                "type": "traces",
-                "user_id": current_user.id,
-                "filters": {"min_duration": min_duration, "status": status_filters},
-                "started_at": datetime.now()
-            }
-            
-            yield format_sse_message({
-                "type": "connection_established",
-                "connection_id": connection_id,
-                "filters": {"min_duration": min_duration, "status": status_filters},
-                "timestamp": datetime.now().isoformat()
-            }, "connection")
-            
+    """Stream real-time trace data"""
+    try:
+        observability_service = ObservabilityService()
+        
+        async def generate_traces():
             while True:
                 try:
-                    if await request.is_disconnected():
-                        break
+                    # Get recent traces
+                    traces = await observability_service.search_traces(
+                        customer_id=customer_id,
+                        filters={
+                            "start_time": datetime.now() - timedelta(minutes=5),
+                            "end_time": datetime.now(),
+                            "limit": 10
+                        },
+                        limit=10
+                    )
                     
-                    # Generate sample trace data
-                    trace_data = await generate_sample_trace(min_duration, status_filters)
-                    if trace_data:
-                        yield format_sse_message(trace_data, "trace")
+                    if traces:
+                        yield format_sse_message("traces", traces)
                     
-                    await asyncio.sleep(3)  # Traces every 3 seconds
+                    await asyncio.sleep(10)  # Update every 10 seconds
                     
-                except asyncio.CancelledError:
-                    break
                 except Exception as e:
-                    logger.error("Error in traces stream", connection_id=connection_id, error=str(e))
+                    logger.error("Error streaming traces", error=str(e), customer_id=customer_id)
+                    yield format_sse_message("error", {"message": f"Traces streaming error: {str(e)}"})
                     break
-                    
-        finally:
-            if connection_id in active_connections:
-                del active_connections[connection_id]
-            logger.info("Traces stream ended", connection_id=connection_id)
-    
-    return StreamingResponse(traces_stream_generator())
+        
+        return StreamingResponse(
+            generate_traces(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+            }
+        )
+        
+    except Exception as e:
+        logger.error("Failed to start traces stream", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to start traces stream: {str(e)}")
 
-# =================================================================
-# SECURITY STREAMING ENDPOINTS
-# =================================================================
 
-@router.get("/security/events/stream")
+@router.get("/security")
 async def stream_security_events(
-    severity: str = Query("medium,high,critical", description="Comma-separated severity levels"),
-    current_user: User = Depends(get_current_user),
-    request: Request = None
+    customer_id: str = Header(..., alias="X-Customer-ID")
 ):
-    """Stream real-time security events and threat detections"""
-    connection_id = str(uuid.uuid4())
-    severity_filters = [s.strip() for s in severity.split(',')]
-    
-    logger.info("Starting security events stream", 
-                connection_id=connection_id,
-                severity_filters=severity_filters,
-                user_id=current_user.id)
-    
-    async def security_stream_generator():
-        try:
-            active_connections[connection_id] = {
-                "type": "security",
-                "user_id": current_user.id,
-                "severity_filters": severity_filters,
-                "started_at": datetime.now()
-            }
-            
-            yield format_sse_message({
-                "type": "connection_established",
-                "connection_id": connection_id,
-                "severity_filters": severity_filters,
-                "timestamp": datetime.now().isoformat()
-            }, "connection")
-            
+    """Stream real-time security events"""
+    try:
+        security_service = SecurityService()
+        
+        async def generate_security_events():
             while True:
                 try:
-                    if await request.is_disconnected():
-                        break
+                    # Get recent security events
+                    events = await security_service.get_security_events(
+                        customer_id=customer_id,
+                        limit=20,
+                        status_filter=None
+                    )
                     
-                    # Generate sample security event
-                    security_event = await generate_sample_security_event(severity_filters)
-                    if security_event:
-                        yield format_sse_message(security_event, "security_event")
+                    # Filter for recent events (last 5 minutes)
+                    recent_events = [
+                        event for event in events
+                        if datetime.fromisoformat(event.get('timestamp', '1970-01-01')) > 
+                           datetime.now() - timedelta(minutes=5)
+                    ]
                     
-                    await asyncio.sleep(5)  # Security events every 5 seconds
+                    if recent_events:
+                        yield format_sse_message("security_events", recent_events)
                     
-                except asyncio.CancelledError:
-                    break
+                    await asyncio.sleep(15)  # Update every 15 seconds
+                    
                 except Exception as e:
-                    logger.error("Error in security stream", connection_id=connection_id, error=str(e))
+                    logger.error("Error streaming security events", error=str(e), customer_id=customer_id)
+                    yield format_sse_message("error", {"message": f"Security events streaming error: {str(e)}"})
                     break
-                    
-        finally:
-            if connection_id in active_connections:
-                del active_connections[connection_id]
-            logger.info("Security stream ended", connection_id=connection_id)
-    
-    return StreamingResponse(security_stream_generator())
-
-# =================================================================
-# ALERTS STREAMING ENDPOINTS
-# =================================================================
-
-@router.get("/alerts/events/stream")
-async def stream_alert_events(
-    severity: str = Query("medium,high,critical", description="Comma-separated severity levels"),
-    current_user: User = Depends(get_current_user),
-    request: Request = None
-):
-    """Stream real-time alert notifications and rule triggers"""
-    connection_id = str(uuid.uuid4())
-    severity_filters = [s.strip() for s in severity.split(',')]
-    
-    logger.info("Starting alert events stream", 
-                connection_id=connection_id,
-                severity_filters=severity_filters,
-                user_id=current_user.id)
-    
-    async def alerts_stream_generator():
-        try:
-            active_connections[connection_id] = {
-                "type": "alerts",
-                "user_id": current_user.id,
-                "severity_filters": severity_filters,
-                "started_at": datetime.now()
+        
+        return StreamingResponse(
+            generate_security_events(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
             }
-            
-            yield format_sse_message({
-                "type": "connection_established",
-                "connection_id": connection_id,
-                "severity_filters": severity_filters,
-                "timestamp": datetime.now().isoformat()
-            }, "connection")
-            
+        )
+        
+    except Exception as e:
+        logger.error("Failed to start security events stream", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to start security events stream: {str(e)}")
+
+
+@router.get("/alerts")
+async def stream_alerts(
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Stream real-time alert events"""
+    try:
+        alert_service = AlertService()
+        
+        async def generate_alerts():
             while True:
                 try:
-                    if await request.is_disconnected():
-                        break
+                    # Get recent alerts
+                    alerts = await alert_service.get_alerts(
+                        customer_id=customer_id,
+                        limit=20,
+                        status_filter=None
+                    )
                     
-                    # Generate sample alert event
-                    alert_event = await generate_sample_alert_event(severity_filters)
-                    if alert_event:
-                        yield format_sse_message(alert_event, "alert_event")
+                    # Filter for recent alerts (last 10 minutes)
+                    recent_alerts = [
+                        alert for alert in alerts
+                        if datetime.fromisoformat(alert.get('created_at', '1970-01-01')) > 
+                           datetime.now() - timedelta(minutes=10)
+                    ]
                     
-                    await asyncio.sleep(4)  # Alert events every 4 seconds
+                    if recent_alerts:
+                        yield format_sse_message("alerts", recent_alerts)
                     
-                except asyncio.CancelledError:
-                    break
+                    await asyncio.sleep(20)  # Update every 20 seconds
+                    
                 except Exception as e:
-                    logger.error("Error in alerts stream", connection_id=connection_id, error=str(e))
+                    logger.error("Error streaming alerts", error=str(e), customer_id=customer_id)
+                    yield format_sse_message("error", {"message": f"Alerts streaming error: {str(e)}"})
                     break
-                    
-        finally:
-            if connection_id in active_connections:
-                del active_connections[connection_id]
-            logger.info("Alerts stream ended", connection_id=connection_id)
-    
-    return StreamingResponse(alerts_stream_generator())
-
-# =================================================================
-# USAGE STREAMING ENDPOINTS
-# =================================================================
-
-@router.get("/usage/stream/{tenant_id}")
-async def stream_usage_updates(
-    tenant_id: str,
-    current_user: User = Depends(get_current_user),
-    request: Request = None
-):
-    """Stream real-time usage metrics and billing data for a tenant"""
-    connection_id = str(uuid.uuid4())
-    
-    logger.info("Starting usage stream", 
-                connection_id=connection_id,
-                tenant_id=tenant_id,
-                user_id=current_user.id)
-    
-    async def usage_stream_generator():
-        try:
-            active_connections[connection_id] = {
-                "type": "usage",
-                "user_id": current_user.id,
-                "tenant_id": tenant_id,
-                "started_at": datetime.now()
+        
+        return StreamingResponse(
+            generate_alerts(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
             }
-            
-            yield format_sse_message({
-                "type": "connection_established",
-                "connection_id": connection_id,
-                "tenant_id": tenant_id,
-                "timestamp": datetime.now().isoformat()
-            }, "connection")
-            
+        )
+        
+    except Exception as e:
+        logger.error("Failed to start alerts stream", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to start alerts stream: {str(e)}")
+
+
+@router.get("/usage")
+async def stream_usage_data(
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Stream real-time usage data"""
+    try:
+        usage_service = UsageService()
+        
+        async def generate_usage():
             while True:
                 try:
-                    if await request.is_disconnected():
-                        break
+                    # Get current usage statistics
+                    usage_data = await usage_service.get_usage_summary(
+                        customer_id=customer_id,
+                        start_date=datetime.now().date() - timedelta(days=1),
+                        end_date=datetime.now().date()
+                    )
                     
-                    # Generate sample usage data
-                    usage_data = await generate_sample_usage_data(tenant_id)
                     if usage_data:
-                        yield format_sse_message(usage_data, "usage_update")
+                        yield format_sse_message("usage", usage_data)
                     
-                    await asyncio.sleep(6)  # Usage updates every 6 seconds
+                    await asyncio.sleep(30)  # Update every 30 seconds
                     
-                except asyncio.CancelledError:
-                    break
                 except Exception as e:
-                    logger.error("Error in usage stream", connection_id=connection_id, error=str(e))
+                    logger.error("Error streaming usage data", error=str(e), customer_id=customer_id)
+                    yield format_sse_message("error", {"message": f"Usage streaming error: {str(e)}"})
                     break
-                    
-        finally:
-            if connection_id in active_connections:
-                del active_connections[connection_id]
-            logger.info("Usage stream ended", connection_id=connection_id)
-    
-    return StreamingResponse(usage_stream_generator())
-
-# =================================================================
-# AI INSIGHTS STREAMING ENDPOINTS
-# =================================================================
-
-@router.get("/ai/analysis/{analysis_id}/stream")
-async def stream_ai_analysis_results(
-    analysis_id: str,
-    current_user: User = Depends(get_current_user),
-    request: Request = None
-):
-    """Stream real-time AI analysis results and insights"""
-    connection_id = str(uuid.uuid4())
-    
-    logger.info("Starting AI analysis stream", 
-                connection_id=connection_id,
-                analysis_id=analysis_id,
-                user_id=current_user.id)
-    
-    async def ai_stream_generator():
-        try:
-            active_connections[connection_id] = {
-                "type": "ai_analysis",
-                "user_id": current_user.id,
-                "analysis_id": analysis_id,
-                "started_at": datetime.now()
+        
+        return StreamingResponse(
+            generate_usage(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
             }
-            
-            yield format_sse_message({
-                "type": "connection_established",
-                "connection_id": connection_id,
-                "analysis_id": analysis_id,
-                "timestamp": datetime.now().isoformat()
-            }, "connection")
-            
-            # Simulate AI analysis progress
-            analysis_steps = [
-                {"type": "progress", "step": "data_collection", "progress": 20},
-                {"type": "progress", "step": "pattern_analysis", "progress": 40},
-                {"type": "progress", "step": "anomaly_detection", "progress": 60},
-                {"type": "progress", "step": "root_cause_analysis", "progress": 80},
-                {"type": "insight", "step": "insights_generation", "progress": 90},
-                {"type": "result", "step": "complete", "progress": 100},
-            ]
-            
-            for step in analysis_steps:
+        )
+        
+    except Exception as e:
+        logger.error("Failed to start usage stream", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to start usage stream: {str(e)}")
+
+
+@router.get("/ai-insights")
+async def stream_ai_insights(
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Stream real-time AI insights and anomaly detections"""
+    try:
+        ai_service = AIService()
+        
+        async def generate_ai_insights():
+            while True:
                 try:
-                    if await request.is_disconnected():
-                        break
+                    # Get recent AI insights
+                    insights = await ai_service.get_anomaly_insights(
+                        customer_id=customer_id,
+                        hours=1,
+                        limit=10
+                    )
                     
-                    ai_result = await generate_sample_ai_result(analysis_id, step)
-                    if ai_result:
-                        yield format_sse_message(ai_result, "ai_result")
+                    if insights:
+                        yield format_sse_message("ai_insights", insights)
                     
-                    await asyncio.sleep(3)  # Each step takes ~3 seconds
+                    await asyncio.sleep(45)  # Update every 45 seconds
                     
-                except asyncio.CancelledError:
-                    break
                 except Exception as e:
-                    logger.error("Error in AI stream", connection_id=connection_id, error=str(e))
+                    logger.error("Error streaming AI insights", error=str(e), customer_id=customer_id)
+                    yield format_sse_message("error", {"message": f"AI insights streaming error: {str(e)}"})
                     break
-            
-            # Send completion message
-            yield format_sse_message({
-                "type": "completed",
-                "analysis_id": analysis_id,
-                "timestamp": datetime.now().isoformat()
-            }, "completion")
-                    
-        finally:
-            if connection_id in active_connections:
-                del active_connections[connection_id]
-            logger.info("AI analysis stream ended", connection_id=connection_id)
-    
-    return StreamingResponse(ai_stream_generator())
+        
+        return StreamingResponse(
+            generate_ai_insights(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+            }
+        )
+        
+    except Exception as e:
+        logger.error("Failed to start AI insights stream", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to start AI insights stream: {str(e)}")
 
-# =================================================================
-# SAMPLE DATA GENERATORS (Replace with real service calls)
-# =================================================================
 
-async def generate_sample_metric(metric_name: str, timestamp: datetime) -> Dict[str, Any]:
-    """Generate sample metric data"""
-    import random
-    
-    base_values = {
-        "http_request_duration_milliseconds": lambda: random.uniform(50, 500),
-        "http_requests_total": lambda: random.randint(100, 1000),
-        "cpu_usage_percent": lambda: random.uniform(10, 90),
-        "memory_usage_percent": lambda: random.uniform(20, 80),
-        "disk_io_bytes": lambda: random.randint(1000, 100000),
-        "network_throughput_bytes": lambda: random.randint(5000, 500000),
-    }
-    
-    value_generator = base_values.get(metric_name, lambda: random.uniform(0, 100))
-    
+@router.get("/health")
+async def streaming_health():
+    """Health check for streaming service"""
     return {
-        "metric_name": metric_name,
-        "value": value_generator(),
-        "timestamp": timestamp.isoformat(),
-        "labels": {
-            "service_name": random.choice(["api-gateway", "user-service", "auth-service", "data-processor"]),
-            "environment": "production",
-            "instance": f"server-{random.randint(1, 5)}"
-        }
-    }
-
-async def generate_sample_trace(min_duration: int, status_filters: List[str]) -> Optional[Dict[str, Any]]:
-    """Generate sample trace data"""
-    import random
-    
-    if random.random() < 0.3:  # 30% chance of generating a trace
-        status = random.choice(status_filters)
-        duration = random.randint(min_duration, min_duration * 10)
-        
-        return {
-            "trace_id": str(uuid.uuid4()),
-            "service_name": random.choice(["api-gateway", "user-service", "payment-service"]),
-            "operation_name": random.choice(["GET /users", "POST /payment", "GET /orders"]),
-            "start_time": datetime.now().isoformat(),
-            "duration": duration,
-            "status": status,
-            "span_count": random.randint(3, 15),
-            "tags": {
-                "http.method": random.choice(["GET", "POST", "PUT"]),
-                "http.status_code": random.choice([200, 404, 500]) if status == "error" else 200
-            }
-        }
-    return None
-
-async def generate_sample_security_event(severity_filters: List[str]) -> Optional[Dict[str, Any]]:
-    """Generate sample security event"""
-    import random
-    
-    if random.random() < 0.2:  # 20% chance of generating a security event
-        event_types = [
-            "Brute Force Attack Detected",
-            "Suspicious PowerShell Execution",
-            "Unusual Network Traffic Pattern",
-            "Failed Authentication Spike",
-            "Privilege Escalation Attempt"
+        "status": "healthy",
+        "message": "Streaming service operational",
+        "endpoints": [
+            "/v1/stream/metrics",
+            "/v1/stream/traces", 
+            "/v1/stream/security",
+            "/v1/stream/alerts",
+            "/v1/stream/usage",
+            "/v1/stream/ai-insights"
         ]
-        
-        mitre_techniques = ["T1110", "T1059", "T1041", "T1078", "T1068"]
-        
-        return {
-            "id": str(uuid.uuid4()),
-            "rule_name": random.choice(event_types),
-            "severity": random.choice(severity_filters),
-            "description": f"Security event detected: {random.choice(event_types)}",
-            "timestamp": datetime.now().isoformat(),
-            "mitre_technique": random.choice(mitre_techniques),
-            "source_ip": f"192.168.{random.randint(1, 255)}.{random.randint(1, 255)}",
-            "target_ip": f"10.0.{random.randint(1, 255)}.{random.randint(1, 255)}",
-            "rule_id": f"sigma-{random.randint(1000, 9999)}"
-        }
-    return None
-
-async def generate_sample_alert_event(severity_filters: List[str]) -> Optional[Dict[str, Any]]:
-    """Generate sample alert event"""
-    import random
-    
-    if random.random() < 0.25:  # 25% chance of generating an alert
-        alert_types = [
-            "High CPU Usage Alert",
-            "Memory Threshold Exceeded",
-            "Disk Space Critical",
-            "Error Rate Spike",
-            "Response Time Degradation"
-        ]
-        
-        return {
-            "id": str(uuid.uuid4()),
-            "rule_name": random.choice(alert_types),
-            "severity": random.choice(severity_filters),
-            "message": f"Alert triggered: {random.choice(alert_types)}",
-            "triggered_at": datetime.now().isoformat(),
-            "rule_id": f"alert-{random.randint(1000, 9999)}",
-            "condition": "threshold_exceeded",
-            "threshold": random.uniform(70, 95),
-            "current_value": random.uniform(75, 100)
-        }
-    return None
-
-async def generate_sample_usage_data(tenant_id: str) -> Optional[Dict[str, Any]]:
-    """Generate sample usage data"""
-    import random
-    
-    metric_types = ["data_ingestion_gb", "api_calls_count", "storage_used_gb", "alerts_triggered"]
-    
-    return {
-        "tenant_id": tenant_id,
-        "metric_type": random.choice(metric_types),
-        "current_value": random.uniform(100, 10000),
-        "timestamp": datetime.now().isoformat(),
-        "billing_period": datetime.now().strftime("%Y-%m"),
-        "rate_limit_status": "within_limits" if random.random() > 0.1 else "approaching_limit"
     }
-
-async def generate_sample_ai_result(analysis_id: str, step: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate sample AI analysis result"""
-    import random
-    
-    if step["type"] == "progress":
-        return {
-            "type": "progress",
-            "analysis_id": analysis_id,
-            "data": {
-                "step": step["step"],
-                "progress": step["progress"],
-                "message": f"Processing {step['step'].replace('_', ' ')}...",
-                "timestamp": datetime.now().isoformat()
-            }
-        }
-    elif step["type"] == "insight":
-        insights = [
-            "Detected unusual pattern in authentication logs",
-            "Identified potential performance bottleneck in API gateway",
-            "Found correlation between network spikes and error rates"
-        ]
-        return {
-            "type": "insight",
-            "analysis_id": analysis_id,
-            "data": {
-                "finding": random.choice(insights),
-                "confidence": random.uniform(0.7, 0.95),
-                "category": random.choice(["security", "performance", "reliability"]),
-                "timestamp": datetime.now().isoformat()
-            }
-        }
-    elif step["type"] == "result":
-        return {
-            "type": "result",
-            "analysis_id": analysis_id,
-            "data": {
-                "result": "Analysis completed successfully",
-                "insights_count": random.randint(3, 8),
-                "recommendations": random.randint(2, 5),
-                "confidence": random.uniform(0.8, 0.95),
-                "timestamp": datetime.now().isoformat()
-            }
-        }
-
-# =================================================================
-# STREAMING MANAGEMENT ENDPOINTS
-# =================================================================
-
-@router.get("/streaming/connections")
-async def get_active_connections(current_user: User = Depends(get_current_user)):
-    """Get information about active streaming connections"""
-    user_connections = {
-        conn_id: info for conn_id, info in active_connections.items()
-        if info["user_id"] == current_user.id
-    }
-    
-    return {
-        "active_connections": len(user_connections),
-        "connections": user_connections,
-        "total_system_connections": len(active_connections)
-    }
-
-@router.delete("/streaming/connections/{connection_id}")
-async def close_streaming_connection(
-    connection_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    """Close a specific streaming connection"""
-    if connection_id not in active_connections:
-        raise HTTPException(404, "Connection not found")
-    
-    connection_info = active_connections[connection_id]
-    if connection_info["user_id"] != current_user.id:
-        raise HTTPException(403, "Cannot close connection belonging to another user")
-    
-    del active_connections[connection_id]
-    logger.info("Streaming connection closed by user", 
-                connection_id=connection_id, 
-                user_id=current_user.id)
-    
-    return {"message": "Connection closed successfully", "connection_id": connection_id}

@@ -61,15 +61,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Check if user has valid session
       const authContext = apiClient.getAuthContext()
+      console.log('🔄 AuthContext initialization - auth context:', { 
+        isAuthenticated: authContext.isAuthenticated, 
+        hasToken: !!authContext.token,
+        tenantId: authContext.tenantId 
+      })
       
       if (authContext.isAuthenticated && authContext.token) {
+        // Validate JWT token format first
+        const tokenParts = authContext.token.split('.')
+        if (tokenParts.length !== 3) {
+          console.warn('Invalid JWT token format - not 3 parts')
+          throw new Error('Invalid JWT token format')
+        }
+        
         // Extract tenant_id and user_role from JWT token (same as login flow)
         try {
-          const tokenPayload = JSON.parse(atob(authContext.token.split('.')[1]))
+          const tokenPayload = JSON.parse(atob(tokenParts[1]))
           const tenantId = tokenPayload.tenant_id
           const userRole = tokenPayload.user_role
           
           if (!tenantId || !userRole) {
+            console.warn('JWT token missing tenant_id or user_role:', { tenantId, userRole })
             throw new Error('JWT token missing tenant_id or user_role')
           }
           
@@ -77,19 +90,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           apiClient.setAuth(authContext.token, tenantId, undefined)
           
           // Validate session with backend using correct tenant context
+          console.log('🔍 Testing session validation...')
           const userProfile = await AuthApi.getCurrentUser()
+          console.log('👤 getCurrentUser response:', userProfile)
           
-          if (userProfile.success) {
+          if (userProfile.success && userProfile.data) {
             // Fetch actual tenant information from API using tenant ID
             const tenantData = await TenantsApi.getTenant(tenantId)
             if (!tenantData) {
               throw new Error('Failed to fetch tenant information')
             }
             
-            // Use real tenant data from API (API returns tenant in data property)
-            const tenant = tenantData.data
-            if (!tenant) {
-              throw new Error('Tenant data not found')
+            // Handle different response formats - backend might return data directly or wrapped
+            let tenant
+            if (tenantData.data && tenantData.data.tenant_id) {
+              // Standard ApiResponse<Tenant> format (wrapped)
+              tenant = tenantData.data
+            } else if (tenantData.tenant_id) {
+              // Backend returns tenant directly (not wrapped) - this is the actual format
+              tenant = tenantData
+            } else {
+              throw new Error('Tenant data not found in expected format')
             }
             
             const tenantInfo: TenantInfo = {
@@ -112,6 +133,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setPermissions(['logs:read', 'analytics:read', 'dashboards:read'])
             setIsAuthenticated(true)
             
+            console.log('✅ Auth initialization successful:', {
+              userId: userProfile.data.id,
+              userEmail: userProfile.data.email,
+              tenantId: tenantId,
+              tenantName: tenantInfo.name,
+              userRole: userRole
+            })
+            
             // Fetch available tenants for multi-tenant support
             await loadAvailableTenants()
           } else {
@@ -119,18 +148,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } catch (jwtError) {
           console.error('Failed to parse JWT token:', jwtError)
+          // Clear invalid tokens
+          apiClient.logout()
           throw new Error('Invalid JWT token format')
         }
       } else {
-        // No valid session, redirect to login
+        // No valid session, clear any remaining state and proceed to login check
         setIsAuthenticated(false)
-        router.push('/login')
+        // Don't automatically redirect here - let the page routing handle it
       }
     } catch (error: any) {
       console.error('Auth initialization failed:', error)
-      setError('Authentication failed. Please log in again.')
+      // Only set error if we're not on the login page already
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+        setError('Authentication failed. Please log in again.')
+      }
       setIsAuthenticated(false)
-      router.push('/login')
+      // Clear any invalid auth state
+      apiClient.logout()
     } finally {
       setIsLoading(false)
     }
@@ -145,7 +180,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const loginResponse = await AuthApi.login({ email, password })
       
       if (loginResponse.success && loginResponse.data) {
-        const { access_token, user: userProfile, expires_in } = loginResponse.data
+        const { access_token, user: userProfile, expires_at } = loginResponse.data
         
         // Step 2: Extract tenant_id and user_role from JWT token (backend now includes both)
         const tokenPayload = JSON.parse(atob(access_token.split('.')[1]))
@@ -174,13 +209,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         // Handle different response formats - backend might return data directly or wrapped
         let tenant
-        if (tenantData.data) {
-          // Standard ApiResponse<Tenant> format
+        if (tenantData.data && tenantData.data.tenant_id) {
+          // Standard ApiResponse<Tenant> format (wrapped)
           tenant = tenantData.data
           console.log('🏢 Using tenant from .data property:', tenant)
         } else if (tenantData.tenant_id) {
-          // Backend returns tenant directly (not wrapped)
-          tenant = tenantData as any
+          // Backend returns tenant directly (not wrapped) - this is the actual format
+          tenant = tenantData
           console.log('🏢 Using tenant directly from response:', tenant)
         } else {
           console.error('🚨 Unexpected tenant response format:', tenantData)
@@ -303,10 +338,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Failed to fetch tenant information')
       }
       
-      // Use real tenant data from API (API returns tenant in data property)
-      const tenant = tenantData.data
-      if (!tenant) {
-        throw new Error('Tenant data not found')
+      // Handle different response formats - backend might return data directly or wrapped
+      let tenant
+      if (tenantData.data && tenantData.data.tenant_id) {
+        // Standard ApiResponse<Tenant> format (wrapped)
+        tenant = tenantData.data
+      } else if (tenantData.tenant_id) {
+        // Backend returns tenant directly (not wrapped) - this is the actual format
+        tenant = tenantData
+      } else {
+        throw new Error('Tenant data not found in expected format')
       }
       
       const newTenantInfo: TenantInfo = {

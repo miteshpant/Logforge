@@ -4,13 +4,14 @@ Multi-tenant APM capabilities with database-backed service/dao pattern
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Request, Header
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, ValidationError
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List, Union
 import structlog
 import json
 import uuid
+import asyncio
 from dataclasses import asdict
 from enum import Enum
 
@@ -502,3 +503,114 @@ async def observability_health():
     except Exception as e:
         logger.error("Observability health check failed", error=str(e))
         return {"status": "error", "message": f"Health check failed: {str(e)}"}
+
+
+def format_sse_message(event_type: str, data: Any, event_id: Optional[str] = None) -> str:
+    """Format data as Server-Sent Events message"""
+    message = ""
+    if event_id:
+        message += f"id: {event_id}\n"
+    message += f"event: {event_type}\n"
+    message += f"data: {json.dumps(data)}\n\n"
+    return message
+
+
+@router.get("/metrics/stream")
+async def stream_metrics(
+    metric_names: str = "cpu_usage,memory_usage,disk_usage",
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Stream real-time metrics data"""
+    try:
+        observability_service = ObservabilityService()
+        metric_list = metric_names.split(",")
+        
+        async def generate_metrics():
+            while True:
+                try:
+                    # Get latest metrics for the specified names
+                    metrics = await observability_service.get_metrics(
+                        customer_id=customer_id,
+                        metric_name=None,
+                        hours=1,
+                        limit=100
+                    )
+                    
+                    # Filter metrics by requested names
+                    filtered_metrics = [
+                        metric for metric in metrics 
+                        if metric.get('name') in metric_list
+                    ]
+                    
+                    if filtered_metrics:
+                        yield format_sse_message("metrics", filtered_metrics)
+                    
+                    await asyncio.sleep(5)  # Update every 5 seconds
+                    
+                except Exception as e:
+                    logger.error("Error streaming metrics", error=str(e), customer_id=customer_id)
+                    yield format_sse_message("error", {"message": f"Metrics streaming error: {str(e)}"})
+                    break
+        
+        return StreamingResponse(
+            generate_metrics(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+            }
+        )
+        
+    except Exception as e:
+        logger.error("Failed to start metrics stream", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to start metrics stream: {str(e)}")
+
+
+@router.get("/traces/stream")
+async def stream_traces(
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Stream real-time trace data"""
+    try:
+        observability_service = ObservabilityService()
+        
+        async def generate_traces():
+            while True:
+                try:
+                    # Get recent traces
+                    traces = await observability_service.search_traces(
+                        customer_id=customer_id,
+                        filters={
+                            "start_time": datetime.now() - timedelta(minutes=5),
+                            "end_time": datetime.now(),
+                            "limit": 10
+                        },
+                        limit=10
+                    )
+                    
+                    if traces:
+                        yield format_sse_message("traces", traces)
+                    
+                    await asyncio.sleep(10)  # Update every 10 seconds
+                    
+                except Exception as e:
+                    logger.error("Error streaming traces", error=str(e), customer_id=customer_id)
+                    yield format_sse_message("error", {"message": f"Traces streaming error: {str(e)}"})
+                    break
+        
+        return StreamingResponse(
+            generate_traces(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+            }
+        )
+        
+    except Exception as e:
+        logger.error("Failed to start traces stream", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to start traces stream: {str(e)}")

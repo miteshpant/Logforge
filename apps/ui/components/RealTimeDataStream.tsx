@@ -163,26 +163,38 @@ export const RealTimeDataStream: React.FC<RealTimeDataStreamProps> = ({
         streamCleanupRefs.current.push(alertsCleanup)
       }
 
-      // 4. Start usage tracking streaming
+      // 4. Start usage tracking streaming (using correct /v1/stream/usage endpoint)
       if (types.includes('log') && tenant) {
         console.log('📈 Starting usage stream...')
-        const usageCleanup = await UsageApi.streamUsageUpdates(
-          tenant.id,
+        const usageCleanup = await apiClient.getStream(
+          '/v1/stream/usage',
           (usageData) => {
-            const event: StreamEvent = {
-              id: `usage-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              timestamp: usageData.timestamp,
-              type: 'log',
-              severity: usageData.current_value > 1000 ? 'high' : 'low',
-              service: 'ingestion',
-              message: `${usageData.metric_type}: ${formatMetricValue(usageData.current_value, usageData.metric_type)}`,
-              metadata: {
-                tenant_id: tenant.id,
-                metric_type: usageData.metric_type,
-                value: usageData.current_value
-              }
+            // Usage stream returns: {"api_calls": 15420, "data_ingested_gb": 12.5, "storage_used_gb": 145.2, "cost_today": 25.80}
+            if (usageData && typeof usageData === 'object') {
+              const metrics = [
+                { key: 'api_calls', value: usageData.api_calls, label: 'API Calls' },
+                { key: 'data_ingested_gb', value: usageData.data_ingested_gb, label: 'Data Ingested (GB)' },
+                { key: 'storage_used_gb', value: usageData.storage_used_gb, label: 'Storage Used (GB)' },
+                { key: 'cost_today', value: usageData.cost_today, label: 'Cost Today ($)' }
+              ].filter(metric => metric.value !== undefined && metric.value !== null)
+              
+              metrics.forEach(metric => {
+                const event: StreamEvent = {
+                  id: `usage-${metric.key}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                  timestamp: new Date().toISOString(),
+                  type: 'log',
+                  severity: metric.value > 1000 ? 'high' : 'low',
+                  service: 'usage-tracker',
+                  message: `${metric.label}: ${formatMetricValue(metric.value, metric.key)}`,
+                  metadata: {
+                    tenant_id: tenant.id,
+                    metric_type: metric.key,
+                    value: metric.value
+                  }
+                }
+                addEvent(event)
+              })
             }
-            addEvent(event)
           },
           (error) => console.error('Usage stream error:', error)
         )
@@ -224,17 +236,18 @@ export const RealTimeDataStream: React.FC<RealTimeDataStreamProps> = ({
         console.log('🧠 Starting AI insights stream...')
         // Note: AI streaming requires an analysis ID, so we'll start a general monitoring analysis
         try {
-          const analysisResponse = await AiApi.startRootCauseAnalysis({
-            description: 'Real-time monitoring analysis',
-            context: { 
-              time_range: '5m',
+          const analysisResponse = await AiApi.performRootCauseAnalysis({
+            symptoms: ['Real-time monitoring analysis'],
+            time_range: '5m',
+            affected_services: [],
+            incident_context: { 
               scope: 'platform'
             }
           })
           
-          if (analysisResponse.data?.analysis_id) {
+          if (analysisResponse.data?.id) {
             const aiCleanup = await AiApi.streamAnalysisResults(
-              analysisResponse.data.analysis_id,
+              analysisResponse.data.id,
               (aiResult) => {
                 // Only process insights and results, skip progress updates
                 if (aiResult.type !== 'progress') {
@@ -246,7 +259,7 @@ export const RealTimeDataStream: React.FC<RealTimeDataStreamProps> = ({
                     service: 'ai-engine',
                     message: `AI ${aiResult.type}: ${aiResult.data?.finding || aiResult.data?.result || aiResult.data?.message || 'Analysis update'}`,
                     metadata: {
-                      analysis_id: analysisResponse.data.analysis_id,
+                      analysis_id: analysisResponse.data.id,
                       update_type: aiResult.type,
                       confidence: aiResult.data?.confidence,
                       category: aiResult.data?.category
