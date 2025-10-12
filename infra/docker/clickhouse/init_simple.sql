@@ -457,6 +457,26 @@ PARTITION BY toYYYYMM(created_at)
 ORDER BY (customer_id, tenant_id, quota_type)
 SETTINGS index_granularity = 8192;
 
+-- Quota usage history table for storing usage snapshots when quotas are reset
+CREATE TABLE IF NOT EXISTS quota_usage_history_mt (
+    id String,
+    tenant_id String,
+    customer_id String,
+    quota_type Enum8('daily_ingestion' = 1, 'monthly_ingestion' = 2, 'storage_gb' = 3, 'api_calls' = 4, 'users' = 5, 'alerts' = 6),
+    usage_amount UInt64,
+    quota_limit UInt64,
+    reset_period_start DateTime64(3),
+    reset_period_end DateTime64(3),
+    billing_period String, -- YYYY-MM format
+    reset_reason Enum8('scheduled_reset' = 1, 'manual_reset' = 2, 'policy_change' = 3, 'billing_cycle' = 4),
+    metadata String DEFAULT '{}', -- JSON blob for additional context
+    created_at DateTime64(3) DEFAULT now64(3),
+    updated_at DateTime64(3) DEFAULT now64(3)
+) ENGINE = MergeTree()
+PARTITION BY (customer_id, toYYYYMM(reset_period_end))
+ORDER BY (customer_id, tenant_id, quota_type, reset_period_end)
+SETTINGS index_granularity = 8192;
+
 -- Tenant storage backend configurations
 CREATE TABLE IF NOT EXISTS tenant_storage_configs_mt (
     tenant_id String,
@@ -1414,3 +1434,50 @@ SETTINGS index_granularity = 8192;
 INSERT INTO feature_rates_mt (id, feature_name, pricing_model, base_rate, tier_rates, currency, effective_date, created_by, description, customer_id)
 VALUES 
     ('rate-storage-cost-per-gb', 'storage.cost_per_gb', 'per_unit', 0.023, '{"enterprise": 0.023, "smb": 0.025, "startup": 0.027, "non_profit": 0.020, "government": 0.021, "education": 0.019, "healthcare": 0.022, "financial": 0.024}', 'USD', now(), 'system', 'Storage cost per GB', 'platform');
+
+-- Archive tracking table to prevent duplicate archival and track customer data access
+CREATE TABLE IF NOT EXISTS archive_metadata_mt (
+    id UUID DEFAULT generateUUIDv4(),
+    customer_id String,
+    archive_key String,
+    original_start_date DateTime64(3, 'UTC'),
+    original_end_date DateTime64(3, 'UTC'),
+    records_archived UInt64,
+    data_size_bytes UInt64,
+    compression_type LowCardinality(String) DEFAULT 'gzip',
+    encryption_enabled UInt8 DEFAULT 0,
+    archive_date DateTime64(3, 'UTC'),
+    storage_backend LowCardinality(String) DEFAULT 'minio',
+    bucket_name String DEFAULT 'logforge',
+    checksum String,
+    retention_policy_id String,
+    created_at DateTime64(3, 'UTC') DEFAULT now64(),
+    status LowCardinality(String) DEFAULT 'completed',
+    access_count UInt64 DEFAULT 0,
+    last_accessed_at DateTime64(3, 'UTC') DEFAULT now64()
+)
+ENGINE = MergeTree()
+PARTITION BY (customer_id, toYYYYMM(archive_date))
+ORDER BY (customer_id, archive_date, archive_key)
+PRIMARY KEY (customer_id, archive_date)
+SETTINGS index_granularity = 8192;
+
+-- Archive access log for tracking customer data retrievals
+CREATE TABLE IF NOT EXISTS archive_access_log_mt (
+    id UUID DEFAULT generateUUIDv4(),
+    customer_id String,
+    archive_key String,
+    access_type LowCardinality(String), -- 'read', 'download', 'query'
+    user_id String,
+    session_id String,
+    accessed_at DateTime64(3, 'UTC') DEFAULT now64(),
+    bytes_transferred UInt64 DEFAULT 0,
+    query_filter String DEFAULT '',
+    client_ip String
+)
+ENGINE = MergeTree()
+PARTITION BY (customer_id, toYYYYMM(accessed_at))
+ORDER BY (customer_id, accessed_at, archive_key)
+PRIMARY KEY (customer_id, accessed_at)
+TTL toDateTime(accessed_at) + toIntervalDay(365)
+SETTINGS index_granularity = 8192;

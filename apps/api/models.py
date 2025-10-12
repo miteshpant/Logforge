@@ -12,6 +12,12 @@ import json
 import re
 import uuid
 
+class BaseResponse(BaseModel):
+    """Generic response model for API endpoints"""
+    status: str = Field(description="Response status: success, error, warning")
+    message: str = Field(description="Human-readable response message")
+    timestamp: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc), description="Response timestamp")
+
 class LogLevel(str, Enum):
     """Standard log levels"""
     TRACE = "trace"
@@ -75,12 +81,12 @@ class BaseLogEntry(BaseModel):
     status: Optional[int] = Field(0, description="HTTP status or error code")
     src_ip: Optional[str] = Field("", description="Source IP address")
     user_id: Optional[str] = Field("", description="User identifier")
-    
+
     # Enhanced fields for M1
     severity_num: Optional[int] = Field(0, description="Numeric severity (0-7)")
     facility: Optional[int] = Field(16, description="Syslog facility code")
     parser_version: Optional[str] = Field("v1", description="Parser version used")
-    
+
     # Runtime metadata fields
     ingested_at: Optional[datetime] = Field(None, description="Ingestion timestamp")
     customer_id: Optional[str] = Field("default", description="Customer identifier for multi-tenancy")
@@ -104,7 +110,7 @@ class BaseLogEntry(BaseModel):
             # Handle common timestamp formats
             formats = [
                 "%Y-%m-%dT%H:%M:%S.%fZ",
-                "%Y-%m-%dT%H:%M:%SZ", 
+                "%Y-%m-%dT%H:%M:%SZ",
                 "%Y-%m-%d %H:%M:%S.%f",
                 "%Y-%m-%d %H:%M:%S",
                 "%d/%b/%Y:%H:%M:%S %z",  # Nginx format
@@ -129,7 +135,7 @@ class LogEntry(BaseLogEntry):
 class BatchLogEntry(BaseModel):
     """Batch log ingestion"""
     logs: List[LogEntry] = Field(..., description="Array of log entries")
-    
+
     @validator('logs')
     def validate_batch_size(cls, v):
         if len(v) > 1000:
@@ -141,7 +147,7 @@ class SyslogEntry(BaseModel):
     """Syslog format entry (RFC 3164/5424)"""
     raw_message: str = Field(..., description="Raw syslog message")
     facility: Optional[int] = Field(16, description="Syslog facility")
-    severity: Optional[int] = Field(6, description="Syslog severity") 
+    severity: Optional[int] = Field(6, description="Syslog severity")
     timestamp: Optional[str] = Field(None, description="Syslog timestamp")
     hostname: Optional[str] = Field("", description="Hostname from syslog")
     program: Optional[str] = Field("", description="Program name")
@@ -189,7 +195,7 @@ class CEFEntry(BaseModel):
     """Common Event Format entry"""
     version: int = Field(0, description="CEF version")
     device_vendor: str = Field(..., description="Device vendor")
-    device_product: str = Field(..., description="Device product") 
+    device_product: str = Field(..., description="Device product")
     device_version: str = Field(..., description="Device version")
     signature_id: str = Field(..., description="Signature ID")
     name: str = Field(..., description="Event name")
@@ -220,13 +226,13 @@ class StructuredLogEntry(BaseModel):
     thread: Optional[str] = Field("", description="Thread name")
     mdc: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Mapped Diagnostic Context")
     exception: Optional[Dict[str, Any]] = Field(None, description="Exception details")
-    
+
     # Common application fields
     user_id: Optional[str] = Field("", description="User ID")
-    session_id: Optional[str] = Field("", description="Session ID") 
+    session_id: Optional[str] = Field("", description="Session ID")
     request_id: Optional[str] = Field("", description="Request ID")
     correlation_id: Optional[str] = Field("", description="Correlation ID")
-    
+
     # HTTP-specific fields
     http_method: Optional[str] = Field("", description="HTTP method")
     http_url: Optional[str] = Field("", description="HTTP URL")
@@ -269,12 +275,12 @@ class QueryResponse(BaseModel):
     query_info: Dict[str, Any] = Field(description="Query execution information")
     query_info: Dict[str, Any] = {}
     customer_id: Optional[str] = Field("default", description="Customer identifier for multi-tenancy")
-    
+
 # Validation models for different ingestion formats
 class IngestFormat(str, Enum):
     """Supported ingestion formats"""
     JSON = "json"
-    SYSLOG = "syslog" 
+    SYSLOG = "syslog"
     OTLP = "otlp"
     CEF = "cef"
     NGINX = "nginx"
@@ -284,7 +290,7 @@ class TextLogEntry(BaseModel):
     """Plain text log entry"""
     message: str = Field(..., description="Raw log message")
     source: Optional[str] = Field("", description="Log source/file")
-    
+
     # Optional fields that may be extracted
     service: Optional[str] = Field("unknown", description="Service name")
     level: Optional[str] = Field("info", description="Log level")
@@ -299,7 +305,7 @@ class ParserConfig(BaseModel):
     default_service: Optional[str] = Field("unknown", description="Default service name")
     default_level: Optional[str] = Field("info", description="Default log level")
     timezone: Optional[str] = Field("UTC", description="Default timezone")
-    
+
 # Bulk operations
 class BulkOperation(BaseModel):
     """Bulk log operation"""
@@ -310,7 +316,7 @@ class BulkOperation(BaseModel):
 class BulkRequest(BaseModel):
     """Bulk request with multiple operations"""
     operations: List[BulkOperation] = Field(..., description="List of bulk operations")
-    
+
     @validator('operations')
     def validate_bulk_size(cls, v):
         if len(v) > 10000:
@@ -357,7 +363,7 @@ class TenantCreate(BaseModel):
     company_size: Optional[int] = Field(None, description="Number of employees")
     website: Optional[str] = Field("", description="Company website", max_length=200)
     notes: Optional[str] = Field("", description="Additional notes", max_length=1000)
-    
+
     @validator('primary_contact_email')
     def validate_email(cls, v):
         """Basic email validation"""
@@ -379,7 +385,7 @@ class TenantUpdate(BaseModel):
     website: Optional[str] = Field(None, description="Company website", max_length=200)
     notes: Optional[str] = Field(None, description="Additional notes", max_length=1000)
     status: Optional[TenantStatus] = Field(None, description="Tenant status")
-    
+
     @validator('primary_contact_email')
     def validate_email(cls, v):
         """Basic email validation"""
@@ -448,12 +454,12 @@ class Tenant(BaseModel):
     status: TenantStatus = Field(TenantStatus.ACTIVE, description="Tenant status")
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
     updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last update timestamp")
-    
+
     # Usage and billing
     monthly_log_limit: Optional[int] = Field(None, description="Monthly log ingestion limit")
     storage_limit_gb: Optional[int] = Field(None, description="Storage limit in GB")
     retention_days: int = Field(30, description="Log retention period in days")
-    
+
     # Settings
     timezone: str = Field("UTC", description="Default timezone")
     data_residency: str = Field("US", description="Data residency requirement")
@@ -519,7 +525,7 @@ class TenantHealthResponse(BaseModel):
 class UserStatus(str, Enum):
     """User account status"""
     ACTIVE = "active"
-    INACTIVE = "inactive" 
+    INACTIVE = "inactive"
     PENDING = "pending"
     SUSPENDED = "suspended"
 
@@ -530,7 +536,7 @@ class UserRole(str, Enum):
     ADMIN = "admin"
     SUPPORT_ADMIN = "support_admin"
     BILLING_ADMIN = "billing_admin"
-    
+
     # Customer User Roles
     TENANT_ADMIN = "tenant_admin"
     SECURITY_ANALYST = "security_analyst"
@@ -636,7 +642,7 @@ class UserCreateRequest(BaseModel):
 class UserUpdateRequest(BaseModel):
     """Request to update user"""
     name: Optional[str] = Field(None, min_length=1, max_length=255, description="Full user name")
-    email: Optional[str] = Field(None, description="User email address") 
+    email: Optional[str] = Field(None, description="User email address")
     status: Optional[UserStatus] = Field(None, description="Account status")
 
 class UserResponse(BaseModel):
@@ -667,7 +673,7 @@ class LoginResponse(BaseModel):
     access_token: str = Field(..., description="Access token")
     expires_at: datetime = Field(..., description="Token expiration time")
     user: UserResponse = Field(..., description="User profile")
-    
+
 class RoleAssignmentRequest(BaseModel):
     """Request to assign role to user"""
     tenant_id: str = Field(..., description="Tenant UUID ('platform' for admin)")
@@ -769,7 +775,7 @@ class StorageStatusResponse(BaseModel):
     storage_backend: StorageBackendType = Field(..., description="Storage backend type")
     total_size_bytes: float = Field(0.0, description="Total storage size in bytes")
     hot_storage_bytes: float = Field(0.0, description="Hot storage bytes")
-    warm_storage_bytes: float = Field(0.0, description="Warm storage bytes") 
+    warm_storage_bytes: float = Field(0.0, description="Warm storage bytes")
     cold_storage_bytes: float = Field(0.0, description="Cold storage bytes")
     health_status: str = Field("healthy", description="Storage health status")
     connection_status: str = Field("connected", description="Connection status")
@@ -784,7 +790,7 @@ class SubscriptionTier(str, Enum):
     STARTUP = "startup"
     STARTER = "starter"
     SMB = "smb"
-    PROFESSIONAL = "professional" 
+    PROFESSIONAL = "professional"
     ENTERPRISE = "enterprise"
     NON_PROFIT = "non_profit"
     GOVERNMENT = "government"
@@ -795,7 +801,7 @@ class SubscriptionTier(str, Enum):
 class BillingCycle(str, Enum):
     """Billing cycle options"""
     MONTHLY = "monthly"
-    QUARTERLY = "quarterly" 
+    QUARTERLY = "quarterly"
     YEARLY = "yearly"
 
 class SubscriptionStatus(str, Enum):

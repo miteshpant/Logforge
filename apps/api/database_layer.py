@@ -56,7 +56,8 @@ class DatabaseLayer:
         'SubscriptionDAO': os.getenv('SUBSCRIPTION_SERVICE_KEY', 'subscription-dao-service-key'),
         'PlatformSetup': os.getenv('PLATFORM_SETUP_KEY', 'platform-setup-key'),
         'IngestionTestService': 'ingestion-test-service-key',
-        'AuditService': os.getenv('AUDIT_SERVICE_KEY', 'audit-service-key-dev')
+        'AuditService': os.getenv('AUDIT_SERVICE_KEY', 'audit-service-key-dev'),
+        'StorageQuotaSyncService': os.getenv('STORAGE_QUOTA_SYNC_KEY', 'storage-quota-sync-service-key')
     }
     
     # Table access control by service
@@ -79,7 +80,7 @@ class DatabaseLayer:
         'IngestionDAO': ['ingestion_stats_mt', 'ingestion_errors_mt'],
         'QueryDAO': ['saved_queries_mt', 'query_cache_mt', 'logs_normalized_mt'],
         'DashboardDAO': ['dashboards_mt', 'dashboard_widgets_mt', 'dashboard_shares_mt', 'logs_normalized_mt'],
-        'StorageDAO': ['retention_policies_mt', 'storage_backends_mt', 'storage_operations_mt', 'storage_quotas_mt', 'data_archives_mt', 'logs_raw_mt', 'logs_normalized_mt'],
+        'StorageDAO': ['retention_policies_mt', 'storage_backends_mt', 'storage_operations_mt', 'storage_quotas_mt', 'data_archives_mt', 'archive_metadata_mt', 'archive_access_log_mt', 'logs_raw_mt', 'logs_normalized_mt'],
         'AlertDAO': ['alert_rules_mt', 'alert_instances_mt', 'notification_channels_mt', 'alert_rule_states_mt'],
         'UsageDAO': ['api_usage_audit_mt', 'tenants_mt', 'users_mt', 'tenant_bills_mt', 'logs_raw_mt'],
         'SecurityDAO': ['sigma_rules_mt', 'security_events_mt', 'threat_intel_mt'],
@@ -89,15 +90,21 @@ class DatabaseLayer:
         'SubscriptionDAO': ['tenant_subscriptions_mt', 'feature_rates_mt', 'usage_records_mt', 'tenant_deletions_mt'],
         'PlatformSetup': ['users_mt', 'user_tenant_roles_mt', 'user_sessions_mt'],
         'IngestionTestService': ['*'],  # Test service can access all tables
-        'AuditService': ['enterprise_audit_logs_mt']
+        'AuditService': ['enterprise_audit_logs_mt'],
+        # Quota Reset Service - needs access to quotas and historical data
+        'QuotaResetService': ['tenant_quotas_mt', 'quota_usage_history_mt'],
+        'QuotaTestService': ['tenant_quotas_mt', 'quota_usage_history_mt'],
+        'QuotaHistoryAPI': ['quota_usage_history_mt'],
+        # Storage Quota Sync Service - needs access to logs and quotas
+        'StorageQuotaSyncService': ['logs_raw_mt', 'tenant_quotas_mt']
     }
     
     # Dangerous operations requiring admin privileges
     ADMIN_OPERATIONS = ['DROP', 'TRUNCATE', 'DELETE FROM', 'CREATE TABLE']
-    ADMIN_SERVICES = ['TestService']  # Services allowed to perform admin operations
+    ADMIN_SERVICES = ['TestService', 'QuotaTestService']  # Services allowed to perform admin operations
     
     # Services allowed to perform UPDATE operations (ALTER TABLE ... UPDATE)
-    UPDATE_ALLOWED_SERVICES = ['UserService', 'AlertService', 'SecurityService', 'TestService', 'UserDAO', 'TenantDAO', 'RoleDAO', 'QueryDAO', 'QueryService', 'DashboardDAO', 'DashboardService', 'StorageDAO', 'StorageService', 'AlertDAO', 'SecurityDAO', 'AIDAO', 'ObservabilityDAO', 'EnterpriseDAO', 'SubscriptionDAO']
+    UPDATE_ALLOWED_SERVICES = ['UserService', 'AlertService', 'SecurityService', 'TestService', 'UserDAO', 'TenantDAO', 'RoleDAO', 'QueryDAO', 'QueryService', 'DashboardDAO', 'DashboardService', 'StorageDAO', 'StorageService', 'AlertDAO', 'SecurityDAO', 'AIDAO', 'ObservabilityDAO', 'EnterpriseDAO', 'SubscriptionDAO', 'QuotaResetService', 'QuotaTestService', 'StorageQuotaSyncService']
     
     def __init__(self, service_name: str, service_key: str):
         """Initialize database layer with service authentication
@@ -239,7 +246,7 @@ class DatabaseLayer:
                 user_id String,
                 endpoint String,
                 method String,
-                status_code UInt16,
+                response_status UInt16,
                 processing_time_ms UInt32,
                 response_size_bytes UInt64,
                 ip_address String,
@@ -432,9 +439,12 @@ class DatabaseLayer:
                 columns = ['id', 'user_id', 'tenant_id', 'role', 'granted_by', 'granted_at',
                           'expires_at', 'status', 'created_at', 'updated_at', 'customer_id']
             elif table == 'api_usage_mt':
-                columns = ['id', 'tenant_id', 'user_id', 'endpoint', 'method', 'status_code',
-                          'processing_time_ms', 'response_size_bytes', 'ip_address', 'user_agent',
-                          'request_timestamp', 'billing_feature', 'cost_credits', 'created_at', 'customer_id']
+                columns = ['id', 'customer_id', 'tenant_id', 'user_id', 'endpoint', 'method',
+                          'request_timestamp', 'response_status', 'processing_time_ms', 'billing_feature',
+                          'cost_credits', 'request_size_bytes', 'response_size_bytes', 'ip_address', 'user_agent']
+            elif table == 'archive_access_log_mt':
+                columns = ['customer_id', 'archive_key', 'access_type', 'user_id', 'session_id',
+                          'accessed_at', 'bytes_transferred', 'query_filter', 'client_ip']
             else:
                 # For other tables, let ClickHouse determine columns
                 self.client.insert(table, data)
@@ -443,7 +453,13 @@ class DatabaseLayer:
             # Convert dict data to list format with correct column order
             rows = []
             for record in data:
-                row = [record.get(col) for col in columns]
+                row = []
+                for col in columns:
+                    value = record.get(col)
+                    # Handle None values for numeric columns
+                    if value is None and col in ['request_size_bytes', 'response_size_bytes', 'processing_time_ms', 'cost_credits']:
+                        value = 0
+                    row.append(value)
                 rows.append(row)
             
             # Use ClickHouse batch insert with column specification
@@ -746,7 +762,7 @@ class DatabaseLayer:
                 count(*) as total_requests,
                 sum(response_size_bytes) as total_bytes,
                 avg(processing_time_ms) as avg_processing_time,
-                countIf(status_code < 400) * 100.0 / count(*) as success_rate
+                countIf(response_status < 400) * 100.0 / count(*) as success_rate
             FROM api_usage_mt 
             WHERE tenant_id = %(tenant_id)s
             AND request_timestamp >= %(start_date)s

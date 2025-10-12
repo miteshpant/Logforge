@@ -440,6 +440,7 @@ class TenantService:
             db_quotas = await self.tenant_dao.get_tenant_quotas(tenant_id)
             
             # Find the relevant quota and update usage
+            quota_updated = False
             for quota in db_quotas:
                 if quota['quota_type'] == f"{usage_type}_quota" or quota['quota_type'] == usage_type:
                     current_used = quota['current_usage']
@@ -451,12 +452,41 @@ class TenantService:
                         quota['quota_type'], 
                         {'current_usage': new_used}
                     )
-                    
-                    logger.debug("Usage tracked", tenant_id=tenant_id, usage_type=usage_type, amount=amount)
-                    return True
+                    quota_updated = True
+                    break
             
-            # If no existing quota found, this is OK - just log it
-            logger.debug("Usage tracked (no quota found)", tenant_id=tenant_id, usage_type=usage_type, amount=amount)
+            # Create detailed usage record in usage_records_mt
+            from datetime import datetime, timezone
+            import uuid
+            
+            # Calculate cost using pricing.yml configuration
+            cost_calculated, rate_applied = await self._calculate_usage_cost(usage_type, amount)
+            
+            usage_record = {
+                'id': str(uuid.uuid4()),
+                'tenant_id': tenant_id,
+                'customer_id': tenant_id,
+                'feature_name': usage_type,
+                'usage_type': usage_type,
+                'quantity': amount,
+                'timestamp': datetime.now(timezone.utc),
+                'billing_period': datetime.now(timezone.utc).strftime('%Y-%m'),
+                'cost_calculated': cost_calculated,
+                'rate_applied': rate_applied,
+                'metadata': '{}',
+                'created_at': datetime.now(timezone.utc),
+                'updated_at': datetime.now(timezone.utc)
+            }
+            
+            # Use subscription DAO to insert usage record
+            from dao.subscription_dao import SubscriptionDAO
+            subscription_dao = SubscriptionDAO()
+            await subscription_dao.create_usage_record(usage_record)
+            
+            if quota_updated:
+                logger.debug("Usage tracked with quota update", tenant_id=tenant_id, usage_type=usage_type, amount=amount)
+            else:
+                logger.debug("Usage tracked (no quota found)", tenant_id=tenant_id, usage_type=usage_type, amount=amount)
             return True
             
         except Exception as e:

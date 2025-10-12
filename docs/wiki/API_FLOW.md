@@ -146,7 +146,6 @@ Query Router (query.py):
 ├── POST /v1/saved-queries        # Save query for reuse
 ├── GET /v1/saved-queries/{id}    # Get specific saved query
 ├── DELETE /v1/saved-queries/{id} # Delete saved query
-└── POST /v1/query/cache/cleanup  # Cache cleanup operations
 
 Dashboard Router (dashboard.py):
 ├── GET /v1/dashboards            # List available enterprise dashboards
@@ -169,8 +168,6 @@ Storage Router (storage.py):
 ├── POST /v1/storage/backends           # Create storage backend
 ├── GET /v1/storage/operations          # List data operations
 ├── POST /v1/storage/operations/archive # Archive data manually
-├── GET /v1/storage/quotas              # Storage quotas and limits
-├── POST /v1/storage/quotas             # Set storage quotas
 └── GET /v1/storage/health/infrastructure # System-wide infrastructure health (admin only)
 
 Alerts Router (alerts.py):

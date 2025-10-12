@@ -89,17 +89,43 @@ class StorageConfigManager:
                 },
                 'cold': {
                     'enabled': True,
-                    'backend': 's3',
+                    'backend': 'minio',  # Default to MinIO for local development
                     'backends': {
+                        'minio': {
+                            'enabled': True,
+                            'bucket': 'logforge',
+                            'endpoint': os.getenv('MINIO_ENDPOINT', 'http://minio:9000'),
+                            'access_key': os.getenv('MINIO_ACCESS_KEY', 'minio'),
+                            'secret_key': os.getenv('MINIO_SECRET_KEY', 'minio123'),
+                            'secure': os.getenv('MINIO_SECURE', 'false').lower() == 'true'
+                        },
                         's3': {
                             'shared': {
                                 'enabled': True,
                                 'bucket_prefix': 'logforge-dev',
                                 'region': 'us-east-1'
+                            },
+                            'dedicated': {
+                                'enabled': True,
+                                'bucket_prefix': 'logforge-dedicated', 
+                                'region': 'us-east-1'
                             }
                         }
                     }
                 }
+            },
+            'customers': {
+                # Example: Tenant-specific S3 configuration
+                # 'enterprise-customer-id': {
+                #     'storage': {
+                #         'cold': {
+                #             'backend': 's3',
+                #             'deployment': {
+                #                 'type': 'dedicated'
+                #             }
+                #         }
+                #     }
+                # }
             }
         }
     
@@ -124,7 +150,7 @@ class StorageConfigManager:
         
         # Get cold storage config
         cold_config = storage_config.get('cold', {})
-        backend_name = cold_config.get('backend', 's3')
+        backend_name = cold_config.get('backend', 'minio')  # Default to MinIO
         backend = StorageBackend(backend_name)
         
         # Build endpoint based on backend and deployment type
@@ -269,18 +295,30 @@ class StorageConfigManager:
         if not minio_config.get('enabled', False):
             raise ValueError("MinIO backend not enabled")
             
-        bucket = minio_config.get('bucket', f'{customer_id}-logforge-cold' if customer_id else 'logforge')
+        # Use shared bucket with tenant path isolation for cost efficiency
+        bucket = minio_config.get('bucket', 'logforge')
+        
+        # Get endpoint URL and ensure it has proper protocol
+        endpoint_url = minio_config.get('endpoint', 'http://minio:9000')
+        
+        # Fix endpoint URL if it's missing protocol
+        if endpoint_url and not endpoint_url.startswith(('http://', 'https://')):
+            # Add http:// prefix for local MinIO
+            endpoint_url = f"http://{endpoint_url}"
+            logger.warning(f"Fixed MinIO endpoint URL to include protocol: {endpoint_url}")
         
         credentials = StorageCredentials(
             access_key=minio_config.get('access_key', 'minio'),
             secret_key=minio_config.get('secret_key', 'minio123')
         )
         
+        logger.info(f"MinIO endpoint configured: endpoint={endpoint_url}, bucket={bucket}, customer_id={customer_id}")
+        
         return StorageEndpoint(
             backend=StorageBackend.MINIO,
             region=region,
             bucket=bucket,
-            endpoint_url=minio_config.get('endpoint', 'http://minio:9000'),
+            endpoint_url=endpoint_url,
             credentials=credentials,
             encryption_enabled=minio_config.get('secure', False)
         )
@@ -299,7 +337,10 @@ class StorageConfigManager:
             elif endpoint.backend == StorageBackend.AZURE:
                 self._storage_clients[client_key] = self._create_azure_client(endpoint)
             elif endpoint.backend == StorageBackend.MINIO:
-                self._storage_clients[client_key] = self._create_s3_client(endpoint)  # MinIO uses S3 API
+                client = self._create_s3_client(endpoint)  # MinIO uses S3 API
+                # Ensure bucket exists for MinIO
+                self._ensure_bucket_exists(client, endpoint.bucket)
+                self._storage_clients[client_key] = client
                 
         return self._storage_clients[client_key]
     
@@ -346,6 +387,25 @@ class StorageConfigManager:
         # This would require azure-storage-blob library
         # Implementation would be added when Azure support is needed  
         raise NotImplementedError("Azure client not implemented yet")
+    
+    def _ensure_bucket_exists(self, s3_client, bucket_name: str):
+        """Ensure bucket exists, create if it doesn't"""
+        try:
+            s3_client.head_bucket(Bucket=bucket_name)
+            logger.info(f"Bucket {bucket_name} already exists")
+        except Exception as e:
+            # Handle both 404 (NoSuchBucket) and other bucket-not-found errors
+            if 'NoSuchBucket' in str(e) or '404' in str(e) or 'Not Found' in str(e):
+                try:
+                    # Create bucket - for MinIO, no location constraint needed
+                    s3_client.create_bucket(Bucket=bucket_name)
+                    logger.info(f"Successfully created bucket {bucket_name}")
+                except Exception as create_error:
+                    logger.error(f"Failed to create bucket {bucket_name}: {str(create_error)}")
+                    raise
+            else:
+                logger.error(f"Error checking bucket {bucket_name}: {str(e)}")
+                raise
     
     def _merge_configs(self, base_config: Dict[str, Any], override_config: Dict[str, Any]) -> Dict[str, Any]:
         """Deep merge configuration dictionaries"""

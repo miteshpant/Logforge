@@ -9,6 +9,7 @@ import structlog
 import asyncio
 import os
 import json
+import uuid
 
 from dao.storage_dao import StorageDAO
 
@@ -21,6 +22,8 @@ class StorageService:
         self.storage_dao = StorageDAO()
         # TTL manager will be injected
         self.ttl_manager = None
+        # Initialize ClickHouse client for archive queries
+        self.clickhouse_client = self.storage_dao.db if hasattr(self.storage_dao, 'db') else None
     
     def set_ttl_manager(self, ttl_manager):
         """Set TTL manager for data lifecycle operations"""
@@ -583,37 +586,123 @@ class StorageService:
             # Get infrastructure-level health
             infrastructure_health = await self.get_infrastructure_health()
             
-            # Get customer-specific storage quotas
-            quotas = await self.storage_dao.get_storage_quotas(customer_id)
+            # Get customer-specific quotas from tenant_quotas_mt (correct table)
+            tenant_quotas_query = """
+                SELECT quota_type, quota_limit, current_usage, reset_period
+                FROM tenant_quotas_mt 
+                WHERE customer_id = %(customer_id)s
+            """
+            quotas_result = await self.storage_dao.db.execute_query(tenant_quotas_query, {"customer_id": customer_id})
             
             # Get customer-specific storage operations
             operations_result = await self.get_storage_operations(customer_id)
             recent_operations = operations_result.get('operations', [])[:5]  # Last 5 operations
             
-            # Calculate customer-specific health status
-            customer_status = "healthy"
-            if any(quota.get('usage_percentage', 0) > quota.get('critical_threshold', 90) for quota in quotas):
-                customer_status = "critical"
-            elif any(quota.get('usage_percentage', 0) > quota.get('warning_threshold', 80) for quota in quotas):
-                customer_status = "warning"
+            # Process tenant quotas and convert units properly
+            storage_gb = 0
+            monthly_ingestion_gb = 0
+            monthly_log_count = 0
+            quota_status = "healthy"
             
-            # Customer-specific storage statistics
+            for quota in quotas_result:
+                quota_type = quota['quota_type']
+                current_usage = quota.get('current_usage', 0)  # This is in bytes
+                quota_limit = quota.get('quota_limit', 0)      # This needs to be confirmed - bytes or GB?
+                usage_percentage = 0  # Initialize to avoid scope issues
+                
+                if quota_type == 'storage_gb':
+                    # Convert current usage from bytes to GB for display
+                    storage_gb = current_usage / (1024**3) if current_usage > 0 else 0
+                    
+                    # CRITICAL FIX: quota_limit is stored in GB, need to convert for percentage calculation
+                    # current_usage is in bytes, quota_limit is in GB - convert quota_limit to bytes
+                    quota_limit_bytes = quota_limit * (1024**3) if quota_limit > 0 else 0
+                    quota_limit_gb = quota_limit  # quota_limit is already in GB
+                    usage_percentage = (current_usage / quota_limit_bytes * 100) if quota_limit_bytes > 0 else 0
+                    
+                elif quota_type == 'monthly_ingestion':
+                    # Convert current usage from bytes to GB for display
+                    monthly_ingestion_gb = current_usage / (1024**3) if current_usage > 0 else 0
+                    
+                    # CRITICAL FIX: For monthly_ingestion, quota_limit might also be in GB
+                    # Check if quota_limit looks like GB (reasonable value) or bytes (very large)
+                    if quota_limit < 1000:  # Likely GB (reasonable quota like 10 GB, 100 GB)
+                        quota_limit_bytes = quota_limit * (1024**3)  # Convert GB to bytes
+                        quota_limit_gb = quota_limit  # Already in GB
+                    else:  # Likely bytes (very large number)
+                        quota_limit_bytes = quota_limit  # Already in bytes
+                        quota_limit_gb = quota_limit / (1024**3)  # Convert to GB for display
+                    
+                    usage_percentage = (current_usage / quota_limit_bytes * 100) if quota_limit_bytes > 0 else 0
+                
+                else:
+                    # For other quota types, assume both current_usage and quota_limit are in same units
+                    usage_percentage = (current_usage / quota_limit * 100) if quota_limit > 0 else 0
+                
+                # Check quota health using properly calculated usage_percentage
+                if usage_percentage > 90:
+                    quota_status = "critical"
+                elif usage_percentage > 80 and quota_status != "critical":
+                    quota_status = "warning"
+            
+            # Get current month log count and performance from ingestion_stats_mt
+            current_month_query = """
+                SELECT 
+                    count(*) as log_count,
+                    avg(processing_time_ms) as avg_processing_time,
+                    sum(bytes_ingested) as total_bytes_ingested,
+                    sum(records_ingested) as total_records_ingested
+                FROM ingestion_stats_mt 
+                WHERE customer_id = %(customer_id)s
+                AND timestamp >= date_trunc('month', now())
+            """
+            
+            performance_result = await self.storage_dao.db.execute_query(current_month_query, {"customer_id": customer_id})
+            
+            if performance_result and performance_result[0]['log_count']:
+                monthly_log_count = performance_result[0]['total_records_ingested'] or 0
+                avg_processing_time = performance_result[0]['avg_processing_time'] or 0
+                monthly_bytes = performance_result[0]['total_bytes_ingested'] or 0
+            else:
+                avg_processing_time = 0
+                monthly_bytes = 0
+            
+            # Customer-specific storage statistics (current month focus)
             customer_stats = {
-                "total_logs": len(recent_operations) * 1000,  # Mock calculation
-                "customer_storage_gb": sum(quota.get('current_usage_gb', 0) for quota in quotas),
-                "hot_storage_gb": next((q.get('current_usage_gb', 0) for q in quotas if q.get('quota_type') == 'hot_storage'), 0),
-                "cold_storage_gb": next((q.get('current_usage_gb', 0) for q in quotas if q.get('quota_type') == 'cold_storage'), 0),
-                "archive_storage_gb": next((q.get('current_usage_gb', 0) for q in quotas if q.get('quota_type') == 'archive_storage'), 0)
+                "total_logs_current_month": monthly_log_count,
+                "storage_gb": round(storage_gb, 6),  # Current cumulative storage
+                "monthly_ingestion_gb": round(monthly_ingestion_gb, 6),  # Current month ingestion
+                "hot_storage_gb": round(storage_gb, 6),  # Currently all storage is hot
+                "cold_storage_gb": 0,  # Future feature - show as 0 for now
+                "archive_storage_gb": 0,  # Future feature - show as 0 for now
+                "current_month": datetime.now(timezone.utc).strftime('%Y-%m'),
+                "performance": {
+                    "avg_ingestion_time_ms": round(avg_processing_time, 2),
+                    "monthly_ingestion_calls": len(performance_result) if performance_result else 0,
+                    "avg_bytes_per_call": round(monthly_bytes / max(monthly_log_count, 1), 2) if monthly_log_count > 0 else 0
+                }
             }
             
+            # Convert storage_gb quota from bytes to GB for display
+            display_quotas = []
+            for quota in quotas_result:
+                display_quota = dict(quota)  # Copy original
+                
+                if quota['quota_type'] == 'storage_gb':
+                    # Convert current_usage from bytes to GB for display
+                    current_usage_bytes = quota.get('current_usage', 0)
+                    display_quota['current_usage'] = round(current_usage_bytes / (1024**3), 6)
+                
+                display_quotas.append(display_quota)
+
             # Combined health information
             health_info = {
-                "overall_status": customer_status,
+                "overall_status": quota_status,
                 "customer_id": customer_id,
                 "infrastructure": infrastructure_health,
                 "customer_data": {
-                    "status": customer_status,
-                    "quotas": quotas,
+                    "status": quota_status,
+                    "quotas": display_quotas,  # Now with storage_gb converted to GB
                     "usage_stats": customer_stats,
                     "recent_operations": recent_operations
                 },
@@ -622,7 +711,7 @@ class StorageService:
             
             logger.info("Comprehensive storage health retrieved", 
                        customer_id=customer_id, 
-                       customer_status=customer_status,
+                       customer_status=quota_status,
                        infrastructure_status=infrastructure_health.get('system_status'))
             
             return health_info
@@ -727,4 +816,289 @@ class StorageService:
             
         except Exception as e:
             logger.error("Failed to update storage usage", error=str(e), customer_id=customer_id)
+            raise e
+
+    # Archive Retrieval Methods
+
+    async def list_customer_archives(self, customer_id: str, limit: int = 50, offset: int = 0, 
+                                   start_date: str = None, end_date: str = None) -> List[Dict[str, Any]]:
+        """List archived data for a customer with pagination and filtering"""
+        try:
+            if not customer_id:
+                raise ValueError("Customer ID is required")
+            
+            # Build date filter conditions
+            date_filters = []
+            if start_date:
+                date_filters.append(f"archive_date >= '{start_date}'")
+            if end_date:
+                date_filters.append(f"archive_date <= '{end_date}'")
+            
+            where_clause = f"WHERE customer_id = '{customer_id}' AND status = 'completed'"
+            if date_filters:
+                where_clause += f" AND {' AND '.join(date_filters)}"
+            
+            # Query archive metadata
+            query = f"""
+            SELECT 
+                id, archive_key, original_start_date, original_end_date,
+                records_archived, data_size_bytes, compression_type, encryption_enabled,
+                archive_date, storage_backend, bucket_name, checksum,
+                access_count, last_accessed_at
+            FROM archive_metadata_mt
+            {where_clause}
+            ORDER BY archive_date DESC
+            LIMIT {limit} OFFSET {offset}
+            """
+            
+            result = await self.clickhouse_client.execute_query(query)
+            
+            archives = []
+            for row in result:
+                archive = {
+                    "id": row.get("id"),
+                    "archive_key": row.get("archive_key"),
+                    "time_period": {
+                        "start": row.get("original_start_date"),
+                        "end": row.get("original_end_date")
+                    },
+                    "records_count": row.get("records_archived"),
+                    "data_size_bytes": row.get("data_size_bytes"),
+                    "data_size_gb": round((row.get("data_size_bytes") or 0) / (1024**3), 6),
+                    "compression_type": row.get("compression_type"),
+                    "encryption_enabled": bool(row.get("encryption_enabled")),
+                    "archive_date": row.get("archive_date"),
+                    "storage_backend": row.get("storage_backend"),
+                    "bucket_name": row.get("bucket_name"),
+                    "checksum": (row.get("checksum") or "")[:16] + "..." if row.get("checksum") else None,
+                    "access_stats": {
+                        "access_count": row.get("access_count"),
+                        "last_accessed_at": row.get("last_accessed_at")
+                    }
+                }
+                archives.append(archive)
+            
+            logger.info("Listed customer archives", 
+                       customer_id=customer_id, 
+                       archives_count=len(archives),
+                       limit=limit, offset=offset)
+            
+            return archives
+            
+        except Exception as e:
+            logger.error("Failed to list customer archives", error=str(e), customer_id=customer_id)
+            raise e
+
+    async def get_archive_metadata(self, archive_key: str, customer_id: str) -> Dict[str, Any]:
+        """Get detailed metadata for a specific archive"""
+        try:
+            if not archive_key or not customer_id:
+                raise ValueError("Archive key and customer ID are required")
+            
+            # Validate customer owns this archive key
+            if not archive_key.startswith(f"archived_logs/{customer_id}/"):
+                raise ValueError("Archive key does not belong to customer")
+            
+            query = f"""
+            SELECT 
+                id, archive_key, original_start_date, original_end_date,
+                records_archived, data_size_bytes, compression_type, encryption_enabled,
+                archive_date, storage_backend, bucket_name, checksum, retention_policy_id,
+                created_at, status, access_count, last_accessed_at
+            FROM archive_metadata_mt
+            WHERE customer_id = '{customer_id}' AND archive_key = '{archive_key}'
+            """
+            
+            result = await self.clickhouse_client.execute_query(query)
+            
+            if not result:
+                return None
+            
+            row = result[0]
+            archive_metadata = {
+                "id": row.get("id"),
+                "archive_key": row.get("archive_key"),
+                "customer_id": customer_id,
+                "time_period": {
+                    "start": row.get("original_start_date"),
+                    "end": row.get("original_end_date")
+                },
+                "content_info": {
+                    "records_count": row.get("records_archived"),
+                    "data_size_bytes": row.get("data_size_bytes"),
+                    "data_size_gb": round((row.get("data_size_bytes") or 0) / (1024**3), 6),
+                    "compression_type": row.get("compression_type"),
+                    "encryption_enabled": bool(row.get("encryption_enabled"))
+                },
+                "storage_info": {
+                    "archive_date": row.get("archive_date"),
+                    "storage_backend": row.get("storage_backend"),
+                    "bucket_name": row.get("bucket_name"),
+                    "checksum": row.get("checksum"),
+                    "retention_policy_id": row.get("retention_policy_id")
+                },
+                "metadata": {
+                    "created_at": row.get("created_at"),
+                    "status": row.get("status"),
+                    "access_count": row.get("access_count"),
+                    "last_accessed_at": row.get("last_accessed_at")
+                },
+                "access_methods": {
+                    "download_url": f"/v1/storage/archive/{archive_key}/download",
+                    "query_api": "/v1/storage/query-archive"
+                }
+            }
+            
+            logger.info("Retrieved archive metadata", 
+                       customer_id=customer_id, 
+                       archive_key=archive_key)
+            
+            return archive_metadata
+            
+        except Exception as e:
+            logger.error("Failed to get archive metadata", error=str(e), 
+                        customer_id=customer_id, archive_key=archive_key)
+            raise e
+
+    async def generate_archive_download(self, archive_key: str, customer_id: str, user_id: str) -> Dict[str, Any]:
+        """Generate download link for archived data and log access"""
+        try:
+            # Validate archive exists and belongs to customer
+            archive_metadata = await self.get_archive_metadata(archive_key, customer_id)
+            if not archive_metadata:
+                return None
+            
+            # Get storage client for presigned URL generation
+            from storage_config import StorageConfigManager
+            storage_manager = StorageConfigManager()
+            storage_client = storage_manager.get_storage_client(customer_id)
+            storage_endpoint = storage_manager.get_storage_endpoint(customer_id)
+            
+            # Generate presigned URL (valid for 1 hour)
+            try:
+                if hasattr(storage_client, 'generate_presigned_url'):
+                    download_url = storage_client.generate_presigned_url(
+                        'get_object',
+                        Params={'Bucket': storage_endpoint.bucket, 'Key': archive_key},
+                        ExpiresIn=3600
+                    )
+                else:
+                    # Fallback for MinIO or other S3-compatible clients
+                    endpoint_url = storage_endpoint.endpoint_url or "http://minio:9000"
+                    download_url = f"{endpoint_url}/{storage_endpoint.bucket}/{archive_key}"
+            except Exception as e:
+                logger.warning("Failed to generate presigned URL, using direct URL", error=str(e))
+                endpoint_url = storage_endpoint.endpoint_url or "http://minio:9000"
+                download_url = f"{endpoint_url}/{storage_endpoint.bucket}/{archive_key}"
+            
+            # Log access in archive_access_log_mt
+            access_log_data = [{
+                'customer_id': customer_id,
+                'archive_key': archive_key,
+                'access_type': 'download',
+                'user_id': user_id,
+                'session_id': 'api_session',
+                'accessed_at': datetime.now(timezone.utc),
+                'bytes_transferred': int(archive_metadata["content_info"]["data_size_bytes"] or 0),
+                'query_filter': '',
+                'client_ip': 'api_client'
+            }]
+            
+            await self.clickhouse_client.execute_insert('archive_access_log_mt', access_log_data)
+            
+            # Update access count in metadata
+            update_access_query = f"""
+            ALTER TABLE archive_metadata_mt UPDATE 
+                access_count = access_count + 1,
+                last_accessed_at = now64()
+            WHERE customer_id = '{customer_id}' AND archive_key = '{archive_key}'
+            """
+            
+            await self.clickhouse_client.execute_update(update_access_query)
+            
+            logger.info("Access logged for archive", 
+                       customer_id=customer_id, 
+                       archive_key=archive_key,
+                       access_type="download")
+            
+            download_info = {
+                "archive_key": archive_key,
+                "download_url": download_url,
+                "expires_in_seconds": 3600,
+                "archive_metadata": {
+                    "records_count": archive_metadata["content_info"]["records_count"],
+                    "data_size_gb": archive_metadata["content_info"]["data_size_gb"],
+                    "time_period": archive_metadata["time_period"]
+                },
+                "access_logged": True,
+                "generated_at": datetime.now(timezone.utc)
+            }
+            
+            logger.info("Generated archive download", 
+                       customer_id=customer_id, 
+                       archive_key=archive_key,
+                       user_id=user_id)
+            
+            return download_info
+            
+        except Exception as e:
+            logger.error("Failed to generate archive download", error=str(e), 
+                        customer_id=customer_id, archive_key=archive_key)
+            raise e
+
+    async def query_archived_data(self, customer_id: str, archive_keys: List[str], 
+                                filters: Dict[str, Any], limit: int, user_id: str) -> Dict[str, Any]:
+        """Query data from archived files (experimental feature)"""
+        try:
+            # Validate all archive keys belong to customer
+            for archive_key in archive_keys:
+                if not archive_key.startswith(f"archived_logs/{customer_id}/"):
+                    raise ValueError(f"Archive key does not belong to customer: {archive_key}")
+            
+            # Log query access
+            access_log_data = []
+            for archive_key in archive_keys:
+                access_log_data.append({
+                    'customer_id': customer_id,
+                    'archive_key': archive_key,
+                    'access_type': 'query',
+                    'user_id': user_id,
+                    'session_id': 'api_session',
+                    'accessed_at': datetime.now(timezone.utc),
+                    'bytes_transferred': 0,  # Query doesn't transfer full archive
+                    'query_filter': str(filters),
+                    'client_ip': 'api_client'
+                })
+            
+            # Insert all access logs in batch
+            if access_log_data:
+                await self.clickhouse_client.execute_insert('archive_access_log_mt', access_log_data)
+            
+            # For now, return metadata about what would be queried
+            # Full implementation would require downloading and parsing Parquet files
+            query_results = {
+                "status": "experimental_feature",
+                "message": "Archive querying is an experimental feature. Currently returns metadata only.",
+                "archives_requested": archive_keys,
+                "filters_requested": filters,
+                "estimated_results": {
+                    "note": "Full implementation would parse Parquet files and apply filters",
+                    "implementation_status": "metadata_only"
+                },
+                "alternative_access": {
+                    "download_instructions": "Use /v1/storage/archive/{archive_key}/download to get full archive files",
+                    "manual_processing": "Download Parquet files and process locally with pandas/dask"
+                }
+            }
+            
+            logger.info("Archive query requested (experimental)", 
+                       customer_id=customer_id, 
+                       archive_count=len(archive_keys),
+                       user_id=user_id)
+            
+            return query_results
+            
+        except Exception as e:
+            logger.error("Failed to query archived data", error=str(e), 
+                        customer_id=customer_id)
             raise e

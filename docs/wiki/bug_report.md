@@ -1054,4 +1054,224 @@ const formatTimestamp = (timestamp: string) => {
 
 ---
 
+## 🚨 CRITICAL PRIORITY - MOCK DATA AUDIT 🚨
+
+**AUDIT STATUS**: ACTIVE SYSTEMATIC AUDIT  
+**Target**: All APIs referenced in `/docs/wiki/API_FLOW.md`  
+**Progress**: In progress - checking all services for mock data  
+**Priority**: Replace ALL mock data with real database implementations  
+**Reporter**: System Architecture Audit  
+**Date**: October 7, 2025
+
+### AI Service APIs (M6) - Mock Data Detected ❌ CRITICAL
+
+#### BUG-MOCK-001: `/v1/ai/root-cause-analysis` - Hardcoded Analysis
+**Status**: CRITICAL  
+**Component**: AI Service  
+**File**: `/apps/api/services/ai_service.py`  
+**Issue**: Returns hardcoded keyword-based analysis instead of real AI/ML processing
+
+**Mock Data Evidence**:
+```python
+def _determine_primary_cause(self, incident: Dict[str, Any]) -> str:
+    # Simple pattern matching for demo
+    if 'database' in symptoms_text:
+        return "Database connectivity issues causing service degradation"
+    elif 'memory' in symptoms_text:
+        return "Memory exhaustion in application processes"
+    # ... more hardcoded mappings
+```
+
+**Additional Mock Components**:
+- `_generate_recommendations()`: Template-based recommendations
+- Fixed confidence scores: 0.82, 0.91, 0.78 (hardcoded)
+- `_build_incident_timeline()`: Static timeline generation
+- `_calculate_business_impact_simple()`: Hardcoded impact calculations
+
+#### BUG-MOCK-002: `/v1/ai/query` - Pattern Matching NL-to-SQL
+**Status**: CRITICAL  
+**Component**: AI Service - NL Query Processing  
+**File**: `/apps/api/services/ai_service.py` lines 124-198  
+**Issue**: Natural language to SQL uses simple keyword matching instead of AI/ML
+
+**Mock Data Evidence**:
+```python
+def _convert_nl_to_sql(self, question: str, context: Dict[str, Any]) -> Tuple[str, str, float]:
+    # Simple pattern matching instead of AI
+    if "error" in question_lower:
+        confidence = 0.85  # Hardcoded confidence
+        sql = "SELECT * FROM logs_normalized_mt WHERE level = 'ERROR'"  # Template SQL
+        explanation = "Analyzing error patterns..."  # Static explanation
+```
+
+**Problems**:
+- Keyword matching instead of semantic understanding
+- Hardcoded SQL templates for each pattern  
+- Static confidence scores not based on query complexity
+- Fixed explanations instead of generated descriptions
+
+---
+
+### Additional Mock Data Found - Audit Progress
+
+#### BUG-MOCK-003: Subscription Service - Hardcoded Feature Bundles
+**Status**: HIGH  
+**Component**: Subscription Service  
+**File**: `/apps/api/services/subscription_service.py` lines 31-60  
+**Issue**: Feature bundles hardcoded in service instead of database/configuration
+
+**Mock Data Evidence**:
+```python
+def _initialize_feature_bundles(self):
+    return {
+        "startup": ["ingestion.basic", "storage.hot", "queries.basic"],
+        "starter": ["ingestion.basic", "storage.hot", "queries.basic"], 
+        "smb": ["ingestion.*", "storage.*", "queries.*", "alerts.basic"],
+        "professional": ["ingestion.*", "storage.*", "queries.*", "alerts.*"],
+        "enterprise": ["*"]  # All features
+    }
+```
+
+**Impact**: Business cannot modify subscription features without code deployment
+
+#### BUG-MOCK-004: Dashboard Service - Extensive Default Value Injection
+**Status**: MEDIUM  
+**Component**: Dashboard Service  
+**File**: `/apps/api/services/dashboard_service.py` lines 45-53, 407-413  
+**Issue**: Service layer setting defaults instead of database defaults
+
+**Mock Data Evidence**:
+```python
+# Dashboard defaults
+dashboard_data.setdefault('description', '')
+dashboard_data.setdefault('layout', {'columns': 2, 'rows': 2})
+dashboard_data.setdefault('filters', [])
+dashboard_data.setdefault('is_public', False)
+dashboard_data.setdefault('created_by', 'system')
+
+# Widget defaults  
+widget_data.setdefault('position', {'x': 0, 'y': 0})
+widget_data.setdefault('size', {'width': 6, 'height': 4})
+widget_data.setdefault('refresh_interval', 300)
+```
+
+**Impact**: Business logic in service layer instead of data layer
+
+#### BUG-MOCK-005: Alert Service - Hardcoded Configuration Values
+**Status**: MEDIUM  
+**Component**: Alert Service  
+**File**: `/apps/api/services/alert_service.py` lines 32-44  
+**Issue**: Alert configuration values hardcoded in service layer
+
+**Mock Data Evidence**:
+```python
+rule_data.setdefault("rule_type", "threshold")
+rule_data.setdefault("severity", "medium")
+rule_data.setdefault("evaluation_interval", 300)  # 5 minutes
+rule_data.setdefault("cooldown_period", 600)      # 10 minutes
+rule_data.setdefault("max_alerts_per_hour", 10)
+```
+
+**Impact**: Alert configuration embedded in code instead of configurable
+
+#### BUG-MOCK-006: Security Service - Demo Implementation Notice
+**Status**: MEDIUM  
+**Component**: Security Service  
+**File**: `/apps/api/services/security_service.py` line 243  
+**Issue**: Simplified demo implementation instead of production Sigma engine
+
+**Mock Data Evidence**:
+```python
+# This is a simplified implementation for demo purposes
+# Production would use a proper Sigma rule engine
+```
+
+**Impact**: Security detection engine using simplified logic instead of full Sigma implementation
+
+#### BUG-MOCK-007: Storage Service - Hardcoded Default Policy Returns
+**Status**: MEDIUM  
+**Component**: Storage Service  
+**File**: `/apps/api/services/storage_service.py` lines 100-111  
+**Issue**: Returns hardcoded default retention policy instead of using DAO
+
+**Mock Data Evidence**:
+```python
+# Return default policy structure if none exists
+return {
+    "policy_name": "default",
+    "hot_retention_days": 30,
+    "cold_retention_days": 90,  
+    "archive_retention_days": 365,
+    "compression_enabled": True,
+    "auto_deletion_enabled": False,
+    "storage_backend": "s3"
+}
+```
+
+**Impact**: Bypasses database layer, inconsistent with service → DAO → DB pattern
+
+#### BUG-MOCK-008: Query Service - Default Value Injection
+**Status**: MEDIUM  
+**Component**: Query Service  
+**File**: `/apps/api/services/query_service.py` lines 37-42  
+**Issue**: Service sets default values instead of database defaults
+
+**Mock Data Evidence**:
+```python
+query_data.setdefault('description', '')
+query_data.setdefault('query_type', 'advanced')
+query_data.setdefault('tags', [])
+query_data.setdefault('is_public', False)
+query_data.setdefault('created_by', 'system')
+```
+
+**Impact**: Business logic in service layer instead of data layer
+
+#### BUG-MOCK-009: Usage Service - Hardcoded Calculation Thresholds
+**Status**: MEDIUM  
+**Component**: Usage Service  
+**File**: `/apps/api/services/usage_service.py` lines 317-322  
+**Issue**: Growth rate thresholds hardcoded in service
+
+**Mock Data Evidence**:
+```python
+# Hardcoded 10% thresholds for trend classification
+if growth_rate > 10:
+    trend = "growing"
+elif growth_rate < -10:
+    trend = "declining"
+else:
+    trend = "stable"
+```
+
+**Impact**: Business calculation rules embedded in code instead of configurable
+
+### ✅ MOCK DATA AUDIT COMPLETE
+
+#### Final Service Audit Results:
+- [x] ❌ **AI Service** - CRITICAL ISSUES FOUND (keyword matching, hardcoded analysis)
+- [x] ❌ **Subscription Service** - HIGH ISSUES FOUND (hardcoded feature bundles)  
+- [x] ❌ **Dashboard Service** - MEDIUM ISSUES FOUND (default value injection)
+- [x] ❌ **Alert Service** - MEDIUM ISSUES FOUND (hardcoded config values)
+- [x] ❌ **Security Service** - MEDIUM ISSUES FOUND (demo implementation)
+- [x] ❌ **Storage Service** - MEDIUM ISSUES FOUND (hardcoded policy returns)
+- [x] ❌ **Query Service** - MEDIUM ISSUES FOUND (default value injection)
+- [x] ❌ **Usage Service** - MEDIUM ISSUES FOUND (hardcoded thresholds)
+- [x] ✅ **Observability Service** - NO MOCK DATA ISSUES
+- [x] ✅ **Enterprise Service** - NO MOCK DATA ISSUES (checked earlier)
+- [x] ✅ **Health/Tenant/User/Role Services** - NO MOCK DATA ISSUES (covered in earlier analysis)
+
+### 🚨 SUMMARY: 9 CRITICAL MOCK DATA BUGS FOUND
+
+**IMPACT ASSESSMENT**:
+- **CRITICAL (2 bugs)**: AI Service completely mock, Subscription features hardcoded
+- **HIGH PRIORITY (1 bug)**: Storage policy bypassing database
+- **MEDIUM PRIORITY (6 bugs)**: Default value injection, hardcoded configurations
+
+**PRODUCTION READINESS**: ❌ **NOT PRODUCTION READY**  
+**Required Action**: Replace ALL mock data implementations with real database-backed services
+
+**Estimated Fix Time**: 2-3 weeks for full remediation across all services
+
+---
 

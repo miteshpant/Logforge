@@ -280,9 +280,17 @@ class TTLManager:
     async def _upload_to_storage(self, storage_client, key: str, data: List, policy: RetentionPolicy):
         """Upload archived data to configured storage backend"""
         try:
-            # Convert data to compressed format (Parquet)
-            import pandas as pd
-            import io
+            # Check for required dependencies
+            try:
+                import pandas as pd
+                import pyarrow
+                import io
+            except ImportError as e:
+                raise ValueError(f"Required dependencies missing for data archival: {e}. Please install pandas and pyarrow.")
+            
+            # Validate input data
+            if not data or len(data) == 0:
+                raise ValueError("No data provided for archival")
             
             # Create DataFrame from ClickHouse result
             df = pd.DataFrame(data)
@@ -296,16 +304,26 @@ class TTLManager:
             if policy.encryption_required:
                 compressed_data = await self._encrypt_data(compressed_data, policy.customer_id)
             
+            # Get bucket name from storage endpoint
+            storage_endpoint = self.storage_manager.get_storage_endpoint(policy.customer_id)
+            bucket_name = storage_endpoint.bucket
+            
             # Upload based on storage type
             if hasattr(storage_client, 'put_object'):  # S3-compatible
-                storage_client.put_object(
-                    Bucket=self.storage_manager.get_bucket_name(policy.customer_id),
-                    Key=key,
-                    Body=compressed_data,
-                    ServerSideEncryption='AES256' if policy.encryption_required else None
-                )
+                # Build upload parameters
+                upload_params = {
+                    'Bucket': bucket_name,
+                    'Key': key,
+                    'Body': compressed_data
+                }
+                
+                # Only add ServerSideEncryption if encryption is required
+                if policy.encryption_required:
+                    upload_params['ServerSideEncryption'] = 'AES256'
+                
+                storage_client.put_object(**upload_params)
             elif hasattr(storage_client, 'blob'):  # GCS
-                bucket = storage_client.bucket(self.storage_manager.get_bucket_name(policy.customer_id))
+                bucket = storage_client.bucket(bucket_name)
                 blob = bucket.blob(key)
                 blob.upload_from_string(compressed_data)
             
@@ -342,6 +360,227 @@ class TTLManager:
         key_hash = hashlib.sha256(key_material).digest()[:32]
         return Fernet.generate_key()  # Replace with proper key derivation
     
+    async def archive_data(self, customer_id: str) -> Dict[str, Any]:
+        """Archive data for a specific customer based on their database retention policy"""
+        try:
+            # Get tenant's retention policy from database via storage service
+            from services.storage_service import StorageService
+            storage_service = StorageService()
+            db_policy = await storage_service.get_retention_policy(customer_id)
+            
+            if not db_policy:
+                raise ValueError(f"No retention policy found for customer {customer_id}")
+            
+            # Extract retention settings from database policy
+            hot_retention_days = db_policy.get('hot_retention_days', 30)
+            cold_retention_days = db_policy.get('cold_retention_days', 90)
+            archive_retention_days = db_policy.get('archive_retention_days', 365)
+            compression_enabled = db_policy.get('compression_enabled', True)
+            
+            # Calculate archive cutoff date (data older than hot_retention_days should be archived)
+            from datetime import datetime, timedelta, timezone
+            archive_before_date = datetime.now(timezone.utc) - timedelta(days=hot_retention_days)
+            cold_cutoff_date = datetime.now(timezone.utc) - timedelta(days=cold_retention_days)
+            
+            # Get actual data size for the time period from ingestion_stats_mt
+            # Convert datetime to ClickHouse-compatible format
+            archive_before_str = archive_before_date.strftime('%Y-%m-%d %H:%M:%S')
+            cold_cutoff_str = cold_cutoff_date.strftime('%Y-%m-%d %H:%M:%S')
+            
+            size_query = f"""
+            SELECT 
+                SUM(records_ingested) as total_log_count,
+                SUM(bytes_ingested) as total_bytes_ingested
+            FROM ingestion_stats_mt 
+            WHERE customer_id = '{customer_id}' 
+              AND timestamp < '{archive_before_str}'
+              AND timestamp >= '{cold_cutoff_str}'
+            """
+            
+            size_result = await asyncio.to_thread(self.ch_client.query, size_query)
+            
+            if not size_result.result_rows or not size_result.result_rows[0][0]:
+                self.logger.info("No ingestion stats found for archive period", 
+                               customer_id=customer_id, 
+                               archive_before_date=archive_before_date)
+                return {
+                    "status": "completed",
+                    "records_processed": 0,
+                    "data_size_gb": 0.0,
+                    "archive_cutoff_date": archive_before_date.isoformat(),
+                    "message": "No data found for archival based on ingestion stats"
+                }
+            
+            # Extract actual size data
+            total_log_count = size_result.result_rows[0][0] or 0
+            total_bytes_ingested = size_result.result_rows[0][1] or 0
+            
+            # Convert bytes to GB
+            data_size_gb = total_bytes_ingested / (1024**3) if total_bytes_ingested > 0 else 0.0
+            
+            if total_log_count == 0:
+                self.logger.info("No records to archive for period", 
+                               customer_id=customer_id, 
+                               archive_before_date=archive_before_date)
+                return {
+                    "status": "completed",
+                    "records_processed": 0,
+                    "data_size_gb": 0.0,
+                    "archive_cutoff_date": archive_before_date.isoformat(),
+                    "message": "No records found in archive time period"
+                }
+            
+            # Query actual log data to archive (limited batch for performance)
+            # Use exact column names from logs_raw_mt table schema
+            archive_query = f"""
+            SELECT 
+                ts, host, service, level, msg, trace_id, span_id, 
+                attrs, status, src_ip, user_id, customer_id,
+                ingested_at, severity_num, facility, parser_version
+            FROM logs_raw_mt 
+            WHERE customer_id = '{customer_id}' 
+              AND ts < toDateTime64('{archive_before_str}', 3)
+              AND ts >= toDateTime64('{cold_cutoff_str}', 3)
+            ORDER BY ts
+            LIMIT 5000
+            """
+            
+            result = await asyncio.to_thread(self.ch_client.query, archive_query)
+            actual_records_archived = len(result.result_rows) if result.result_rows else 0
+            
+            # Get storage client for archival
+            storage_client = self.storage_manager.get_storage_client(customer_id)
+            
+            # Create archive path with customer isolation
+            archive_date_str = archive_before_date.strftime('%Y/%m/%d')
+            archive_key = f"archived_logs/{customer_id}/{archive_date_str}/logs_batch_{int(datetime.now(timezone.utc).timestamp())}.parquet"
+            
+            # Create a temporary policy object for upload method compatibility
+            temp_policy = RetentionPolicy(
+                customer_id=customer_id,
+                deployment_type="shared",
+                hot_storage_days=hot_retention_days,
+                cold_storage_days=cold_retention_days,
+                total_retention_days=archive_retention_days,
+                encryption_required=False
+            )
+            
+            # Check if this time period has already been archived to prevent duplicates
+            existing_archive_query = f"""
+            SELECT COUNT(*) as existing_count 
+            FROM archive_metadata_mt 
+            WHERE customer_id = '{customer_id}' 
+              AND original_start_date <= toDateTime64('{cold_cutoff_str}', 3)
+              AND original_end_date >= toDateTime64('{archive_before_str}', 3)
+              AND status = 'completed'
+            """
+            
+            existing_result = await asyncio.to_thread(self.ch_client.query, existing_archive_query)
+            existing_archives = existing_result.result_rows[0][0] if existing_result.result_rows else 0
+            
+            if existing_archives > 0:
+                self.logger.info("Time period already archived, skipping",
+                               customer_id=customer_id,
+                               existing_archives=existing_archives,
+                               time_period=f"{cold_cutoff_str} to {archive_before_str}")
+                return {
+                    "status": "completed",
+                    "records_processed": 0,
+                    "data_size_gb": round(data_size_gb, 6),
+                    "message": f"Time period already archived ({existing_archives} existing archives found)"
+                }
+            
+            # Only upload if we have data to archive
+            if actual_records_archived > 0:
+                # Upload to cold storage first
+                await self._upload_to_storage(storage_client, archive_key, result.result_rows, temp_policy)
+                
+                # Calculate checksum for data integrity
+                import hashlib
+                data_str = str(result.result_rows).encode('utf-8')
+                checksum = hashlib.sha256(data_str).hexdigest()
+                
+                # Record archive metadata BEFORE deleting data
+                storage_endpoint = self.storage_manager.get_storage_endpoint(customer_id)
+                
+                archive_metadata_insert = f"""
+                INSERT INTO archive_metadata_mt (
+                    customer_id, archive_key, original_start_date, original_end_date,
+                    records_archived, data_size_bytes, compression_type, encryption_enabled,
+                    archive_date, storage_backend, bucket_name, checksum, retention_policy_id,
+                    status
+                ) VALUES (
+                    '{customer_id}',
+                    '{archive_key}',
+                    toDateTime64('{cold_cutoff_str}', 3),
+                    toDateTime64('{archive_before_str}', 3),
+                    {actual_records_archived},
+                    {total_bytes_ingested},
+                    'gzip',
+                    0,
+                    now64(),
+                    '{storage_endpoint.backend.value}',
+                    '{storage_endpoint.bucket}',
+                    '{checksum}',
+                    'default',
+                    'completed'
+                )
+                """
+                
+                await asyncio.to_thread(self.ch_client.command, archive_metadata_insert)
+                
+                # After successful upload and metadata tracking, DELETE the archived data from ClickHouse (MOVE operation)
+                delete_query = f"""
+                DELETE FROM logs_raw_mt 
+                WHERE customer_id = '{customer_id}' 
+                  AND ts < toDateTime64('{archive_before_str}', 3)
+                  AND ts >= toDateTime64('{cold_cutoff_str}', 3)
+                """
+                
+                delete_result = await asyncio.to_thread(self.ch_client.command, delete_query)
+                self.logger.info(f"Successfully moved data to archive",
+                               customer_id=customer_id,
+                               records_moved=actual_records_archived,
+                               archive_key=archive_key,
+                               checksum=checksum[:16] + "...")
+                
+                archive_message = f"Successfully moved {actual_records_archived} records to cold storage (deleted from hot storage)"
+            else:
+                archive_message = f"No actual log records found in time period (estimated {total_log_count} from stats)"
+            
+            self.logger.info("Data archival completed",
+                           customer_id=customer_id,
+                           estimated_total_records=total_log_count,
+                           actual_records_archived=actual_records_archived,
+                           data_size_gb=round(data_size_gb, 6),
+                           archive_key=archive_key if actual_records_archived > 0 else None,
+                           archive_cutoff_date=archive_before_date.isoformat())
+            
+            return {
+                "status": "completed",
+                "records_processed": actual_records_archived,
+                "estimated_total_records": total_log_count,
+                "data_size_gb": round(data_size_gb, 6),
+                "archive_key": archive_key if actual_records_archived > 0 else None,
+                "archive_cutoff_date": archive_before_date.isoformat(),
+                "storage_backend": "minio",
+                "compression_enabled": compression_enabled,
+                "hot_retention_days": hot_retention_days,
+                "message": archive_message
+            }
+            
+        except Exception as e:
+            self.logger.error("Failed to archive data",
+                            customer_id=customer_id,
+                            error=str(e))
+            return {
+                "status": "failed",
+                "error": str(e),
+                "records_processed": 0,
+                "data_size_gb": 0.0,
+                "message": f"Archive operation failed: {str(e)}"
+            }
+
     async def cleanup_expired_data(self):
         """Clean up expired data across all customers"""
         try:

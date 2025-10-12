@@ -68,7 +68,7 @@ async def list_dashboards(
             limit=limit
         )
         return result
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list dashboards: {str(e)}")
 
@@ -77,17 +77,19 @@ async def get_dashboard_config(dashboard_id: str, customer_id: str = MiddlewareT
     """Get dashboard configuration and metadata"""
     try:
         dashboard = await dashboard_service.get_dashboard(dashboard_id, customer_id)
-        
+
         if not dashboard:
             # Try default dashboard engine as fallback
             if dashboard_engine:
-                dashboard = dashboard_engine.get_dashboard_definition(dashboard_id)
-                if dashboard:
+                dashboard_def = dashboard_engine.get_dashboard_definition(dashboard_id)
+                if dashboard_def:
+                    # Convert Pydantic model to dict and add customer_id
+                    dashboard = dashboard_def.model_dump()
                     dashboard['customer_id'] = customer_id
                     return dashboard
-            
+
             raise HTTPException(status_code=404, detail="Dashboard not found")
-        
+
         return dashboard
 
     except HTTPException:
@@ -114,7 +116,7 @@ async def get_dashboard_data(
                 time_range = {"start_time": start_dt, "end_time": end_dt}
             except Exception as e:
                 logger.warning("Invalid time range format", error=str(e))
-        
+
         # Get dashboard data
         data = await dashboard_service.get_dashboard_data(dashboard_id, customer_id, time_range)
 
@@ -135,11 +137,11 @@ async def create_dashboard(dashboard_request: DashboardRequest, customer_id: str
         # Add customer_id to dashboard data
         dashboard_data = dashboard_request.model_dump()
         dashboard_data['customer_id'] = customer_id
-        
+
         # Create dashboard
         result = await dashboard_service.create_dashboard(dashboard_data)
         return result
-        
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -153,7 +155,7 @@ async def update_dashboard(dashboard_id: str, dashboard_request: DashboardReques
         update_data = dashboard_request.model_dump()
         result = await dashboard_service.update_dashboard(dashboard_id, customer_id, update_data)
         return result
-        
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -165,7 +167,7 @@ async def delete_dashboard(dashboard_id: str, customer_id: str = MiddlewareTenan
     try:
         result = await dashboard_service.delete_dashboard(dashboard_id, customer_id)
         return result
-        
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -205,10 +207,10 @@ async def create_widget(dashboard_id: str, widget_request: WidgetRequest, custom
         widget_data = widget_request.model_dump()
         widget_data['dashboard_id'] = dashboard_id
         widget_data['customer_id'] = customer_id
-        
+
         result = await dashboard_service.create_widget(widget_data)
         return result
-        
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -221,7 +223,7 @@ async def update_widget(dashboard_id: str, widget_id: str, widget_request: Widge
         update_data = widget_request.model_dump()
         result = await dashboard_service.update_widget(widget_id, customer_id, update_data)
         return result
-        
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -233,7 +235,7 @@ async def delete_widget(dashboard_id: str, widget_id: str, customer_id: str = Mi
     try:
         result = await dashboard_service.delete_widget(widget_id, customer_id)
         return result
-        
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -245,10 +247,26 @@ async def delete_widget(dashboard_id: str, widget_id: str, customer_id: str = Mi
 async def share_dashboard(dashboard_id: str, share_request: ShareRequest, customer_id: str = MiddlewareTenant):
     """Share dashboard with another user or tenant"""
     try:
+        # Validate the dashboard_id format - reject template placeholders
+        if dashboard_id.startswith('{{') and dashboard_id.endswith('}}'):
+            raise HTTPException(status_code=400, detail="Invalid dashboard ID: template placeholder not allowed")
+        
+        # First validate that the dashboard exists
+        dashboard = await dashboard_service.get_dashboard(dashboard_id, customer_id)
+        
+        # If not found in custom dashboards, check default dashboards
+        if not dashboard and dashboard_engine:
+            dashboard = dashboard_engine.get_dashboard_definition(dashboard_id)
+        
+        if not dashboard:
+            raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found")
+        
         share_data = share_request.model_dump()
         result = await dashboard_service.share_dashboard(dashboard_id, customer_id, share_data)
         return result
-        
+
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -265,6 +283,6 @@ async def get_dashboard_shares(dashboard_id: str, customer_id: str = MiddlewareT
             "total": len(shares),
             "customer_id": customer_id
         }
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get dashboard shares: {str(e)}")

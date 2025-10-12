@@ -22,6 +22,7 @@ import {
   Settings
 } from 'lucide-react'
 import { ObservabilityApi, SecurityApi, AlertsApi, QueryApi, UsageApi, AiApi } from '@/lib/api'
+import { apiClient } from '@/lib/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 
 interface StreamEvent {
@@ -116,22 +117,35 @@ export const RealTimeDataStream: React.FC<RealTimeDataStreamProps> = ({
         const securityCleanup = await SecurityApi.streamSecurityEvents(
           (securityEvent) => {
             const event: StreamEvent = {
-              id: `security-${securityEvent.id}`,
-              timestamp: securityEvent.timestamp,
+              id: `security-${securityEvent.id || Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              timestamp: securityEvent.timestamp || new Date().toISOString(),
               type: 'security',
-              severity: securityEvent.severity as StreamEvent['severity'],
+              severity: (securityEvent.severity as StreamEvent['severity']) || 'medium',
               service: 'security-engine',
-              message: `${securityEvent.rule_name}: ${securityEvent.description}`,
+              message: `${securityEvent.rule_name || 'Security Event'}: ${securityEvent.description || 'Security detection triggered'}`,
               metadata: { 
-                rule_id: securityEvent.rule_id, 
-                mitre: securityEvent.mitre_technique,
-                source_ip: securityEvent.source_ip,
-                target_ip: securityEvent.target_ip
+                rule_id: securityEvent.rule_id || 'unknown', 
+                mitre: securityEvent.mitre_technique || 'N/A',
+                source_ip: securityEvent.source_ip || 'N/A',
+                target_ip: securityEvent.target_ip || 'N/A'
               }
             }
             addEvent(event)
           },
-          (error) => console.error('Security stream error:', error),
+          (error) => {
+            console.error('Security stream error:', error)
+            // Add error event to stream for visibility
+            const errorEvent: StreamEvent = {
+              id: `security-error-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              timestamp: new Date().toISOString(),
+              type: 'security',
+              severity: 'medium',
+              service: 'security-engine',
+              message: `Security streaming error: ${error.message || 'Connection failed'}`,
+              metadata: { error: true }
+            }
+            addEvent(errorEvent)
+          },
           { severity: ['medium', 'high', 'critical'] }
         )
         streamCleanupRefs.current.push(securityCleanup)
@@ -143,21 +157,34 @@ export const RealTimeDataStream: React.FC<RealTimeDataStreamProps> = ({
         const alertsCleanup = await AlertsApi.streamAlertEvents(
           (alertEvent) => {
             const event: StreamEvent = {
-              id: `alert-${alertEvent.id}`,
-              timestamp: alertEvent.triggered_at,
+              id: `alert-${alertEvent.id || Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              timestamp: alertEvent.triggered_at || new Date().toISOString(),
               type: 'alert',
-              severity: alertEvent.severity as StreamEvent['severity'],
+              severity: (alertEvent.severity as StreamEvent['severity']) || 'medium',
               service: alertEvent.rule_name || 'alert-engine',
-              message: `Alert: ${alertEvent.message || alertEvent.description}`,
+              message: `Alert: ${alertEvent.message || alertEvent.description || 'Alert triggered'}`,
               metadata: {
-                rule_id: alertEvent.rule_id,
-                condition: alertEvent.condition,
-                threshold: alertEvent.threshold
+                rule_id: alertEvent.rule_id || 'unknown',
+                condition: alertEvent.condition || 'N/A',
+                threshold: alertEvent.threshold || 'N/A'
               }
             }
             addEvent(event)
           },
-          (error) => console.error('Alerts stream error:', error),
+          (error) => {
+            console.error('Alerts stream error:', error)
+            // Add error event to stream for visibility
+            const errorEvent: StreamEvent = {
+              id: `alert-error-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              timestamp: new Date().toISOString(),
+              type: 'alert',
+              severity: 'medium',
+              service: 'alert-engine',
+              message: `Alert: Alerts streaming error: ${error.message || 'Connection failed'}`,
+              metadata: { error: true }
+            }
+            addEvent(errorEvent)
+          },
           { severity: ['medium', 'high', 'critical'] }
         )
         streamCleanupRefs.current.push(alertsCleanup)
@@ -207,7 +234,7 @@ export const RealTimeDataStream: React.FC<RealTimeDataStreamProps> = ({
         const tracesCleanup = await ObservabilityApi.streamTraces(
           (traceData) => {
             const event: StreamEvent = {
-              id: `trace-${traceData.trace_id}`,
+              id: `trace-${traceData.trace_id || Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               timestamp: traceData.start_time,
               type: 'log',
               severity: traceData.duration > 5000 ? 'high' : traceData.duration > 1000 ? 'medium' : 'low',
@@ -376,23 +403,50 @@ export const RealTimeDataStream: React.FC<RealTimeDataStreamProps> = ({
   }
 
   const formatTime = (timestamp: string) => {
-    return new Date(timestamp).toLocaleTimeString('en-US', {
-      hour12: false,
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    })
+    try {
+      const date = new Date(timestamp)
+      if (isNaN(date.getTime())) {
+        return new Date().toLocaleTimeString('en-US', {
+          hour12: false,
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        })
+      }
+      return date.toLocaleTimeString('en-US', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      })
+    } catch (error) {
+      return new Date().toLocaleTimeString('en-US', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      })
+    }
   }
 
   const formatTimeAgo = (timestamp: string) => {
-    const now = Date.now()
-    const time = new Date(timestamp).getTime()
-    const diff = now - time
-    
-    if (diff < 1000) return 'just now'
-    if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-    return `${Math.floor(diff / 3600000)}h ago`
+    try {
+      const now = Date.now()
+      const time = new Date(timestamp).getTime()
+      
+      if (isNaN(time)) {
+        return 'just now'
+      }
+      
+      const diff = now - time
+      
+      if (diff < 1000) return 'just now'
+      if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`
+      if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
+      return `${Math.floor(diff / 3600000)}h ago`
+    } catch (error) {
+      return 'just now'
+    }
   }
 
   return (

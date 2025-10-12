@@ -361,3 +361,340 @@ class DashboardDAO:
         except Exception as e:
             logger.error("Failed to get dashboard shares", error=str(e), dashboard_id=dashboard_id)
             return []
+    
+    # Widget data generation methods
+    
+    async def get_time_series_data(self, customer_id: str, query_definition: Dict[str, Any], 
+                                  start_time: datetime, end_time: datetime) -> Dict[str, Any]:
+        """Generate time series data for line charts"""
+        try:
+            # Build time series query
+            time_field = query_definition.get('time_field', 'ts')
+            interval = query_definition.get('interval', '1h')
+            
+            # Build filters
+            where_clauses = [f"customer_id = %(customer_id)s"]
+            where_clauses.append(f"{time_field} >= %(start_time)s")
+            where_clauses.append(f"{time_field} <= %(end_time)s")
+            
+            params = {
+                'customer_id': customer_id,
+                'start_time': start_time.strftime('%Y-%m-%d %H:%M:%S'),
+                'end_time': end_time.strftime('%Y-%m-%d %H:%M:%S')
+            }
+            
+            # Add custom filters from query definition
+            if 'filters' in query_definition:
+                for filter_def in query_definition['filters']:
+                    field = filter_def['field']
+                    operator = filter_def['operator']
+                    value = filter_def['value']
+                    
+                    if operator == 'eq':
+                        where_clauses.append(f"{field} = %({field})s")
+                        params[field] = value
+                    elif operator == 'in' and isinstance(value, list):
+                        placeholders = ', '.join([f"%(filter_{field}_{i})s" for i in range(len(value))])
+                        where_clauses.append(f"{field} IN ({placeholders})")
+                        for i, v in enumerate(value):
+                            params[f"filter_{field}_{i}"] = v
+            
+            # Build aggregation (default to count)
+            aggregation = query_definition.get('aggregation', 'count(*)')
+            if aggregation == 'count':
+                aggregation = 'count(*)'
+            
+            # Time series query with hourly buckets
+            query = f"""
+                SELECT 
+                    toStartOfHour({time_field}) as time_bucket,
+                    {aggregation} as value
+                FROM logs_raw_mt 
+                WHERE {' AND '.join(where_clauses)}
+                GROUP BY time_bucket 
+                ORDER BY time_bucket
+            """
+            
+            result = await self.db.execute_query(query, params)
+            
+            # Format for chart visualization
+            series_data = []
+            labels = []
+            
+            for row in result:
+                time_bucket = row[0]
+                value = row[1]
+                
+                labels.append(time_bucket.strftime('%Y-%m-%d %H:%M:%S') if hasattr(time_bucket, 'strftime') else str(time_bucket))
+                series_data.append(float(value) if value is not None else 0.0)
+            
+            return {
+                "series": [{"name": "Time Series", "data": series_data}],
+                "labels": labels,
+                "query_definition": query_definition
+            }
+            
+        except Exception as e:
+            logger.error("Failed to generate time series data", error=str(e))
+            return {"series": [], "labels": [], "query_definition": query_definition, "error": str(e)}
+    
+    async def get_categorical_data(self, customer_id: str, query_definition: Dict[str, Any],
+                                  start_time: datetime, end_time: datetime) -> Dict[str, Any]:
+        """Generate categorical data for bar charts"""
+        try:
+            # Get grouping field (default to 'service')
+            group_by_field = query_definition.get('group_by', 'service')
+            time_field = query_definition.get('time_field', 'ts')
+            
+            # Build filters
+            where_clauses = [f"customer_id = %(customer_id)s"]
+            where_clauses.append(f"{time_field} >= %(start_time)s")
+            where_clauses.append(f"{time_field} <= %(end_time)s")
+            
+            params = {
+                'customer_id': customer_id,
+                'start_time': start_time.strftime('%Y-%m-%d %H:%M:%S'),
+                'end_time': end_time.strftime('%Y-%m-%d %H:%M:%S')
+            }
+            
+            # Add custom filters
+            if 'filters' in query_definition:
+                for filter_def in query_definition['filters']:
+                    field = filter_def['field']
+                    operator = filter_def['operator']
+                    value = filter_def['value']
+                    
+                    if operator == 'eq':
+                        where_clauses.append(f"{field} = %({field})s")
+                        params[field] = value
+                    elif operator == 'in' and isinstance(value, list):
+                        placeholders = ', '.join([f"%(filter_{field}_{i})s" for i in range(len(value))])
+                        where_clauses.append(f"{field} IN ({placeholders})")
+                        for i, v in enumerate(value):
+                            params[f"filter_{field}_{i}"] = v
+            
+            # Build aggregation
+            aggregation = query_definition.get('aggregation', 'count(*)')
+            if aggregation == 'count':
+                aggregation = 'count(*)'
+            
+            # Categorical query
+            query = f"""
+                SELECT 
+                    {group_by_field} as category,
+                    {aggregation} as value
+                FROM logs_raw_mt 
+                WHERE {' AND '.join(where_clauses)}
+                GROUP BY {group_by_field}
+                ORDER BY value DESC
+                LIMIT 20
+            """
+            
+            result = await self.db.execute_query(query, params)
+            
+            # Format for bar chart
+            categories = []
+            values = []
+            
+            for row in result:
+                category = row[0] or 'Unknown'
+                value = row[1]
+                
+                categories.append(str(category))
+                values.append(float(value) if value is not None else 0.0)
+            
+            return {
+                "series": [{"name": group_by_field.title(), "data": values}],
+                "labels": categories,
+                "query_definition": query_definition
+            }
+            
+        except Exception as e:
+            logger.error("Failed to generate categorical data", error=str(e))
+            return {"series": [], "labels": [], "query_definition": query_definition, "error": str(e)}
+    
+    async def get_metric_data(self, customer_id: str, query_definition: Dict[str, Any],
+                             start_time: datetime, end_time: datetime) -> Dict[str, Any]:
+        """Generate single metric data"""
+        try:
+            time_field = query_definition.get('time_field', 'ts')
+            
+            # Build filters
+            where_clauses = [f"customer_id = %(customer_id)s"]
+            where_clauses.append(f"{time_field} >= %(start_time)s")
+            where_clauses.append(f"{time_field} <= %(end_time)s")
+            
+            params = {
+                'customer_id': customer_id,
+                'start_time': start_time.strftime('%Y-%m-%d %H:%M:%S'),
+                'end_time': end_time.strftime('%Y-%m-%d %H:%M:%S')
+            }
+            
+            # Add custom filters
+            if 'filters' in query_definition:
+                for filter_def in query_definition['filters']:
+                    field = filter_def['field']
+                    operator = filter_def['operator']
+                    value = filter_def['value']
+                    
+                    if operator == 'eq':
+                        where_clauses.append(f"{field} = %({field})s")
+                        params[field] = value
+                    elif operator == 'gte':
+                        where_clauses.append(f"{field} >= %({field})s")
+                        params[field] = value
+            
+            # Build aggregation (default to count)
+            aggregation = query_definition.get('aggregation', 'count(*)')
+            if aggregation == 'count':
+                aggregation = 'count(*)'
+            elif aggregation == 'avg' and 'field' in query_definition:
+                field = query_definition['field']
+                if field in ['severity_num', 'status', 'facility']:
+                    aggregation = f'avg({field})'
+                else:
+                    aggregation = f'avg(toFloat64OrZero({field}))'
+            
+            # Single metric query
+            query = f"""
+                SELECT {aggregation} as current_value
+                FROM logs_raw_mt 
+                WHERE {' AND '.join(where_clauses)}
+            """
+            
+            result = await self.db.execute_query(query, params)
+            
+            current_value = 0.0
+            if result and result[0][0] is not None:
+                current_value = float(result[0][0])
+            
+            # Calculate previous period for trend (last 24h vs previous 24h)
+            prev_start = start_time - (end_time - start_time)
+            prev_params = params.copy()
+            prev_params.update({
+                'start_time': prev_start.strftime('%Y-%m-%d %H:%M:%S'),
+                'end_time': start_time.strftime('%Y-%m-%d %H:%M:%S')
+            })
+            
+            prev_result = await self.db.execute_query(query, prev_params)
+            prev_value = 0.0
+            if prev_result and prev_result[0][0] is not None:
+                prev_value = float(prev_result[0][0])
+            
+            # Calculate change percentage
+            change_percent = 0.0
+            trend = "stable"
+            if prev_value > 0:
+                change_percent = ((current_value - prev_value) / prev_value) * 100
+                trend = "up" if change_percent > 0 else "down" if change_percent < 0 else "stable"
+            
+            # Format value
+            if current_value >= 1000000:
+                formatted_value = f"{current_value/1000000:.1f}M"
+            elif current_value >= 1000:
+                formatted_value = f"{current_value/1000:.1f}K"
+            else:
+                formatted_value = f"{current_value:.0f}"
+            
+            return {
+                "value": current_value,
+                "formatted_value": formatted_value,
+                "change": f"{change_percent:+.1f}%",
+                "trend": trend,
+                "query_definition": query_definition
+            }
+            
+        except Exception as e:
+            logger.error("Failed to generate metric data", error=str(e))
+            return {
+                "value": 0,
+                "formatted_value": "0",
+                "change": "0%",
+                "trend": "stable",
+                "query_definition": query_definition,
+                "error": str(e)
+            }
+    
+    async def get_table_data(self, customer_id: str, query_definition: Dict[str, Any],
+                            start_time: datetime, end_time: datetime) -> Dict[str, Any]:
+        """Generate table data"""
+        try:
+            time_field = query_definition.get('time_field', 'ts')
+            limit = query_definition.get('limit', 100)
+            
+            # Define columns to select
+            columns = query_definition.get('columns', ['ts', 'level', 'service', 'msg', 'host'])
+            select_fields = ', '.join(columns)
+            
+            # Build filters
+            where_clauses = [f"customer_id = %(customer_id)s"]
+            where_clauses.append(f"{time_field} >= %(start_time)s")
+            where_clauses.append(f"{time_field} <= %(end_time)s")
+            
+            params = {
+                'customer_id': customer_id,
+                'start_time': start_time.strftime('%Y-%m-%d %H:%M:%S'),
+                'end_time': end_time.strftime('%Y-%m-%d %H:%M:%S'),
+                'limit': limit
+            }
+            
+            # Add custom filters
+            if 'filters' in query_definition:
+                for filter_def in query_definition['filters']:
+                    field = filter_def['field']
+                    operator = filter_def['operator']
+                    value = filter_def['value']
+                    
+                    if operator == 'eq':
+                        where_clauses.append(f"{field} = %({field})s")
+                        params[field] = value
+                    elif operator == 'ne':
+                        where_clauses.append(f"{field} != %({field})s")
+                        params[field] = value
+                    elif operator == 'contains':
+                        where_clauses.append(f"{field} LIKE %(like_{field})s")
+                        params[f"like_{field}"] = f"%{value}%"
+            
+            # Table query
+            order_by = query_definition.get('order_by', f'{time_field} DESC')
+            query = f"""
+                SELECT {select_fields}
+                FROM logs_raw_mt 
+                WHERE {' AND '.join(where_clauses)}
+                ORDER BY {order_by}
+                LIMIT %(limit)s
+            """
+            
+            result = await self.db.execute_query(query, params)
+            
+            # Format table data
+            headers = [{"key": col, "label": col.replace('_', ' ').title()} for col in columns]
+            rows = []
+            
+            for row in result:
+                row_data = {}
+                for i, col in enumerate(columns):
+                    value = row[i] if i < len(row) else None
+                    # Format datetime values
+                    if col == 'ts' and hasattr(value, 'strftime'):
+                        row_data[col] = value.strftime('%Y-%m-%d %H:%M:%S')
+                    else:
+                        row_data[col] = str(value) if value is not None else ''
+                rows.append(row_data)
+            
+            return {
+                "headers": headers,
+                "rows": rows,
+                "total": len(rows),
+                "query_definition": query_definition
+            }
+            
+        except Exception as e:
+            logger.error("Failed to generate table data", error=str(e))
+            return {
+                "headers": [],
+                "rows": [],
+                "total": 0,
+                "query_definition": query_definition,
+                "error": str(e)
+            }

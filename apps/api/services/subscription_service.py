@@ -389,23 +389,54 @@ class SubscriptionService:
         return await self.get_tenant_subscription(tenant_id)
 
     async def get_feature_rate(self, feature: str, tenant_id: str) -> Optional[FeatureRate]:
-        """Get current feature rate for tenant"""
+        """Get current feature rate for tenant, with fallback to YAML pricing"""
         try:
+            # First try to get from database
             db_rate = await self.subscription_dao.get_feature_rate(feature)
-
-            return FeatureRate(
-                feature_name=db_rate["feature_name"],
-                pricing_model=PricingModel(db_rate["pricing_model"]),
-                base_rate=float(db_rate["base_rate"]),
-                tier_rates=json.loads(db_rate["tier_rates"]),
-                currency=db_rate["currency"],
-                effective_date=db_rate["effective_date"],
-                created_by=db_rate["created_by"],
-                description=db_rate.get("description", "")
-            )
+            if db_rate:
+                return FeatureRate(
+                    feature_name=db_rate["feature_name"],
+                    pricing_model=PricingModel(db_rate["pricing_model"]),
+                    base_rate=float(db_rate["base_rate"]),
+                    tier_rates=json.loads(db_rate["tier_rates"]),
+                    currency=db_rate["currency"],
+                    effective_date=db_rate["effective_date"],
+                    created_by=db_rate["created_by"],
+                    description=db_rate.get("description", "")
+                )
 
         except Exception as e:
-            logger.error("Failed to get feature rate", error=str(e), feature=feature)
+            logger.debug("No database rate found, falling back to YAML pricing", feature=feature)
+
+        # Fallback to YAML pricing configuration
+        try:
+            import yaml
+            import os
+            from datetime import datetime, timezone
+            
+            config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'pricing.yml')
+            with open(config_path, 'r') as file:
+                pricing_config = yaml.safe_load(file)
+                
+            feature_pricing = pricing_config.get('feature_pricing', {})
+            if feature in feature_pricing:
+                rate_config = feature_pricing[feature]
+                return FeatureRate(
+                    feature_name=feature,
+                    pricing_model=PricingModel.PER_UNIT,
+                    base_rate=float(rate_config['base_price']),
+                    tier_rates={},
+                    currency=pricing_config.get('currency', 'USD'),
+                    effective_date=datetime.now(timezone.utc),
+                    created_by="yaml_config",
+                    description=rate_config.get('description', '')
+                )
+                
+            logger.warning("Feature not found in pricing config", feature=feature)
+            return None
+            
+        except Exception as e:
+            logger.error("Failed to load YAML pricing config", error=str(e), feature=feature)
             return None
 
     async def set_feature_rate(self, rate_request: FeatureRateRequest, created_by: str = "admin") -> FeatureRate:

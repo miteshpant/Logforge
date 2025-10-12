@@ -1,0 +1,2172 @@
+{
+	"info": {
+		"_postman_id": "logforge-api-tests",
+		"name": "Logforge API Tests",
+		"description": "Collection for testing Logforge API endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{auth_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"exec": [
+					"// Set global variables",
+					"pm.globals.set('base_url', 'http://localhost:7080');",
+					"pm.globals.set('tenant_id', '505908f9-8718-4dea-b2d8-9b9e5ae0bd45');",
+					"pm.globals.set('auth_email', 'shrutipande14@gmail.com');",
+					"pm.globals.set('auth_password', '*Pdq2C8CJhj9$U2q');"
+				],
+				"type": "text/javascript"
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:7080",
+			"type": "string"
+		},
+		{
+			"key": "tenant_id",
+			"value": "505908f9-8718-4dea-b2d8-9b9e5ae0bd45",
+			"type": "string"
+		},
+		{
+			"key": "auth_email",
+			"value": "shrutipande14@gmail.com",
+			"type": "string"
+		},
+		{
+			"key": "auth_password",
+			"value": "*Pdq2C8CJhj9$U2q",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.globals.set('auth_token', response.access_token);",
+									"    pm.test('Login successful', function () {",
+									"        pm.response.to.have.status(200);",
+									"    });",
+									"} else {",
+									"    pm.test('Login failed', function () {",
+									"        pm.response.to.have.status(200);",
+									"    });",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{auth_email}}\",\n  \"password\": \"{{auth_password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.globals.set('admin_auth_token', response.access_token);",
+									"    pm.test('Admin login successful', function () {",
+									"        pm.response.to.have.status(200);",
+									"    });",
+									"} else {",
+									"    pm.test('Admin login failed', function () {",
+									"        pm.response.to.have.status(200);",
+									"    });",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"admin@mrlogsec.com\",\n  \"password\": \"SecureAdmin123!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Log Ingestion",
+			"item": [
+				{
+					"name": "Ingest JSON Logs",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"service\": \"manual-testing\",\n  \"msg\": \"Manual API test - Generic JSON log ingestion\",\n  \"ts\": \"2025-10-08T00:00:00Z\",\n  \"level\": \"info\",\n  \"host\": \"api-test-host\",\n  \"trace_id\": \"test-trace-001\",\n  \"span_id\": \"test-span-001\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/ingest/logs",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"ingest",
+								"logs"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ingest Batch Logs",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"logs\": [\n    {\n      \"service\": \"web-service\",\n      \"msg\": \"User login successful\",\n      \"ts\": \"2025-10-08T00:00:00Z\",\n      \"level\": \"info\",\n      \"host\": \"web-01\",\n      \"trace_id\": \"trace-001\",\n      \"span_id\": \"span-001\",\n      \"user_id\": \"user-123\"\n    },\n    {\n      \"service\": \"auth-service\",\n      \"msg\": \"Authentication validated\",\n      \"ts\": \"2025-10-08T00:00:00Z\",\n      \"level\": \"info\",\n      \"host\": \"auth-01\",\n      \"trace_id\": \"trace-001\",\n      \"span_id\": \"span-002\"\n    },\n    {\n      \"service\": \"db-service\",\n      \"msg\": \"Database query executed\",\n      \"ts\": \"2025-10-08T00:00:00Z\",\n      \"level\": \"debug\",\n      \"host\": \"db-01\",\n      \"trace_id\": \"trace-001\",\n      \"span_id\": \"span-003\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/ingest/logs/batch",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"ingest",
+								"logs",
+								"batch"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ingest OTLP Logs",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"resource_logs\": [\n    {\n      \"resource\": {\n        \"attributes\": [\n          {\n            \"key\": \"service.name\",\n            \"value\": \"otlp-test-service\"\n          },\n          {\n            \"key\": \"host.name\",\n            \"value\": \"otlp-test-host\"\n          },\n          {\n            \"key\": \"deployment.environment\",\n            \"value\": \"development\"\n          }\n        ]\n      },\n      \"scope_logs\": [\n        {\n          \"scope\": {\n            \"name\": \"test-instrumentation\",\n            \"version\": \"1.0.0\"\n          },\n          \"log_records\": [\n            {\n              \"time_unix_nano\": {{$timestamp}}000000000,\n              \"severity_number\": 9,\n              \"severity_text\": \"INFO\",\n              \"body\": \"OTLP log ingestion test - OpenTelemetry Protocol log entry\",\n              \"attributes\": [\n                {\n                  \"key\": \"http.method\",\n                  \"value\": \"POST\"\n                },\n                {\n                  \"key\": \"http.status_code\",\n                  \"value\": 200\n                },\n                {\n                  \"key\": \"user.id\",\n                  \"value\": \"user-456\"\n                }\n              ],\n              \"dropped_attributes_count\": 0,\n              \"flags\": 0,\n              \"trace_id\": \"0102030405060708090a0b0c0d0e0f10\",\n              \"span_id\": \"0102030405060708\"\n            },\n            {\n              \"time_unix_nano\": {{$timestamp}}000000000,\n              \"severity_number\": 13,\n              \"severity_text\": \"WARN\",\n              \"body\": \"OTLP warning log - potential performance issue detected\",\n              \"attributes\": [\n                {\n                  \"key\": \"component\",\n                  \"value\": \"database\"\n                },\n                {\n                  \"key\": \"latency_ms\",\n                  \"value\": 1500\n                }\n              ],\n              \"dropped_attributes_count\": 0,\n              \"flags\": 0,\n              \"trace_id\": \"0102030405060708090a0b0c0d0e0f10\",\n              \"span_id\": \"0102030405060709\"\n            }\n          ]\n        }\n      ]\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/ingest/otlp",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"ingest",
+								"otlp"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ingest Syslog",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "text/plain"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "<134>Oct  8 12:34:56 syslog-test-host logforge-test: Syslog ingestion test - RFC 3164 format log entry with priority 134, facility local0, severity info"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/ingest/syslog",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"ingest",
+								"syslog"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ingest Nginx Logs",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "text/plain"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "192.168.1.100 - admin [08/Oct/2025:12:34:56 +0000] \"GET /api/health HTTP/1.1\" 200 45 \"https://example.com/dashboard\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\""
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/ingest/nginx",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"ingest",
+								"nginx"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ingest CEF Logs",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "text/plain"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "CEF:0|Logforge|Security|1.0|100|User Login Attempt|5|src=192.168.1.100 suser=testuser dhost=auth-server act=login outcome=success"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/ingest/cef",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"ingest",
+								"cef"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ingest Plain Text",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "text/plain"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "2025-10-08 12:34:56 INFO Application started successfully on port 8080"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/ingest/text",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"ingest",
+								"text"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ingest Structured JSON",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ts\": \"2025-10-08T00:00:00Z\",\n  \"level\": \"info\",\n  \"service\": \"structured-test-service\",\n  \"host\": \"structured-test-host\",\n  \"msg\": \"Structured JSON ingestion test - flexible JSON log format\",\n  \"user_id\": \"user-789\",\n  \"request_id\": \"req-123456\",\n  \"environment\": \"testing\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/ingest/structured",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"ingest",
+								"structured"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ingest Auto-Detect",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"service\": \"auto-detect-service\",\n  \"msg\": \"Auto-detect ingestion test - format detection based on content type and structure\",\n  \"ts\": \"2025-10-08T00:00:00Z\",\n  \"level\": \"info\",\n  \"host\": \"auto-detect-host\",\n  \"detection_test\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/ingest",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"ingest"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Log Query",
+			"item": [
+				{
+					"name": "Get Basic Logs",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/logs?limit=10&offset=0",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"logs"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Maximum number of logs to return"
+								},
+								{
+									"key": "offset",
+									"value": "0",
+									"description": "Number of logs to skip"
+								},
+								{
+									"key": "service",
+									"value": "",
+									"description": "Filter by service name",
+									"disabled": true
+								},
+								{
+									"key": "level",
+									"value": "",
+									"description": "Filter by log level",
+									"disabled": true
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Logs with Service Filter",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/logs?service=manual-testing&limit=5",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"logs"
+							],
+							"query": [
+								{
+									"key": "service",
+									"value": "manual-testing",
+									"description": "Filter by service name"
+								},
+								{
+									"key": "limit",
+									"value": "5",
+									"description": "Maximum number of logs to return"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Logs with Level Filter",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/logs?level=info&limit=10",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"logs"
+							],
+							"query": [
+								{
+									"key": "level",
+									"value": "info",
+									"description": "Filter by log level"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Maximum number of logs to return"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Saved Queries",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/query/saved?limit=10",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"query",
+								"saved"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Maximum number of queries to return"
+								},
+								{
+									"key": "created_by",
+									"value": "",
+									"description": "Filter by creator",
+									"disabled": true
+								},
+								{
+									"key": "query_type",
+									"value": "",
+									"description": "Filter by query type",
+									"disabled": true
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Save Query",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Test Query\",\n  \"description\": \"Sample saved query for testing\",\n  \"query_type\": \"search\",\n  \"query_definition\": {\n    \"filters\": [\n      {\n        \"field\": \"level\",\n        \"operator\": \"eq\",\n        \"value\": \"info\"\n      }\n    ],\n    \"time_range\": {\n      \"start\": \"2025-10-09T00:00:00Z\",\n      \"end\": \"2025-10-09T23:59:59Z\"\n    },\n    \"limit\": 100\n  },\n  \"tags\": [\"test\", \"demo\"],\n  \"is_public\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/query/saved",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"query",
+								"saved"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Saved Query by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/query/saved/{{query_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"query",
+								"saved",
+								"{{query_id}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Saved Query",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Updated Test Query\",\n  \"description\": \"Updated description for the test query\",\n  \"query_definition\": {\n    \"filters\": [\n      {\n        \"field\": \"level\",\n        \"operator\": \"eq\",\n        \"value\": \"error\"\n      }\n    ],\n    \"time_range\": {\n      \"start\": \"2025-10-09T00:00:00Z\",\n      \"end\": \"2025-10-09T23:59:59Z\"\n    },\n    \"limit\": 50\n  },\n  \"tags\": [\"test\", \"demo\", \"updated\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/query/saved/{{query_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"query",
+								"saved",
+								"{{query_id}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Saved Query",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/query/saved/{{query_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"query",
+								"saved",
+								"{{query_id}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "1. Basic Error Query",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"start_time\": \"2025-10-08T00:00:00Z\",\n  \"end_time\": \"2025-10-10T23:59:59Z\",\n  \"filters\": [\n    {\n      \"field\": \"level\",\n      \"operator\": \"eq\",\n      \"value\": \"error\"\n    }\n  ],\n  \"limit\": 100,\n  \"sort_field\": \"ts\",\n  \"sort_order\": \"desc\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/query/advanced",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"query",
+								"advanced"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2. Multi-Filter Query",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"start_time\": \"2025-10-08T00:00:00Z\",\n  \"end_time\": \"2025-10-10T23:59:59Z\",\n  \"filters\": [\n    {\n      \"field\": \"level\",\n      \"operator\": \"in\",\n      \"value\": [\"error\", \"warn\"]\n    },\n    {\n      \"field\": \"service\",\n      \"operator\": \"starts_with\",\n      \"value\": \"api-\"\n    },\n    {\n      \"field\": \"msg\",\n      \"operator\": \"contains\",\n      \"value\": \"timeout\"\n    }\n  ],\n  \"text_search\": \"authentication failed\",\n  \"limit\": 500,\n  \"sort_field\": \"ts\",\n  \"sort_order\": \"desc\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/query/advanced",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"query",
+								"advanced"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "3. Aggregation Query",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"start_time\": \"2025-10-08T00:00:00Z\",\n  \"end_time\": \"2025-10-10T23:59:59Z\",\n  \"filters\": [\n    {\n      \"field\": \"level\",\n      \"operator\": \"eq\",\n      \"value\": \"error\"\n    }\n  ],\n  \"aggregations\": [\n    {\n      \"type\": \"count\",\n      \"field\": \"*\",\n      \"alias\": \"error_count\"\n    },\n    {\n      \"type\": \"unique\",\n      \"field\": \"service\",\n      \"alias\": \"affected_services\"\n    },\n    {\n      \"type\": \"cardinality\",\n      \"field\": \"host\",\n      \"alias\": \"affected_hosts\"\n    }\n  ],\n  \"group_by\": [\"service\", \"level\"],\n  \"limit\": 1000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/query/advanced",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"query",
+								"advanced"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "4. Time Series Query",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"start_time\": \"2025-10-08T00:00:00Z\",\n  \"end_time\": \"2025-10-10T23:59:59Z\",\n  \"filters\": [\n    {\n      \"field\": \"level\",\n      \"operator\": \"in\",\n      \"value\": [\"error\", \"warn\"]\n    }\n  ],\n  \"time_series\": true,\n  \"time_granularity\": \"hour\",\n  \"aggregations\": [\n    {\n      \"type\": \"count\",\n      \"field\": \"*\",\n      \"alias\": \"events_per_hour\"\n    }\n  ],\n  \"group_by\": [\"service\"],\n  \"limit\": 2000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/query/advanced",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"query",
+								"advanced"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "5. Performance Monitoring",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"start_time\": \"2025-10-08T00:00:00Z\",\n  \"end_time\": \"2025-10-10T23:59:59Z\",\n  \"filters\": [\n    {\n      \"field\": \"severity_num\",\n      \"operator\": \"gte\",\n      \"value\": 3\n    },\n    {\n      \"field\": \"service\",\n      \"operator\": \"ne\",\n      \"value\": \"health-check\"\n    }\n  ],\n  \"aggregations\": [\n    {\n      \"type\": \"avg\",\n      \"field\": \"severity_num\",\n      \"alias\": \"avg_severity\"\n    },\n    {\n      \"type\": \"max\",\n      \"field\": \"severity_num\",\n      \"alias\": \"max_severity\"\n    },\n    {\n      \"type\": \"count\",\n      \"field\": \"*\",\n      \"alias\": \"high_severity_events\"\n    }\n  ],\n  \"group_by\": [\"service\"],\n  \"time_series\": true,\n  \"time_granularity\": \"minute\",\n  \"sort_field\": \"severity_num\",\n  \"sort_order\": \"desc\",\n  \"limit\": 1000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/query/advanced",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"query",
+								"advanced"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "6. Security Analytics",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"start_time\": \"2025-10-08T00:00:00Z\",\n  \"end_time\": \"2025-10-10T23:59:59Z\",\n  \"filters\": [\n    {\n      \"field\": \"level\",\n      \"operator\": \"in\",\n      \"value\": [\"error\", \"critical\"]\n    },\n    {\n      \"field\": \"msg\",\n      \"operator\": \"regex\",\n      \"value\": \"(failed|denied|blocked|unauthorized|breach)\"\n    }\n  ],\n  \"text_search\": \"security\",\n  \"aggregations\": [\n    {\n      \"type\": \"count\",\n      \"field\": \"*\",\n      \"alias\": \"security_events\"\n    },\n    {\n      \"type\": \"unique\",\n      \"field\": \"src_ip\",\n      \"alias\": \"unique_sources\"\n    },\n    {\n      \"type\": \"cardinality\",\n      \"field\": \"user_id\",\n      \"alias\": \"affected_users\"\n    }\n  ],\n  \"group_by\": [\"service\", \"src_ip\"],\n  \"time_series\": true,\n  \"time_granularity\": \"minute\",\n  \"limit\": 5000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/query/advanced",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"query",
+								"advanced"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "7. Field Selection Query",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"start_time\": \"2025-10-08T00:00:00Z\",\n  \"end_time\": \"2025-10-10T23:59:59Z\",\n  \"filters\": [\n    {\n      \"field\": \"service\",\n      \"operator\": \"in\",\n      \"value\": [\"api-gateway\", \"auth-service\", \"user-service\"]\n    }\n  ],\n  \"include_fields\": [\"ts\", \"level\", \"service\", \"msg\", \"host\", \"trace_id\"],\n  \"exclude_fields\": [\"internal_debug_info\", \"raw_headers\"],\n  \"sort_field\": \"ts\",\n  \"sort_order\": \"desc\",\n  \"limit\": 200,\n  \"offset\": 0\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/query/advanced",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"query",
+								"advanced"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "8. Complex Regex Query",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"start_time\": \"2025-10-08T00:00:00Z\",\n  \"end_time\": \"2025-10-10T23:59:59Z\",\n  \"filters\": [\n    {\n      \"field\": \"msg\",\n      \"operator\": \"regex\",\n      \"value\": \"\\\\b(?:error|exception|failure|timeout)\\\\b.*\\\\d{3,4}ms\"\n    },\n    {\n      \"field\": \"trace_id\",\n      \"operator\": \"regex\",\n      \"value\": \"^[a-f0-9]{16,32}$\"\n    },\n    {\n      \"field\": \"status\",\n      \"operator\": \"gte\",\n      \"value\": 400\n    }\n  ],\n  \"aggregations\": [\n    {\n      \"type\": \"count\",\n      \"field\": \"*\",\n      \"alias\": \"total_issues\"\n    },\n    {\n      \"type\": \"unique\",\n      \"field\": \"status\",\n      \"alias\": \"status_codes\"\n    }\n  ],\n  \"group_by\": [\"service\", \"level\"],\n  \"limit\": 1000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/query/advanced",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"query",
+								"advanced"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "9. Business Intelligence",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"start_time\": \"2025-10-08T00:00:00Z\",\n  \"end_time\": \"2025-10-10T23:59:59Z\",\n  \"filters\": [\n    {\n      \"field\": \"level\",\n      \"operator\": \"in\",\n      \"value\": [\"info\", \"warn\", \"error\"]\n    },\n    {\n      \"field\": \"status\",\n      \"operator\": \"gt\",\n      \"value\": 0\n    }\n  ],\n  \"aggregations\": [\n    {\n      \"type\": \"count\",\n      \"field\": \"*\",\n      \"alias\": \"total_events\"\n    },\n    {\n      \"type\": \"sum\",\n      \"field\": \"status\",\n      \"alias\": \"total_status_codes\"\n    },\n    {\n      \"type\": \"avg\",\n      \"field\": \"severity_num\",\n      \"alias\": \"avg_severity\"\n    },\n    {\n      \"type\": \"unique\",\n      \"field\": \"user_id\",\n      \"alias\": \"active_users\"\n    }\n  ],\n  \"group_by\": [\"level\", \"service\"],\n  \"time_series\": true,\n  \"time_granularity\": \"day\",\n  \"limit\": 5000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/query/advanced",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"query",
+								"advanced"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "10. Pagination Example",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"start_time\": \"2025-10-08T00:00:00Z\",\n  \"end_time\": \"2025-10-10T23:59:59Z\",\n  \"filters\": [\n    {\n      \"field\": \"level\",\n      \"operator\": \"ne\",\n      \"value\": \"debug\"\n    }\n  ],\n  \"sort_field\": \"ts\",\n  \"sort_order\": \"desc\",\n  \"limit\": 50,\n  \"offset\": 0,\n  \"include_fields\": [\"ts\", \"level\", \"service\", \"msg\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/query/advanced",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"query",
+								"advanced"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Dashboard Management",
+			"item": [
+				{
+					"name": "GET /v1/dashboards",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/dashboards?include_default=true&limit=50",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"dashboards"
+							],
+							"query": [
+								{
+									"key": "include_default",
+									"value": "true"
+								},
+								{
+									"key": "limit",
+									"value": "50"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST /v1/dashboards",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Custom Security Dashboard\",\n  \"description\": \"Real-time security monitoring for threat detection\",\n  \"widgets\": [\n    {\n      \"id\": \"widget-1\",\n      \"name\": \"Error Rate Over Time\",\n      \"type\": \"line_chart\",\n      \"query_definition\": {\n        \"filters\": [\n          {\n            \"field\": \"level\",\n            \"operator\": \"eq\",\n            \"value\": \"error\"\n          }\n        ],\n        \"aggregations\": [\n          {\n            \"type\": \"count\",\n            \"field\": \"*\",\n            \"alias\": \"error_count\"\n          }\n        ],\n        \"time_series\": true,\n        \"time_granularity\": \"hour\"\n      },\n      \"position\": {\"x\": 0, \"y\": 0},\n      \"size\": {\"width\": 6, \"height\": 4}\n    }\n  ],\n  \"layout\": {\"columns\": 12, \"rows\": 8},\n  \"filters\": [],\n  \"tags\": [\"security\", \"monitoring\"],\n  \"is_public\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/dashboards",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"dashboards"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /v1/dashboards/{dashboard_id}",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/dashboards/security",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"dashboards",
+								"security"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /v1/dashboards/{dashboard_id}/data",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/dashboards/security/data?start_time=2025-10-08T00:00:00Z&end_time=2025-10-10T23:59:59Z",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"dashboards",
+								"security",
+								"data"
+							],
+							"query": [
+								{
+									"key": "start_time",
+									"value": "2025-10-08T00:00:00Z"
+								},
+								{
+									"key": "end_time",
+									"value": "2025-10-10T23:59:59Z"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "PUT /v1/dashboards/{dashboard_id}",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Updated Security Dashboard\",\n  \"description\": \"Enhanced security monitoring with threat intelligence\",\n  \"widgets\": [\n    {\n      \"id\": \"widget-1\",\n      \"name\": \"Critical Security Events\",\n      \"type\": \"bar_chart\",\n      \"query_definition\": {\n        \"filters\": [\n          {\n            \"field\": \"severity_num\",\n            \"operator\": \"gte\",\n            \"value\": 4\n          }\n        ],\n        \"aggregations\": [\n          {\n            \"type\": \"count\",\n            \"field\": \"*\",\n            \"alias\": \"critical_events\"\n          }\n        ],\n        \"group_by\": [\"service\"]\n      },\n      \"position\": {\"x\": 0, \"y\": 0},\n      \"size\": {\"width\": 6, \"height\": 4}\n    }\n  ],\n  \"layout\": {\"columns\": 12, \"rows\": 8},\n  \"tags\": [\"security\", \"critical\", \"monitoring\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/dashboards/{{dashboard_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"dashboards",
+								"{{dashboard_id}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "DELETE /v1/dashboards/{dashboard_id}",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/dashboards/{{dashboard_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"dashboards",
+								"{{dashboard_id}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST /v1/dashboards/{dashboard_id}/widgets",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Service Performance Metrics\",\n  \"type\": \"metric\",\n  \"query_definition\": {\n    \"filters\": [\n      {\n        \"field\": \"service\",\n        \"operator\": \"eq\",\n        \"value\": \"api-gateway\"\n      }\n    ],\n    \"aggregations\": [\n      {\n        \"type\": \"avg\",\n        \"field\": \"severity_num\",\n        \"alias\": \"avg_severity\"\n      }\n    ]\n  },\n  \"visualization_config\": {\n    \"display_format\": \"decimal\",\n    \"precision\": 2,\n    \"unit\": \"severity\"\n  },\n  \"position\": {\"x\": 6, \"y\": 0},\n  \"size\": {\"width\": 3, \"height\": 2},\n  \"refresh_interval\": 60\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/dashboards/{{dashboard_id}}/widgets",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"dashboards",
+								"{{dashboard_id}}",
+								"widgets"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /v1/dashboards/{dashboard_id}/widgets/{widget_id}/data",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/dashboards/{{dashboard_id}}/widgets/{{widget_id}}/data",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"dashboards",
+								"{{dashboard_id}}",
+								"widgets",
+								"{{widget_id}}",
+								"data"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST /v1/dashboards/{dashboard_id}/share",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"shared_with_email\": \"analyst@example.com\",\n  \"permission_level\": \"view\",\n  \"expires_at\": \"2025-12-31T23:59:59Z\",\n  \"created_by\": \"admin@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/dashboards/{{dashboard_id}}/share",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"dashboards",
+								"{{dashboard_id}}",
+								"share"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Storage Management",
+			"item": [
+				{
+					"name": "TTL and Retention Management",
+					"item": [
+						{
+							"name": "Create Retention Policy",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"hot_retention_days\": 30,\n  \"cold_retention_days\": 90,\n  \"archive_retention_days\": 365,\n  \"compression_enabled\": true,\n  \"auto_deletion_enabled\": false\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/storage/retention/{{tenant_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"storage",
+										"retention",
+										"{{tenant_id}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get Retention Policy",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/v1/storage/retention/{{tenant_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"storage",
+										"retention",
+										"{{tenant_id}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Update Retention Policy",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"hot_retention_days\": 45,\n  \"cold_retention_days\": 120,\n  \"archive_retention_days\": 400,\n  \"compression_enabled\": true,\n  \"auto_deletion_enabled\": false\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/storage/retention/{{tenant_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"storage",
+										"retention",
+										"{{tenant_id}}"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Data Operations",
+					"item": [
+						{
+							"name": "Trigger Manual Cleanup",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"policy_name\": \"default\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/storage/cleanup",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"storage",
+										"cleanup"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Archive Old Data",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/v1/storage/archive/{{tenant_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"storage",
+										"archive",
+										"{{tenant_id}}"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Health Monitoring",
+					"item": [
+						{
+							"name": "Customer Storage Health",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/v1/storage/health",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"storage",
+										"health"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Specific Customer Health",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/v1/storage/health/{{tenant_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"storage",
+										"health",
+										"{{tenant_id}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Infrastructure Health (Admin Only)",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{admin_auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/v1/storage/health/infrastructure",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"storage",
+										"health",
+										"infrastructure"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Quota Management",
+					"item": [
+						{
+							"name": "Sync Tenant Quota",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/v1/storage/quota/sync",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"storage",
+										"quota",
+										"sync"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Sync All Tenant Quotas (Admin Only)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{admin_auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/v1/storage/quota/sync/all",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"storage",
+										"quota",
+										"sync",
+										"all"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Archive Retrieval",
+					"item": [
+						{
+							"name": "List Customer Archives",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/v1/storage/archives/{{tenant_id}}?limit=50&offset=0",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"storage",
+										"archives",
+										"{{tenant_id}}"
+									],
+									"query": [
+										{
+											"key": "limit",
+											"value": "50"
+										},
+										{
+											"key": "offset",
+											"value": "0"
+										},
+										{
+											"key": "start_date",
+											"value": "2025-01-01",
+											"disabled": true
+										},
+										{
+											"key": "end_date",
+											"value": "2025-12-31",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get Archive Metadata",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/v1/storage/archive/archived_logs/{{tenant_id}}/sample_archive.parquet",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"storage",
+										"archive",
+										"archived_logs",
+										"{{tenant_id}}",
+										"sample_archive.parquet"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Download Archive",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/v1/storage/archive/archived_logs/{{tenant_id}}/sample_archive.parquet/download",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"storage",
+										"archive",
+										"archived_logs",
+										"{{tenant_id}}",
+										"sample_archive.parquet",
+										"download"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Query Archived Data",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"archive_keys\": [\n    \"archived_logs/{{tenant_id}}/sample_archive.parquet\"\n  ],\n  \"filters\": {\n    \"level\": \"error\",\n    \"service\": \"web-service\"\n  },\n  \"limit\": 1000\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/storage/query-archive",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"storage",
+										"query-archive"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Alerts Management",
+			"item": [
+				{
+					"name": "Alert Rules",
+					"item": [
+						{
+							"name": "Create Alert Rule",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"High Error Rate Alert\",\n  \"description\": \"Alert when error rate exceeds 5% in 5 minutes\",\n  \"rule_type\": \"threshold\",\n  \"severity\": \"high\",\n  \"enabled\": true,\n  \"evaluation_interval\": 300,\n  \"cooldown_period\": 600,\n  \"conditions\": [\n    {\n      \"field\": \"level\",\n      \"operator\": \"eq\",\n      \"value\": \"error\"\n    }\n  ],\n  \"filters\": [\n    {\n      \"field\": \"service\",\n      \"operator\": \"eq\",\n      \"value\": \"web-api\"\n    }\n  ],\n  \"notification_channels\": [\"email-ops\", \"slack-alerts\"],\n  \"tags\": [\"web\", \"critical\"]\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/alerts/rules",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"alerts",
+										"rules"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "List Alert Rules",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/v1/alerts/rules?enabled=true&severity=high&limit=100&offset=0",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"alerts",
+										"rules"
+									],
+									"query": [
+										{
+											"key": "enabled",
+											"value": "true",
+											"description": "Filter by enabled status"
+										},
+										{
+											"key": "severity",
+											"value": "high",
+											"description": "Filter by severity level",
+											"disabled": true
+										},
+										{
+											"key": "limit",
+											"value": "100",
+											"description": "Number of results to return"
+										},
+										{
+											"key": "offset",
+											"value": "0",
+											"description": "Pagination offset"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get Specific Alert Rule",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/v1/alerts/rules/{{rule_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"alerts",
+										"rules",
+										"{{rule_id}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Update Alert Rule",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"Updated High Error Rate Alert\",\n  \"description\": \"Updated description for error rate monitoring\",\n  \"enabled\": false,\n  \"severity\": \"critical\",\n  \"conditions\": [\n    {\n      \"field\": \"level\",\n      \"operator\": \"eq\",\n      \"value\": \"error\"\n    },\n    {\n      \"field\": \"count\",\n      \"operator\": \"gt\",\n      \"value\": \"10\"\n    }\n  ],\n  \"notification_channels\": [\"updated-channel\"]\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/alerts/rules/{{rule_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"alerts",
+										"rules",
+										"{{rule_id}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Test Alert Rule",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"test_data\": {\n    \"custom_conditions\": [\"optional\", \"test\", \"overrides\"]\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/alerts/rules/{{rule_id}}/test",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"alerts",
+										"rules",
+										"{{rule_id}}",
+										"test"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Alert Rule",
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/v1/alerts/rules/{{rule_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"alerts",
+										"rules",
+										"{{rule_id}}"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		}
+	]
+}

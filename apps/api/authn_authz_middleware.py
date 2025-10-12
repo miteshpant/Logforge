@@ -443,6 +443,8 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in ["POST", "PUT", "DELETE"]:
             return "observability:write:tenant"
         return "observability:read:tenant"
+    elif path.startswith("/v1/stream/"):
+        return "observability:read:tenant"  # Streaming endpoints require observability read access
     elif path == "/v1/tenants" or (path.startswith("/v1/tenants") and path.count("/") == 2):
         # /v1/tenants (list all) requires platform admin
         # /v1/tenants (create) requires platform admin
@@ -840,6 +842,101 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 "reason": "Feature validation error - access granted"
             }
 
+    async def _calculate_api_call_cost(self, endpoint: str, status_code: int, response_size: int = 0) -> float:
+        """Calculate API call cost using pricing.yml configuration"""
+        try:
+            # Import BillingService to use pricing configuration
+            from services.billing_service import BillingService
+            billing_service = BillingService()
+            
+            # Get pricing from configuration
+            feature_pricing = billing_service.pricing_config.get("feature_pricing", {})
+            api_pricing = feature_pricing.get("api.calls", {})
+            base_price_per_1000 = api_pricing.get("base_price", 1.50)  # $1.50 per 1000 calls as per pricing.yml
+            
+            # Calculate cost per single API call
+            cost_per_call = base_price_per_1000 / 1000.0
+            
+            # Apply billing policy for failed requests (same as before)
+            if 500 <= status_code < 600:
+                return 0.0  # No charge for server errors
+            elif status_code in [401, 403]:
+                return cost_per_call * 0.1  # Minimal charge for auth processing
+            elif 400 <= status_code < 500:
+                return cost_per_call * 0.5  # Partial charge for client errors
+            else:
+                # Full charge for successful requests
+                return cost_per_call
+                
+        except Exception as e:
+            logger.warning("Failed to calculate API cost from pricing.yml, using fallback", error=str(e))
+            # Fallback to a reasonable default if pricing config fails
+            return 0.0015  # $1.50 / 1000 calls = $0.0015 per call
+
+    def _track_api_cost_background(self, tenant_id: str):
+        """Track API call cost calculation in background thread (same pattern as monthly_ingestion)"""
+        try:
+            import threading
+            import asyncio
+            
+            def run_async_in_thread():
+                """Run async processing in a separate thread with its own event loop (same as dependencies.py)"""
+                try:
+                    # Create a new ClickHouse client instance for this background task
+                    from clickhouse_connect import get_client
+                    background_client = get_client(
+                        host=CLICKHOUSE_HOST,
+                        port=CLICKHOUSE_PORT, 
+                        username=CLICKHOUSE_USER,
+                        password=CLICKHOUSE_PASSWORD,
+                        database=CLICKHOUSE_DATABASE,
+                        send_receive_timeout=120
+                    )
+                    
+                    if not background_client:
+                        logger.error("Failed to create background ClickHouse client")
+                        return
+                        
+                    # Run the async function in a new event loop
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    
+                    try:
+                        loop.run_until_complete(
+                            self._track_api_cost_async(tenant_id, background_client)
+                        )
+                    finally:
+                        loop.close()
+                        background_client.close()
+                        
+                except Exception as e:
+                    logger.error(f"Async background API cost tracking failed: {e}")
+            
+            # Start the processing in a daemon thread (fire-and-forget - same as dependencies.py)
+            thread = threading.Thread(target=run_async_in_thread, daemon=True)
+            thread.start()
+            
+            logger.debug(f"Non-blocking API cost tracking started for tenant {tenant_id}")
+                
+        except Exception as e:
+            logger.error(f"Failed to start background API cost tracking: {e}")
+
+    async def _track_api_cost_async(self, tenant_id: str, client):
+        """Async function for API cost calculation and tracking (same pattern as track_usage_with_cost_calculation)"""
+        try:
+            # Import services within the function to avoid circular imports (same as dependencies.py)
+            from services.tenant_service import TenantService
+            from dependencies import track_usage_with_cost_calculation
+            
+            # Track API call quota with proper cost calculation (same as monthly_ingestion)
+            tenant_service = TenantService()
+            await track_usage_with_cost_calculation(tenant_service, tenant_id, "api_calls", 1)
+            
+            logger.debug(f"API cost tracking completed: tenant_id={tenant_id}")
+            
+        except Exception as e:
+            logger.warning(f"API cost calculation failed in background: tenant_id={tenant_id}, error={str(e)}")
+
     async def _track_api_usage(self, request: Request, response, user: User,
                               tenant_id: str, start_time: float):
         """Track API usage for billing (async)"""
@@ -847,8 +944,20 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             current_time = time.time()
             processing_time = int((current_time - start_time) * 1000)
 
-            # Get response size safely
+            # Get request and response sizes safely
+            request_size = 0
             response_size = 0
+            
+            # Get request size
+            if hasattr(request, "headers"):
+                content_length = request.headers.get("content-length")
+                if content_length:
+                    try:
+                        request_size = int(content_length)
+                    except (ValueError, TypeError):
+                        request_size = 0
+            
+            # Get response size
             if hasattr(response, "body"):
                 response_size = len(response.body)
             elif hasattr(response, "headers"):
@@ -859,10 +968,10 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                     except (ValueError, TypeError):
                         response_size = 0
 
-            # Calculate cost safely (avoid inf/nan values)
+            # Calculate cost using pricing.yml configuration
             cost_credits = 0.0
             try:
-                cost_credits = calculate_request_cost(
+                cost_credits = await self._calculate_api_call_cost(
                     request.url.path,
                     getattr(response, "status_code", 200),
                     response_size
@@ -880,6 +989,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 "method": request.method,
                 "response_status": getattr(response, "status_code", 200),
                 "processing_time_ms": processing_time,
+                "request_size_bytes": request_size,
                 "response_size_bytes": response_size,
                 "ip_address": request.client.host if request.client else "unknown",
                 "user_agent": request.headers.get("user-agent", ""),
@@ -890,6 +1000,9 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             }
 
             await usage_buffer.add_usage(usage_data)
+            
+            # Track API call quota with proper cost calculation (non-blocking, same pattern as monthly_ingestion)
+            self._track_api_cost_background(tenant_id)
 
         except Exception as e:
             logger.error("Usage tracking failed", error=str(e),
@@ -944,7 +1057,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             request_details = {
                 "endpoint": path,
                 "method": request.method,
-                "status_code": getattr(response, "status_code", 200),
+                "response_status": getattr(response, "status_code", 200),
                 "user_agent": request.headers.get("user-agent", ""),
                 "target_tenant": tenant_id,
                 "platform_roles": [role["role"] for role in user_roles if role["tenant_id"] == "platform"]

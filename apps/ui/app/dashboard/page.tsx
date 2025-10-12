@@ -1286,32 +1286,58 @@ export default function DashboardPage() {
 
         {/* 🚀 WORLD-CLASS ENTERPRISE FEATURES */}
         
-        {/* Advanced Data Visualizations */}
-        <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-xl flex items-center space-x-2">
-                  <BarChart3 className="w-6 h-6 text-indigo-600" />
-                  <span>Real-Time Analytics</span>
-                </CardTitle>
-                <CardDescription>
-                  Advanced data visualizations with live streaming and AI-powered insights
-                </CardDescription>
+        {/* Real-Time Analytics - Enterprise Grade */}
+        <Card className="bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50 border-slate-200 shadow-xl">
+          <CardHeader className="pb-6">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-lg">
+                  <BarChart3 className="w-7 h-7 text-white" />
+                </div>
+                <div>
+                  <CardTitle className="text-2xl font-bold text-slate-900 mb-1">
+                    Real-Time Analytics
+                  </CardTitle>
+                  <CardDescription className="text-slate-600 text-base">
+                    Advanced data visualizations with live streaming and AI-powered insights
+                  </CardDescription>
+                </div>
               </div>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setShowRealTimeStream(!showRealTimeStream)}
-                className="border-indigo-300 text-indigo-700"
-                data-testid="toggle-real-time-stream"
-              >
-                {showRealTimeStream ? 'Hide Stream' : 'Show Stream'}
-              </Button>
+              <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-2 px-3 py-1.5 bg-green-100 rounded-full">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <span className="text-xs font-medium text-green-700">Live</span>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setShowRealTimeStream(!showRealTimeStream)}
+                  className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 transition-colors"
+                  data-testid="toggle-real-time-stream"
+                >
+                  {showRealTimeStream ? (
+                    <>
+                      <Eye className="w-4 h-4 mr-2" />
+                      Hide Stream
+                    </>
+                  ) : (
+                    <>
+                      <Activity className="w-4 h-4 mr-2" />
+                      Show Stream
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </CardHeader>
-          <CardContent>
-            <DashboardVisualization />
+          <CardContent className="pt-0">
+            <div className="space-y-6">
+              
+              {/* Charts Container */}
+              <div className="bg-white/80 backdrop-blur-sm rounded-lg border border-slate-200 p-4">
+                <DashboardVisualization className="space-y-6" />
+              </div>
+            </div>
           </CardContent>
         </Card>
 

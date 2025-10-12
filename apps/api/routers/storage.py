@@ -166,23 +166,45 @@ async def archive_old_data(customer_id: str, requesting_customer: str = Middlewa
         raise HTTPException(status_code=500, detail=f"Archival failed: {str(e)}")
 
 @router.get("/health/infrastructure")
-async def get_infrastructure_health(customer_id: str = MiddlewareTenant):
-    """Get system-wide infrastructure health (Admin-only access)"""
+async def get_infrastructure_health(request: Request, customer_id: str = MiddlewareTenant):
+    """Get system-wide infrastructure health (Platform Admin only)"""
     try:
-        # TODO: Add admin access check here
-        # For now, we'll implement the check in a future admin authorization system
-        # if not is_admin(customer_id):
-        #     raise HTTPException(status_code=403, detail="Admin access required")
+        # Enforce platform admin access for infrastructure health
+        from services.user_service import UserService
+        user_service = UserService()
+        
+        # Get user ID from request context (set by auth middleware)
+        user_id = getattr(request.state, 'user_id', None)
+        if not user_id:
+            raise HTTPException(status_code=403, detail="User context not found")
+        
+        # Check if user has platform admin role
+        user_roles = await user_service.get_user_roles(user_id)
+        platform_admin_roles = ['super_admin', 'admin', 'support_admin']
+        
+        has_platform_admin_access = any(
+            role.get('role_name') in platform_admin_roles and role.get('tenant_id') == 'platform'
+            for role in user_roles
+        )
+        
+        if not has_platform_admin_access:
+            raise HTTPException(
+                status_code=403, 
+                detail="Platform admin access required for infrastructure health check"
+            )
         
         # Get infrastructure health information using storage service
         health_info = await storage_service.get_infrastructure_health()
         
         return {
             "infrastructure_health": health_info,
-            "access_level": "admin",
+            "access_level": "platform_admin",
+            "accessed_by": user_id,
             "checked_at": datetime.now(timezone.utc)
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Infrastructure health check failed: {str(e)}")
 
@@ -202,15 +224,31 @@ async def get_customer_storage_health(customer_id: str = MiddlewareTenant):
         raise HTTPException(status_code=500, detail=f"Storage health check failed: {str(e)}")
 
 @router.get("/health/{target_customer_id}")
-async def get_specific_customer_health(target_customer_id: str, requesting_customer: str = MiddlewareTenant):
+async def get_specific_customer_health(target_customer_id: str, request: Request, requesting_customer: str = MiddlewareTenant):
     """Get specific customer's storage health (Admin access or own data only)"""
     try:
         # Basic tenant isolation check
         if requesting_customer != target_customer_id:
-            # TODO: Add admin access check here
-            # For now, block cross-tenant access (will be enhanced with admin roles)
-            # if not is_admin(requesting_customer):
-            raise HTTPException(status_code=403, detail="Access denied - can only view own storage health")
+            # Check if requesting user has admin privileges
+            from services.user_service import UserService
+            user_service = UserService()
+            
+            # Get user ID from request context (set by auth middleware)
+            user_id = getattr(request.state, 'user_id', None)
+            if not user_id:
+                raise HTTPException(status_code=403, detail="User context not found")
+            
+            # Check if user has platform admin role
+            user_roles = await user_service.get_user_roles(user_id)
+            admin_roles = ['super_admin', 'admin', 'support_admin']
+            
+            has_admin_access = any(
+                role.get('role_name') in admin_roles and role.get('tenant_id') == 'platform'
+                for role in user_roles
+            )
+            
+            if not has_admin_access:
+                raise HTTPException(status_code=403, detail="Admin access required to view other tenant's storage health")
         
         # Get storage health for the target customer
         health_info = await storage_service.get_storage_health(target_customer_id)
@@ -221,3 +259,190 @@ async def get_specific_customer_health(target_customer_id: str, requesting_custo
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Storage health check failed: {str(e)}")
+
+@router.post("/quota/sync")
+async def trigger_storage_quota_sync(customer_id: str = MiddlewareTenant):
+    """Trigger manual storage quota sync for the authenticated tenant"""
+    try:
+        from services.storage_quota_sync_service import storage_quota_sync_service
+        
+        # Trigger sync for the authenticated customer
+        result = await storage_quota_sync_service.trigger_manual_sync(customer_id)
+        
+        return {
+            "status": "completed",
+            "customer_id": customer_id,
+            "sync_result": result,
+            "triggered_at": datetime.now(timezone.utc)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Storage quota sync failed: {str(e)}")
+
+@router.post("/quota/sync/all")
+async def trigger_all_storage_quota_sync(request: Request, requesting_customer: str = MiddlewareTenant):
+    """Trigger manual storage quota sync for all tenants (Platform Admin only)"""
+    try:
+        # Enforce platform admin access for system-wide operations
+        from services.user_service import UserService
+        user_service = UserService()
+        
+        # Get user ID from request context (set by auth middleware)
+        user_id = getattr(request.state, 'user_id', None)
+        if not user_id:
+            raise HTTPException(status_code=403, detail="User context not found")
+        
+        # Check if user has platform admin role
+        user_roles = await user_service.get_user_roles(user_id)
+        platform_admin_roles = ['super_admin', 'admin']
+        
+        has_platform_admin_access = any(
+            role.get('role_name') in platform_admin_roles and role.get('tenant_id') == 'platform'
+            for role in user_roles
+        )
+        
+        if not has_platform_admin_access:
+            raise HTTPException(
+                status_code=403, 
+                detail="Platform admin access required for system-wide storage quota sync"
+            )
+        
+        from services.storage_quota_sync_service import storage_quota_sync_service
+        
+        # Trigger sync for all tenants
+        result = await storage_quota_sync_service.trigger_manual_sync()
+        
+        return {
+            "status": "completed",
+            "sync_result": result,
+            "triggered_by": requesting_customer,
+            "user_id": user_id,
+            "triggered_at": datetime.now(timezone.utc)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"System-wide storage quota sync failed: {str(e)}")
+
+# Archive Retrieval APIs
+
+@router.get("/archives/{customer_id}")
+async def list_customer_archives(
+    customer_id: str,
+    limit: int = 50,
+    offset: int = 0,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    requesting_customer: str = MiddlewareTenant
+):
+    """List archived data for a customer with pagination and filtering"""
+    try:
+        # Validate tenant access
+        if requesting_customer != customer_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        archives = await storage_service.list_customer_archives(
+            customer_id=customer_id,
+            limit=limit,
+            offset=offset,
+            start_date=start_date,
+            end_date=end_date
+        )
+        
+        return {
+            "customer_id": customer_id,
+            "archives": archives,
+            "pagination": {
+                "limit": limit,
+                "offset": offset,
+                "total_count": len(archives)
+            },
+            "retrieved_at": datetime.now(timezone.utc)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list archives: {str(e)}")
+
+@router.get("/archive/{archive_key:path}")
+async def get_archive_metadata(
+    archive_key: str,
+    requesting_customer: str = MiddlewareTenant
+):
+    """Get metadata for a specific archive"""
+    try:
+        archive_info = await storage_service.get_archive_metadata(archive_key, requesting_customer)
+        if not archive_info:
+            raise HTTPException(status_code=404, detail="Archive not found")
+        
+        return {
+            "archive_metadata": archive_info,
+            "retrieved_at": datetime.now(timezone.utc)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get archive metadata: {str(e)}")
+
+@router.post("/archive/{archive_key:path}/download")
+async def download_archive(
+    archive_key: str,
+    request: Request,
+    requesting_customer: str = MiddlewareTenant
+):
+    """Generate presigned URL or direct download for archived data"""
+    try:
+        # Get user ID from request context
+        user_id = getattr(request.state, 'user_id', 'unknown')
+        
+        download_info = await storage_service.generate_archive_download(
+            archive_key=archive_key,
+            customer_id=requesting_customer,
+            user_id=user_id
+        )
+        
+        if not download_info:
+            raise HTTPException(status_code=404, detail="Archive not found")
+        
+        return download_info
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate download: {str(e)}")
+
+@router.post("/query-archive")
+async def query_archived_data(
+    query_request: Dict[str, Any],
+    request: Request,
+    requesting_customer: str = MiddlewareTenant
+):
+    """Query data from archived files (experimental feature)"""
+    try:
+        # Extract parameters
+        archive_keys = query_request.get("archive_keys", [])
+        filters = query_request.get("filters", {})
+        limit = query_request.get("limit", 1000)
+        
+        # Get user ID from request context
+        user_id = getattr(request.state, 'user_id', 'unknown')
+        
+        results = await storage_service.query_archived_data(
+            customer_id=requesting_customer,
+            archive_keys=archive_keys,
+            filters=filters,
+            limit=limit,
+            user_id=user_id
+        )
+        
+        return {
+            "customer_id": requesting_customer,
+            "query_filters": filters,
+            "results": results,
+            "total_archives_searched": len(archive_keys),
+            "queried_at": datetime.now(timezone.utc)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to query archived data: {str(e)}")

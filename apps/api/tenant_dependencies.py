@@ -30,8 +30,8 @@ async def validate_tenant_header(
             detail=f"Invalid tenant UUID: {x_customer_id}. Use valid UUID or 'default'"
         )
     
-    # Track API usage
-    await tenant_service.track_usage(x_customer_id, "api_call")
+    # Track API usage - REMOVED: Handled by authentication middleware to prevent duplicates
+    # await tenant_service.track_usage(x_customer_id, "api_call")
     
     return x_customer_id
 
@@ -51,9 +51,9 @@ async def get_validated_tenant_id(
     # Validate tenant UUID exists
     validated_id = await tenant_service.get_tenant_by_uuid_or_default(x_customer_id)
     
-    # Track API usage for valid tenants
-    if validated_id != "default":
-        await tenant_service.track_usage(validated_id, "api_call")
+    # Track API usage for valid tenants - REMOVED: Handled by authentication middleware to prevent duplicates
+    # if validated_id != "default":
+    #     await tenant_service.track_usage(validated_id, "api_call")
     
     return validated_id
 
@@ -100,8 +100,8 @@ async def require_valid_tenant(
             detail=f"Invalid tenant UUID: {x_customer_id}"
         )
     
-    # Track API usage
-    await tenant_service.track_usage(x_customer_id, "api_call")
+    # Track API usage - REMOVED: Handled by authentication middleware to prevent duplicates
+    # await tenant_service.track_usage(x_customer_id, "api_call")
     
     return x_customer_id
 

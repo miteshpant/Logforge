@@ -38,6 +38,14 @@ class AnalysisRequest(BaseModel):
     context: Dict[str, Any] = Field(default_factory=dict, description="Analysis context")
 
 
+class RootCauseAnalysisRequest(BaseModel):
+    """Root cause analysis request matching UI structure"""
+    symptoms: List[str] = Field(..., description="List of symptoms")
+    time_range: str = Field(default="5m", description="Time range for analysis")
+    affected_services: List[str] = Field(default_factory=list, description="Affected services")
+    incident_context: Dict[str, Any] = Field(default_factory=dict, description="Incident context")
+
+
 class BaselineRequest(BaseModel):
     """ML baseline save request"""
     model_id: str = Field(..., description="Model identifier")
@@ -286,6 +294,53 @@ async def analyze_incident(
     except Exception as e:
         logger.error("Failed to analyze incident", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to analyze incident: {str(e)}")
+
+
+@router.post("/root-cause-analysis")
+async def root_cause_analysis(
+    request: RootCauseAnalysisRequest,
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
+):
+    """Perform root cause analysis with UI-compatible structure"""
+    user_id = current_user.id
+    
+    try:
+        ai_service = AIService()
+        
+        # Transform UI request structure to internal format
+        incident_data = {
+            "symptoms": request.symptoms,
+            "time_range": request.time_range,
+            "affected_services": request.affected_services,
+            "description": f"Real-time monitoring analysis: {', '.join(request.symptoms)}",
+            "severity": "medium",
+            "detected_at": "now"
+        }
+        
+        analysis = await ai_service.analyze_incident(
+            incident=incident_data,
+            context=request.incident_context,
+            started_by=user_id,
+            customer_id=customer_id
+        )
+        
+        return {
+            "analysis_id": analysis.analysis_id,
+            "incident_id": analysis.incident_id,
+            "root_cause": analysis.primary_cause,
+            "contributing_factors": analysis.contributing_factors,
+            "timeline": analysis.timeline,
+            "business_impact": analysis.business_impact,
+            "recommendations": analysis.recommendations,
+            "similar_incidents": analysis.similar_incidents,
+            "confidence_score": analysis.confidence_score if hasattr(analysis, 'confidence_score') else 0.85,
+            "customer_id": customer_id
+        }
+        
+    except Exception as e:
+        logger.error("Failed to perform root cause analysis", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to perform root cause analysis: {str(e)}")
 
 
 @router.post("/baselines")

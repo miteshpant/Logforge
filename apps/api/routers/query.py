@@ -59,7 +59,7 @@ async def advanced_query_logs(query_request: AdvancedQueryRequest, customer_id: 
         ))
         
         # Check cache first
-        query_dict = query_request.model_dump()
+        query_dict = query_request.model_dump(mode='json')
         cached_result = await query_service.get_cached_result(query_dict, customer_id)
         
         if cached_result:
@@ -79,7 +79,7 @@ async def advanced_query_logs(query_request: AdvancedQueryRequest, customer_id: 
         await query_service.cache_query_result(
             query_data=query_dict,
             customer_id=customer_id,
-            result=result.model_dump(),
+            result=result.model_dump(mode='json'),
             ttl_seconds=300
         )
         

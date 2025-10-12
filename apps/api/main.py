@@ -24,12 +24,14 @@ from routers.ai_api import router as ai_router
 from routers.enterprise_api import router as enterprise_router
 from routers.tenant_api import router as tenant_router
 from routers.subscription_api import router as subscription_router
+from routers.streaming_api import router as streaming_router
 
 # Import M8 User Service routers
 from routers.user_api import router as user_router
 from routers.auth_api import router as auth_router
 from routers.role_api import router as role_router
 from routers.usage_api import router as usage_router
+from routers.quota_management_api import router as quota_management_router
 
 # Configure structured logging
 logger = structlog.get_logger()
@@ -72,6 +74,7 @@ app.include_router(user_router)
 app.include_router(auth_router)
 app.include_router(role_router)
 app.include_router(usage_router)
+app.include_router(quota_management_router)
 
 # Include additional API routers
 app.include_router(security_router)
@@ -80,6 +83,7 @@ app.include_router(ai_router)
 app.include_router(enterprise_router)
 app.include_router(tenant_router)
 app.include_router(subscription_router)
+app.include_router(streaming_router)
 
 
 if __name__ == "__main__":

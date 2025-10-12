@@ -194,8 +194,8 @@ class QueryDAO:
                 'id': cache_id,
                 'customer_id': customer_id,
                 'cache_key': cache_key,
-                'query_definition': json.dumps(query_data),
-                'result_data': json.dumps(result),
+                'query_definition': json.dumps(query_data, default=str),
+                'result_data': json.dumps(result, default=str),
                 'created_at': datetime.now(timezone.utc),
                 'expires_at': datetime.now(timezone.utc).timestamp() + ttl_seconds
             }

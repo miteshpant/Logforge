@@ -359,22 +359,22 @@ export const AdvancedDataViz: React.FC<AdvancedDataVizProps> = ({
   }
 
   return (
-    <Card className={`${className} hover:shadow-lg transition-shadow duration-300`} data-testid="advanced-data-viz">
-      <CardHeader className="pb-3">
+    <Card className={`${className} hover:shadow-xl transition-all duration-300 hover:scale-[1.02] bg-gradient-to-br from-white to-slate-50 border-slate-200`} data-testid="advanced-data-viz">
+      <CardHeader className="pb-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className={`p-2 rounded-lg`} style={{ backgroundColor: config.color + '20' }}>
-              <BarChart3 className="w-5 h-5" style={{ color: config.color }} />
+          <div className="flex items-start space-x-4">
+            <div className={`p-3 rounded-xl shadow-md`} style={{ backgroundColor: config.color + '15', border: `2px solid ${config.color}30` }}>
+              <BarChart3 className="w-6 h-6" style={{ color: config.color }} />
             </div>
-            <div>
-              <CardTitle className="text-lg">{config.title}</CardTitle>
-              <div className="flex items-center space-x-3 mt-1">
-                <span className={`text-2xl font-bold ${getStatusColor()}`} data-testid="current-value">
+            <div className="flex-1">
+              <CardTitle className="text-lg font-bold text-slate-900 mb-2">{config.title}</CardTitle>
+              <div className="flex items-center space-x-4">
+                <span className={`text-3xl font-bold ${getStatusColor()}`} data-testid="current-value">
                   {currentValue.toFixed(1)}{config.unit}
                 </span>
-                <div className="flex items-center space-x-1">
+                <div className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-slate-100">
                   {getStatusIcon()}
-                  <span className={`text-sm font-medium ${trend === 'up' ? 'text-green-600' : trend === 'down' ? 'text-red-600' : 'text-blue-600'}`}>
+                  <span className={`text-sm font-semibold ${trend === 'up' ? 'text-green-700' : trend === 'down' ? 'text-red-700' : 'text-blue-700'}`}>
                     {changePercent > 0 && `${trend === 'up' ? '+' : '-'}${changePercent.toFixed(1)}%`}
                   </span>
                 </div>
@@ -421,8 +421,8 @@ export const AdvancedDataViz: React.FC<AdvancedDataVizProps> = ({
         </div>
 
         {/* Status Indicators */}
-        <div className="flex items-center space-x-4 mt-3">
-          <Badge variant="outline" className="text-xs">
+        <div className="flex items-center space-x-3 mt-4">
+          <Badge variant="outline" className="text-xs font-medium border-slate-300 text-slate-600">
             {chartData.length} data points
           </Badge>
           
@@ -430,20 +430,20 @@ export const AdvancedDataViz: React.FC<AdvancedDataVizProps> = ({
             <>
               <Badge 
                 variant="outline" 
-                className={`text-xs ${currentValue >= config.threshold.critical ? 'border-red-500 text-red-700' : 
-                  currentValue >= config.threshold.warning ? 'border-orange-500 text-orange-700' : 
-                  'border-green-500 text-green-700'}`}
+                className={`text-xs font-semibold ${currentValue >= config.threshold.critical ? 'border-red-400 bg-red-50 text-red-700' : 
+                  currentValue >= config.threshold.warning ? 'border-orange-400 bg-orange-50 text-orange-700' : 
+                  'border-green-400 bg-green-50 text-green-700'}`}
               >
-                {currentValue >= config.threshold.critical ? 'Critical' :
-                 currentValue >= config.threshold.warning ? 'Warning' : 'Normal'}
+                {currentValue >= config.threshold.critical ? '🔴 Critical' :
+                 currentValue >= config.threshold.warning ? '🟡 Warning' : '🟢 Normal'}
               </Badge>
             </>
           )}
           
           {isLive && (
-            <Badge variant="default" className="text-xs bg-green-100 text-green-800">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse mr-1"></div>
-              Real-time
+            <Badge variant="default" className="text-xs font-semibold bg-gradient-to-r from-green-100 to-blue-100 text-green-800 border-green-300">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse mr-2"></div>
+              Live Updates
             </Badge>
           )}
         </div>
@@ -451,41 +451,44 @@ export const AdvancedDataViz: React.FC<AdvancedDataVizProps> = ({
       
       <CardContent className="pt-0">
         <div className="relative">
-          <canvas 
-            ref={canvasRef}
-            className="w-full"
-            style={{ height: `${height}px` }}
-            data-testid="chart-canvas"
-          />
-          
-          {chartData.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center bg-slate-50 rounded-lg">
-              <div className="text-center text-slate-500">
-                <BarChart3 className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No data available</p>
+          <div className="bg-gradient-to-br from-slate-50 to-white rounded-lg border border-slate-100 p-3 mb-4">
+            <canvas 
+              ref={canvasRef}
+              className="w-full rounded-md"
+              style={{ height: `${height}px` }}
+              data-testid="chart-canvas"
+            />
+            
+            {chartData.length === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg m-3">
+                <div className="text-center text-slate-500">
+                  <BarChart3 className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                  <p className="text-sm font-medium">No data available</p>
+                  <p className="text-xs text-slate-400 mt-1">Waiting for metrics...</p>
+                </div>
+              </div>
+            )}
+          </div>
+        
+          {/* Quick Stats */}
+          <div className="grid grid-cols-3 gap-4 p-4 bg-gradient-to-r from-slate-50 to-slate-100 rounded-lg border border-slate-200">
+            <div className="text-center">
+              <div className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-1">Min</div>
+              <div className="text-lg font-bold text-slate-800" data-testid="min-value">
+                {chartData.length > 0 ? Math.min(...chartData.map(d => d.value)).toFixed(1) : '0.0'}{config.unit}
               </div>
             </div>
-          )}
-        </div>
-        
-        {/* Quick Stats */}
-        <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-slate-200">
-          <div className="text-center">
-            <div className="text-xs text-slate-500">Min</div>
-            <div className="text-sm font-semibold" data-testid="min-value">
-              {chartData.length > 0 ? Math.min(...chartData.map(d => d.value)).toFixed(1) : '0.0'}{config.unit}
+            <div className="text-center border-l border-r border-slate-300">
+              <div className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-1">Avg</div>
+              <div className="text-lg font-bold text-slate-800" data-testid="avg-value">
+                {chartData.length > 0 ? (chartData.reduce((sum, d) => sum + d.value, 0) / chartData.length).toFixed(1) : '0.0'}{config.unit}
+              </div>
             </div>
-          </div>
-          <div className="text-center">
-            <div className="text-xs text-slate-500">Avg</div>
-            <div className="text-sm font-semibold" data-testid="avg-value">
-              {chartData.length > 0 ? (chartData.reduce((sum, d) => sum + d.value, 0) / chartData.length).toFixed(1) : '0.0'}{config.unit}
-            </div>
-          </div>
-          <div className="text-center">
-            <div className="text-xs text-slate-500">Max</div>
-            <div className="text-sm font-semibold" data-testid="max-value">
-              {chartData.length > 0 ? Math.max(...chartData.map(d => d.value)).toFixed(1) : '0.0'}{config.unit}
+            <div className="text-center">
+              <div className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-1">Max</div>
+              <div className="text-lg font-bold text-slate-800" data-testid="max-value">
+                {chartData.length > 0 ? Math.max(...chartData.map(d => d.value)).toFixed(1) : '0.0'}{config.unit}
+              </div>
             </div>
           </div>
         </div>
@@ -650,57 +653,84 @@ export const DashboardVisualization: React.FC<{ className?: string }> = ({ class
   }
 
   return (
-    <div className={`${className} grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6`} data-testid="dashboard-visualization">
-      <AdvancedDataViz
-        data={responseTimeData}
-        config={{
-          title: 'API Response Time',
-          type: 'area',
-          color: '#3b82f6',
-          gradientFrom: '#3b82f6',
-          gradientTo: '#1d4ed8',
-          unit: 'ms',
-          threshold: {
-            warning: 300,
-            critical: 500
-          }
-        }}
-        realTime={true}
-      />
+    <div className={className}>
+      {/* Chart Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6" data-testid="dashboard-visualization">
+        <AdvancedDataViz
+          data={responseTimeData}
+          config={{
+            title: 'API Response Time',
+            type: 'area',
+            color: '#3b82f6',
+            gradientFrom: '#3b82f6',
+            gradientTo: '#1d4ed8',
+            unit: 'ms',
+            threshold: {
+              warning: 300,
+              critical: 500
+            }
+          }}
+          realTime={true}
+          height={240}
+        />
+        
+        <AdvancedDataViz
+          data={throughputData}
+          config={{
+            title: 'API Throughput',
+            type: 'line',
+            color: '#10b981',
+            gradientFrom: '#10b981',
+            gradientTo: '#059669',
+            unit: 'req/s',
+            threshold: {
+              warning: 1000,
+              critical: 2000
+            }
+          }}
+          realTime={true}
+          height={240}
+        />
+        
+        <AdvancedDataViz
+          data={errorRateData}
+          config={{
+            title: 'Error Rate',
+            type: 'line',
+            color: '#ef4444',
+            gradientFrom: '#ef4444',
+            gradientTo: '#dc2626',
+            unit: '%',
+            threshold: {
+              warning: 3,
+              critical: 5
+            }
+          }}
+          realTime={true}
+          height={240}
+        />
+      </div>
       
-      <AdvancedDataViz
-        data={throughputData}
-        config={{
-          title: 'API Throughput',
-          type: 'line',
-          color: '#10b981',
-          gradientFrom: '#10b981',
-          gradientTo: '#059669',
-          unit: 'req/s',
-          threshold: {
-            warning: 1000,
-            critical: 2000
-          }
-        }}
-        realTime={true}
-      />
-      
-      <AdvancedDataViz
-        data={errorRateData}
-        config={{
-          title: 'Error Rate',
-          type: 'line',
-          color: '#ef4444',
-          gradientFrom: '#ef4444',
-          gradientTo: '#dc2626',
-          unit: '%',
-          threshold: {
-            warning: 3,
-            critical: 5
-          }
-        }}
-        realTime={true}
-      />
+      {/* Additional Enterprise Metrics */}
+      <div className="mt-8">
+        <AdvancedDataViz
+          data={usageData}
+          config={{
+            title: 'API Usage Trends',
+            type: 'bar',
+            color: '#8b5cf6',
+            gradientFrom: '#8b5cf6',
+            gradientTo: '#7c3aed',
+            unit: ' calls',
+            threshold: {
+              warning: 50000,
+              critical: 100000
+            }
+          }}
+          realTime={false}
+          height={200}
+        />
+      </div>
     </div>
   )
 }

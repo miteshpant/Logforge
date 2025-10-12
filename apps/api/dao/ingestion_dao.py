@@ -31,21 +31,21 @@ class IngestionDAO:
                 'id': stats_id,
                 'customer_id': stats_data['customer_id'],
                 'endpoint': stats_data['endpoint'],
-                'format_detected': stats_data['format_detected'],
+                'format_type': stats_data['format_type'],
                 'log_count': stats_data['log_count'],
                 'bytes_processed': stats_data['bytes_processed'],
                 'processing_time_ms': stats_data['processing_time_ms'],
                 'status': stats_data.get('status', STATUS_ACTIVE),
-                'ingested_at': stats_data.get('ingested_at', datetime.now(timezone.utc)),
+                'timestamp': stats_data.get('ingested_at', datetime.now(timezone.utc)),
                 'created_at': datetime.now(timezone.utc)
             }
             
             await self.db.execute_query(
                 f"""INSERT INTO {INGESTION_STATS_TABLE} 
-                   (id, customer_id, endpoint, format_detected, log_count, bytes_processed, 
-                    processing_time_ms, status, ingested_at, created_at)
-                   VALUES (%(id)s, %(customer_id)s, %(endpoint)s, %(format_detected)s, %(log_count)s,
-                   %(bytes_processed)s, %(processing_time_ms)s, %(status)s, %(ingested_at)s, %(created_at)s)""",
+                   (id, customer_id, endpoint, format_type, records_ingested, bytes_ingested, 
+                    processing_time_ms, errors_count, timestamp)
+                   VALUES (%(id)s, %(customer_id)s, %(endpoint)s, %(format_type)s, %(log_count)s,
+                   %(bytes_processed)s, %(processing_time_ms)s, 0, %(timestamp)s)""",
                 db_stats_data
             )
             
@@ -97,11 +97,11 @@ class IngestionDAO:
             params = {"customer_id": customer_id, "limit": limit}
             
             if start_date:
-                query += " AND ingested_at >= %(start_date)s"
+                query += " AND timestamp >= %(start_date)s"
                 params["start_date"] = start_date
                 
             if end_date:
-                query += " AND ingested_at <= %(end_date)s"
+                query += " AND timestamp <= %(end_date)s"
                 params["end_date"] = end_date
             
             query += " ORDER BY ingested_at DESC LIMIT %(limit)s"
@@ -120,10 +120,10 @@ class IngestionDAO:
         try:
             query = f"""SELECT 
                        COUNT(*) as total_ingestions,
-                       SUM(log_count) as total_logs,
-                       SUM(bytes_processed) as total_bytes,
+                       SUM(records_ingested) as total_logs,
+                       SUM(bytes_ingested) as total_bytes,
                        if(count(*) > 0 AND count(processing_time_ms) > 0, AVG(processing_time_ms), 0) as avg_processing_time,
-                       format_detected,
+                       format_type,
                        COUNT(*) as format_count
                        FROM {INGESTION_STATS_TABLE} 
                        WHERE customer_id = %(customer_id)s"""
@@ -131,14 +131,14 @@ class IngestionDAO:
             params = {"customer_id": customer_id}
             
             if start_date:
-                query += " AND ingested_at >= %(start_date)s"
+                query += " AND timestamp >= %(start_date)s"
                 params["start_date"] = start_date
                 
             if end_date:
-                query += " AND ingested_at <= %(end_date)s"
+                query += " AND timestamp <= %(end_date)s"
                 params["end_date"] = end_date
             
-            query += " GROUP BY format_detected ORDER BY format_count DESC"
+            query += " GROUP BY format_type ORDER BY format_count DESC"
             
             result = await self.db.execute_query(query, params)
             

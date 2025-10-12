@@ -205,9 +205,13 @@ class AlertEngine:
         # Initialize with default notification channels
         await self._create_default_channels()
         
-        # Load saved rules would go here
-        # For now, we'll create some example rules
-        await self._create_example_rules()
+        # Load rules from database
+        await self._load_rules_from_database()
+        
+        # Fall back to example rules only if no database rules found
+        if not self.rules:
+            logger.warning("No database rules found, creating example rules")
+            await self._create_example_rules()
     
     async def _create_default_channels(self):
         """Create default notification channels"""
@@ -239,6 +243,112 @@ class AlertEngine:
             self.notification_channels[channel.channel_id] = channel
         
         logger.info(f"Created {len(default_channels)} default notification channels")
+    
+    async def _load_rules_from_database(self):
+        """Load alert rules from database"""
+        try:
+            # Import here to avoid circular dependencies
+            from dao.alert_dao import AlertDAO
+            from database_layer import DatabaseLayer
+            
+            db = DatabaseLayer()
+            alert_dao = AlertDAO(db)
+            
+            # Get all enabled alert rules from database
+            query = """
+            SELECT * FROM alert_rules_mt 
+            WHERE is_enabled = 1
+            ORDER BY created_at DESC
+            """
+            
+            rows = await db.execute_query(query)
+            loaded_count = 0
+            
+            for row in rows:
+                try:
+                    # Parse the condition_config JSON
+                    condition_config = json.loads(row.get("condition_config", "{}"))
+                    
+                    # Convert database row to AlertRule object
+                    rule = AlertRule(
+                        rule_id=row["id"],
+                        name=row["name"],
+                        description=row.get("description", ""),
+                        customer_id=row["customer_id"],
+                        severity=AlertSeverity(row.get("severity", "medium")),
+                        rule_type=AlertRuleType(row.get("rule_type", "threshold")),
+                        enabled=bool(row.get("is_enabled", 1)),
+                        conditions=self._parse_conditions(condition_config.get("conditions", [])),
+                        filters=condition_config.get("filters", []),
+                        notification_channels=json.loads(row.get("notification_channels", "[]")) if isinstance(row.get("notification_channels"), str) else row.get("notification_channels", []),
+                        tags=condition_config.get("tags", []),
+                        evaluation_interval=str(condition_config.get("evaluation_interval", 300)) + "s",  # Convert to seconds format
+                        cooldown_period=str(row.get("cooldown_minutes", 5)) + "m",  # Convert to minutes format
+                        max_alerts_per_hour=condition_config.get("max_alerts_per_hour", 10),
+                        created_at=row.get("created_at"),
+                        updated_at=row.get("updated_at"),
+                        created_by=row.get("created_by")
+                    )
+                    
+                    self.rules[rule.rule_id] = rule
+                    loaded_count += 1
+                    
+                    logger.debug(f"Loaded rule: {rule.name} (ID: {rule.rule_id}, Customer: {rule.customer_id})")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to load rule {row.get('id', 'unknown')}: {e}")
+                    continue
+            
+            logger.info(f"Successfully loaded {loaded_count} alert rules from database")
+            
+        except Exception as e:
+            logger.error(f"Failed to load rules from database: {e}")
+    
+    def _parse_conditions(self, conditions_data):
+        """Parse conditions from database format to AlertCondition objects"""
+        parsed_conditions = []
+        
+        for condition in conditions_data:
+            try:
+                parsed_condition = AlertCondition(
+                    field=condition.get("field", "*"),
+                    operator=ThresholdOperator(condition.get("operator", "gt")),
+                    value=condition.get("value", 0),
+                    aggregation=condition.get("aggregation", "count"),
+                    time_window=condition.get("time_window", "5m")
+                )
+                parsed_conditions.append(parsed_condition)
+            except Exception as e:
+                logger.warning(f"Failed to parse condition {condition}: {e}")
+                
+        return parsed_conditions
+    
+    async def reload_rules_from_database(self):
+        """Reload rules from database and update running evaluations"""
+        try:
+            logger.info("Reloading alert rules from database...")
+            
+            # Stop all current evaluation tasks
+            for task in self.evaluation_tasks.values():
+                task.cancel()
+            self.evaluation_tasks.clear()
+            
+            # Clear current rules
+            self.rules.clear()
+            
+            # Reload from database
+            await self._load_rules_from_database()
+            
+            # Restart evaluation loops for enabled rules
+            if self.is_running:
+                for rule in self.rules.values():
+                    if rule.enabled:
+                        await self._start_rule_evaluation(rule)
+            
+            logger.info(f"Successfully reloaded {len(self.rules)} alert rules")
+            
+        except Exception as e:
+            logger.error(f"Failed to reload rules from database: {e}")
     
     async def _create_example_rules(self):
         """Create example alert rules for different scenarios"""

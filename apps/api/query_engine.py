@@ -153,9 +153,15 @@ class QueryAggregation:
             return f"count({field_name}) AS {alias}"
             
         elif self.type == AggregationType.SUM:
+            # Use direct aggregation for known numeric fields, toFloat64OrZero for string fields
+            if field_name in ['severity_num', 'status', 'facility']:
+                return f"sum({field_name}) AS {alias}"
             return f"sum(toFloat64OrZero({field_name})) AS {alias}"
             
         elif self.type == AggregationType.AVG:
+            # Use direct aggregation for known numeric fields, toFloat64OrZero for string fields
+            if field_name in ['severity_num', 'status', 'facility']:
+                return f"avg({field_name}) AS {alias}"
             return f"avg(toFloat64OrZero({field_name})) AS {alias}"
             
         elif self.type == AggregationType.MIN:
@@ -166,6 +172,9 @@ class QueryAggregation:
             
         elif self.type == AggregationType.PERCENTILE:
             percentile = self.percentile_value or 0.95
+            # Use direct aggregation for known numeric fields, toFloat64OrZero for string fields
+            if field_name in ['severity_num', 'status', 'facility']:
+                return f"quantile({percentile})({field_name}) AS {alias}"
             return f"quantile({percentile})(toFloat64OrZero({field_name})) AS {alias}"
             
         elif self.type == AggregationType.UNIQUE:
@@ -352,8 +361,8 @@ class AdvancedQueryEngine:
         where_conditions = []
         
         # Time range
-        where_conditions.append(f"ts >= '{query.start_time.isoformat()}'")
-        where_conditions.append(f"ts <= '{query.end_time.isoformat()}'")
+        where_conditions.append(f"ts >= '{query.start_time.strftime('%Y-%m-%d %H:%M:%S')}'")
+        where_conditions.append(f"ts <= '{query.end_time.strftime('%Y-%m-%d %H:%M:%S')}'")
         
         # Filters
         for filter_obj in query.filters:
@@ -439,20 +448,27 @@ class AdvancedQueryEngine:
         
         for row in rows:
             # Convert row to dictionary
-            # This assumes the row matches the table schema
-            log_dict = {
-                'ts': row[0],
-                'host': row[1],
-                'service': row[2],
-                'level': row[3],
-                'msg': row[4],
-                'trace_id': row[5],
-                'span_id': row[6],
-                'attrs': json.loads(row[7]) if len(row) > 7 and row[7] else {},
-                'status': row[8] if len(row) > 8 else None,
-                'src_ip': row[9] if len(row) > 9 else None,
-                'user_id': row[10] if len(row) > 10 else None
-            }
+            if query.include_fields:
+                # When include_fields is specified, map columns to the requested fields
+                log_dict = {}
+                for i, field in enumerate(query.include_fields):
+                    if i < len(row):
+                        log_dict[field] = row[i]
+            else:
+                # Default full table schema mapping
+                log_dict = {
+                    'ts': row[0] if len(row) > 0 else None,
+                    'host': row[1] if len(row) > 1 else None,
+                    'service': row[2] if len(row) > 2 else None,
+                    'level': row[3] if len(row) > 3 else None,
+                    'msg': row[4] if len(row) > 4 else None,
+                    'trace_id': row[5] if len(row) > 5 else None,
+                    'span_id': row[6] if len(row) > 6 else None,
+                    'attrs': json.loads(row[7]) if len(row) > 7 and row[7] else {},
+                    'status': row[8] if len(row) > 8 else None,
+                    'src_ip': row[9] if len(row) > 9 else None,
+                    'user_id': row[10] if len(row) > 10 else None
+                }
             
             # Apply field filtering
             if query.exclude_fields:

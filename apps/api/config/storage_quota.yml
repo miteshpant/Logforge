@@ -1,0 +1,38 @@
+# Logforge Storage Quota Sync Configuration
+# Periodic calculation of storage usage and quota updates
+
+config_version: "1.0"
+last_updated: "2025-10-09"
+
+# Periodic sync settings
+storage_quota_sync:
+  # How often to calculate and update storage quotas (in minutes)
+  interval_minutes: 1
+
+  # Whether the periodic sync is enabled
+  enabled: true
+
+  # Whether to run calculation on startup
+  run_on_startup: true
+
+  # Startup delay before first calculation (in seconds)
+  startup_delay_seconds: 60
+
+# Storage calculation method
+storage_calculation:
+  # Use actual size_bytes from logs_raw_mt table
+  use_actual_log_sizes: true
+
+  # Include overhead for indexes, metadata (multiplier)
+  overhead_multiplier: 1.2
+
+  # Minimum storage to report (in MB)
+  minimum_storage_mb: 1.0
+
+# Logging
+logging:
+  # Log level for storage quota sync operations
+  log_level: "INFO"
+
+  # Log quota changes
+  log_quota_changes: true

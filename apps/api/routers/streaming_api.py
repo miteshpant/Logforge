@@ -65,7 +65,8 @@ async def stream_metrics(
                     await asyncio.sleep(5)  # Update every 5 seconds
                     
                 except Exception as e:
-                    logger.error("Error streaming metrics", error=str(e), customer_id=customer_id)
+                    logger.error("Error streaming metrics", error=str(e), customer_id=customer_id, 
+                               error_type=type(e).__name__, metric_names=metric_names)
                     yield format_sse_message("error", {"message": f"Metrics streaming error: {str(e)}"})
                     break
         
@@ -196,18 +197,17 @@ async def stream_alerts(
             while True:
                 try:
                     # Get recent alerts
-                    alerts = await alert_service.get_alerts(
+                    alerts = await alert_service.list_alert_instances(
                         customer_id=customer_id,
-                        limit=20,
-                        status_filter=None
+                        status=None
                     )
                     
-                    # Filter for recent alerts (last 10 minutes)
+                    # Filter for recent alerts (last 10 minutes) and limit to 20
                     recent_alerts = [
                         alert for alert in alerts
                         if datetime.fromisoformat(alert.get('created_at', '1970-01-01')) > 
                            datetime.now() - timedelta(minutes=10)
-                    ]
+                    ][:20]  # Limit to 20 most recent alerts
                     
                     if recent_alerts:
                         yield format_sse_message("alerts", recent_alerts)
@@ -247,10 +247,8 @@ async def stream_usage_data(
             while True:
                 try:
                     # Get current usage statistics
-                    usage_data = await usage_service.get_usage_summary(
-                        customer_id=customer_id,
-                        start_date=datetime.now().date() - timedelta(days=1),
-                        end_date=datetime.now().date()
+                    usage_data = await usage_service.get_tenant_usage_summary(
+                        tenant_id=customer_id
                     )
                     
                     if usage_data:

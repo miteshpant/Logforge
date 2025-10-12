@@ -23,14 +23,14 @@ class IngestionService:
         self.max_log_size = MAX_LOG_SIZE_BYTES
     
     async def track_ingestion_success(self, customer_id: str, endpoint: str, 
-                                    format_detected: str, log_count: int,
+                                    format_type: str, log_count: int,
                                     bytes_processed: int, processing_time_ms: int) -> str:
         """Track successful ingestion statistics"""
         try:
             stats_data = {
                 'customer_id': customer_id,
                 'endpoint': endpoint,
-                'format_detected': format_detected,
+                'format_type': format_type,
                 'log_count': log_count,
                 'bytes_processed': bytes_processed,
                 'processing_time_ms': processing_time_ms,
@@ -149,8 +149,8 @@ class IngestionService:
                 log_entry.customer_id = customer_id
                 
                 # Set default timestamp if not provided
-                if not log_entry.timestamp:
-                    log_entry.timestamp = ingested_at
+                if not log_entry.ts:
+                    log_entry.ts = ingested_at
                 
                 prepared_logs.append(log_entry)
             

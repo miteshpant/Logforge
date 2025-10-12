@@ -733,7 +733,7 @@ def format_sse_message(event_type: str, data: Any, event_id: Optional[str] = Non
     return message
 
 
-@router.get("/stream/{tenant_id}")
+@router.get("/usage-stream/{tenant_id}")
 async def stream_usage_data(
     tenant_id: str,
     customer_id: str = Header(..., alias="X-Customer-ID")
