@@ -8,6 +8,45 @@ from typing import Dict, List, Optional
 from enum import Enum
 import structlog
 
+from .constants import (
+    # Topic names
+    TOPIC_USAGE_EVENTS,
+    TOPIC_ALERT_EVENTS,
+    TOPIC_LOG_EVENTS,
+    TOPIC_TENANT_EVENTS,
+    TOPIC_UI_REALTIME_EVENTS,
+    TOPIC_SYSTEM_EVENTS,
+    ALL_TOPICS,
+
+    # Event types
+    USAGE_EVENT_TYPES,
+    ALERT_EVENT_TYPES,
+    LOG_EVENT_TYPES,
+    TENANT_EVENT_TYPES,
+    UI_REALTIME_EVENT_TYPES,
+    SYSTEM_EVENT_TYPES,
+
+    # Subscriber groups
+    SUBSCRIBER_USAGE_TRACKING_SERVICE,
+    SUBSCRIBER_BILLING_SERVICE,
+    SUBSCRIBER_ANALYTICS_SERVICE,
+    SUBSCRIBER_ALERT_ENGINE,
+    SUBSCRIBER_NOTIFICATION_SERVICE,
+    SUBSCRIBER_STORAGE_SERVICE,
+    SUBSCRIBER_TENANT_SERVICE,
+    SUBSCRIBER_USER_SERVICE,
+    SUBSCRIBER_UI_SERVICE,
+    SUBSCRIBER_WEBSOCKET_SERVICE,
+    SUBSCRIBER_MONITORING_SERVICE,
+    SUBSCRIBER_SECURITY_SERVICE,
+    SUBSCRIBER_AUDIT_SERVICE,
+    SUBSCRIBER_ADMIN_UI,
+
+    # Mappings
+    EVENT_TYPE_TO_TOPIC,
+    TOPIC_TO_SUBSCRIBER_GROUPS
+)
+
 logger = structlog.get_logger(__name__)
 
 
@@ -30,11 +69,11 @@ class TopicConfig:
     partition_strategy: PartitionStrategy = PartitionStrategy.CUSTOMER_HASH
     max_message_bytes: int = 1048576  # 1MB
     compression_type: str = "lz4"
-    
+
     # Event routing configuration
     event_types: List[str] = None
     subscriber_groups: List[str] = None
-    
+
     def __post_init__(self):
         if self.event_types is None:
             self.event_types = []
@@ -45,154 +84,99 @@ class TopicConfig:
 # Topic configurations for all event types
 TOPIC_CONFIGS = {
     # Usage and billing events - high volume, medium retention
-    "usage-events": TopicConfig(
-        name="usage-events",
+    TOPIC_USAGE_EVENTS: TopicConfig(
+        name=TOPIC_USAGE_EVENTS,
         partitions=100,
         replication_factor=3,
         retention_ms=604800000,  # 7 days
         partition_strategy=PartitionStrategy.CUSTOMER_HASH,
-        event_types=[
-            "usage.api.call",
-            "usage.ingestion.batch", 
-            "usage.query.execution",
-            "usage.storage.operation",
-            "usage.quota.exceeded",
-            "usage.cost.calculated"
-        ],
+        event_types=USAGE_EVENT_TYPES,
         subscriber_groups=[
-            "usage-tracking-service",
-            "billing-service",
-            "analytics-service",
-            "ui-service"
+            SUBSCRIBER_USAGE_TRACKING_SERVICE,
+            SUBSCRIBER_BILLING_SERVICE,
+            SUBSCRIBER_ANALYTICS_SERVICE,
+            SUBSCRIBER_UI_SERVICE
         ]
     ),
-    
+
     # Alert-related events - medium volume, longer retention
-    "alert-events": TopicConfig(
-        name="alert-events", 
+    TOPIC_ALERT_EVENTS: TopicConfig(
+        name=TOPIC_ALERT_EVENTS,
         partitions=50,
         replication_factor=3,
         retention_ms=2592000000,  # 30 days
         partition_strategy=PartitionStrategy.CUSTOMER_HASH,
-        event_types=[
-            "alert.rule.created",
-            "alert.rule.updated", 
-            "alert.rule.deleted",
-            "alert.rule.enabled",
-            "alert.rule.disabled",
-            "alert.triggered",
-            "alert.resolved",
-            "alert.acknowledged",
-            "alert.escalated",
-            "notification.sent",
-            "notification.failed"
-        ],
+        event_types=ALERT_EVENT_TYPES,
         subscriber_groups=[
-            "alert-engine",
-            "notification-service",
-            "ui-service",
-            "audit-service"
+            SUBSCRIBER_ALERT_ENGINE,
+            SUBSCRIBER_NOTIFICATION_SERVICE,
+            SUBSCRIBER_UI_SERVICE,
+            SUBSCRIBER_AUDIT_SERVICE
         ]
     ),
-    
+
     # Log lifecycle events - very high volume, short retention
-    "log-events": TopicConfig(
-        name="log-events",
-        partitions=100, 
+    TOPIC_LOG_EVENTS: TopicConfig(
+        name=TOPIC_LOG_EVENTS,
+        partitions=100,
         replication_factor=3,
         retention_ms=3600000,  # 1 hour (logs already in ClickHouse)
         partition_strategy=PartitionStrategy.CUSTOMER_HASH,
         compression_type="snappy",  # Better for high volume
-        event_types=[
-            "logs.batch.ingested",
-            "logs.parsing.failed",
-            "logs.quota.exceeded",
-            "logs.realtime.batch",  # For real-time alert evaluation
-            "logs.archived",
-            "logs.ttl.expired",
-            "logs.restored"
-        ],
+        event_types=LOG_EVENT_TYPES,
         subscriber_groups=[
-            "alert-engine",
-            "usage-tracking-service", 
-            "storage-service",
-            "ui-service"
+            SUBSCRIBER_ALERT_ENGINE,
+            SUBSCRIBER_USAGE_TRACKING_SERVICE,
+            SUBSCRIBER_STORAGE_SERVICE,
+            SUBSCRIBER_UI_SERVICE
         ]
     ),
-    
+
     # Tenant and user management events - low volume, long retention
-    "tenant-events": TopicConfig(
-        name="tenant-events",
+    TOPIC_TENANT_EVENTS: TopicConfig(
+        name=TOPIC_TENANT_EVENTS,
         partitions=20,
         replication_factor=3,
         retention_ms=2592000000,  # 30 days
         partition_strategy=PartitionStrategy.CUSTOMER_HASH,
-        event_types=[
-            "tenant.created",
-            "tenant.updated",
-            "tenant.quota.updated", 
-            "tenant.suspended",
-            "tenant.activated",
-            "user.created",
-            "user.updated",
-            "user.login",
-            "user.logout",
-            "user.role.changed"
-        ],
+        event_types=TENANT_EVENT_TYPES,
         subscriber_groups=[
-            "tenant-service",
-            "user-service",
-            "billing-service",
-            "audit-service",
-            "admin-ui"
+            SUBSCRIBER_TENANT_SERVICE,
+            SUBSCRIBER_USER_SERVICE,
+            SUBSCRIBER_BILLING_SERVICE,
+            SUBSCRIBER_AUDIT_SERVICE,
+            SUBSCRIBER_ADMIN_UI
         ]
     ),
-    
+
     # Real-time UI events - very high volume, very short retention
-    "ui-realtime-events": TopicConfig(
-        name="ui-realtime-events",
+    TOPIC_UI_REALTIME_EVENTS: TopicConfig(
+        name=TOPIC_UI_REALTIME_EVENTS,
         partitions=200,
         replication_factor=2,  # Lower replication for performance
         retention_ms=600000,  # 10 minutes
         partition_strategy=PartitionStrategy.CUSTOMER_HASH,
         compression_type="snappy",
-        event_types=[
-            "dashboard.metrics.updated",
-            "dashboard.chart.refreshed",
-            "logs.live.stream",
-            "metrics.live.update",
-            "query.executed",
-            "export.completed",
-            "ui.user.action"
-        ],
+        event_types=UI_REALTIME_EVENT_TYPES,
         subscriber_groups=[
-            "websocket-service",
-            "ui-service"
+            SUBSCRIBER_WEBSOCKET_SERVICE,
+            SUBSCRIBER_UI_SERVICE
         ]
     ),
-    
+
     # System and infrastructure events - low volume, broadcast
-    "system-events": TopicConfig(
-        name="system-events",
+    TOPIC_SYSTEM_EVENTS: TopicConfig(
+        name=TOPIC_SYSTEM_EVENTS,
         partitions=10,
         replication_factor=3,
         retention_ms=2592000000,  # 30 days
         partition_strategy=PartitionStrategy.SERVICE_HASH,
-        event_types=[
-            "system.health.check",
-            "system.service.started",
-            "system.service.stopped",
-            "query.expensive",
-            "storage.usage.high",
-            "security.threat.detected",
-            "security.rule.triggered",
-            "auth.failed.attempts"
-        ],
+        event_types=SYSTEM_EVENT_TYPES,
         subscriber_groups=[
-            "monitoring-service",
-            "security-service",
-            "admin-ui",
-            "alert-engine"
+            SUBSCRIBER_MONITORING_SERVICE,
+            SUBSCRIBER_SECURITY_SERVICE,
+            SUBSCRIBER_ADMIN_UI,
+            SUBSCRIBER_ALERT_ENGINE
         ]
     )
 }
@@ -200,55 +184,43 @@ TOPIC_CONFIGS = {
 
 class TopicManager:
     """Manages Kafka topics and routing"""
-    
+
     def __init__(self, topic_configs: Dict[str, TopicConfig] = None):
         self.topic_configs = topic_configs or TOPIC_CONFIGS
-        self.event_type_to_topic = self._build_event_routing_map()
-    
-    def _build_event_routing_map(self) -> Dict[str, str]:
-        """Build mapping from event type to topic"""
-        routing_map = {}
-        
-        for topic_name, config in self.topic_configs.items():
-            for event_type in config.event_types:
-                if event_type in routing_map:
-                    logger.warning(f"Event type {event_type} mapped to multiple topics")
-                routing_map[event_type] = topic_name
-        
-        logger.info(f"Built event routing map for {len(routing_map)} event types")
-        return routing_map
-    
+        self.event_type_to_topic = EVENT_TYPE_TO_TOPIC
+
+
     def get_topic_for_event(self, event_type: str) -> Optional[str]:
         """Get topic name for an event type"""
         topic = self.event_type_to_topic.get(event_type)
         if not topic:
             logger.warning(f"No topic configured for event type: {event_type}")
         return topic
-    
+
     def get_topic_config(self, topic_name: str) -> Optional[TopicConfig]:
         """Get configuration for a topic"""
         return self.topic_configs.get(topic_name)
-    
+
     def get_partition_count(self, topic_name: str) -> int:
         """Get partition count for a topic"""
         config = self.get_topic_config(topic_name)
         return config.partitions if config else 1
-    
+
     def get_partition_strategy(self, topic_name: str) -> PartitionStrategy:
         """Get partition strategy for a topic"""
         config = self.get_topic_config(topic_name)
         return config.partition_strategy if config else PartitionStrategy.CUSTOMER_HASH
-    
+
     def get_event_types_for_topic(self, topic_name: str) -> List[str]:
         """Get all event types for a topic"""
         config = self.get_topic_config(topic_name)
         return config.event_types if config else []
-    
+
     def get_subscribers_for_topic(self, topic_name: str) -> List[str]:
         """Get subscriber groups for a topic"""
         config = self.get_topic_config(topic_name)
         return config.subscriber_groups if config else []
-    
+
     def validate_event_routing(self) -> Dict[str, List[str]]:
         """Validate event routing configuration"""
         issues = {
@@ -256,23 +228,23 @@ class TopicManager:
             "duplicate_events": [],
             "orphaned_events": []
         }
-        
+
         # Check for duplicate event type mappings
         event_counts = {}
         for config in self.topic_configs.values():
             for event_type in config.event_types:
                 event_counts[event_type] = event_counts.get(event_type, 0) + 1
-        
+
         for event_type, count in event_counts.items():
             if count > 1:
                 issues["duplicate_events"].append(event_type)
-        
+
         return issues
-    
+
     def get_topic_creation_configs(self) -> Dict[str, Dict[str, any]]:
         """Get Kafka topic creation configurations"""
         configs = {}
-        
+
         for topic_name, config in self.topic_configs.items():
             configs[topic_name] = {
                 "num_partitions": config.partitions,
@@ -284,14 +256,14 @@ class TopicManager:
                     "compression.type": config.compression_type
                 }
             }
-        
+
         return configs
-    
+
     def get_metrics(self) -> Dict[str, any]:
         """Get topic configuration metrics"""
         total_partitions = sum(config.partitions for config in self.topic_configs.values())
         total_event_types = sum(len(config.event_types) for config in self.topic_configs.values())
-        
+
         return {
             "total_topics": len(self.topic_configs),
             "total_partitions": total_partitions,
@@ -311,22 +283,22 @@ class TopicManager:
 # Utility functions for common topic operations
 def get_topic_for_usage_event(usage_type: str) -> str:
     """Get topic for usage events"""
-    return "usage-events"
+    return TOPIC_USAGE_EVENTS
 
 
 def get_topic_for_alert_event(alert_action: str) -> str:
     """Get topic for alert events"""
-    return "alert-events"
+    return TOPIC_ALERT_EVENTS
 
 
 def get_topic_for_log_event(log_action: str) -> str:
     """Get topic for log events"""
-    return "log-events"
+    return TOPIC_LOG_EVENTS
 
 
 def get_topic_for_ui_event(ui_action: str) -> str:
     """Get topic for UI events"""
-    return "ui-realtime-events"
+    return TOPIC_UI_REALTIME_EVENTS
 
 
 # Global topic manager instance

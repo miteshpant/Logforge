@@ -1,0 +1,169 @@
+# Event System Configuration
+# Configuration for Kafka-based event-driven architecture
+
+# Kafka Connection Settings
+kafka:
+  bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS}"
+  security_protocol: "${KAFKA_SECURITY_PROTOCOL}"
+  compression_type: "lz4"
+  max_request_size: 1048576  # 1MB
+  batch_size: 16384
+  linger_ms: 10
+  acks: "all"
+  retries: 2147483647
+  retry_backoff_ms: 100
+
+# Consumer Configuration
+consumer:
+  consumer_group: "logforge-events"
+  max_batch_size: 100
+  max_batch_wait_ms: 1000
+  max_retries: 3
+  retry_delay_ms: 500
+  enable_auto_commit: true
+  enable_metrics: true
+  enable_parallel_processing: true
+  max_parallel_workers: 10
+  auto_offset_reset: "latest"
+  enable_auto_commit_interval_ms: 5000
+  max_poll_records: 500
+  fetch_min_bytes: 1
+  fetch_max_wait_ms: 500
+
+# Producer Configuration  
+producer:
+  batch_size: 100
+  flush_interval_ms: 1000
+  max_retries: 3
+  retry_delay_ms: 500
+  enable_compression: true
+  enable_metrics: true
+  enable_dead_letter: true
+  enable_idempotence: true
+  max_in_flight_requests: 5
+  request_timeout_ms: 30000
+
+# Topic Configuration
+topics:
+  # Usage and billing events
+  usage-events:
+    name: "usage-events"
+    partitions: 100
+    replication_factor: 3
+    retention_ms: 604800000  # 7 days
+    cleanup_policy: "delete"
+    max_message_bytes: 1048576
+    compression_type: "lz4"
+
+  # Alert-related events
+  alert-events:
+    name: "alert-events"
+    partitions: 50
+    replication_factor: 3
+    retention_ms: 2592000000  # 30 days
+    cleanup_policy: "delete"
+    max_message_bytes: 1048576
+    compression_type: "lz4"
+
+  # Log lifecycle events
+  log-events:
+    name: "log-events"
+    partitions: 100
+    replication_factor: 3
+    retention_ms: 3600000  # 1 hour
+    cleanup_policy: "delete"
+    max_message_bytes: 2097152  # 2MB for log batches
+    compression_type: "snappy"
+
+  # Tenant management events
+  tenant-events:
+    name: "tenant-events"
+    partitions: 20
+    replication_factor: 3
+    retention_ms: 2592000000  # 30 days
+    cleanup_policy: "delete"
+    max_message_bytes: 1048576
+    compression_type: "lz4"
+
+  # Real-time UI events
+  ui-realtime-events:
+    name: "ui-realtime-events"
+    partitions: 200
+    replication_factor: 2
+    retention_ms: 600000  # 10 minutes
+    cleanup_policy: "delete"
+    max_message_bytes: 524288  # 512KB
+    compression_type: "snappy"
+
+  # System monitoring events
+  system-events:
+    name: "system-events"
+    partitions: 10
+    replication_factor: 3
+    retention_ms: 2592000000  # 30 days
+    cleanup_policy: "delete"
+    max_message_bytes: 1048576
+    compression_type: "lz4"
+
+# Event Processing Configuration
+processing:
+  # Buffer settings
+  buffer_size_per_customer: 1000
+  buffer_flush_interval_ms: 1000
+  
+  # Batch processing
+  enable_batch_processing: true
+  max_batch_age_ms: 5000
+  
+  # Error handling
+  enable_dead_letter_queue: true
+  dead_letter_topic: "dead-letter-events"
+  max_retry_attempts: 3
+  retry_backoff_multiplier: 2
+  
+  # Performance
+  enable_async_processing: true
+  max_concurrent_batches: 20
+  enable_event_deduplication: true
+  dedup_window_ms: 30000
+
+# Monitoring and Metrics
+monitoring:
+  enable_metrics: true
+  metrics_flush_interval_ms: 60000
+  enable_health_checks: true
+  health_check_interval_ms: 30000
+  
+  # Alerting thresholds
+  alert_on_consumer_lag_ms: 10000
+  alert_on_error_rate_percent: 5.0
+  alert_on_throughput_drop_percent: 50.0
+
+# Environment-specific overrides
+development:
+  kafka:
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS}"
+    security_protocol: "${KAFKA_SECURITY_PROTOCOL}"
+  topics:
+    usage-events:
+      partitions: 10
+    alert-events:
+      partitions: 5
+    log-events:
+      partitions: 10
+    ui-realtime-events:
+      partitions: 20
+
+production:
+  kafka:
+    bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS}"
+    security_protocol: "SASL_SSL"
+    sasl_mechanism: "SCRAM-SHA-256"
+    sasl_username: "${KAFKA_USERNAME}"
+    sasl_password: "${KAFKA_PASSWORD}"
+  consumer:
+    max_parallel_workers: 50
+  producer:
+    batch_size: 500
+  processing:
+    max_concurrent_batches: 100

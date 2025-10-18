@@ -10,7 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Request, HTTPException
 from fastapi.responses import JSONResponse
 
 from models import (
-    LogEntry, BatchLogEntry, OTLPLogsData, 
+    LogEntry, BatchLogEntry, OTLPLogsData,
     IngestResponse, BatchIngestResponse
 )
 from parsers import ParserFactory
@@ -34,12 +34,12 @@ def setup_dependencies(pf, plb, pltb=None):
     parser_factory = pf
     process_logs_background = plb
     process_logs_and_tracking_background = pltb
-    
+
     import logging
     logger = logging.getLogger(__name__)
     logger.info(f"🔧 INGESTION DEPENDENCIES SETUP: pf={pf is not None}, plb={plb is not None}, pltb={pltb is not None}")
     logger.info(f"🔧 process_logs_and_tracking_background = {process_logs_and_tracking_background}")
-    
+
     if process_logs_and_tracking_background:
         logger.info("✅ NEW TRACKING FUNCTION AVAILABLE")
     else:
@@ -47,13 +47,13 @@ def setup_dependencies(pf, plb, pltb=None):
 
 @router.post("/logs", response_model=IngestResponse)
 async def ingest_logs(
-    log_entry: LogEntry, 
+    log_entry: LogEntry,
     background_tasks: BackgroundTasks,
     customer_id: str = MiddlewareTenant
 ):
     """Single log entry ingestion endpoint"""
     start_time = time.time()
-    
+
     try:
         # Validate log entry (only validation in main thread)
         if not ingestion_service.validate_log_entry(log_entry):
@@ -63,26 +63,26 @@ async def ingest_logs(
                 customer_id, "/logs", "validation_error", "Log entry validation failed"
             )
             raise HTTPException(status_code=400, detail="Invalid log entry")
-        
+
         # Prepare logs for storage
         logs = ingestion_service.prepare_logs_for_storage([log_entry], customer_id)
-        
+
         # Calculate metrics for background tracking
         bytes_processed = len(str(log_entry.msg))
         processing_time_ms = int((time.time() - start_time) * 1000)
-        
+
         # Move ALL tracking to background tasks for fast response
         import logging
         logger = logging.getLogger(__name__)
         logger.info(f"🚀 INGESTION ENDPOINT: customer_id={customer_id}, bytes={bytes_processed}, processing_time={processing_time_ms}ms")
-        
+
         if process_logs_and_tracking_background:
             logger.info("✅ USING NEW TRACKING FUNCTION")
             background_tasks.add_task(
-                process_logs_and_tracking_background, 
-                logs, 
-                customer_id, 
-                "/logs", 
+                process_logs_and_tracking_background,
+                logs,
+                customer_id,
+                "/logs",
                 "json",
                 1,  # log_count
                 bytes_processed,
@@ -91,17 +91,17 @@ async def ingest_logs(
         else:
             logger.warning("⚠️ USING FALLBACK METHOD")
             background_tasks.add_task(process_logs_background, logs, customer_id)
-        
+
         # Generate a simple log_id for compatibility
         log_id = f"log-{int(datetime.now().timestamp())}-{hash(str(log_entry)) % 10000}"
-        
+
         return IngestResponse(
             status="accepted",
             message="Successfully accepted 1 log for processing",
             log_id=log_id,
             processed_count=1
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -114,31 +114,31 @@ async def ingest_logs(
 
 @router.post("/logs/batch", response_model=BatchIngestResponse)
 async def ingest_logs_batch(
-    batch: BatchLogEntry, 
+    batch: BatchLogEntry,
     background_tasks: BackgroundTasks,
     customer_id: str = MiddlewareTenant
 ):
     """Batch log entry ingestion"""
     start_time = time.time()
-    
+
     try:
         # Add metadata to all logs (minimal processing in main thread)
         ingested_at = datetime.now(timezone.utc)
         for log in batch.logs:
             log.ingested_at = ingested_at
             log.customer_id = customer_id
-        
+
         # Calculate metrics for background tracking
         total_bytes_processed = sum(len(str(log.msg)) for log in batch.logs)
         processing_time_ms = int((time.time() - start_time) * 1000)
-        
+
         # Move ALL tracking to background tasks for fast response
         if process_logs_and_tracking_background:
             background_tasks.add_task(
-                process_logs_and_tracking_background, 
-                batch.logs, 
-                customer_id, 
-                "/logs/batch", 
+                process_logs_and_tracking_background,
+                batch.logs,
+                customer_id,
+                "/logs/batch",
                 "json",
                 len(batch.logs),  # log_count
                 total_bytes_processed,
@@ -147,7 +147,7 @@ async def ingest_logs_batch(
         else:
             # Fallback to old method if new function not available
             background_tasks.add_task(process_logs_background, batch.logs, customer_id)
-        
+
         return BatchIngestResponse(
             status="accepted",
             message=f"Successfully accepted {len(batch.logs)} logs for processing",
@@ -164,29 +164,29 @@ async def ingest_logs_batch(
         )
         raise HTTPException(status_code=500, detail=f"Batch ingestion failed: {str(e)}")
 
-@router.post("/logs/bulk", response_model=BatchIngestResponse)  
+@router.post("/logs/bulk", response_model=BatchIngestResponse)
 async def ingest_logs_bulk(
-    bulk_data: Dict[str, Any], 
-    background_tasks: BackgroundTasks, 
+    bulk_data: Dict[str, Any],
+    background_tasks: BackgroundTasks,
     customer_id: str = MiddlewareTenant
 ):
     """Bulk ingestion from various sources"""
     try:
-        
+
         if "logs" not in bulk_data:
             raise HTTPException(status_code=400, detail="Missing 'logs' field in request")
-        
+
         logs = []
         ingested_at = datetime.now(timezone.utc)
-        
+
         for log_data in bulk_data["logs"]:
             log = LogEntry(**log_data) if isinstance(log_data, dict) else LogEntry.from_json(log_data)
             log.ingested_at = ingested_at
             log.customer_id = customer_id
             logs.append(log)
-        
+
         background_tasks.add_task(process_logs_background, logs, customer_id)
-        
+
         return BatchIngestResponse(
             status="success",
             message=f"Successfully ingested {len(logs)} logs",
@@ -200,42 +200,42 @@ async def ingest_logs_bulk(
 
 @router.post("/otlp", response_model=BatchIngestResponse)
 async def ingest_otlp_logs(
-    otlp_data: OTLPLogsData, 
-    background_tasks: BackgroundTasks, 
+    otlp_data: OTLPLogsData,
+    background_tasks: BackgroundTasks,
     customer_id: str = MiddlewareTenant
 ):
     """OpenTelemetry Protocol (OTLP) log ingestion"""
     start_time = time.time()
-    
+
     try:
         if not parser_factory:
             raise HTTPException(status_code=500, detail="Parser factory not initialized")
-        
+
         parser = parser_factory.get_parser("otlp")
         logs = parser.parse_batch(otlp_data)
-        
+
         if not logs:
             raise HTTPException(status_code=400, detail="No valid log records found in OTLP data")
-        
+
         # Prepare logs for storage
         logs = ingestion_service.prepare_logs_for_storage(logs, customer_id)
-        
+
         # Calculate metrics for background tracking
         total_bytes_processed = sum(len(str(log.msg)) for log in logs)
         processing_time_ms = int((time.time() - start_time) * 1000)
-        
+
         # Move ALL tracking to background tasks for fast response
         import logging
         logger = logging.getLogger(__name__)
         logger.info(f"🚀 OTLP INGESTION: customer_id={customer_id}, log_count={len(logs)}, bytes={total_bytes_processed}, processing_time={processing_time_ms}ms")
-        
+
         if process_logs_and_tracking_background:
             logger.info("✅ USING OTLP NON-BLOCKING TRACKING")
             background_tasks.add_task(
-                process_logs_and_tracking_background, 
-                logs, 
-                customer_id, 
-                "/otlp", 
+                process_logs_and_tracking_background,
+                logs,
+                customer_id,
+                "/otlp",
                 "otlp",
                 len(logs),  # log_count
                 total_bytes_processed,
@@ -244,7 +244,7 @@ async def ingest_otlp_logs(
         else:
             logger.warning("⚠️ OTLP USING FALLBACK METHOD")
             background_tasks.add_task(process_logs_background, logs, customer_id)
-        
+
         return BatchIngestResponse(
             status="accepted",
             message=f"Successfully accepted {len(logs)} OTLP logs for processing",
@@ -263,40 +263,40 @@ async def ingest_otlp_logs(
 
 @router.post("/syslog", response_model=IngestResponse)
 async def ingest_syslog(
-    request: Request, 
+    request: Request,
     background_tasks: BackgroundTasks,
     customer_id: str = MiddlewareTenant
 ):
     """Syslog format ingestion (RFC 3164 and RFC 5424)"""
     start_time = time.time()
-    
+
     try:
         raw_content = await request.body()
         syslog_data = raw_content.decode('utf-8').strip()
-        
+
         if not parser_factory:
             raise HTTPException(status_code=500, detail="Parser factory not initialized")
-        
+
         parser = parser_factory.get_parser("syslog")
         log = parser.parse(syslog_data)
-        
+
         if not log:
             raise HTTPException(status_code=400, detail="No valid log records found in syslog data")
-        
+
         # Prepare logs for storage
         logs = ingestion_service.prepare_logs_for_storage([log], customer_id)
-        
+
         # Calculate metrics for background tracking
         total_bytes_processed = len(syslog_data.encode('utf-8'))
         processing_time_ms = int((time.time() - start_time) * 1000)
-        
+
         # Move ALL tracking to background tasks for fast response
         if process_logs_and_tracking_background:
             background_tasks.add_task(
-                process_logs_and_tracking_background, 
-                logs, 
-                customer_id, 
-                "/syslog", 
+                process_logs_and_tracking_background,
+                logs,
+                customer_id,
+                "/syslog",
                 "syslog",
                 len(logs),  # log_count
                 total_bytes_processed,
@@ -305,7 +305,7 @@ async def ingest_syslog(
         else:
             # Fallback to old method if new function not available
             background_tasks.add_task(process_logs_background, logs, customer_id)
-        
+
         return IngestResponse(
             status="success",
             message=f"Successfully ingested {len(logs)} logs",
@@ -314,42 +314,42 @@ async def ingest_syslog(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Syslog parsing failed: {str(e)}")
 
-@router.post("/nginx", response_model=IngestResponse) 
+@router.post("/nginx", response_model=IngestResponse)
 async def ingest_nginx(
-    request: Request, 
+    request: Request,
     background_tasks: BackgroundTasks,
     customer_id: str = MiddlewareTenant
 ):
     """Nginx access log ingestion"""
     start_time = time.time()
-    
+
     try:
         raw_content = await request.body()
         nginx_logs = raw_content.decode('utf-8').strip()
-        
+
         if not parser_factory:
             raise HTTPException(status_code=500, detail="Parser factory not initialized")
-        
+
         parser = parser_factory.get_parser("nginx")
         log = parser.parse(nginx_logs)
-        
+
         if not log:
             raise HTTPException(status_code=400, detail="No valid log records found in nginx data")
-        
+
         # Prepare logs for storage
         logs = ingestion_service.prepare_logs_for_storage([log], customer_id)
-        
+
         # Calculate metrics for background tracking
         total_bytes_processed = len(nginx_logs.encode('utf-8'))
         processing_time_ms = int((time.time() - start_time) * 1000)
-        
+
         # Move ALL tracking to background tasks for fast response
         if process_logs_and_tracking_background:
             background_tasks.add_task(
-                process_logs_and_tracking_background, 
-                logs, 
-                customer_id, 
-                "/nginx", 
+                process_logs_and_tracking_background,
+                logs,
+                customer_id,
+                "/nginx",
                 "nginx",
                 len(logs),  # log_count
                 total_bytes_processed,
@@ -358,7 +358,7 @@ async def ingest_nginx(
         else:
             # Fallback to old method if new function not available
             background_tasks.add_task(process_logs_background, logs, customer_id)
-        
+
         return IngestResponse(
             status="success",
             message=f"Successfully ingested {len(logs)} logs",
@@ -369,40 +369,40 @@ async def ingest_nginx(
 
 @router.post("/cef", response_model=IngestResponse)
 async def ingest_cef(
-    request: Request, 
+    request: Request,
     background_tasks: BackgroundTasks,
     customer_id: str = MiddlewareTenant
 ):
     """Common Event Format (CEF) log ingestion"""
     start_time = time.time()
-    
+
     try:
         raw_content = await request.body()
         cef_data = raw_content.decode('utf-8').strip()
-        
+
         if not parser_factory:
             raise HTTPException(status_code=500, detail="Parser factory not initialized")
-        
+
         parser = parser_factory.get_parser("cef")
         log = parser.parse(cef_data)
-        
+
         if not log:
             raise HTTPException(status_code=400, detail="No valid log records found in CEF data")
-        
+
         # Prepare logs for storage
         logs = ingestion_service.prepare_logs_for_storage([log], customer_id)
-        
+
         # Calculate metrics for background tracking
         total_bytes_processed = len(cef_data.encode('utf-8'))
         processing_time_ms = int((time.time() - start_time) * 1000)
-        
+
         # Move ALL tracking to background tasks for fast response
         if process_logs_and_tracking_background:
             background_tasks.add_task(
-                process_logs_and_tracking_background, 
-                logs, 
-                customer_id, 
-                "/cef", 
+                process_logs_and_tracking_background,
+                logs,
+                customer_id,
+                "/cef",
                 "cef",
                 len(logs),  # log_count
                 total_bytes_processed,
@@ -411,7 +411,7 @@ async def ingest_cef(
         else:
             # Fallback to old method if new function not available
             background_tasks.add_task(process_logs_background, logs, customer_id)
-        
+
         return IngestResponse(
             status="success",
             message=f"Successfully ingested {len(logs)} logs",
@@ -422,40 +422,40 @@ async def ingest_cef(
 
 @router.post("/text", response_model=IngestResponse)
 async def ingest_text(
-    request: Request, 
+    request: Request,
     background_tasks: BackgroundTasks,
     customer_id: str = MiddlewareTenant
 ):
     """Plain text log ingestion with basic parsing"""
     start_time = time.time()
-    
+
     try:
         raw_content = await request.body()
         text_data = raw_content.decode('utf-8').strip()
-        
+
         if not parser_factory:
             raise HTTPException(status_code=500, detail="Parser factory not initialized")
-        
+
         parser = parser_factory.get_parser("text")
         log = parser.parse(text_data)
-        
+
         if not log:
             raise HTTPException(status_code=400, detail="No valid log records found in text data")
-        
+
         # Prepare logs for storage
         logs = ingestion_service.prepare_logs_for_storage([log], customer_id)
-        
+
         # Calculate metrics for background tracking
         total_bytes_processed = len(text_data.encode('utf-8'))
         processing_time_ms = int((time.time() - start_time) * 1000)
-        
+
         # Move ALL tracking to background tasks for fast response
         if process_logs_and_tracking_background:
             background_tasks.add_task(
-                process_logs_and_tracking_background, 
-                logs, 
-                customer_id, 
-                "/text", 
+                process_logs_and_tracking_background,
+                logs,
+                customer_id,
+                "/text",
                 "text",
                 len(logs),  # log_count
                 total_bytes_processed,
@@ -464,7 +464,7 @@ async def ingest_text(
         else:
             # Fallback to old method if new function not available
             background_tasks.add_task(process_logs_background, logs, customer_id)
-        
+
         return IngestResponse(
             status="success",
             message=f"Successfully ingested {len(logs)} logs",
@@ -475,16 +475,16 @@ async def ingest_text(
 
 @router.post("/structured", response_model=IngestResponse)
 async def ingest_structured(
-    structured_data: Dict[str, Any], 
-    background_tasks: BackgroundTasks, 
+    structured_data: Dict[str, Any],
+    background_tasks: BackgroundTasks,
     customer_id: str = MiddlewareTenant
 ):
     """Structured JSON log ingestion"""
     start_time = time.time()
-    
+
     try:
         logs = []
-        
+
         if isinstance(structured_data, list):
             for item in structured_data:
                 log = LogEntry(**item) if isinstance(item, dict) else LogEntry.from_json(str(item))
@@ -492,24 +492,24 @@ async def ingest_structured(
         else:
             log = LogEntry(**structured_data)
             logs.append(log)
-        
+
         if not logs:
             raise HTTPException(status_code=400, detail="No valid log records found in structured data")
-        
+
         # Prepare logs for storage
         logs = ingestion_service.prepare_logs_for_storage(logs, customer_id)
-        
+
         # Calculate metrics for background tracking
         total_bytes_processed = len(str(structured_data).encode('utf-8'))
         processing_time_ms = int((time.time() - start_time) * 1000)
-        
+
         # Move ALL tracking to background tasks for fast response
         if process_logs_and_tracking_background:
             background_tasks.add_task(
-                process_logs_and_tracking_background, 
-                logs, 
-                customer_id, 
-                "/structured", 
+                process_logs_and_tracking_background,
+                logs,
+                customer_id,
+                "/structured",
                 "json",
                 len(logs),  # log_count
                 total_bytes_processed,
@@ -518,7 +518,7 @@ async def ingest_structured(
         else:
             # Fallback to old method if new function not available
             background_tasks.add_task(process_logs_background, logs, customer_id)
-        
+
         return IngestResponse(
             status="success",
             message=f"Successfully ingested {len(logs)} logs",
@@ -530,25 +530,25 @@ async def ingest_structured(
 # Generic format-aware endpoint
 @router.post("", response_model=IngestResponse)
 async def ingest_auto_detect(
-    request: Request, 
+    request: Request,
     background_tasks: BackgroundTasks,
     customer_id: str = MiddlewareTenant
 ):
     """Auto-detect format and ingest logs"""
     start_time = time.time()
-    
+
     try:
         content_type = request.headers.get("content-type", "")
         raw_content = await request.body()
-        
+
         if not parser_factory:
             raise HTTPException(status_code=500, detail="Parser factory not initialized")
-        
+
         # Auto-detect format based on content type and content
         if "application/json" in content_type:
             try:
                 json_data = json.loads(raw_content.decode('utf-8'))
-                
+
                 # Check if it's OTLP format
                 if "resource_logs" in json_data:
                     parser = parser_factory.get_parser("otlp")
@@ -559,14 +559,14 @@ async def ingest_auto_detect(
                     log = LogEntry(**json_data) if isinstance(json_data, dict) else LogEntry.from_json(str(json_data))
                     logs = [log]
                     detected_format = "json"
-                    
+
             except json.JSONDecodeError:
                 raise HTTPException(status_code=400, detail="Invalid JSON format")
-                
+
         else:
             # Try to detect text-based formats
             text_content = raw_content.decode('utf-8').strip()
-            
+
             if text_content.startswith('<') and 'CEF:' in text_content:
                 parser = parser_factory.get_parser("cef")
                 log = parser.parse(text_content)
@@ -587,24 +587,24 @@ async def ingest_auto_detect(
                 log = parser.parse(text_content)
                 logs = [log]
                 detected_format = "text"
-        
+
         if not logs:
             raise HTTPException(status_code=400, detail="No valid log records found in auto-detected data")
-        
+
         # Prepare logs for storage
         logs = ingestion_service.prepare_logs_for_storage(logs, customer_id)
-        
+
         # Calculate metrics for background tracking
         total_bytes_processed = len(raw_content)
         processing_time_ms = int((time.time() - start_time) * 1000)
-        
+
         # Move ALL tracking to background tasks for fast response
         if process_logs_and_tracking_background:
             background_tasks.add_task(
-                process_logs_and_tracking_background, 
-                logs, 
-                customer_id, 
-                "/ingest", 
+                process_logs_and_tracking_background,
+                logs,
+                customer_id,
+                "/ingest",
                 detected_format,
                 len(logs),  # log_count
                 total_bytes_processed,
@@ -613,12 +613,12 @@ async def ingest_auto_detect(
         else:
             # Fallback to old method if new function not available
             background_tasks.add_task(process_logs_background, logs, customer_id)
-        
+
         return IngestResponse(
             status="success",
             message=f"Successfully ingested {len(logs)} logs - detected format: {detected_format}",
             processed_count=len(logs)
         )
-        
+
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Auto-detection failed: {str(e)}")

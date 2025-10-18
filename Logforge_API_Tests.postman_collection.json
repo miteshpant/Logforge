@@ -22,9 +22,9 @@
 				"exec": [
 					"// Set global variables",
 					"pm.globals.set('base_url', 'http://localhost:7080');",
-					"pm.globals.set('tenant_id', '505908f9-8718-4dea-b2d8-9b9e5ae0bd45');",
+					"pm.globals.set('tenant_id', '3bbbb222-3f2c-4473-a0a5-a4a2a1f8acbe');",
 					"pm.globals.set('auth_email', 'shrutipande14@gmail.com');",
-					"pm.globals.set('auth_password', '*Pdq2C8CJhj9$U2q');"
+					"pm.globals.set('auth_password', 'rtWRp#c7YkM6Ns26');"
 				],
 				"type": "text/javascript"
 			}
@@ -38,7 +38,7 @@
 		},
 		{
 			"key": "tenant_id",
-			"value": "505908f9-8718-4dea-b2d8-9b9e5ae0bd45",
+			"value": "3bbbb222-3f2c-4473-a0a5-a4a2a1f8acbe",
 			"type": "string"
 		},
 		{
@@ -48,7 +48,7 @@
 		},
 		{
 			"key": "auth_password",
-			"value": "*Pdq2C8CJhj9$U2q",
+			"value": "rtWRp#c7YkM6Ns26",
 			"type": "string"
 		}
 	],

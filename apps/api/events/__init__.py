@@ -4,7 +4,7 @@ Comprehensive event system for Logforge platform
 """
 
 from .base import BaseEvent, EventPublisher, EventSubscriber
-from .publishers import EventPublisherManager
+from .publisher_manager import EventPublisherManager
 from .subscribers import EventSubscriberManager
 from .partitioning import CustomerPartitionManager
 from .topics import TopicManager, TOPIC_CONFIGS
