@@ -5,7 +5,7 @@
 kafka:
   bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS}"
   security_protocol: "${KAFKA_SECURITY_PROTOCOL}"
-  compression_type: "lz4"
+  compression_type: "gzip"
   max_request_size: 1048576  # 1MB
   batch_size: 16384
   linger_ms: 10
@@ -53,7 +53,7 @@ topics:
     retention_ms: 604800000  # 7 days
     cleanup_policy: "delete"
     max_message_bytes: 1048576
-    compression_type: "lz4"
+    compression_type: "gzip"
 
   # Alert-related events
   alert-events:
@@ -63,7 +63,7 @@ topics:
     retention_ms: 2592000000  # 30 days
     cleanup_policy: "delete"
     max_message_bytes: 1048576
-    compression_type: "lz4"
+    compression_type: "gzip"
 
   # Log lifecycle events
   log-events:
@@ -73,7 +73,7 @@ topics:
     retention_ms: 3600000  # 1 hour
     cleanup_policy: "delete"
     max_message_bytes: 2097152  # 2MB for log batches
-    compression_type: "snappy"
+    compression_type: "gzip"
 
   # Tenant management events
   tenant-events:
@@ -83,7 +83,7 @@ topics:
     retention_ms: 2592000000  # 30 days
     cleanup_policy: "delete"
     max_message_bytes: 1048576
-    compression_type: "lz4"
+    compression_type: "gzip"
 
   # Real-time UI events
   ui-realtime-events:
@@ -93,7 +93,7 @@ topics:
     retention_ms: 600000  # 10 minutes
     cleanup_policy: "delete"
     max_message_bytes: 524288  # 512KB
-    compression_type: "snappy"
+    compression_type: "gzip"
 
   # System monitoring events
   system-events:
@@ -103,7 +103,7 @@ topics:
     retention_ms: 2592000000  # 30 days
     cleanup_policy: "delete"
     max_message_bytes: 1048576
-    compression_type: "lz4"
+    compression_type: "gzip"
 
 # Event Processing Configuration
 processing:
@@ -147,12 +147,20 @@ development:
   topics:
     usage-events:
       partitions: 10
+      replication_factor: 1
     alert-events:
       partitions: 5
+      replication_factor: 1
     log-events:
       partitions: 10
+      replication_factor: 1
+    tenant-events:
+      replication_factor: 1
     ui-realtime-events:
       partitions: 20
+      replication_factor: 1
+    system-events:
+      replication_factor: 1
 
 production:
   kafka:

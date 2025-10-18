@@ -78,6 +78,7 @@ services:
     networks:
       - logforge-network
 
+
   # FastAPI Backend
   api:
     build:
@@ -96,6 +97,8 @@ services:
       - CLICKHOUSE_PASSWORD=logforge123
       - CLICKHOUSE_DATABASE=logforge
       - REDPANDA_BOOTSTRAP_SERVERS=redpanda:9092
+      - KAFKA_BOOTSTRAP_SERVERS=redpanda:9092
+      - KAFKA_SECURITY_PROTOCOL=PLAINTEXT
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=minio
       - MINIO_SECRET_KEY=minio123

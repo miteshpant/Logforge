@@ -154,8 +154,22 @@ class KafkaEventPublisher(EventPublisher):
         await self.admin_client.start()
 
     async def _ensure_topics_exist(self):
-        """Create topics if they don't exist"""
+        """Create topics if they don't exist (fallback for init container)"""
         topics_config = EVENT_CONFIG.get("topics", {})
+        logger.info(f"Fallback topic creation - checking {len(self.config.topics)} topics")
+
+        # Check if topics already exist (likely created by init container)
+        try:
+            metadata = await self.admin_client.describe_topics()
+            if isinstance(metadata, dict):
+                existing_topics = set(metadata.keys())
+            else:
+                # Handle case where describe_topics returns a list
+                existing_topics = set(getattr(topic, 'topic', str(topic)) for topic in metadata)
+            logger.info(f"Found {len(existing_topics)} existing topics: {list(existing_topics)}")
+        except Exception as e:
+            logger.warning(f"Could not check existing topics: {e}")
+            existing_topics = set()
 
         for topic_key in self.config.topics:
             if topic_key not in topics_config:
@@ -164,22 +178,30 @@ class KafkaEventPublisher(EventPublisher):
 
             topic_config = topics_config[topic_key]
             topic_name = topic_config.get("name", topic_key)
+            
+            # Skip if topic already exists (init container likely created it)
+            if topic_name in existing_topics:
+                logger.info(f"Topic {topic_name} already exists, skipping creation")
+                continue
+            
+            partitions = topic_config.get("partitions", 10)
+            logger.info(f"Fallback creating topic {topic_name} with {partitions} partitions")
 
             try:
                 topic = NewTopic(
                     name=topic_name,
-                    num_partitions=topic_config.get("partitions", 10),
+                    num_partitions=partitions,
                     replication_factor=topic_config.get("replication_factor", 1)
                 )
 
                 await self.admin_client.create_topics([topic])
-                logger.info(f"Topic created", topic=topic_name)
+                logger.info(f"Fallback topic created successfully", topic=topic_name, partitions=partitions)
 
             except TopicAlreadyExistsError:
-                logger.debug(f"Topic already exists", topic=topic_name)
+                logger.info(f"Topic {topic_name} was created concurrently, continuing")
             except Exception as e:
                 logger.error(f"Failed to create topic {topic_name}: {e}")
-                raise
+                # Don't raise - continue with other topics and let the app start
 
     async def _start_producer(self):
         """Start the Kafka producer"""

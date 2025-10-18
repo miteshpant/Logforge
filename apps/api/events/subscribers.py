@@ -533,7 +533,9 @@ class LogEventHandler(EventHandler):
             customer_id=event.customer_id,
             event_type=event.event_type
         )
-
+        logger.info(
+            event=event
+        )
         # TODO: Implement actual log processing logic
         # - Update log indexes
         # - Trigger log analysis
