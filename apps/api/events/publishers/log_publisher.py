@@ -77,7 +77,12 @@ class LogEventPublisher:
                 metadata=metadata
             )
 
-            success = await self.publisher_manager.publish(event)
+            results = await self.publisher_manager.publish(event)
+            
+            # Check if any publisher succeeded
+            success_count = sum(1 for result in results.values() if result)
+            total_publishers = len(results)
+            success = success_count > 0
 
             if success:
                 self.logger.info(
@@ -85,13 +90,17 @@ class LogEventPublisher:
                     customer_id=customer_id,
                     batch_id=batch_info.get("batch_id"),
                     log_count=batch_info.get("log_count"),
-                    source_format=source_format
+                    source_format=source_format,
+                    successful_publishers=success_count,
+                    total_publishers=total_publishers,
+                    publisher_results=results
                 )
             else:
                 self.logger.error(
-                    "Failed to publish log batch ingestion event",
+                    "Failed to publish log batch ingestion event to any publisher",
                     customer_id=customer_id,
-                    batch_id=batch_info.get("batch_id")
+                    batch_id=batch_info.get("batch_id"),
+                    publisher_results=results
                 )
 
             return success
@@ -150,14 +159,16 @@ class LogEventPublisher:
                 metadata=metadata
             )
 
-            success = await self.publisher_manager.publish(event)
+            results = await self.publisher_manager.publish(event)
+            success = any(results.values())
 
             if success:
                 self.logger.debug(
                     "Log parsing event published",
                     customer_id=customer_id,
                     log_id=log_id,
-                    parser=parser_name
+                    parser=parser_name,
+                    publisher_results=results
                 )
 
             return success
@@ -214,14 +225,16 @@ class LogEventPublisher:
                 metadata=metadata
             )
 
-            success = await self.publisher_manager.publish(event)
+            results = await self.publisher_manager.publish(event)
+            success = any(results.values())
 
             if success:
                 self.logger.debug(
                     "Log indexing event published",
                     customer_id=customer_id,
                     log_id=log_id,
-                    index=index_name
+                    index=index_name,
+                    publisher_results=results
                 )
 
             return success
@@ -277,14 +290,16 @@ class LogEventPublisher:
                 metadata=metadata
             )
 
-            success = await self.publisher_manager.publish(event)
+            results = await self.publisher_manager.publish(event)
+            success = any(results.values())
 
             if success:
                 self.logger.info(
                     "Log archival event published",
                     customer_id=customer_id,
                     archive_id=archive_info.get("archive_id"),
-                    log_count=archive_info.get("log_count")
+                    log_count=archive_info.get("log_count"),
+                    publisher_results=results
                 )
 
             return success
@@ -337,14 +352,16 @@ class LogEventPublisher:
                 metadata=metadata
             )
 
-            success = await self.publisher_manager.publish(event)
+            results = await self.publisher_manager.publish(event)
+            success = any(results.values())
 
             if success:
                 self.logger.info(
                     "Log deletion event published",
                     customer_id=customer_id,
                     log_count=deletion_info.get("log_count"),
-                    reason=reason
+                    reason=reason,
+                    publisher_results=results
                 )
 
             return success
@@ -399,7 +416,8 @@ class LogEventPublisher:
                 metadata=metadata
             )
 
-            success = await self.publisher_manager.publish(event)
+            results = await self.publisher_manager.publish(event)
+            success = any(results.values())
 
             if success:
                 self.logger.warning(
@@ -407,7 +425,8 @@ class LogEventPublisher:
                     customer_id=customer_id,
                     log_id=log_info.get("log_id"),
                     parser=parser_name,
-                    error=error_details.get("error_message")
+                    error=error_details.get("error_message"),
+                    publisher_results=results
                 )
 
             return success
@@ -457,14 +476,16 @@ class LogEventPublisher:
                 metadata=metadata
             )
 
-            success = await self.publisher_manager.publish(event)
+            results = await self.publisher_manager.publish(event)
+            success = any(results.values())
 
             if success:
                 self.logger.warning(
                     "Log quota exceeded event published",
                     customer_id=customer_id,
                     quota_type=quota_info.get("quota_type"),
-                    percentage_used=event_data["percentage_used"]
+                    percentage_used=event_data["percentage_used"],
+                    publisher_results=results
                 )
 
             return success
@@ -514,14 +535,16 @@ class LogEventPublisher:
                 metadata=metadata
             )
 
-            success = await self.publisher_manager.publish(event)
+            results = await self.publisher_manager.publish(event)
+            success = any(results.values())
 
             if success:
                 self.logger.debug(
                     "Real-time log batch event published",
                     customer_id=customer_id,
                     stream_name=stream_name,
-                    log_count=batch_info.get("log_count")
+                    log_count=batch_info.get("log_count"),
+                    publisher_results=results
                 )
 
             return success

