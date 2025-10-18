@@ -412,53 +412,7 @@ class KafkaEventPublisher(EventPublisher):
             logger.error(f"Error closing KafkaEventPublisher: {e}")
 
 
-class MockEventPublisher(EventPublisher):
-    """Mock publisher for testing and development"""
-
-    def __init__(self, config: PublisherConfig):
-        self.config = config
-        self.is_started = False
-        self.metrics = EventMetrics()
-        self.published_events: List[BaseEvent] = []
-
-        logger.info("MockEventPublisher initialized", publisher=config.name)
-
-    async def publish(self, event: BaseEvent) -> bool:
-        """Mock publish - just store the event"""
-        if not self.is_started:
-            raise EventPublishError("Publisher not started")
-
-        if not self.config.enabled:
-            return True
-
-        self.published_events.append(event)
-        self.metrics.record_event_published()
-
-        logger.debug(
-            "Event mock published",
-            event_id=event.metadata.event_id,
-            event_type=event.event_type
-        )
-        return True
-
-    async def publish_batch(self, events: List[BaseEvent]) -> Dict[str, bool]:
-        """Mock batch publish"""
-        results = {}
-
-        for event in events:
-            success = await self.publish(event)
-            results[event.metadata.event_id] = success
-
-        return results
-
-    async def health_check(self) -> bool:
-        """Mock health check"""
-        return self.is_started
-
-    async def close(self):
-        """Close mock publisher"""
-        self.is_started = False
-        logger.info("MockEventPublisher closed", publisher=self.config.name)
+# MockEventPublisher removed - using only real Kafka publishers
 
 
 class EventPublisherManager:
@@ -511,11 +465,7 @@ class EventPublisherManager:
                 batch_timeout_ms=0,
                 retry_attempts=1
             ),
-            "mock_test": PublisherConfig(
-                name="mock_test",
-                enabled=False,  # Disabled to avoid confusion during troubleshooting
-                topics=all_topics
-            )
+# Mock publisher configuration removed - using only real Kafka publishers
         }
 
     def register_publisher(self, name: str, publisher_class: Type[EventPublisher],
@@ -542,8 +492,7 @@ class EventPublisherManager:
             if EVENT_CONFIG.get("producer", {}).get("enable_compression", True):
                 self.register_publisher("kafka_analytics", KafkaEventPublisher)
 
-        # Always register mock for testing
-        self.register_publisher("mock_test", MockEventPublisher)
+        # Mock publisher registration removed - using only real Kafka publishers
 
         # Start all enabled publishers
         for name, publisher in self.publishers.items():

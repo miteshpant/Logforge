@@ -448,69 +448,7 @@ class KafkaEventSubscriber(EventSubscriber):
             logger.error(f"Error stopping KafkaEventSubscriber: {e}")
 
 
-class MockEventSubscriber(EventSubscriber):
-    """Mock subscriber for testing and development"""
-
-    def __init__(self, config: SubscriberConfig):
-        self.config = config
-        self.is_started = False
-        self.metrics = EventMetrics()
-        self.handlers: Dict[str, EventHandler] = {}
-        self.processed_events: List[BaseEvent] = []
-
-        logger.info("MockEventSubscriber initialized", subscriber=config.name)
-
-    def register_handler(self, handler: EventHandler):
-        """Register an event handler"""
-        handler_name = handler.get_handler_name()
-        self.handlers[handler_name] = handler
-        logger.info("Mock handler registered", handler=handler_name)
-
-    async def start(self):
-        """Start the mock subscriber"""
-        self.is_started = True
-        logger.info("MockEventSubscriber started", subscriber=self.config.name)
-
-    async def handle_event(self, event: BaseEvent) -> bool:
-        """Mock handle - process with registered handlers"""
-        if not self.is_started:
-            raise EventSubscribeError("Subscriber not started")
-
-        if not self.config.enabled:
-            return True
-
-        self.processed_events.append(event)
-
-        # Process with handlers
-        for handler_name, handler in self.handlers.items():
-            if event.event_type in handler.get_supported_event_types():
-                try:
-                    await handler.handle(event)
-                except Exception as e:
-                    logger.error(f"Mock handler {handler_name} failed: {e}")
-                    return False
-
-        self.metrics.record_event_consumed(0.0)
-        return True
-
-    async def handle_batch(self, events: List[BaseEvent]) -> Dict[str, bool]:
-        """Mock batch handle"""
-        results = {}
-
-        for event in events:
-            success = await self.handle_event(event)
-            results[event.metadata.event_id] = success
-
-        return results
-
-    def get_subscribed_events(self) -> List[str]:
-        """Get subscribed event types"""
-        return self.config.event_types.copy()
-
-    async def stop(self):
-        """Stop mock subscriber"""
-        self.is_started = False
-        logger.info("MockEventSubscriber stopped", subscriber=self.config.name)
+# MockEventSubscriber removed - using only real Kafka subscribers
 
 
 # Common event handlers
@@ -729,12 +667,7 @@ class EventSubscriberManager:
                 max_batch_size=100,
                 max_parallel_workers=5
             ),
-            "mock_subscriber": SubscriberConfig(
-                name="mock_subscriber",
-                consumer_group=f"{base_group}-mock",
-                topics=all_topics,
-                enabled=False
-            )
+# Mock subscriber configuration removed - using only real Kafka subscribers
         }
 
     def register_subscriber(self, name: str, subscriber_class: Type[EventSubscriber],
@@ -763,8 +696,7 @@ class EventSubscriberManager:
             self.register_subscriber("ui_subscriber", KafkaEventSubscriber)
             self.register_subscriber("system_subscriber", KafkaEventSubscriber)
 
-        # Always register mock for testing
-        self.register_subscriber("mock_subscriber", MockEventSubscriber)
+        # Mock subscriber registration removed - using only real Kafka subscribers
 
         # Register default handlers
         await self._register_default_handlers()
