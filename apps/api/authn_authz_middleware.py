@@ -926,7 +926,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         try:
             # Import services within the function to avoid circular imports (same as dependencies.py)
             from services.tenant_service import TenantService
-            from dependencies import track_usage_with_cost_calculation
+            from event_processing import track_usage_with_cost_calculation
             
             # Track API call quota with proper cost calculation (same as monthly_ingestion)
             tenant_service = TenantService()
