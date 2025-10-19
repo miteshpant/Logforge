@@ -241,10 +241,13 @@ async def process_logs_and_tracking_async(
             customer_id, endpoint, format_type, log_count, bytes_processed, processing_time_ms
         )
 
-        # 4. Publish log ingestion event (if event system is available)
+        # 4. PHASE 2: DUAL PROCESSING - Publish log ingestion event for validation
+        # This will run in parallel with direct processing to validate event-driven approach
         global log_event_publisher
         if log_event_publisher:
             try:
+                logger.info(f"🔄 PHASE 2: Starting dual processing validation for customer {customer_id}")
+                
                 batch_info = {
                     "batch_id": f"batch_{customer_id}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}",
                     "log_count": log_count,
@@ -252,7 +255,8 @@ async def process_logs_and_tracking_async(
                     "endpoint": endpoint,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "success_count": log_count,  # Assuming all logs processed successfully
-                    "error_count": 0
+                    "error_count": 0,
+                    "logs": [log.model_dump(mode='json') if hasattr(log, 'model_dump') else log.__dict__ for log in logs]  # Include log data for event processing
                 }
 
                 await log_event_publisher.publish_batch_ingested(
@@ -261,12 +265,13 @@ async def process_logs_and_tracking_async(
                     source_format=format_type,
                     processing_time_ms=float(processing_time_ms)
                 )
-                logger.debug(f"Log ingestion event published for customer {customer_id}")
+                logger.info(f"🔄 PHASE 2: Event published for dual processing validation - customer {customer_id}")
 
             except Exception as e:
-                logger.warning(f"Failed to publish log ingestion event: {e}")
+                logger.warning(f"🔄 PHASE 2: Failed to publish event for dual processing: {e}")
 
         logger.info(f"Complete log processing and tracking finished: customer_id={customer_id}, endpoint={endpoint}, log_count={log_count}, bytes_processed={bytes_processed}")
+        logger.info(f"🔄 PHASE 2: Direct processing complete, event-driven processing will run in parallel")
 
     except Exception as e:
         logger.error("Failed comprehensive log processing", exc_info=e)
@@ -424,6 +429,14 @@ async def initialize_engines():
         # Initialize observability engine (M5)
         observability_engine = ObservabilityEngine(client)
         logger.info("Observability engine initialized")
+
+        # Initialize event processing module config
+        try:
+            import event_processing
+            event_processing.set_config(config)
+            logger.info("Event processing module configured")
+        except Exception as e:
+            logger.warning(f"Failed to configure event processing module: {e}")
 
          # Initialize event system
         try:

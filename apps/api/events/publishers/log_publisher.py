@@ -51,16 +51,27 @@ class LogEventPublisher:
             trace_id: Distributed tracing ID
         """
         try:
+            # Debug logging to trace endpoint value
+            endpoint_from_batch = batch_info.get("endpoint", "unknown")
+            self.logger.info(
+                f"LOG_PUBLISHER DEBUG: Creating event data with endpoint",
+                customer_id=customer_id,
+                endpoint_from_batch=endpoint_from_batch,
+                batch_info_keys=list(batch_info.keys()),
+                source_format=source_format
+            )
+            
             event_data = {
                 "batch_id": batch_info.get("batch_id"),
                 "log_count": batch_info.get("log_count", 0),
                 "source_format": source_format,
                 "processing_time_ms": processing_time_ms,
                 "bytes_processed": batch_info.get("bytes_processed", 0),
-                "ingestion_endpoint": batch_info.get("endpoint", "unknown"),
+                "ingestion_endpoint": endpoint_from_batch,
                 "timestamp": batch_info.get("timestamp"),
                 "success_count": batch_info.get("success_count", 0),
-                "error_count": batch_info.get("error_count", 0)
+                "error_count": batch_info.get("error_count", 0),
+                "logs": batch_info.get("logs", [])  # Include actual log data for event processing
             }
 
             metadata = EventMetadata(
