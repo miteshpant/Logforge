@@ -27,23 +27,45 @@ def load_event_config():
             # Merge environment-specific config
             for section, values in config[env].items():
                 if section in config:
-                    config[section].update(values)
+                    if isinstance(config[section], dict) and isinstance(values, dict):
+                        # Deep merge for nested dictionaries like topics
+                        for key, value in values.items():
+                            if key in config[section] and isinstance(config[section][key], dict) and isinstance(value, dict):
+                                config[section][key].update(value)
+                            else:
+                                config[section][key] = value
+                    else:
+                        config[section].update(values)
         
         return config
     
     except Exception as e:
         logger.error(f"Failed to load event config: {e}")
-        # Return default config
-        return {
-            "topics": {
-                "usage-events": {"partitions": 100},
-                "alert-events": {"partitions": 50},
-                "log-events": {"partitions": 100},
-                "tenant-events": {"partitions": 20},
-                "ui-realtime-events": {"partitions": 200},
-                "system-events": {"partitions": 10}
+        # Return environment-appropriate default config
+        env = os.getenv('ENVIRONMENT', 'development')
+        if env == 'development':
+            return {
+                "topics": {
+                    "usage-events": {"partitions": 10},
+                    "alert-events": {"partitions": 5},
+                    "log-events": {"partitions": 10},
+                    "tenant-events": {"partitions": 20},
+                    "ui-realtime-events": {"partitions": 20},
+                    "system-events": {"partitions": 10}
+                }
             }
-        }
+        else:
+            # Production defaults
+            return {
+                "topics": {
+                    "usage-events": {"partitions": 100},
+                    "alert-events": {"partitions": 50},
+                    "log-events": {"partitions": 100},
+                    "tenant-events": {"partitions": 20},
+                    "ui-realtime-events": {"partitions": 200},
+                    "system-events": {"partitions": 10}
+                }
+            }
 
 
 @dataclass

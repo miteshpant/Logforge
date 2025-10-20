@@ -30,6 +30,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 # Event system imports
 from events.publishers import EventPublisherManager
 from events.publishers.log_publisher import LogEventPublisher
+from events.publishers.alert_publisher import AlertEventPublisher
 from events.subscribers import EventSubscriberManager
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ observability_engine = None
 event_publisher_manager = None
 event_subscriber_manager = None
 log_event_publisher = None
+alert_event_publisher = None
 alert_rule_cache_instance = None
 
 def get_clickhouse_client():
@@ -69,6 +71,11 @@ def get_clickhouse_client():
             raise
 
     return clickhouse_client
+
+def get_alert_event_publisher():
+    """Get alert event publisher instance"""
+    global alert_event_publisher
+    return alert_event_publisher
 
 # process_log_batch() function removed - now handled by event_processing.py
 
@@ -203,7 +210,7 @@ async def initialize_engines():
     """Initialize all engines with their dependencies"""
     global storage_manager, parser_factory, ttl_manager, query_engine
     global dashboard_engine, alert_engine, observability_engine
-    global event_publisher_manager, event_subscriber_manager, log_event_publisher
+    global event_publisher_manager, event_subscriber_manager, log_event_publisher, alert_event_publisher
 
     logger.info("Initializing application engines...")
 
@@ -264,6 +271,10 @@ async def initialize_engines():
             log_event_publisher = LogEventPublisher(event_publisher_manager)
             logger.info("Log event publisher initialized")
 
+            # Initialize alert event publisher
+            alert_event_publisher = AlertEventPublisher(event_publisher_manager)
+            logger.info("Alert event publisher initialized")
+
             logger.info("Event system initialized successfully")
 
         except Exception as e:
@@ -272,6 +283,7 @@ async def initialize_engines():
             event_publisher_manager = None
             event_subscriber_manager = None
             log_event_publisher = None
+            alert_event_publisher = None
 
         # Initialize Redis and Alert Rule Cache
         try:

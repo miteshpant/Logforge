@@ -474,3 +474,12 @@ PROCESSING_TIMEOUT_SECONDS = 60
 # Event processing configuration
 EVENT_BATCH_SIZE = 50  # Number of events to process in a batch
 EVENT_PROCESSING_INTERVAL_SECONDS = 10  # Process events every 10 seconds
+
+# ============================================================================
+# REDIS CACHE CONSTANTS
+# ============================================================================
+
+# Alert rule cache keys
+ALERT_RULE_CACHE_PREFIX = "alerts:rules:"
+ALERT_COOLDOWN_CACHE_PREFIX = "alerts:cooldown:"
+ALERT_CACHE_METADATA_KEY = "alerts:cache:metadata"

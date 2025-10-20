@@ -63,17 +63,11 @@ class UsageBuffer:
                     json_test_data[key] = value.isoformat()
                 else:
                     json_test_data[key] = value
-
-            json.dumps(json_test_data)  # This will raise error if values are JSON-unsafe
-            logger.debug("DEBUG: Usage data JSON validation passed")
         except (TypeError, ValueError) as e:
-            logger.error("DEBUG: JSON validation failed in add_usage",
-                        error=str(e))
             # Try to sanitize the data (keep original datetime objects for database)
             for key, value in usage_data.items():
                 if isinstance(value, float):
                     if value != value or abs(value) == float('inf'):
-                        logger.warning("DEBUG: Sanitizing invalid float", key=key, original_value=value)
                         usage_data[key] = 0.0
 
         self.buffer.append(usage_data)
@@ -571,22 +565,22 @@ class SetupTokenManager:
         try:
             # Check if any super_admin users exist in the database
             query = """
-                SELECT count() FROM users_mt 
-                WHERE customer_id = 'platform' 
+                SELECT count() FROM users_mt
+                WHERE customer_id = 'platform'
                 AND id IN (
-                    SELECT user_id FROM user_tenant_roles_mt 
+                    SELECT user_id FROM user_tenant_roles_mt
                     WHERE role = 'super_admin' AND status = 'active'
                 )
             """
             result = self.db.client.query(query)
             super_admin_count = result.result_rows[0][0] if result.result_rows else 0
-            
+
             # Setup is completed if there's at least one active super admin
             setup_completed = super_admin_count > 0
             logger.debug("Setup completion check", super_admin_count=super_admin_count, completed=setup_completed)
-            
+
             return setup_completed
-            
+
         except Exception as e:
             logger.error("Failed to check setup completion", error=str(e))
             # Fallback: check if any tokens have been used (old behavior)
@@ -683,7 +677,6 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         """Process authentication, authorization, and feature access"""
-        print(f"🚀 MIDDLEWARE DISPATCH CALLED: {request.method} {request.url.path}")  # Debug print
         start_time = time.time()
 
         # Allow CORS preflight requests to pass through without authentication
@@ -700,41 +693,21 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         try:
             # Step 1: Authentication - Extract and validate JWT token
             auth_context = await self._extract_authentication(request)
-            logger.debug("🔍 AUTH STEP 1 SUCCESS: Authentication extracted", path=str(request.url.path))
 
             user = await self._validate_user_session(auth_context)
-            logger.debug("🔍 AUTH STEP 1 SUCCESS: User session validated", user_id=user.id, path=str(request.url.path))
 
             # Step 2: Tenant Context - Extract tenant ID
             tenant_id = request.headers.get("X-Customer-ID")
-            logger.debug("🔍 AUTH STEP 2: Extracted tenant context", tenant_id=tenant_id, path=str(request.url.path))
             if not tenant_id and not request.url.path.startswith("/v1/auth/"):
-                logger.error("🔍 AUTH STEP 2 FAILED: Missing X-Customer-ID header", path=str(request.url.path))
                 raise HTTPException(400, "X-Customer-ID header required")
 
             # Step 3: Authorization - Verify user has access to tenant
             user_roles = []
             if tenant_id:
-                print(f"🔍 DEBUG: TENANT VALIDATION START")
-                print(f"🔍 DEBUG: User ID: {user.id}")
-                print(f"🔍 DEBUG: X-Customer-ID Header: {tenant_id}")
-                print(f"🔍 DEBUG: Request Path: {request.url.path}")
-                
-                logger.debug("🔍 AUTH STEP 3: Getting user tenant roles", user_id=user.id, tenant_id=tenant_id, path=str(request.url.path))
                 user_roles = await self.user_service.get_user_tenant_roles(user.id, tenant_id)
-                
-                print(f"🔍 DEBUG: User Roles for Tenant {tenant_id}: {user_roles}")
-                print(f"🔍 DEBUG: Number of roles found: {len(user_roles) if user_roles else 0}")
-                
-                logger.debug("🔍 AUTH STEP 3 RESULT: User tenant roles retrieved", user_id=user.id, tenant_id=tenant_id, user_roles=user_roles, path=str(request.url.path))
+
                 if not user_roles:
-                    print(f"🔍 DEBUG: ❌ NO ROLES FOUND - Should return 403!")
-                    print(f"🔍 DEBUG: User {user.id} has no access to tenant {tenant_id}")
-                    logger.error("🔍 AUTH STEP 3 FAILED: No access to tenant", user_id=user.id, tenant_id=tenant_id, path=str(request.url.path))
                     raise HTTPException(403, f"No access to tenant: {tenant_id}")
-                else:
-                    print(f"🔍 DEBUG: ✅ ROLES FOUND - Access granted")
-                    print(f"🔍 DEBUG: User {user.id} has access to tenant {tenant_id} with roles: {user_roles}")
 
             # Step 4: Permission Check - Verify endpoint permissions
             # Skip permission checks for auth endpoints (they are user-level operations)
@@ -771,7 +744,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 asyncio.create_task(
                     self._track_api_usage(request, response, user, tenant_id, start_time)
                 )
-            
+
             # Step 9: Audit Logging - Track admin activities for platform admins
             if user_roles and any(role["tenant_id"] == "platform" for role in user_roles):
                 asyncio.create_task(
@@ -848,15 +821,15 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             # Import BillingService to use pricing configuration
             from services.billing_service import BillingService
             billing_service = BillingService()
-            
+
             # Get pricing from configuration
             feature_pricing = billing_service.pricing_config.get("feature_pricing", {})
             api_pricing = feature_pricing.get("api.calls", {})
             base_price_per_1000 = api_pricing.get("base_price", 1.50)  # $1.50 per 1000 calls as per pricing.yml
-            
+
             # Calculate cost per single API call
             cost_per_call = base_price_per_1000 / 1000.0
-            
+
             # Apply billing policy for failed requests (same as before)
             if 500 <= status_code < 600:
                 return 0.0  # No charge for server errors
@@ -867,7 +840,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             else:
                 # Full charge for successful requests
                 return cost_per_call
-                
+
         except Exception as e:
             logger.warning("Failed to calculate API cost from pricing.yml, using fallback", error=str(e))
             # Fallback to a reasonable default if pricing config fails
@@ -878,7 +851,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         try:
             import threading
             import asyncio
-            
+
             def run_async_in_thread():
                 """Run async processing in a separate thread with its own event loop (same as dependencies.py)"""
                 try:
@@ -886,21 +859,21 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                     from clickhouse_connect import get_client
                     background_client = get_client(
                         host=CLICKHOUSE_HOST,
-                        port=CLICKHOUSE_PORT, 
+                        port=CLICKHOUSE_PORT,
                         username=CLICKHOUSE_USER,
                         password=CLICKHOUSE_PASSWORD,
                         database=CLICKHOUSE_DATABASE,
                         send_receive_timeout=120
                     )
-                    
+
                     if not background_client:
                         logger.error("Failed to create background ClickHouse client")
                         return
-                        
+
                     # Run the async function in a new event loop
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
-                    
+
                     try:
                         loop.run_until_complete(
                             self._track_api_cost_async(tenant_id, background_client)
@@ -908,16 +881,16 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                     finally:
                         loop.close()
                         background_client.close()
-                        
+
                 except Exception as e:
                     logger.error(f"Async background API cost tracking failed: {e}")
-            
+
             # Start the processing in a daemon thread (fire-and-forget - same as dependencies.py)
             thread = threading.Thread(target=run_async_in_thread, daemon=True)
             thread.start()
-            
+
             logger.debug(f"Non-blocking API cost tracking started for tenant {tenant_id}")
-                
+
         except Exception as e:
             logger.error(f"Failed to start background API cost tracking: {e}")
 
@@ -927,13 +900,13 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             # Import services within the function to avoid circular imports (same as dependencies.py)
             from services.tenant_service import TenantService
             from event_processing import track_usage_with_cost_calculation
-            
+
             # Track API call quota with proper cost calculation (same as monthly_ingestion)
             tenant_service = TenantService()
             await track_usage_with_cost_calculation(tenant_service, tenant_id, "api_calls", 1)
-            
+
             logger.debug(f"API cost tracking completed: tenant_id={tenant_id}")
-            
+
         except Exception as e:
             logger.warning(f"API cost calculation failed in background: tenant_id={tenant_id}, error={str(e)}")
 
@@ -947,7 +920,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             # Get request and response sizes safely
             request_size = 0
             response_size = 0
-            
+
             # Get request size
             if hasattr(request, "headers"):
                 content_length = request.headers.get("content-length")
@@ -956,7 +929,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                         request_size = int(content_length)
                     except (ValueError, TypeError):
                         request_size = 0
-            
+
             # Get response size
             if hasattr(response, "body"):
                 response_size = len(response.body)
@@ -1000,7 +973,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             }
 
             await usage_buffer.add_usage(usage_data)
-            
+
             # Track API call quota with proper cost calculation (non-blocking, same pattern as monthly_ingestion)
             self._track_api_cost_background(tenant_id)
 
@@ -1016,17 +989,17 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             # Determine action type based on HTTP method
             method_to_action = {
                 "POST": "create",
-                "PUT": "update", 
+                "PUT": "update",
                 "PATCH": "update",
                 "DELETE": "delete",
                 "GET": "view"
             }
             action_type = method_to_action.get(request.method, "view")
-            
+
             # Determine resource type and ID from endpoint
             resource_type = "unknown"
             resource_id = None
-            
+
             path = request.url.path
             if path.startswith("/v1/tenants/"):
                 resource_type = "tenant"
@@ -1046,7 +1019,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             elif path.startswith("/v1/usage/"):
                 resource_type = "usage_analytics"
             elif path.startswith("/v1/analytics/"):
-                resource_type = "platform_analytics" 
+                resource_type = "platform_analytics"
             elif path.startswith("/v1/enterprise/"):
                 resource_type = "enterprise_config"
             else:
@@ -1116,11 +1089,11 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
             # Insert into enterprise_audit_logs_mt table
             insert_query = """
-                INSERT INTO enterprise_audit_logs_mt 
-                (id, user_id, tenant_id, action_type, resource_type, resource_id, 
+                INSERT INTO enterprise_audit_logs_mt
+                (id, user_id, tenant_id, action_type, resource_type, resource_id,
                  details, ip_address, user_agent, timestamp, customer_id)
-                VALUES 
-                (%(id)s, %(user_id)s, %(tenant_id)s, %(action_type)s, %(resource_type)s, 
+                VALUES
+                (%(id)s, %(user_id)s, %(tenant_id)s, %(action_type)s, %(resource_type)s,
                  %(resource_id)s, %(details)s, %(ip_address)s, %(user_agent)s, %(timestamp)s, %(customer_id)s)
             """
 
@@ -1133,20 +1106,20 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 "login": 5,
                 "logout": 6
             }
-            
+
             # Prepare data for ClickHouse
             clickhouse_data = audit_entry.copy()
             clickhouse_data["action_type"] = action_type_map.get(audit_entry["action_type"], 4)  # Default to 'view'
 
             await db.execute_update(insert_query, clickhouse_data)
-            logger.debug("Audit log entry inserted", 
+            logger.debug("Audit log entry inserted",
                         user_id=audit_entry["user_id"],
-                        action=audit_entry["action_type"], 
+                        action=audit_entry["action_type"],
                         resource=audit_entry["resource_type"])
 
         except Exception as e:
-            logger.error("Failed to insert audit log entry to database", 
-                        error=str(e), 
+            logger.error("Failed to insert audit log entry to database",
+                        error=str(e),
                         user_id=audit_entry["user_id"])
             # Continue without failing - audit logging should not block requests
 

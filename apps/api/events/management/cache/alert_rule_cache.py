@@ -11,6 +11,16 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 
 from .redis_manager import RedisManager
+from ...constants import (
+    EVENT_ALERT_RULE_CREATED,
+    EVENT_ALERT_RULE_UPDATED,
+    EVENT_ALERT_RULE_DELETED,
+    EVENT_ALERT_RULE_ENABLED,
+    EVENT_ALERT_RULE_DISABLED,
+    ALERT_RULE_CACHE_PREFIX,
+    ALERT_COOLDOWN_CACHE_PREFIX,
+    ALERT_CACHE_METADATA_KEY
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +42,9 @@ class AlertRuleCache:
             redis_manager: Redis manager instance (optional, will create if not provided)
         """
         self.redis_manager = redis_manager or RedisManager()
-        self.cache_prefix = "alerts:rules:"
-        self.cooldown_prefix = "alerts:cooldown:"
-        self.metadata_key = "alerts:cache:metadata"
+        self.cache_prefix = ALERT_RULE_CACHE_PREFIX
+        self.cooldown_prefix = ALERT_COOLDOWN_CACHE_PREFIX
+        self.metadata_key = ALERT_CACHE_METADATA_KEY
         
     async def initialize_cache_from_db(self) -> bool:
         """
@@ -251,7 +261,9 @@ class AlertRuleCache:
         """
         try:
             customer_id = rule_data.get('customer_id')
-            rule_id = rule_data.get('id')
+            # Event data has rule_id at top level, and nested rule_data
+            rule_id = rule_data.get('rule_id') or rule_data.get('id')
+            actual_rule_data = rule_data.get('rule_data', rule_data)
             
             if not customer_id:
                 logger.error(f"No customer_id in rule event data: {event_type}")
@@ -259,22 +271,23 @@ class AlertRuleCache:
             
             logger.debug(f"🔔 Handling rule event: {event_type} for customer {customer_id}, rule {rule_id}")
             
-            if event_type == "alert.rule.created":
-                return await self.update_rule_cache(customer_id, rule_data)
+            if event_type == EVENT_ALERT_RULE_CREATED:
+                # Pass the actual rule data to the cache update method
+                return await self.update_rule_cache(customer_id, actual_rule_data)
                 
-            elif event_type == "alert.rule.updated":
-                return await self.update_rule_cache(customer_id, rule_data)
+            elif event_type == EVENT_ALERT_RULE_UPDATED:
+                return await self.update_rule_cache(customer_id, actual_rule_data)
                 
-            elif event_type == "alert.rule.deleted":
+            elif event_type == EVENT_ALERT_RULE_DELETED:
                 if rule_id:
                     return await self.remove_rule_from_cache(customer_id, rule_id)
                 else:
                     logger.error("No rule_id provided for deletion event")
                     return False
                     
-            elif event_type in ["alert.rule.enabled", "alert.rule.disabled"]:
+            elif event_type in [EVENT_ALERT_RULE_ENABLED, EVENT_ALERT_RULE_DISABLED]:
                 # Update the rule's enabled status
-                rule_data['is_enabled'] = (event_type == "alert.rule.enabled")
+                rule_data['is_enabled'] = (event_type == EVENT_ALERT_RULE_ENABLED)
                 return await self.update_rule_cache(customer_id, rule_data)
                 
             else:

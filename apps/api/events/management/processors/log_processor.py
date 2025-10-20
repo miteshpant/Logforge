@@ -34,8 +34,6 @@ async def process_log_batch_with_client(logs: List[LogEntry], customer_id: str) 
             logger.warning(f"Empty log batch received for customer {customer_id}")
             return True
 
-        logger.info(f"Processing batch of {len(logs)} logs for customer {customer_id}")
-
         # Create ClickHouse client
         client = get_client(
             host=config["clickhouse_host"],
@@ -69,8 +67,6 @@ async def process_log_batch_internal(logs: List[LogEntry], client, customer_id: 
     """
     if not logs:
         return
-    logger.info(f"Processing batch of {len(logs)} logs for customer {customer_id}")
-    
     # Prepare batch insert data
     rows = []
     for log in logs:
@@ -112,11 +108,11 @@ async def process_log_batch_internal(logs: List[LogEntry], client, customer_id: 
 async def process_log_batch(logs: List[LogEntry], customer_id: str) -> bool:
     """
     Process log batch and insert into ClickHouse logs_raw_mt table
-    
+
     Args:
         logs: List of LogEntry objects to process
         customer_id: Customer/tenant ID for multi-tenant isolation
-        
+
     Returns:
         bool: True if successful, False otherwise
     """
@@ -124,8 +120,6 @@ async def process_log_batch(logs: List[LogEntry], customer_id: str) -> bool:
         if not logs:
             logger.warning(f"Empty log batch received for customer {customer_id}")
             return True
-
-        logger.info(f"Processing batch of {len(logs)} logs for customer {customer_id}")
 
         # Create ClickHouse client
         client = get_client(
@@ -191,7 +185,7 @@ async def process_log_batch(logs: List[LogEntry], customer_id: str) -> bool:
 async def track_ingestion_metrics(customer_id: str, endpoint: str, log_count: int, bytes_processed: int, format_type: str, processing_time_ms: int) -> bool:
     """
     Track ingestion metrics and statistics
-    
+
     Args:
         customer_id: Customer/tenant ID
         endpoint: API endpoint used for ingestion
@@ -199,21 +193,21 @@ async def track_ingestion_metrics(customer_id: str, endpoint: str, log_count: in
         bytes_processed: Number of bytes processed
         format_type: Format of ingested logs (json, syslog, etc.)
         processing_time_ms: Processing time in milliseconds
-        
+
     Returns:
         bool: True if successful, False otherwise
     """
     try:
         from services.ingestion_service import IngestionService
-        
+
         ingestion_service = IngestionService()
         await ingestion_service.track_ingestion_success(
             customer_id, endpoint, format_type, log_count, bytes_processed, processing_time_ms
         )
-        
+
         logger.debug(f"Ingestion metrics tracked for customer {customer_id}: endpoint={endpoint}, logs={log_count}, bytes={bytes_processed}")
         return True
-        
+
     except Exception as e:
         logger.error(f"Failed to track ingestion metrics for customer {customer_id}: {e}")
         return False

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import json
 
 from dao.alert_dao import AlertDAO
+from dependencies import get_alert_event_publisher
 
 logger = structlog.get_logger(__name__)
 
@@ -58,6 +59,22 @@ class AlertService:
             
             # Return the created rule
             created_rule = await self.alert_dao.get_alert_rule(rule_id, rule_data["customer_id"])
+            
+            # Publish alert rule created event
+            try:
+                alert_event_publisher = get_alert_event_publisher()
+                if alert_event_publisher:
+                    await alert_event_publisher.publish_rule_created(
+                        customer_id=rule_data["customer_id"],
+                        rule_data=created_rule,
+                        created_by=rule_data.get("created_by", "api-user")
+                    )
+                    logger.info(f"Published alert rule created event for rule {rule_id}")
+                else:
+                    logger.warning("Alert event publisher not available, skipping event publication")
+            except Exception as event_error:
+                logger.warning(f"Failed to publish alert rule created event: {event_error}")
+                # Don't fail the operation due to event publishing failure
             
             return created_rule
             
@@ -118,7 +135,26 @@ class AlertService:
             
             if success:
                 # Return updated rule
-                return await self.alert_dao.get_alert_rule(rule_id, customer_id)
+                updated_rule = await self.alert_dao.get_alert_rule(rule_id, customer_id)
+                
+                # Publish alert rule updated event
+                try:
+                    alert_event_publisher = get_alert_event_publisher()
+                    if alert_event_publisher:
+                        await alert_event_publisher.publish_rule_updated(
+                            customer_id=customer_id,
+                            rule_data=updated_rule,
+                            updates=updates,
+                            updated_by="api-user"
+                        )
+                        logger.info(f"Published alert rule updated event for rule {rule_id}")
+                    else:
+                        logger.warning("Alert event publisher not available, skipping event publication")
+                except Exception as event_error:
+                    logger.warning(f"Failed to publish alert rule updated event: {event_error}")
+                    # Don't fail the operation due to event publishing failure
+                
+                return updated_rule
             
             return None
             
@@ -129,7 +165,31 @@ class AlertService:
     async def delete_alert_rule(self, rule_id: str, customer_id: str) -> bool:
         """Delete alert rule"""
         try:
-            return await self.alert_dao.delete_alert_rule(rule_id, customer_id)
+            # Get rule data before deletion for event publishing
+            rule_data = await self.alert_dao.get_alert_rule(rule_id, customer_id)
+            
+            # Delete from database
+            success = await self.alert_dao.delete_alert_rule(rule_id, customer_id)
+            
+            if success:
+                # Publish alert rule deleted event
+                try:
+                    alert_event_publisher = get_alert_event_publisher()
+                    if alert_event_publisher:
+                        await alert_event_publisher.publish_rule_deleted(
+                            customer_id=customer_id,
+                            rule_id=rule_id,
+                            rule_data=rule_data,
+                            deleted_by="api-user"
+                        )
+                        logger.info(f"Published alert rule deleted event for rule {rule_id}")
+                    else:
+                        logger.warning("Alert event publisher not available, skipping event publication")
+                except Exception as event_error:
+                    logger.warning(f"Failed to publish alert rule deleted event: {event_error}")
+                    # Don't fail the operation due to event publishing failure
+            
+            return success
             
         except Exception as e:
             logger.error(f"Failed to delete alert rule {rule_id}: {e}")
