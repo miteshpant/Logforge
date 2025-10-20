@@ -74,7 +74,7 @@ SETTINGS index_granularity = 8192;
 -- Create materialized view for normalized log data with enhanced parsing
 CREATE MATERIALIZED VIEW IF NOT EXISTS logs_view
 TO logs_normalized
-AS SELECT 
+AS SELECT
     ts,
     toDate(ts) as date,
     toHour(ts) as hour,
@@ -126,7 +126,7 @@ SETTINGS index_granularity = 8192;
 -- Create materialized view for hourly aggregations
 CREATE MATERIALIZED VIEW IF NOT EXISTS logs_hourly_stats_mv
 TO logs_hourly_stats
-AS SELECT 
+AS SELECT
     toStartOfHour(ts) as hour,
     service,
     level,
@@ -142,7 +142,7 @@ GROUP BY hour, service, level, host;
 
 -- Create views for common queries
 CREATE VIEW IF NOT EXISTS recent_errors AS
-SELECT 
+SELECT
     ts,
     service,
     level,
@@ -151,13 +151,13 @@ SELECT
     http_status,
     extracted_user_id,
     extracted_ip
-FROM logs_normalized 
-WHERE ts > now() - INTERVAL 1 HOUR 
+FROM logs_normalized
+WHERE ts > now() - INTERVAL 1 HOUR
   AND is_error = 1
 ORDER BY ts DESC;
 
 CREATE VIEW IF NOT EXISTS service_health_summary AS
-SELECT 
+SELECT
     service,
     count() as total_requests,
     countIf(is_error = 1) as error_count,
@@ -166,7 +166,7 @@ SELECT
     round(quantile(0.95)(http_response_time_ms), 2) as p95_response_time_ms,
     uniqHLL12(extracted_user_id) as unique_users,
     max(ts) as last_seen
-FROM logs_normalized 
+FROM logs_normalized
 WHERE ts > now() - INTERVAL 1 HOUR
 GROUP BY service
 ORDER BY error_rate_percent DESC;
@@ -200,7 +200,7 @@ ENGINE = MergeTree()
 PARTITION BY (customer_id, toYYYYMM(ts))
 ORDER BY (customer_id, service, level, ts, host)
 PRIMARY KEY (customer_id, service, level, ts)
-TTL toDateTime(ts) + toIntervalDay(7)
+TTL toDateTime(ts) + toIntervalDay(30)
 SETTINGS index_granularity = 8192;
 
 -- Multi-tenant normalized logs table
@@ -269,7 +269,7 @@ CREATE TABLE IF NOT EXISTS users_mt (
     setup_token Nullable(String),
     setup_token_expires Nullable(DateTime64(3)),
     customer_id String DEFAULT 'platform'
-) ENGINE = MergeTree() 
+) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(created_at)
 ORDER BY (customer_id, id)
 SETTINGS index_granularity = 8192;
@@ -286,7 +286,7 @@ CREATE TABLE IF NOT EXISTS user_sessions_mt (
     expires_at DateTime64(3),
     status Enum8('active'=1, 'expired'=2, 'revoked'=3),
     customer_id String DEFAULT 'platform'
-) ENGINE = MergeTree() 
+) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(created_at)
 ORDER BY (customer_id, user_id, session_token)
 SETTINGS index_granularity = 8192;
@@ -304,7 +304,7 @@ CREATE TABLE IF NOT EXISTS user_tenant_roles_mt (
     created_at DateTime64(3) DEFAULT now64(3),
     updated_at DateTime64(3) DEFAULT now64(3),
     customer_id String DEFAULT 'platform'
-) ENGINE = MergeTree() 
+) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(created_at)
 ORDER BY (customer_id, user_id, tenant_id)
 SETTINGS index_granularity = 8192;
@@ -395,7 +395,7 @@ ORDER BY (customer_id, storage_type, created_at)
 SETTINGS index_granularity = 8192;
 
 -- =====================================================
--- SERVICE TABLES FOR LOGFORGE PLATFORM ENGINES  
+-- SERVICE TABLES FOR LOGFORGE PLATFORM ENGINES
 -- This consolidates all service tables from logforge-service-tables.sql
 -- =====================================================
 
@@ -1432,7 +1432,7 @@ SETTINGS index_granularity = 8192;
 
 -- Insert default storage cost rate for all subscription tiers
 INSERT INTO feature_rates_mt (id, feature_name, pricing_model, base_rate, tier_rates, currency, effective_date, created_by, description, customer_id)
-VALUES 
+VALUES
     ('rate-storage-cost-per-gb', 'storage.cost_per_gb', 'per_unit', 0.023, '{"enterprise": 0.023, "smb": 0.025, "startup": 0.027, "non_profit": 0.020, "government": 0.021, "education": 0.019, "healthcare": 0.022, "financial": 0.024}', 'USD', now(), 'system', 'Storage cost per GB', 'platform');
 
 -- Archive tracking table to prevent duplicate archival and track customer data access
