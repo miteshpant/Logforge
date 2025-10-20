@@ -47,6 +47,7 @@ observability_engine = None
 event_publisher_manager = None
 event_subscriber_manager = None
 log_event_publisher = None
+alert_rule_cache_instance = None
 
 def get_clickhouse_client():
     """Get or create ClickHouse client"""
@@ -272,6 +273,35 @@ async def initialize_engines():
             event_subscriber_manager = None
             log_event_publisher = None
 
+        # Initialize Redis and Alert Rule Cache
+        try:
+            logger.info("🔄 Initializing Redis and Alert Rule Cache...")
+            
+            # Initialize Redis connection
+            from events.management.cache import init_redis
+            redis_manager = await init_redis()
+            logger.info("✅ Redis connection initialized successfully")
+            
+            # Initialize Alert Rule Cache and load rules from database
+            from events.management.cache.alert_rule_cache import AlertRuleCache
+            alert_rule_cache = AlertRuleCache(redis_manager)
+            
+            # Load all alert rules from database into Redis cache
+            cache_success = await alert_rule_cache.initialize_cache_from_db()
+            if cache_success:
+                logger.info("✅ Alert rule cache initialized and loaded from database")
+            else:
+                logger.warning("⚠️ Alert rule cache initialization completed with some failures")
+            
+            # Make alert rule cache globally available
+            global alert_rule_cache_instance
+            alert_rule_cache_instance = alert_rule_cache
+            
+        except Exception as e:
+            logger.error(f"❌ Redis/Alert cache initialization failed: {e}")
+            # This is not critical for startup, so don't fail
+            alert_rule_cache_instance = None
+
         # Initialize quota reset scheduler (disabled during development)
         # TODO: Enable after database permissions are updated in container
         # from services.quota_reset_service import get_quota_reset_scheduler
@@ -287,7 +317,7 @@ async def initialize_engines():
 
 async def shutdown_engines():
     """Cleanup and shutdown all engines"""
-    global event_publisher_manager, event_subscriber_manager
+    global event_publisher_manager, event_subscriber_manager, alert_rule_cache_instance
 
     logger.info("Shutting down application engines...")
 
@@ -308,6 +338,14 @@ async def shutdown_engines():
         if observability_engine:
             await observability_engine.shutdown()
             logger.info("Observability engine shutdown")
+
+        # Cleanup Redis connection
+        try:
+            from events.management.cache import cleanup_redis
+            await cleanup_redis()
+            logger.info("Redis connection cleaned up")
+        except Exception as e:
+            logger.warning(f"Error cleaning up Redis: {e}")
 
         # Stop quota reset scheduler (disabled during development)
         # TODO: Enable after database permissions are updated in container

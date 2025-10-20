@@ -30,33 +30,6 @@ from .constants import (
     UI_REALTIME_EVENT_TYPES,
     SYSTEM_EVENT_TYPES,
 
-    # Individual events for handlers
-    EVENT_USAGE_API_CALL,
-    EVENT_USAGE_INGESTION_BATCH,
-    EVENT_USAGE_QUERY_EXECUTION,
-    EVENT_USAGE_STORAGE_OPERATION,
-    EVENT_BILLING_SUBSCRIPTION_CHANGED,
-    EVENT_BILLING_PAYMENT_PROCESSED,
-    EVENT_ALERT_TRIGGERED,
-    EVENT_ALERT_RESOLVED,
-    EVENT_ALERT_ESCALATED,
-    EVENT_ALERT_ACKNOWLEDGED,
-    EVENT_ALERT_RULE_UPDATED,
-    EVENT_LOGS_BATCH_INGESTED,
-    EVENT_LOGS_PARSING_FAILED,
-    EVENT_LOGS_ARCHIVED,
-    EVENT_LOGS_TTL_EXPIRED,
-    EVENT_LOGS_RESTORED,
-    EVENT_LOGS_PARSED,
-    EVENT_LOGS_INDEXED,
-    EVENT_LOGS_DELETED,
-    EVENT_SYSTEM_HEALTH_CHECK,
-    EVENT_SYSTEM_SERVICE_STARTED,
-    EVENT_SYSTEM_SERVICE_STOPPED,
-    EVENT_SECURITY_THREAT_DETECTED,
-    EVENT_QUERY_EXPENSIVE,
-    EVENT_SYSTEM_ERROR_OCCURRED,
-    EVENT_SYSTEM_PERFORMANCE_METRIC
 )
 
 # Import aiokafka components
@@ -140,23 +113,14 @@ class SubscriberConfig:
     metrics_enabled: bool = True
 
 
-class EventHandler(ABC):
-    """Abstract base class for event handlers"""
-
-    @abstractmethod
-    async def handle(self, event: BaseEvent) -> bool:
-        """Handle a single event"""
-        pass
-
-    @abstractmethod
-    def get_supported_event_types(self) -> List[str]:
-        """Get list of event types this handler supports"""
-        pass
-
-    @abstractmethod
-    def get_handler_name(self) -> str:
-        """Get the name of this handler"""
-        pass
+# Import modular event handlers
+from .handlers import (
+    EventHandler,
+    AlertEventHandler,
+    LogEventHandler,
+    UsageEventHandler,
+    SystemEventHandler
+)
 
 
 class KafkaEventSubscriber(EventSubscriber):
@@ -449,199 +413,6 @@ class KafkaEventSubscriber(EventSubscriber):
 
 
 # MockEventSubscriber removed - using only real Kafka subscribers
-
-
-# Common event handlers
-
-class UsageEventHandler(EventHandler):
-    """Handler for usage and billing events"""
-
-    async def handle(self, event: BaseEvent) -> bool:
-        """Handle usage events"""
-        logger.info(
-            "Processing usage event",
-            event_id=event.metadata.event_id,
-            customer_id=event.customer_id,
-            event_type=event.event_type
-        )
-
-        # TODO: Implement actual usage tracking logic
-        # - Update customer usage metrics
-        # - Calculate billing information
-        # - Update quotas and limits
-
-        return True
-
-    def get_supported_event_types(self) -> List[str]:
-        """Support usage and billing events"""
-        return [
-            EVENT_USAGE_API_CALL,
-            EVENT_USAGE_INGESTION_BATCH,
-            EVENT_USAGE_QUERY_EXECUTION,
-            EVENT_USAGE_STORAGE_OPERATION,
-            EVENT_BILLING_SUBSCRIPTION_CHANGED,
-            EVENT_BILLING_PAYMENT_PROCESSED
-        ]
-
-    def get_handler_name(self) -> str:
-        """Get handler name"""
-        return "usage_handler"
-
-
-class AlertEventHandler(EventHandler):
-    """Handler for alert-related events"""
-
-    async def handle(self, event: BaseEvent) -> bool:
-        """Handle alert events"""
-        logger.info(
-            "Processing alert event",
-            event_id=event.metadata.event_id,
-            customer_id=event.customer_id,
-            event_type=event.event_type
-        )
-
-        # TODO: Implement actual alert processing logic
-        # - Trigger notifications
-        # - Update alert states
-        # - Execute alert actions
-
-        return True
-
-    def get_supported_event_types(self) -> List[str]:
-        """Support alert events"""
-        return [
-            EVENT_ALERT_TRIGGERED,
-            EVENT_ALERT_RESOLVED,
-            EVENT_ALERT_ESCALATED,
-            EVENT_ALERT_ACKNOWLEDGED,
-            EVENT_ALERT_RULE_UPDATED
-        ]
-
-    def get_handler_name(self) -> str:
-        """Get handler name"""
-        return "alert_handler"
-
-
-class LogEventHandler(EventHandler):
-    """Handler for log lifecycle events"""
-
-    async def handle(self, event: BaseEvent) -> bool:
-        """Handle log events"""
-        logger.info(
-            "Processing log event",
-            event_id=event.metadata.event_id,
-            customer_id=event.customer_id,
-            event_type=event.event_type
-        )
-        
-        # Handle different types of log events
-        if event.event_type == EVENT_LOGS_BATCH_INGESTED:
-            return await self._handle_logs_batch_ingested(event)
-        else:
-            # For now, just log other event types
-            logger.info(f"Log event type {event.event_type} received but not yet implemented")
-            return True
-
-    async def _handle_logs_batch_ingested(self, event: BaseEvent) -> bool:
-        """Handle logs.batch.ingested event using new event processing"""
-        try:
-            # Import here to avoid circular dependencies
-            from event_processing import handle_log_ingestion_event
-            
-            # Convert event to the format expected by handle_log_ingestion_event
-            # Use the correct field names that match what the publisher sends
-            event_data = {
-                'customer_id': event.customer_id,
-                'logs': event.data.get('logs', []),
-                'ingestion_endpoint': event.data.get('ingestion_endpoint', '/logs'),  # Fix: Use correct field name
-                'source_format': event.data.get('source_format', 'json'),            # Fix: Use correct field name  
-                'log_count': event.data.get('log_count', 0),
-                'bytes_processed': event.data.get('bytes_processed', 0),
-                'processing_time_ms': event.data.get('processing_time_ms', 0),
-                'batch_id': event.data.get('batch_id', ''),
-                'timestamp': event.data.get('timestamp', '')
-            }
-            
-            logger.info(
-                f"Processing log batch ingestion event via event_processing module",
-                event_id=event.metadata.event_id,
-                customer_id=event.customer_id,
-                log_count=event_data['log_count'],
-                bytes_processed=event_data['bytes_processed']
-            )
-            
-            # Process the event using our new modular functions
-            success = await handle_log_ingestion_event(event_data)
-            
-            if success:
-                logger.info(
-                    f"Log batch ingestion event processed successfully",
-                    event_id=event.metadata.event_id,
-                    customer_id=event.customer_id
-                )
-            else:
-                logger.error(
-                    f"Log batch ingestion event processing failed",
-                    event_id=event.metadata.event_id,
-                    customer_id=event.customer_id
-                )
-            
-            return success
-            
-        except Exception as e:
-            logger.error(
-                f"Exception in log batch ingestion handler: {e}",
-                event_id=event.metadata.event_id,
-                customer_id=event.customer_id
-            )
-            return False
-
-    def get_supported_event_types(self) -> List[str]:
-        """Support log events"""
-        return [
-            EVENT_LOGS_BATCH_INGESTED,
-            EVENT_LOGS_PARSED,
-            EVENT_LOGS_INDEXED,
-            EVENT_LOGS_ARCHIVED,
-            EVENT_LOGS_DELETED
-        ]
-
-    def get_handler_name(self) -> str:
-        """Get handler name"""
-        return "log_handler"
-
-
-class SystemEventHandler(EventHandler):
-    """Handler for system monitoring events"""
-
-    async def handle(self, event: BaseEvent) -> bool:
-        """Handle system events"""
-        logger.info(
-            "Processing system event",
-            event_id=event.metadata.event_id,
-            event_type=event.event_type
-        )
-
-        # TODO: Implement actual system monitoring logic
-        # - Update system metrics
-        # - Trigger health checks
-        # - Update monitoring dashboards
-
-        return True
-
-    def get_supported_event_types(self) -> List[str]:
-        """Support system events"""
-        return [
-            EVENT_SYSTEM_HEALTH_CHECK,
-            EVENT_SYSTEM_SERVICE_STARTED,
-            EVENT_SYSTEM_SERVICE_STOPPED,
-            EVENT_SYSTEM_ERROR_OCCURRED,
-            EVENT_SYSTEM_PERFORMANCE_METRIC
-        ]
-
-    def get_handler_name(self) -> str:
-        """Get handler name"""
-        return "system_handler"
 
 
 class EventSubscriberManager:

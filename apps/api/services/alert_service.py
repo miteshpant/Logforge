@@ -90,6 +90,14 @@ class AlertService:
             logger.error(f"Failed to list alert rules for customer {customer_id}: {e}")
             raise
     
+    async def get_all_alert_rules(self, enabled_only: bool = True) -> List[Dict[str, Any]]:
+        """Get all alert rules across all customers for cache initialization"""
+        try:
+            return await self.alert_dao.get_all_alert_rules(enabled_only)
+        except Exception as e:
+            logger.error(f"Failed to get all alert rules: {e}")
+            raise
+    
     async def update_alert_rule(self, rule_id: str, customer_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Update alert rule"""
         try:

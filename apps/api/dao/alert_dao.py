@@ -146,6 +146,45 @@ class AlertDAO:
             logger.error(f"Failed to list alert rules for customer {customer_id}: {e}")
             raise
     
+    async def get_all_alert_rules(self, enabled_only: bool = True) -> List[Dict[str, Any]]:
+        """Get all alert rules across all customers for cache initialization"""
+        try:
+            where_clauses = []
+            params = {}
+            
+            if enabled_only:
+                where_clauses.append("is_enabled = 1")
+            
+            where_clause = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+            
+            query = f"""
+            SELECT * FROM {ALERT_RULES_TABLE}
+            {where_clause}
+            ORDER BY customer_id, created_at DESC
+            """
+            
+            results = await self.db.fetch_all(query, params)
+            
+            # Parse JSON fields and map to API format for each rule
+            for rule in results:
+                condition_config = json.loads(rule.get("condition_config", "{}"))
+                
+                # Map database fields to API response format
+                rule["rule_id"] = rule["id"]
+                rule["conditions"] = condition_config.get("conditions", [])
+                rule["filters"] = condition_config.get("filters", [])
+                rule["tags"] = condition_config.get("tags", [])
+                rule["evaluation_interval"] = condition_config.get("evaluation_interval", 300)
+                rule["max_alerts_per_hour"] = condition_config.get("max_alerts_per_hour", 10)
+                rule["enabled"] = bool(rule.get("is_enabled", 0))
+                rule["cooldown_period"] = rule.get("cooldown_minutes", 5) * 60  # Convert to seconds
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Failed to get all alert rules: {e}")
+            raise
+    
     async def update_alert_rule(self, rule_id: str, customer_id: str, updates: Dict[str, Any]) -> bool:
         """Update alert rule"""
         try:

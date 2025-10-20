@@ -29,3 +29,5 @@ msgpack==1.0.7
 bcrypt==4.1.2
 pyjwt==2.8.0
 python-jose[cryptography]==3.3.0
+# Redis for alert rule caching
+redis==5.0.1
