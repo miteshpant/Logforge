@@ -43,14 +43,29 @@ class AlertDAO:
             )
             """
             
-            # Combine conditions and filters into condition_config JSON
-            condition_config = {
-                "conditions": rule_data.get("conditions", []),
-                "filters": rule_data.get("filters", []),
-                "evaluation_interval": rule_data.get("evaluation_interval", 300),
-                "max_alerts_per_hour": rule_data.get("max_alerts_per_hour", 10),
-                "tags": rule_data.get("tags", [])
-            }
+            # Handle condition_config - preserve nested structure if provided
+            if "condition_config" in rule_data and rule_data["condition_config"]:
+                # Use the provided nested condition_config structure
+                if isinstance(rule_data["condition_config"], str):
+                    # Already JSON string
+                    condition_config = json.loads(rule_data["condition_config"])
+                else:
+                    # Dictionary structure
+                    condition_config = rule_data["condition_config"]
+                
+                # Add metadata fields to existing config
+                condition_config.setdefault("evaluation_interval", rule_data.get("evaluation_interval", 300))
+                condition_config.setdefault("max_alerts_per_hour", rule_data.get("max_alerts_per_hour", 10))
+                condition_config.setdefault("tags", rule_data.get("tags", []))
+            else:
+                # Legacy format: combine conditions and filters into condition_config JSON
+                condition_config = {
+                    "conditions": rule_data.get("conditions", []),
+                    "filters": rule_data.get("filters", []),
+                    "evaluation_interval": rule_data.get("evaluation_interval", 300),
+                    "max_alerts_per_hour": rule_data.get("max_alerts_per_hour", 10),
+                    "tags": rule_data.get("tags", [])
+                }
             
             params = {
                 "id": rule_id,
@@ -89,13 +104,23 @@ class AlertDAO:
             result = await self.db.fetch_one(query, {"rule_id": rule_id, "customer_id": customer_id})
             
             if result:
-                # Parse condition_config JSON and expand it
+                # Parse condition_config JSON 
                 condition_config = json.loads(result.get("condition_config", "{}"))
                 
                 # Map database fields to API response format
                 result["rule_id"] = result["id"]
-                result["conditions"] = condition_config.get("conditions", [])
-                result["filters"] = condition_config.get("filters", [])
+                
+                # Check if this is a nested condition config (has operator) or legacy format
+                if "operator" in condition_config:
+                    # Nested condition format - preserve the structure
+                    result["condition_config"] = condition_config
+                    result["conditions"] = []  # Empty for backward compatibility
+                    result["filters"] = []    # Empty for backward compatibility
+                else:
+                    # Legacy format - expand conditions and filters
+                    result["conditions"] = condition_config.get("conditions", [])
+                    result["filters"] = condition_config.get("filters", [])
+                
                 result["tags"] = condition_config.get("tags", [])
                 result["evaluation_interval"] = condition_config.get("evaluation_interval", 300)
                 result["max_alerts_per_hour"] = condition_config.get("max_alerts_per_hour", 10)
@@ -293,13 +318,25 @@ class AlertDAO:
             )
             """
             
-            # Combine alert data into trigger_data JSON
-            trigger_data = {
-                "title": alert_data.get("title", ""),
-                "message": alert_data.get("message", ""),
-                "severity": alert_data.get("severity", "medium"),
-                "details": alert_data.get("details", {})
-            }
+            # Use provided trigger_data if available, otherwise create basic structure
+            if "trigger_data" in alert_data and alert_data["trigger_data"]:
+                # Use the rich trigger_data provided by the alert processor
+                trigger_data_str = alert_data["trigger_data"]
+                if isinstance(trigger_data_str, str):
+                    # Already JSON string from alert processor
+                    trigger_data_str = trigger_data_str
+                else:
+                    # Convert dict to JSON string
+                    trigger_data_str = json.dumps(trigger_data_str)
+            else:
+                # Fallback to basic structure for backwards compatibility
+                trigger_data = {
+                    "title": alert_data.get("title", ""),
+                    "message": alert_data.get("message", ""),
+                    "severity": alert_data.get("severity", "medium"),
+                    "details": alert_data.get("details", {})
+                }
+                trigger_data_str = json.dumps(trigger_data)
             
             params = {
                 "id": alert_id,
@@ -310,7 +347,7 @@ class AlertDAO:
                 "acknowledged_at": alert_data.get("acknowledged_at"),
                 "resolved_at": alert_data.get("resolved_at"),
                 "acknowledged_by": alert_data.get("acknowledged_by"),
-                "trigger_data": json.dumps(trigger_data),
+                "trigger_data": trigger_data_str,
                 "resolution_data": alert_data.get("resolution_notes"),
                 "escalation_level": alert_data.get("escalation_level", 0)
             }
@@ -434,6 +471,49 @@ class AlertDAO:
             
         except Exception as e:
             logger.error(f"Failed to update alert status {alert_id}: {e}")
+            raise
+    
+    async def update_rule_state(self, rule_state_data: Dict[str, Any]) -> bool:
+        """Update alert rule state statistics"""
+        try:
+            rule_id = rule_state_data["rule_id"]
+            customer_id = rule_state_data["customer_id"]
+            
+            # Use ReplacingMergeTree INSERT which acts as upsert
+            query = f"""
+            INSERT INTO {ALERT_RULE_STATES_TABLE} (
+                rule_id, last_evaluation, last_trigger, evaluation_count, 
+                trigger_count, consecutive_failures, state_data, 
+                created_at, updated_at, customer_id
+            ) VALUES (
+                %(rule_id)s, %(last_evaluation)s, %(last_trigger)s, 
+                %(evaluation_count)s, %(trigger_count)s, %(consecutive_failures)s, 
+                %(state_data)s, %(created_at)s, %(updated_at)s, %(customer_id)s
+            )
+            """
+            
+            # Set defaults for any missing fields
+            current_time = datetime.now(timezone.utc)
+            params = {
+                "rule_id": rule_id,
+                "customer_id": customer_id,
+                "last_evaluation": rule_state_data.get("last_evaluation", current_time),
+                "last_trigger": rule_state_data.get("last_trigger"),
+                "evaluation_count": rule_state_data.get("evaluation_count", 1),
+                "trigger_count": rule_state_data.get("trigger_count", 1),
+                "consecutive_failures": rule_state_data.get("consecutive_failures", 0),
+                "state_data": rule_state_data.get("state_data", "{}"),
+                "created_at": rule_state_data.get("created_at", current_time),
+                "updated_at": rule_state_data.get("updated_at", current_time)
+            }
+            
+            await self.db.execute_query(query, params)
+            logger.info(f"Rule state updated for rule {rule_id}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to update rule state for rule {rule_state_data.get('rule_id')}: {e}")
             raise
     
     # Notification Channels Operations

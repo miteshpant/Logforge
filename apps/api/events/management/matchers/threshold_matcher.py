@@ -54,20 +54,32 @@ class ThresholdMatcher(BaseAlertMatcher):
             if not self._validate_rule_config(rule):
                 return False
             
-            condition = self._parse_rule_condition(rule)
-            threshold_type = condition.get('threshold_type', 'count')
+            condition_config = self._parse_rule_condition(rule)
             
-            self.logger.debug(f"Evaluating threshold rule {rule.get('id')} with type {threshold_type}")
-            
-            if threshold_type == 'count':
-                return await self._evaluate_count_threshold(logs, condition)
-            elif threshold_type == 'value':
-                return await self._evaluate_value_threshold(logs, condition)
-            elif threshold_type == 'rate':
-                return await self._evaluate_rate_threshold(logs, condition)
+            # Check if this is a nested condition (new format) or simple threshold (old format)
+            if 'operator' in condition_config and condition_config.get('operator') in ['AND', 'OR', 'NOT']:
+                # New nested condition format - use base matcher evaluation
+                self.logger.debug(f"Evaluating threshold rule {rule.get('id')} with nested conditions")
+                condition_result = self._evaluate_nested_condition(logs, condition_config)
+                
+                # For threshold rules with nested conditions, we just check if any logs match the condition
+                # The threshold logic can be added here if needed (e.g., minimum count of matching logs)
+                return condition_result.get('matched', False)
             else:
-                self.logger.error(f"Unknown threshold type: {threshold_type}")
-                return False
+                # Old simple threshold format - use legacy threshold logic
+                threshold_type = condition_config.get('threshold_type', 'count')
+                
+                self.logger.debug(f"Evaluating threshold rule {rule.get('id')} with type {threshold_type}")
+                
+                if threshold_type == 'count':
+                    return await self._evaluate_count_threshold(logs, condition_config)
+                elif threshold_type == 'value':
+                    return await self._evaluate_value_threshold(logs, condition_config)
+                elif threshold_type == 'rate':
+                    return await self._evaluate_rate_threshold(logs, condition_config)
+                else:
+                    self.logger.error(f"Unknown threshold type: {threshold_type}")
+                    return False
                 
         except Exception as e:
             self.logger.error(f"Error evaluating threshold rule {rule.get('id')}: {e}")

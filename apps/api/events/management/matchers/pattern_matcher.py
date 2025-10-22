@@ -61,28 +61,37 @@ class PatternMatcher(BaseAlertMatcher):
             if not self._validate_rule_config(rule):
                 return False
             
-            condition = self._parse_rule_condition(rule)
-            pattern_type = condition.get('pattern_type', 'regex')
+            condition_config = self._parse_rule_condition(rule)
             
-            self.logger.debug(f"Evaluating pattern rule {rule.get('id')} with type {pattern_type}")
-            
-            # Filter logs by basic criteria first
-            filtered_logs = self._filter_logs_by_condition(logs, condition)
-            
-            if not filtered_logs:
-                return False
-            
-            if pattern_type == 'regex':
-                return await self._evaluate_regex_pattern(filtered_logs, condition)
-            elif pattern_type == 'keyword':
-                return await self._evaluate_keyword_pattern(filtered_logs, condition)
-            elif pattern_type == 'phrase':
-                return await self._evaluate_phrase_pattern(filtered_logs, condition)
-            elif pattern_type == 'multi_field':
-                return await self._evaluate_multi_field_pattern(filtered_logs, condition)
+            # Check if this is a nested condition (new format) or simple pattern (old format)
+            if 'operator' in condition_config and condition_config.get('operator') in ['AND', 'OR', 'NOT']:
+                # New nested condition format - use base matcher evaluation
+                self.logger.debug(f"Evaluating pattern rule {rule.get('id')} with nested conditions")
+                condition_result = self._evaluate_nested_condition(logs, condition_config)
+                return condition_result.get('matched', False)
             else:
-                self.logger.error(f"Unknown pattern type: {pattern_type}")
-                return False
+                # Old simple pattern format - use legacy pattern logic
+                pattern_type = condition_config.get('pattern_type', 'regex')
+                
+                self.logger.debug(f"Evaluating pattern rule {rule.get('id')} with type {pattern_type}")
+                
+                # Filter logs by basic criteria first
+                filtered_logs = self._filter_logs_by_condition(logs, condition_config)
+                
+                if not filtered_logs:
+                    return False
+                
+                if pattern_type == 'regex':
+                    return await self._evaluate_regex_pattern(filtered_logs, condition_config)
+                elif pattern_type == 'keyword':
+                    return await self._evaluate_keyword_pattern(filtered_logs, condition_config)
+                elif pattern_type == 'phrase':
+                    return await self._evaluate_phrase_pattern(filtered_logs, condition_config)
+                elif pattern_type == 'multi_field':
+                    return await self._evaluate_multi_field_pattern(filtered_logs, condition_config)
+                else:
+                    self.logger.error(f"Unknown pattern type: {pattern_type}")
+                    return False
                 
         except Exception as e:
             self.logger.error(f"Error evaluating pattern rule {rule.get('id')}: {e}")

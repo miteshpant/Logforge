@@ -63,28 +63,37 @@ class AnomalyMatcher(BaseAlertMatcher):
             if not self._validate_rule_config(rule):
                 return False
             
-            condition = self._parse_rule_condition(rule)
-            anomaly_type = condition.get('anomaly_type', 'statistical')
+            condition_config = self._parse_rule_condition(rule)
             
-            self.logger.debug(f"Evaluating anomaly rule {rule.get('id')} with type {anomaly_type}")
-            
-            # Filter logs by basic criteria first
-            filtered_logs = self._filter_logs_by_condition(logs, condition)
-            
-            if not filtered_logs:
-                return False
-            
-            if anomaly_type == 'statistical':
-                return await self._evaluate_statistical_anomaly(filtered_logs, condition)
-            elif anomaly_type == 'rate':
-                return await self._evaluate_rate_anomaly(filtered_logs, condition)
-            elif anomaly_type == 'trend':
-                return await self._evaluate_trend_anomaly(filtered_logs, condition)
-            elif anomaly_type == 'baseline':
-                return await self._evaluate_baseline_anomaly(filtered_logs, condition, rule.get('customer_id'))
+            # Check if this is a nested condition (new format) or simple anomaly (old format)
+            if 'operator' in condition_config and condition_config.get('operator') in ['AND', 'OR', 'NOT']:
+                # New nested condition format - use base matcher evaluation
+                self.logger.debug(f"Evaluating anomaly rule {rule.get('id')} with nested conditions")
+                condition_result = self._evaluate_nested_condition(logs, condition_config)
+                return condition_result.get('matched', False)
             else:
-                self.logger.error(f"Unknown anomaly type: {anomaly_type}")
-                return False
+                # Old simple anomaly format - use legacy anomaly logic
+                anomaly_type = condition_config.get('anomaly_type', 'statistical')
+                
+                self.logger.debug(f"Evaluating anomaly rule {rule.get('id')} with type {anomaly_type}")
+                
+                # Filter logs by basic criteria first
+                filtered_logs = self._filter_logs_by_condition(logs, condition_config)
+                
+                if not filtered_logs:
+                    return False
+                
+                if anomaly_type == 'statistical':
+                    return await self._evaluate_statistical_anomaly(filtered_logs, condition_config)
+                elif anomaly_type == 'rate':
+                    return await self._evaluate_rate_anomaly(filtered_logs, condition_config)
+                elif anomaly_type == 'trend':
+                    return await self._evaluate_trend_anomaly(filtered_logs, condition_config)
+                elif anomaly_type == 'baseline':
+                    return await self._evaluate_baseline_anomaly(filtered_logs, condition_config, rule.get('customer_id'))
+                else:
+                    self.logger.error(f"Unknown anomaly type: {anomaly_type}")
+                    return False
                 
         except Exception as e:
             self.logger.error(f"Error evaluating anomaly rule {rule.get('id')}: {e}")

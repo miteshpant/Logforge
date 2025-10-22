@@ -38,8 +38,10 @@ class AlertService:
             rule_data.setdefault("evaluation_interval", 300)  # 5 minutes
             rule_data.setdefault("cooldown_period", 600)      # 10 minutes
             rule_data.setdefault("max_alerts_per_hour", 10)
-            rule_data.setdefault("conditions", [])
-            rule_data.setdefault("filters", [])
+            # Only set conditions/filters defaults if condition_config is not provided
+            if "condition_config" not in rule_data or not rule_data["condition_config"]:
+                rule_data.setdefault("conditions", [])
+                rule_data.setdefault("filters", [])
             rule_data.setdefault("notification_channels", [])
             rule_data.setdefault("tags", [])
             rule_data.setdefault("created_by", "api-user")
@@ -245,18 +247,13 @@ class AlertService:
     async def create_alert_instance(self, alert_data: Dict[str, Any]) -> Dict[str, Any]:
         """Create new alert instance"""
         try:
-            # Validate required fields
-            required_fields = ["rule_id", "customer_id", "title"]
+            # Validate required fields (matching alert_instances_mt schema)
+            required_fields = ["id", "rule_id", "status", "triggered_at", "trigger_data", "customer_id"]
             for field in required_fields:
                 if field not in alert_data:
                     raise ValueError(f"Missing required field: {field}")
             
-            # Set defaults
-            alert_data.setdefault("status", "active")
-            alert_data.setdefault("severity", "medium")
-            alert_data.setdefault("message", "")
-            alert_data.setdefault("details", {})
-            alert_data.setdefault("triggered_at", datetime.now(timezone.utc))
+            # No defaults needed - nullable fields can be None, escalation_level has DB default
             
             # Save to database
             alert_id = await self.alert_dao.save_alert_instance(alert_data)
@@ -492,4 +489,22 @@ class AlertService:
             
         except Exception as e:
             logger.error(f"Failed to list webhook integrations for customer {customer_id}: {e}")
+            raise
+    
+    # Alert Rule State Management
+    
+    async def update_rule_state(self, rule_state_data: Dict[str, Any]) -> bool:
+        """Update alert rule state statistics"""
+        try:
+            # Validate required fields for alert_rule_states_mt
+            required_fields = ["rule_id", "customer_id"]
+            for field in required_fields:
+                if field not in rule_state_data:
+                    raise ValueError(f"Missing required field: {field}")
+            
+            # Use AlertDAO to update rule state
+            return await self.alert_dao.update_rule_state(rule_state_data)
+            
+        except Exception as e:
+            logger.error(f"Failed to update rule state for rule {rule_state_data.get('rule_id')}: {e}")
             raise
