@@ -516,6 +516,70 @@ class AlertDAO:
             logger.error(f"Failed to update rule state for rule {rule_state_data.get('rule_id')}: {e}")
             raise
     
+    async def get_rule_state(self, rule_id: str, customer_id: str) -> Optional[Dict[str, Any]]:
+        """Get current state for an alert rule"""
+        try:
+            query = f"""
+            SELECT * FROM {ALERT_RULE_STATES_TABLE}
+            WHERE rule_id = %(rule_id)s AND customer_id = %(customer_id)s
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """
+            
+            result = await self.db.fetch_one(query, {
+                "rule_id": rule_id,
+                "customer_id": customer_id
+            })
+            
+            if result:
+                # Parse state_data JSON
+                if result.get("state_data"):
+                    try:
+                        result["state_data"] = json.loads(result["state_data"])
+                    except json.JSONDecodeError:
+                        result["state_data"] = {}
+                else:
+                    result["state_data"] = {}
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Failed to get rule state for rule {rule_id}: {e}")
+            return None
+    
+    async def is_rule_in_cooldown(self, rule_id: str, customer_id: str, cooldown_minutes: int) -> bool:
+        """Check if rule is currently in cooldown period"""
+        try:
+            rule_state = await self.get_rule_state(rule_id, customer_id)
+            
+            if not rule_state or not rule_state.get("last_trigger"):
+                return False
+            
+            from datetime import timedelta
+            
+            last_trigger = rule_state["last_trigger"]
+            cooldown_duration = timedelta(minutes=cooldown_minutes)
+            now = datetime.now(timezone.utc)
+            
+            # Convert last_trigger to datetime if it's a string
+            if isinstance(last_trigger, str):
+                from dateutil import parser
+                last_trigger = parser.parse(last_trigger)
+            
+            # Check if we're still within cooldown period
+            time_since_trigger = now - last_trigger
+            is_in_cooldown = time_since_trigger < cooldown_duration
+            
+            if is_in_cooldown:
+                remaining = cooldown_duration - time_since_trigger
+                logger.debug(f"Rule {rule_id} in cooldown, {remaining.total_seconds():.0f}s remaining")
+            
+            return is_in_cooldown
+            
+        except Exception as e:
+            logger.error(f"Failed to check cooldown for rule {rule_id}: {e}")
+            return False  # Default to allowing rule execution on error
+    
     # Notification Channels Operations
     
     async def save_notification_channel(self, channel_data: Dict[str, Any]) -> str:

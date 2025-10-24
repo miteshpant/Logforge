@@ -189,38 +189,150 @@ async def stream_security_events(
 async def stream_alerts(
     customer_id: str = Header(..., alias="X-Customer-ID")
 ):
-    """Stream real-time alert events"""
+    """Stream real-time alert events - Pure event-driven, no polling"""
     try:
-        alert_service = AlertService()
+        from events.subscribers import KafkaEventSubscriber
+        from events.constants import EVENT_UI_ALERT_TRIGGERED, EVENT_UI_ALERT_ACKNOWLEDGED, EVENT_UI_ALERT_RESOLVED, TOPIC_UI_REALTIME_EVENTS
         
-        async def generate_alerts():
-            while True:
+        # Event types we want to stream to UI
+        ui_alert_events = [
+            EVENT_UI_ALERT_TRIGGERED,
+            EVENT_UI_ALERT_ACKNOWLEDGED, 
+            EVENT_UI_ALERT_RESOLVED
+        ]
+        
+        # Create a queue to receive events from the custom handler
+        event_queue = asyncio.Queue()
+        
+        # Custom handler class to capture UI events for this streaming session
+        class StreamingAlertHandler:
+            """Custom handler to capture UI alert events for streaming"""
+            
+            def __init__(self, target_customer_id: str, event_queue: asyncio.Queue):
+                self.target_customer_id = target_customer_id
+                self.event_queue = event_queue
+                
+            async def handle(self, event) -> bool:
+                """Handle events and put relevant ones in the queue"""
                 try:
-                    # Get recent alerts
-                    alerts = await alert_service.list_alert_instances(
-                        customer_id=customer_id,
-                        status=None
-                    )
-                    
-                    # Filter for recent alerts (last 10 minutes) and limit to 20
-                    recent_alerts = [
-                        alert for alert in alerts
-                        if datetime.fromisoformat(alert.get('created_at', '1970-01-01')) > 
-                           datetime.now() - timedelta(minutes=10)
-                    ][:20]  # Limit to 20 most recent alerts
-                    
-                    if recent_alerts:
-                        yield format_sse_message("alerts", recent_alerts)
-                    
-                    await asyncio.sleep(20)  # Update every 20 seconds
+                    # Only handle events for our target customer and UI alert types
+                    if (hasattr(event, 'customer_id') and 
+                        event.customer_id == self.target_customer_id and
+                        hasattr(event, 'event_type') and
+                        event.event_type in ui_alert_events):
+                        
+                        # Put event in queue for streaming
+                        await self.event_queue.put(event)
+                        logger.debug(f"UI event queued for streaming: {event.event_type}")
+                        return True
+                        
+                    return True
                     
                 except Exception as e:
-                    logger.error("Error streaming alerts", error=str(e), customer_id=customer_id)
-                    yield format_sse_message("error", {"message": f"Alerts streaming error: {str(e)}"})
-                    break
+                    logger.error(f"Error in streaming handler: {e}")
+                    return False
+                    
+            def get_handler_name(self) -> str:
+                return f"streaming_alert_handler_{self.target_customer_id}"
+                
+            def get_supported_event_types(self) -> List[str]:
+                return ui_alert_events
+
+        async def generate_real_time_alerts():
+            """Generate real-time alert events as they occur"""
+            subscriber = None
+            try:
+                from events.subscribers import SubscriberConfig
+                
+                # Create subscriber config for UI events
+                config = SubscriberConfig(
+                    name=f"streaming_alerts_{customer_id}",
+                    consumer_group=f"streaming_alerts_{customer_id}",
+                    topics=[TOPIC_UI_REALTIME_EVENTS],
+                    event_types=ui_alert_events,
+                    enabled=True,
+                    max_batch_size=10,
+                    max_parallel_workers=1
+                )
+                
+                # Create Kafka subscriber for UI events
+                subscriber = KafkaEventSubscriber(config)
+                
+                # Create and register our custom streaming handler
+                streaming_handler = StreamingAlertHandler(customer_id, event_queue)
+                subscriber.register_handler(streaming_handler)
+                
+                logger.info(f"Starting real-time alert stream for customer {customer_id}")
+                
+                # Send initial connection confirmation
+                yield format_sse_message("connected", {
+                    "status": "streaming_started",
+                    "customer_id": customer_id,
+                    "event_types": ui_alert_events,
+                    "timestamp": datetime.now().isoformat()
+                })
+                
+                # Start the subscriber
+                await subscriber.start()
+                
+                # Listen for events from our queue
+                while True:
+                    try:
+                        # Wait for events with a timeout to allow for graceful shutdown
+                        event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
+                        
+                        # Format UI event for streaming
+                        stream_data = {
+                            "alert_id": event.data.get("alert_id"),
+                            "rule_id": event.data.get("rule_id"), 
+                            "rule_name": event.data.get("rule_name"),
+                            "severity": event.data.get("severity"),
+                            "status": event.data.get("status"),
+                            "triggered_at": event.data.get("triggered_at"),
+                            "message": event.data.get("message"),
+                            "event_type": event.event_type,
+                            "timestamp": event.metadata.created_at if hasattr(event, 'metadata') and event.metadata else datetime.now().isoformat(),
+                            "ui_metadata": event.data.get("ui_metadata", {})
+                        }
+                        
+                        # Stream the event immediately
+                        yield format_sse_message("alert_event", stream_data, getattr(event.metadata, 'event_id', None) if hasattr(event, 'metadata') else None)
+                        
+                        logger.debug(
+                            "Alert event streamed to UI",
+                            customer_id=customer_id,
+                            alert_id=stream_data.get("alert_id"),
+                            event_type=event.event_type
+                        )
+                        
+                    except asyncio.TimeoutError:
+                        # Send keepalive message
+                        yield format_sse_message("keepalive", {
+                            "timestamp": datetime.now().isoformat(),
+                            "status": "listening"
+                        })
+                        
+                    except Exception as e:
+                        logger.error(f"Error processing alert event for streaming: {e}")
+                        yield format_sse_message("error", {"message": f"Event processing error: {str(e)}"})
+                        
+            except Exception as e:
+                logger.error(f"Error in real-time alert stream for customer {customer_id}: {e}")
+                yield format_sse_message("error", {
+                    "message": f"Stream error: {str(e)}",
+                    "timestamp": datetime.now().isoformat()
+                })
+            finally:
+                # Clean up subscriber
+                if subscriber:
+                    try:
+                        await subscriber.stop()
+                        logger.info(f"Stopped subscriber for customer {customer_id}")
+                    except Exception as e:
+                        logger.error(f"Error stopping subscriber: {e}")
         
         return StreamingResponse(
-            generate_alerts(),
+            generate_real_time_alerts(),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -231,7 +343,7 @@ async def stream_alerts(
         )
         
     except Exception as e:
-        logger.error("Failed to start alerts stream", error=str(e), customer_id=customer_id)
+        logger.error("Failed to start real-time alerts stream", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to start alerts stream: {str(e)}")
 
 

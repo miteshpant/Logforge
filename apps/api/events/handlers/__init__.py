@@ -7,11 +7,13 @@ from .alert_handler import AlertEventHandler
 from .log_handler import LogEventHandler
 from .usage_handler import UsageEventHandler
 from .system_handler import SystemEventHandler
+from .ui_handler import UIEventHandler
 
 __all__ = [
     'EventHandler',
     'AlertEventHandler',
     'LogEventHandler',
     'UsageEventHandler',
-    'SystemEventHandler'
+    'SystemEventHandler',
+    'UIEventHandler'
 ]

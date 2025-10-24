@@ -120,6 +120,7 @@ from .handlers import (
     LogEventHandler,
     UsageEventHandler,
     SystemEventHandler
+    # UIEventHandler
 )
 
 
@@ -547,6 +548,7 @@ class EventSubscriberManager:
             AlertEventHandler(),
             LogEventHandler(),
             SystemEventHandler()
+            # UIEventHandler()
         ]
 
         for subscriber_name, subscriber in self.subscribers.items():

@@ -13,6 +13,11 @@ from ..matchers.threshold_matcher import ThresholdMatcher
 from ..matchers.pattern_matcher import PatternMatcher
 from ..matchers.anomaly_matcher import AnomalyMatcher
 from models import LogEntry
+from constants.alert_constants import (
+    DEFAULT_COOLDOWN_MINUTES, CRITICAL_SECURITY_COOLDOWN_MINUTES,
+    SYSTEM_HEALTH_COOLDOWN_MINUTES, BUSINESS_METRICS_COOLDOWN_MINUTES,
+    INFORMATIONAL_COOLDOWN_MINUTES, AlertSeverity
+)
 
 logger = logging.getLogger(__name__)
 
@@ -156,8 +161,10 @@ class AlertProcessor:
                 return False
 
             # Check cooldown period
-            if await self._is_in_cooldown(rule_id):
+            cooldown_minutes = self._get_smart_cooldown(rule)
+            if await self._is_in_cooldown(rule_id, customer_id, cooldown_minutes):
                 logger.debug(f"Rule {rule_id} is in cooldown period")
+                await self._update_rule_state(rule_id, customer_id, triggered=False, evaluation_success=True)
                 return False
 
             # Get appropriate matcher for rule type
@@ -181,14 +188,18 @@ class AlertProcessor:
                 success = await self._create_alert_instance(rule, log_dicts, matcher, customer_id)
 
                 if success:
-                    # Set cooldown period to prevent rapid firing
-                    cooldown_minutes = rule.get('cooldown_minutes', 5)
-                    await self.cache_manager.set_rule_cooldown(rule_id, cooldown_minutes)
+                    # Update rule state to track the successful trigger
+                    await self._update_rule_state(rule_id, customer_id, triggered=True, evaluation_success=True)
 
-                    logger.info(f"✅ Alert instance created for rule {rule_id}, cooldown set for {cooldown_minutes} minutes")
+                    logger.info(f"✅ Alert instance created for rule {rule_id}, cooldown active for {cooldown_minutes} minutes")
                     return True
                 else:
                     logger.error(f"❌ Failed to create alert instance for rule {rule_id}")
+                    await self._update_rule_state(rule_id, customer_id, triggered=False, evaluation_success=False)
+
+            else:
+                # Rule was evaluated but didn't match
+                await self._update_rule_state(rule_id, customer_id, triggered=False, evaluation_success=True)
 
             return False
 
@@ -196,18 +207,22 @@ class AlertProcessor:
             logger.error(f"Error processing rule {rule.get('id')}: {e}")
             return False
 
-    async def _is_in_cooldown(self, rule_id: str) -> bool:
+    async def _is_in_cooldown(self, rule_id: str, customer_id: str, cooldown_minutes: int) -> bool:
         """
         Check if rule is currently in cooldown period.
 
         Args:
             rule_id: Rule ID to check
+            customer_id: Customer/tenant ID
+            cooldown_minutes: Cooldown period in minutes
 
         Returns:
             bool: True if in cooldown, False otherwise
         """
         try:
-            return await self.cache_manager.is_rule_in_cooldown(rule_id)
+            from dao.alert_dao import AlertDAO
+            alert_dao = AlertDAO()
+            return await alert_dao.is_rule_in_cooldown(rule_id, customer_id, cooldown_minutes)
         except Exception as e:
             logger.error(f"Error checking cooldown for rule {rule_id}: {e}")
             return False  # Default to allowing rule execution
@@ -257,8 +272,14 @@ class AlertProcessor:
 
             logger.info(f"📝 Alert instance {alert_instance_id} saved to database")
 
-            # TODO: Add UI event publishing for real-time notifications when UI event system is ready
-            # For now, just log the success
+            # TODO: Re-enable UI event publishing after fixing circular dependency
+            await self._publish_ui_alert_event(
+                alert_instance_id=alert_instance_id,
+                rule=rule,
+                match_data=match_data,
+                customer_id=customer_id
+            )
+            logger.info(f"🔔 Alert instance {alert_instance_id} ready for UI notification")
 
             logger.info(f"✅ Alert instance {alert_instance_id} created for rule {rule['id']}")
             return True
@@ -338,3 +359,173 @@ class AlertProcessor:
         except Exception as e:
             logger.error(f"Error getting processing stats: {e}")
             return {"error": str(e)}
+
+    def _get_smart_cooldown(self, rule: Dict[str, Any]) -> int:
+        """
+        Determine appropriate cooldown period based on rule properties.
+
+        Args:
+            rule: Alert rule configuration
+
+        Returns:
+            int: Cooldown period in minutes
+        """
+        try:
+            # Check if rule has explicit cooldown configured
+            if 'cooldown_minutes' in rule:
+                return max(1, rule['cooldown_minutes'])  # Minimum 1 minute
+
+            # Smart cooldown based on severity
+            severity = rule.get('severity', AlertSeverity.MEDIUM).lower()
+
+            if severity == AlertSeverity.CRITICAL:
+                return CRITICAL_SECURITY_COOLDOWN_MINUTES
+            elif severity == AlertSeverity.HIGH:
+                return SYSTEM_HEALTH_COOLDOWN_MINUTES
+            elif severity == AlertSeverity.MEDIUM:
+                return DEFAULT_COOLDOWN_MINUTES
+            elif severity == AlertSeverity.LOW:
+                return INFORMATIONAL_COOLDOWN_MINUTES
+            else:
+                # Additional logic based on rule type for fine-tuning
+                rule_type = rule.get('rule_type', '')
+
+                if rule_type in ['pattern', 'frequency']:
+                    # Pattern and frequency rules tend to be more critical
+                    return SYSTEM_HEALTH_COOLDOWN_MINUTES
+                elif rule_type in ['anomaly', 'sequence']:
+                    # Complex analysis rules might need longer cooldown
+                    return BUSINESS_METRICS_COOLDOWN_MINUTES
+                else:
+                    return DEFAULT_COOLDOWN_MINUTES
+
+        except Exception as e:
+            logger.error(f"Error determining cooldown for rule {rule.get('id')}: {e}")
+            return DEFAULT_COOLDOWN_MINUTES
+
+    async def _update_rule_state(self, rule_id: str, customer_id: str, triggered: bool, evaluation_success: bool):
+        """
+        Update rule state tracking in database.
+
+        Args:
+            rule_id: Rule ID to update
+            customer_id: Customer/tenant ID
+            triggered: Whether the rule triggered an alert
+            evaluation_success: Whether the evaluation completed successfully
+        """
+        try:
+            from dao.alert_dao import AlertDAO
+            import json
+
+            alert_dao = AlertDAO()
+
+            # Get current state to increment counters
+            current_state = await alert_dao.get_rule_state(rule_id, customer_id)
+
+            now = datetime.now(timezone.utc)
+
+            # Build state update
+            state_update = {
+                'rule_id': rule_id,
+                'customer_id': customer_id,
+                'last_evaluation': now,
+                'evaluation_count': (current_state.get('evaluation_count', 0) if current_state else 0) + 1,
+                'consecutive_failures': 0 if evaluation_success else (current_state.get('consecutive_failures', 0) if current_state else 0) + 1,
+                'updated_at': now
+            }
+
+            if triggered:
+                state_update.update({
+                    'last_trigger': now,
+                    'trigger_count': (current_state.get('trigger_count', 0) if current_state else 0) + 1
+                })
+
+            # Add any additional state data
+            state_data = current_state.get('state_data', {}) if current_state else {}
+            state_data.update({
+                'last_evaluation_result': 'triggered' if triggered else ('evaluated' if evaluation_success else 'failed'),
+                'last_updated': now.isoformat()
+            })
+
+            state_update['state_data'] = json.dumps(state_data)
+
+            # Set created_at for new states
+            if not current_state:
+                state_update['created_at'] = now
+
+            # Save to database
+            await alert_dao.update_rule_state(state_update)
+
+            logger.debug(f"Rule state updated for {rule_id}: triggered={triggered}, eval_success={evaluation_success}")
+
+        except Exception as e:
+            logger.error(f"Failed to update rule state for {rule_id}: {e}")
+            # Don't fail the main processing flow due to state tracking errors
+
+    async def _publish_ui_alert_event(
+        self,
+        alert_instance_id: str,
+        rule: Dict[str, Any],
+        match_data: Dict[str, Any],
+        customer_id: str
+    ):
+        """
+        Publish UI event for real-time alert notifications.
+
+        Args:
+            alert_instance_id: ID of the created alert instance
+            rule: Alert rule that triggered
+            match_data: Data about the match from the matcher
+            customer_id: Customer/tenant ID
+        """
+        try:
+            # Import here to avoid circular dependency
+            from ...publishers.ui_publisher import UIEventPublisher
+            import sys
+            import os
+
+            # Add the API root to the path to import dependencies
+            api_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+            if api_root not in sys.path:
+                sys.path.append(api_root)
+
+            import dependencies
+
+            # Use global event publisher manager
+            if not dependencies.event_publisher_manager:
+                logger.warning("Event publisher manager not available")
+                return
+
+            ui_publisher = UIEventPublisher(dependencies.event_publisher_manager)
+
+            # Prepare alert data for UI event
+            alert_data = {
+                "id": alert_instance_id,
+                "severity": rule.get('severity', 'medium'),
+                "trigger_data": match_data
+            }
+
+            # Prepare trigger context
+            trigger_context = {
+                "matched_logs_count": match_data.get("matched_logs_count", 0),
+                "time_window": match_data.get("time_window", {}),
+                "condition_evaluation": match_data.get("condition_evaluation", {})
+            }
+
+            # Publish UI alert triggered event
+            success = await ui_publisher.publish_alert_triggered(
+                customer_id=customer_id,
+                alert_data=alert_data,
+                rule_data=rule,
+                trigger_context=trigger_context,
+                correlation_id=None  # Could add correlation tracking here
+            )
+
+            if success:
+                logger.info(f"🔔 UI alert event published for alert {alert_instance_id}")
+            else:
+                logger.warning(f"⚠️ Failed to publish UI alert event for alert {alert_instance_id}")
+
+        except Exception as e:
+            logger.error(f"Error publishing UI alert event for alert {alert_instance_id}: {e}")
+            # Don't fail the main alert creation flow due to UI event publishing errors

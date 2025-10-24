@@ -31,3 +31,5 @@ pyjwt==2.8.0
 python-jose[cryptography]==3.3.0
 # Redis for alert rule caching
 redis==5.0.1
+# HTTP client for webhook notifications
+aiohttp==3.9.1

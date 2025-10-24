@@ -70,8 +70,18 @@ class ThresholdType:
 
 # Constants for validation
 MAX_CONDITION_DEPTH = 3
-DEFAULT_COOLDOWN_MINUTES = 5
 DEFAULT_TIME_WINDOW_MINUTES = 5
+
+# Cooldown Constants (in minutes)
+DEFAULT_COOLDOWN_MINUTES = 2                    # General default: 2 minutes
+CRITICAL_SECURITY_COOLDOWN_MINUTES = 1          # Critical security events: 1 minute  
+SYSTEM_HEALTH_COOLDOWN_MINUTES = 2              # System health/performance: 2 minutes
+BUSINESS_METRICS_COOLDOWN_MINUTES = 5           # Business metrics: 5 minutes
+INFORMATIONAL_COOLDOWN_MINUTES = 10             # Non-urgent informational: 10 minutes
+
+# Minimum and maximum cooldown bounds
+MIN_COOLDOWN_MINUTES = 1                        # Minimum 1 minute
+MAX_COOLDOWN_MINUTES = 60                       # Maximum 1 hour
 
 # Valid operators lists for validation
 COMPARISON_OPERATORS = [
