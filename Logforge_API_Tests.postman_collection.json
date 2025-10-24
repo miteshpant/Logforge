@@ -2165,6 +2165,302 @@
 							"response": []
 						}
 					]
+				},
+				{
+					"name": "Alert History & Operations",
+					"item": [
+						{
+							"name": "Get Alert History",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/v1/alerts/history",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"alerts",
+										"history"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get Alert Metrics",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/v1/alerts/metrics",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"alerts",
+										"metrics"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Acknowledge Alert",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"alert_id\": \"{{alert_id}}\",\n  \"acknowledged_by\": \"test-user\",\n  \"notes\": \"Investigating the issue\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/alerts/acknowledge",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"alerts",
+										"acknowledge"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Silence Alert Rule",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"rule_id\": \"{{rule_id}}\",\n  \"duration_minutes\": 60,\n  \"reason\": \"Maintenance window\",\n  \"silenced_by\": \"test-user\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/alerts/silence",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"alerts",
+										"silence"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get Escalation Policies",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/v1/alerts/escalation",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"alerts",
+										"escalation"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Notification Channels",
+					"item": [
+						{
+							"name": "List Notification Channels",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/v1/alerts/channels",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"alerts",
+										"channels"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Create Notification Channel",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"ops-email\",\n  \"type\": \"email\",\n  \"enabled\": true,\n  \"configuration\": {\n    \"recipients\": [\"ops@company.com\", \"alerts@company.com\"],\n    \"subject_template\": \"[ALERT] {{rule_name}} - {{severity}}\",\n    \"body_template\": \"Alert: {{message}}\\nTime: {{triggered_at}}\\nSeverity: {{severity}}\"\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/alerts/channels",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"alerts",
+										"channels"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Update Notification Channel",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"ops-email-updated\",\n  \"enabled\": false,\n  \"configuration\": {\n    \"recipients\": [\"new-ops@company.com\"]\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/alerts/channels/{{channel_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"alerts",
+										"channels",
+										"{{channel_id}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Notification Channel",
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/v1/alerts/channels/{{channel_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"alerts",
+										"channels",
+										"{{channel_id}}"
+									]
+								}
+							},
+							"response": []
+						}
+					]
 				}
 			]
 		}
