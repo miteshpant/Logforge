@@ -77,6 +77,11 @@ def get_alert_event_publisher():
     global alert_event_publisher
     return alert_event_publisher
 
+def get_event_publisher_manager():
+    """Get event publisher manager instance"""
+    global event_publisher_manager
+    return event_publisher_manager
+
 # process_log_batch() function removed - now handled by event_processing.py
 
 def process_logs_background(logs: List[LogEntry], customer_id: str = "default"):

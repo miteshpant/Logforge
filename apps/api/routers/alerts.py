@@ -38,7 +38,6 @@ class AlertRuleUpdateRequest(BaseModel):
     severity: Optional[str] = None
 
 class AlertStatusUpdate(BaseModel):
-    status: str  # acknowledged, resolved
     notes: Optional[str] = None
 
 # Alert Rules Management
@@ -260,11 +259,115 @@ async def get_alert(alert_id: str, customer_id: str = MiddlewareTenant):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get alert: {str(e)}")
 
+@router.get("/rules/{rule_id}/instances")
+async def list_alert_instances_by_rule(
+    rule_id: str,
+    status: Optional[str] = None,
+    limit: int = 100,
+    customer_id: str = MiddlewareTenant
+):
+    """Get all alert instances for a specific rule"""
+    try:
+        # Validate limit parameter
+        if limit < 1 or limit > 1000:
+            raise HTTPException(status_code=400, detail="Limit must be between 1 and 1000")
+        
+        # Validate status parameter if provided
+        if status and status not in ["active", "triggered", "acknowledged", "resolved", "suppressed"]:
+            raise HTTPException(status_code=400, detail="Invalid status. Must be one of: active, triggered, acknowledged, resolved, suppressed")
+        
+        # Get alert instances for the rule
+        instances = await alert_service.list_alert_instances_by_rule(rule_id, customer_id, status, limit)
+        
+        return {
+            "rule_id": rule_id,
+            "customer_id": customer_id,
+            "instances": instances,
+            "total": len(instances),
+            "status_filter": status,
+            "limit": limit
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get alert instances for rule {rule_id}: {str(e)}")
+
+class BulkUpdateRequest(BaseModel):
+    status: str
+    notes: Optional[str] = None
+    filter_status: Optional[str] = None
+
+@router.put("/rules/{rule_id}/instances/bulk-update")
+async def bulk_update_alert_instances_by_rule(
+    rule_id: str,
+    update_request: BulkUpdateRequest,
+    request: Request,
+    customer_id: str = MiddlewareTenant
+):
+    """Bulk update status of all alert instances for a specific rule"""
+    try:
+        # Validate status parameter
+        valid_statuses = ["triggered", "acknowledged", "resolved"]
+        if update_request.status not in valid_statuses:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid status: {update_request.status}. Must be one of: {valid_statuses}"
+            )
+        
+        # Validate filter_status parameter if provided
+        if update_request.filter_status and update_request.filter_status not in ["active", "triggered", "acknowledged", "resolved"]:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid filter_status: {update_request.filter_status}. Must be one of: active, triggered, acknowledged, resolved"
+            )
+        
+        # Get user information from JWT token in request state
+        user = getattr(request.state, 'user', None)
+        user_identifier = user.email if user and user.email else user.id if user else "api-user"
+        
+        # Perform bulk update
+        result = await alert_service.bulk_update_alert_instances_by_rule(
+            rule_id=rule_id,
+            customer_id=customer_id,
+            status=update_request.status,
+            notes=update_request.notes,
+            filter_status=update_request.filter_status,
+            updated_by=user_identifier
+        )
+        
+        return {
+            "status": "success",
+            "rule_id": rule_id,
+            "customer_id": customer_id,
+            "updated_count": result["updated_count"],
+            "instances_updated": result["instances_updated"],
+            "filter_status": result["filter_status"],
+            "new_status": result["status"],
+            "updated_by": result["updated_by"],
+            "notes": update_request.notes,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to bulk update alert instances for rule {rule_id}: {str(e)}")
+
 @router.post("/{alert_id}/acknowledge")
-async def acknowledge_alert(alert_id: str, status_update: AlertStatusUpdate, customer_id: str = MiddlewareTenant):
+async def acknowledge_alert(
+    alert_id: str, 
+    status_update: AlertStatusUpdate, 
+    request: Request,
+    customer_id: str = MiddlewareTenant
+):
     """Acknowledge an active alert"""
     try:
-        success = await alert_service.acknowledge_alert(alert_id, customer_id, "api-user")
+        # Get user information from JWT token in request state
+        user = getattr(request.state, 'user', None)
+        user_identifier = user.email if user and user.email else user.id if user else "api-user"
+        
+        success = await alert_service.acknowledge_alert(alert_id, customer_id, user_identifier)
         
         if not success:
             raise HTTPException(status_code=404, detail="Alert not found")
@@ -273,7 +376,9 @@ async def acknowledge_alert(alert_id: str, status_update: AlertStatusUpdate, cus
             "status": "acknowledged",
             "alert_id": alert_id,
             "customer_id": customer_id,
-            "acknowledged_at": datetime.now(timezone.utc)
+            "acknowledged_by": user_identifier,
+            "acknowledged_at": datetime.now(timezone.utc),
+            "notes": status_update.notes
         }
         
     except HTTPException:
@@ -282,13 +387,22 @@ async def acknowledge_alert(alert_id: str, status_update: AlertStatusUpdate, cus
         raise HTTPException(status_code=500, detail=f"Failed to acknowledge alert: {str(e)}")
 
 @router.post("/{alert_id}/resolve")
-async def resolve_alert(alert_id: str, status_update: AlertStatusUpdate, customer_id: str = MiddlewareTenant):
+async def resolve_alert(
+    alert_id: str, 
+    status_update: AlertStatusUpdate, 
+    request: Request,
+    customer_id: str = MiddlewareTenant
+):
     """Resolve an active or acknowledged alert"""
     try:
+        # Get user information from JWT token in request state
+        user = getattr(request.state, 'user', None)
+        user_identifier = user.email if user and user.email else user.id if user else "api-user"
+        
         success = await alert_service.resolve_alert(
             alert_id,
             customer_id,
-            "api-user",
+            user_identifier,
             status_update.notes or "Resolved via API"
         )
         
@@ -299,7 +413,9 @@ async def resolve_alert(alert_id: str, status_update: AlertStatusUpdate, custome
             "status": "resolved",
             "alert_id": alert_id,
             "customer_id": customer_id,
-            "resolved_at": datetime.now(timezone.utc)
+            "resolved_by": user_identifier,
+            "resolved_at": datetime.now(timezone.utc),
+            "notes": status_update.notes or "Resolved via API"
         }
         
     except HTTPException:

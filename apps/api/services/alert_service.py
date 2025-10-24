@@ -326,10 +326,109 @@ class AlertService:
             logger.error(f"Failed to list alert instances for customer {customer_id}: {e}")
             raise
     
+    async def list_alert_instances_by_rule(self, rule_id: str, customer_id: str, 
+                                          status: Optional[str] = None,
+                                          limit: int = 100) -> List[Dict[str, Any]]:
+        """List alert instances for a specific rule"""
+        try:
+            return await self.alert_dao.list_alert_instances_by_rule(rule_id, customer_id, status, limit)
+            
+        except Exception as e:
+            logger.error(f"Failed to list alert instances for rule {rule_id}: {e}")
+            raise
+
+    async def bulk_update_alert_instances_by_rule(self, rule_id: str, customer_id: str, 
+                                                 status: str, notes: Optional[str] = None,
+                                                 filter_status: Optional[str] = None,
+                                                 updated_by: Optional[str] = None) -> Dict[str, Any]:
+        """Bulk update status of all alert instances for a specific rule"""
+        try:
+            # Validate status
+            valid_statuses = ["triggered", "acknowledged", "resolved"]
+            if status not in valid_statuses:
+                raise ValueError(f"Invalid status: {status}. Must be one of: {valid_statuses}")
+            
+            # Perform bulk update
+            result = await self.alert_dao.bulk_update_alert_instances_by_rule(
+                rule_id, customer_id, status, notes, filter_status, updated_by
+            )
+            
+            # Publish UI events for each updated instance if any were updated
+            if result["updated_count"] > 0:
+                try:
+                    # Import here to avoid circular dependency
+                    from events.publishers.ui_publisher import UIEventPublisher
+                    from dependencies import get_event_publisher_manager
+                    
+                    # Get the event publisher manager 
+                    event_publisher_manager = get_event_publisher_manager()
+                    ui_publisher = UIEventPublisher(event_publisher_manager)
+                    
+                    # Publish bulk update events for each updated instance
+                    for instance_id in result["instances_updated"]:
+                        # Fetch complete alert instance data for UI event
+                        alert_instance = await self.alert_dao.get_alert_instance(instance_id, customer_id)
+                        
+                        if status == "acknowledged":
+                            await ui_publisher.publish_alert_acknowledged(
+                                customer_id=customer_id,
+                                alert_id=instance_id,
+                                acknowledged_by=updated_by or "api-user",
+                                acknowledgment_notes=notes,
+                                alert_instance_data=alert_instance
+                            )
+                        elif status == "resolved":
+                            await ui_publisher.publish_alert_resolved(
+                                customer_id=customer_id,
+                                alert_id=instance_id,
+                                resolved_by=updated_by or "api-user",
+                                resolution_notes=notes,
+                                alert_instance_data=alert_instance
+                            )
+                    
+                    logger.info(f"Published UI events for bulk update of {result['updated_count']} alerts")
+                    
+                except Exception as ui_error:
+                    logger.warning(f"Failed to publish UI events for bulk update: {ui_error}")
+                    # Don't fail the operation if UI event publishing fails
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Failed to bulk update alert instances for rule {rule_id}: {e}")
+            raise
+    
     async def acknowledge_alert(self, alert_id: str, customer_id: str, user: str = "api-user") -> bool:
         """Acknowledge alert instance"""
         try:
-            return await self.alert_dao.update_alert_status(alert_id, customer_id, "acknowledged", user)
+            success = await self.alert_dao.update_alert_status(alert_id, customer_id, "acknowledged", user)
+            
+            if success:
+                # Publish UI event for real-time updates
+                try:
+                    # Fetch complete alert instance data for UI event
+                    alert_instance = await self.alert_dao.get_alert_instance(alert_id, customer_id)
+                    
+                    # Import here to avoid circular dependency
+                    from events.publishers.ui_publisher import UIEventPublisher
+                    from dependencies import get_event_publisher_manager
+                    
+                    publisher_manager = get_event_publisher_manager()
+                    ui_publisher = UIEventPublisher(publisher_manager)
+                    
+                    await ui_publisher.publish_alert_acknowledged(
+                        customer_id=customer_id,
+                        alert_id=alert_id,
+                        acknowledged_by=user,
+                        alert_instance_data=alert_instance
+                    )
+                    logger.debug(f"UI event published for acknowledged alert {alert_id}")
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to publish UI event for acknowledged alert {alert_id}: {e}")
+                    # Don't fail the main operation if UI event publishing fails
+            
+            return success
             
         except Exception as e:
             logger.error(f"Failed to acknowledge alert {alert_id}: {e}")
@@ -339,7 +438,35 @@ class AlertService:
                            notes: Optional[str] = None) -> bool:
         """Resolve alert instance"""
         try:
-            return await self.alert_dao.update_alert_status(alert_id, customer_id, "resolved", user, notes)
+            success = await self.alert_dao.update_alert_status(alert_id, customer_id, "resolved", user, notes)
+            
+            if success:
+                # Publish UI event for real-time updates
+                try:
+                    # Fetch complete alert instance data for UI event
+                    alert_instance = await self.alert_dao.get_alert_instance(alert_id, customer_id)
+                    
+                    # Import here to avoid circular dependency
+                    from events.publishers.ui_publisher import UIEventPublisher
+                    from dependencies import get_event_publisher_manager
+                    
+                    publisher_manager = get_event_publisher_manager()
+                    ui_publisher = UIEventPublisher(publisher_manager)
+                    
+                    await ui_publisher.publish_alert_resolved(
+                        customer_id=customer_id,
+                        alert_id=alert_id,
+                        resolved_by=user,
+                        resolution_notes=notes,
+                        alert_instance_data=alert_instance
+                    )
+                    logger.debug(f"UI event published for resolved alert {alert_id}")
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to publish UI event for resolved alert {alert_id}: {e}")
+                    # Don't fail the main operation if UI event publishing fails
+            
+            return success
             
         except Exception as e:
             logger.error(f"Failed to resolve alert {alert_id}: {e}")

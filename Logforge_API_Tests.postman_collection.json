@@ -2167,10 +2167,10 @@
 					]
 				},
 				{
-					"name": "Alert History & Operations",
+					"name": "Alert Instance Management",
 					"item": [
 						{
-							"name": "Get Alert History",
+							"name": "List Alert Instances",
 							"request": {
 								"method": "GET",
 								"header": [
@@ -2184,21 +2184,43 @@
 									}
 								],
 								"url": {
-									"raw": "{{base_url}}/v1/alerts/history",
+									"raw": "{{base_url}}/v1/alerts?status=active&severity=high&limit=100&offset=0",
 									"host": [
 										"{{base_url}}"
 									],
 									"path": [
 										"v1",
-										"alerts",
-										"history"
+										"alerts"
+									],
+									"query": [
+										{
+											"key": "status",
+											"value": "active",
+											"description": "Filter by alert status"
+										},
+										{
+											"key": "severity",
+											"value": "high",
+											"description": "Filter by severity level",
+											"disabled": true
+										},
+										{
+											"key": "limit",
+											"value": "100",
+											"description": "Number of results to return"
+										},
+										{
+											"key": "offset",
+											"value": "0",
+											"description": "Pagination offset"
+										}
 									]
 								}
 							},
 							"response": []
 						},
 						{
-							"name": "Get Alert Metrics",
+							"name": "Get Alert Instance by ID",
 							"request": {
 								"method": "GET",
 								"header": [
@@ -2212,14 +2234,57 @@
 									}
 								],
 								"url": {
-									"raw": "{{base_url}}/v1/alerts/metrics",
+									"raw": "{{base_url}}/v1/alerts/{{alert_id}}",
 									"host": [
 										"{{base_url}}"
 									],
 									"path": [
 										"v1",
 										"alerts",
-										"metrics"
+										"{{alert_id}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get Alert Instances by Rule ID",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "X-Customer-ID",
+										"value": "{{tenant_id}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/v1/alerts/rules/{{rule_id}}/instances?status=active&limit=100",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"alerts",
+										"rules",
+										"{{rule_id}}",
+										"instances"
+									],
+									"query": [
+										{
+											"key": "status",
+											"value": "active",
+											"description": "Filter by alert status",
+											"disabled": true
+										},
+										{
+											"key": "limit",
+											"value": "100",
+											"description": "Maximum number of instances to return"
+										}
 									]
 								}
 							},
@@ -2245,16 +2310,17 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n  \"alert_id\": \"{{alert_id}}\",\n  \"acknowledged_by\": \"test-user\",\n  \"notes\": \"Investigating the issue\"\n}"
+									"raw": "{\n  \"notes\": \"Investigating the issue\"\n}"
 								},
 								"url": {
-									"raw": "{{base_url}}/v1/alerts/acknowledge",
+									"raw": "{{base_url}}/v1/alerts/{{alert_id}}/acknowledge",
 									"host": [
 										"{{base_url}}"
 									],
 									"path": [
 										"v1",
 										"alerts",
+										"{{alert_id}}",
 										"acknowledge"
 									]
 								}
@@ -2262,7 +2328,7 @@
 							"response": []
 						},
 						{
-							"name": "Silence Alert Rule",
+							"name": "Resolve Alert",
 							"request": {
 								"method": "POST",
 								"header": [
@@ -2281,121 +2347,25 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n  \"rule_id\": \"{{rule_id}}\",\n  \"duration_minutes\": 60,\n  \"reason\": \"Maintenance window\",\n  \"silenced_by\": \"test-user\"\n}"
+									"raw": "{\n  \"notes\": \"Issue has been resolved\"\n}"
 								},
 								"url": {
-									"raw": "{{base_url}}/v1/alerts/silence",
+									"raw": "{{base_url}}/v1/alerts/{{alert_id}}/resolve",
 									"host": [
 										"{{base_url}}"
 									],
 									"path": [
 										"v1",
 										"alerts",
-										"silence"
+										"{{alert_id}}",
+										"resolve"
 									]
 								}
 							},
 							"response": []
 						},
 						{
-							"name": "Get Escalation Policies",
-							"request": {
-								"method": "GET",
-								"header": [
-									{
-										"key": "Authorization",
-										"value": "Bearer {{auth_token}}"
-									},
-									{
-										"key": "X-Customer-ID",
-										"value": "{{tenant_id}}"
-									}
-								],
-								"url": {
-									"raw": "{{base_url}}/v1/alerts/escalation",
-									"host": [
-										"{{base_url}}"
-									],
-									"path": [
-										"v1",
-										"alerts",
-										"escalation"
-									]
-								}
-							},
-							"response": []
-						}
-					]
-				},
-				{
-					"name": "Notification Channels",
-					"item": [
-						{
-							"name": "List Notification Channels",
-							"request": {
-								"method": "GET",
-								"header": [
-									{
-										"key": "Authorization",
-										"value": "Bearer {{auth_token}}"
-									},
-									{
-										"key": "X-Customer-ID",
-										"value": "{{tenant_id}}"
-									}
-								],
-								"url": {
-									"raw": "{{base_url}}/v1/alerts/channels",
-									"host": [
-										"{{base_url}}"
-									],
-									"path": [
-										"v1",
-										"alerts",
-										"channels"
-									]
-								}
-							},
-							"response": []
-						},
-						{
-							"name": "Create Notification Channel",
-							"request": {
-								"method": "POST",
-								"header": [
-									{
-										"key": "Authorization",
-										"value": "Bearer {{auth_token}}"
-									},
-									{
-										"key": "X-Customer-ID",
-										"value": "{{tenant_id}}"
-									},
-									{
-										"key": "Content-Type",
-										"value": "application/json"
-									}
-								],
-								"body": {
-									"mode": "raw",
-									"raw": "{\n  \"name\": \"ops-email\",\n  \"type\": \"email\",\n  \"enabled\": true,\n  \"configuration\": {\n    \"recipients\": [\"ops@company.com\", \"alerts@company.com\"],\n    \"subject_template\": \"[ALERT] {{rule_name}} - {{severity}}\",\n    \"body_template\": \"Alert: {{message}}\\nTime: {{triggered_at}}\\nSeverity: {{severity}}\"\n  }\n}"
-								},
-								"url": {
-									"raw": "{{base_url}}/v1/alerts/channels",
-									"host": [
-										"{{base_url}}"
-									],
-									"path": [
-										"v1",
-										"alerts",
-										"channels"
-									]
-								}
-							},
-							"response": []
-						},
-						{
-							"name": "Update Notification Channel",
+							"name": "Bulk Update Alert Instances by Rule",
 							"request": {
 								"method": "PUT",
 								"header": [
@@ -2414,47 +2384,20 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n  \"name\": \"ops-email-updated\",\n  \"enabled\": false,\n  \"configuration\": {\n    \"recipients\": [\"new-ops@company.com\"]\n  }\n}"
+									"raw": "{\n  \"status\": \"acknowledged\",\n  \"notes\": \"Bulk acknowledging all alerts for this rule due to known system maintenance\",\n  \"filter_status\": \"triggered\"\n}"
 								},
 								"url": {
-									"raw": "{{base_url}}/v1/alerts/channels/{{channel_id}}",
+									"raw": "{{base_url}}/v1/alerts/rules/{{rule_id}}/instances/bulk-update",
 									"host": [
 										"{{base_url}}"
 									],
 									"path": [
 										"v1",
 										"alerts",
-										"channels",
-										"{{channel_id}}"
-									]
-								}
-							},
-							"response": []
-						},
-						{
-							"name": "Delete Notification Channel",
-							"request": {
-								"method": "DELETE",
-								"header": [
-									{
-										"key": "Authorization",
-										"value": "Bearer {{auth_token}}"
-									},
-									{
-										"key": "X-Customer-ID",
-										"value": "{{tenant_id}}"
-									}
-								],
-								"url": {
-									"raw": "{{base_url}}/v1/alerts/channels/{{channel_id}}",
-									"host": [
-										"{{base_url}}"
-									],
-									"path": [
-										"v1",
-										"alerts",
-										"channels",
-										"{{channel_id}}"
+										"rules",
+										"{{rule_id}}",
+										"instances",
+										"bulk-update"
 									]
 								}
 							},

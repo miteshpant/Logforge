@@ -123,7 +123,8 @@ class UIEventPublisher:
         alert_id: str,
         acknowledged_by: str,
         acknowledgment_notes: Optional[str] = None,
-        correlation_id: Optional[str] = None
+        correlation_id: Optional[str] = None,
+        alert_instance_data: Optional[Dict[str, Any]] = None
     ) -> bool:
         """
         Publish UI event when an alert is acknowledged
@@ -150,6 +151,16 @@ class UIEventPublisher:
                     "priority": "medium"
                 }
             }
+            
+            # Include alert instance data if provided for complete UI context
+            if alert_instance_data:
+                event_data.update({
+                    "rule_id": alert_instance_data.get("rule_id"),
+                    "rule_name": alert_instance_data.get("rule_name"),
+                    "severity": alert_instance_data.get("severity"),
+                    "triggered_at": alert_instance_data.get("triggered_at"),
+                    "message": alert_instance_data.get("message") or alert_instance_data.get("title", "Alert acknowledged")
+                })
 
             metadata = EventMetadata(
                 source_service="alert-api",
@@ -193,7 +204,8 @@ class UIEventPublisher:
         alert_id: str,
         resolved_by: str,
         resolution_notes: Optional[str] = None,
-        correlation_id: Optional[str] = None
+        correlation_id: Optional[str] = None,
+        alert_instance_data: Optional[Dict[str, Any]] = None
     ) -> bool:
         """
         Publish UI event when an alert is resolved
@@ -220,6 +232,16 @@ class UIEventPublisher:
                     "priority": "low"
                 }
             }
+            
+            # Include alert instance data if provided for complete UI context
+            if alert_instance_data:
+                event_data.update({
+                    "rule_id": alert_instance_data.get("rule_id"),
+                    "rule_name": alert_instance_data.get("rule_name"),
+                    "severity": alert_instance_data.get("severity"),
+                    "triggered_at": alert_instance_data.get("triggered_at"),
+                    "message": alert_instance_data.get("message") or alert_instance_data.get("title", "Alert resolved")
+                })
 
             metadata = EventMetadata(
                 source_service="alert-api",

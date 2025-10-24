@@ -432,6 +432,148 @@ class AlertDAO:
             logger.error(f"Failed to list alert instances for customer {customer_id}: {e}")
             raise
     
+    async def list_alert_instances_by_rule(self, rule_id: str, customer_id: str, 
+                                          status: Optional[str] = None,
+                                          limit: int = 100) -> List[Dict[str, Any]]:
+        """List alert instances for a specific rule"""
+        try:
+            where_clauses = ["customer_id = %(customer_id)s", "rule_id = %(rule_id)s"]
+            params = {"customer_id": customer_id, "rule_id": rule_id}
+            
+            if status:
+                # Map API status to database status
+                if status == "active":
+                    status = "triggered"
+                where_clauses.append("status = %(status)s")
+                params["status"] = status
+            
+            query = f"""
+            SELECT * FROM {ALERT_INSTANCES_TABLE}
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY triggered_at DESC
+            LIMIT %(limit)s
+            """
+            params["limit"] = limit
+            
+            results = await self.db.fetch_all(query, params)
+            
+            # Parse JSON fields and map field names for each alert
+            for alert in results:
+                trigger_data = json.loads(alert.get("trigger_data", "{}"))
+                
+                # Map database fields to API response format
+                alert["alert_id"] = alert["id"]
+                alert["title"] = trigger_data.get("title", "")
+                alert["message"] = trigger_data.get("message", "")
+                alert["severity"] = trigger_data.get("severity", "medium")
+                alert["details"] = trigger_data.get("details", {})
+                alert["resolution_notes"] = alert.get("resolution_data")
+                
+                # Map database status to API status
+                if alert["status"] == "triggered":
+                    alert["status"] = "active"
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Failed to list alert instances for rule {rule_id}: {e}")
+            raise
+
+    async def bulk_update_alert_instances_by_rule(self, rule_id: str, customer_id: str, 
+                                                 status: str, notes: Optional[str] = None,
+                                                 filter_status: Optional[str] = None,
+                                                 updated_by: Optional[str] = None) -> Dict[str, Any]:
+        """Bulk update status of all alert instances for a specific rule"""
+        try:
+            # Build the WHERE clause for filtering
+            where_clauses = ["customer_id = %(customer_id)s", "rule_id = %(rule_id)s"]
+            params = {
+                "customer_id": customer_id, 
+                "rule_id": rule_id,
+                "status": status,
+                "notes": notes or f"Bulk updated to {status}"
+            }
+            
+            # Add filter by current status if specified
+            if filter_status:
+                # Map API status to database status
+                if filter_status == "active":
+                    filter_status = "triggered"
+                where_clauses.append("status = %(filter_status)s")
+                params["filter_status"] = filter_status
+            
+            # Add user tracking if provided
+            current_time = datetime.now(timezone.utc)
+            if updated_by:
+                if status == "acknowledged":
+                    params["acknowledged_by"] = updated_by
+                    params["acknowledged_at"] = current_time
+                elif status == "resolved":
+                    params["acknowledged_by"] = updated_by  # Use acknowledged_by field for resolved_by
+                    params["resolution_data"] = notes or f"Bulk resolved by {updated_by}"
+            
+            # First, get count of instances that will be updated
+            count_query = f"""
+            SELECT COUNT(*) as count FROM {ALERT_INSTANCES_TABLE}
+            WHERE {' AND '.join(where_clauses)}
+            """
+            count_result = await self.db.fetch_one(count_query, params)
+            instances_to_update = count_result["count"] if count_result else 0
+            
+            if instances_to_update == 0:
+                return {
+                    "updated_count": 0,
+                    "instances_updated": [],
+                    "filter_matched": 0
+                }
+            
+            # Get IDs of instances that will be updated for UI event publishing
+            ids_query = f"""
+            SELECT id FROM {ALERT_INSTANCES_TABLE}
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY triggered_at DESC
+            """
+            ids_result = await self.db.fetch_all(ids_query, params)
+            instance_ids = [row["id"] for row in ids_result]
+            
+            # Build the SET clause dynamically based on status
+            set_clauses = ["status = %(status)s"]
+            
+            if status == "acknowledged" and updated_by:
+                set_clauses.extend(["acknowledged_by = %(acknowledged_by)s", "acknowledged_at = %(acknowledged_at)s"])
+            elif status == "resolved" and updated_by:
+                set_clauses.extend(["acknowledged_by = %(acknowledged_by)s", "resolution_data = %(resolution_data)s"])
+            
+            # Always add notes if provided
+            if notes:
+                params["resolution_data"] = notes
+                if "resolution_data = %(resolution_data)s" not in set_clauses:
+                    set_clauses.append("resolution_data = %(resolution_data)s")
+            
+            # Execute the bulk update
+            update_query = f"""
+            ALTER TABLE {ALERT_INSTANCES_TABLE}
+            UPDATE {', '.join(set_clauses)}
+            WHERE {' AND '.join(where_clauses)}
+            """
+            
+            await self.db.execute_query(update_query, params)
+            
+            logger.info(f"Bulk updated {instances_to_update} alert instances for rule {rule_id} to status {status}")
+            
+            return {
+                "updated_count": instances_to_update,
+                "instances_updated": instance_ids,
+                "filter_matched": instances_to_update,
+                "status": status,
+                "filter_status": filter_status,
+                "updated_by": updated_by
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to bulk update alert instances for rule {rule_id}: {e}")
+            raise
+    
     async def update_alert_status(self, alert_id: str, customer_id: str, status: str, 
                                  user: str, notes: Optional[str] = None) -> bool:
         """Update alert instance status"""
