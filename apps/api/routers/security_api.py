@@ -319,6 +319,63 @@ async def test_sigma_rule(
         logger.error(f"Failed to test Sigma rule {rule_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to test rule: {str(e)}")
 
+@router.put("/sigma-rules/{rule_id}")
+async def update_sigma_rule(
+    rule_id: str,
+    rule_request: SigmaRuleRequest,
+    customer_id: str = Header(..., alias="X-Customer-ID")
+) -> Dict[str, str]:
+    """Update an existing Sigma detection rule"""
+    try:
+        # Convert request to rule data
+        rule_data = {
+            "title": rule_request.title,
+            "description": rule_request.description,
+            "severity": rule_request.severity,
+            "author": rule_request.author,
+            "tags": rule_request.tags,
+            "logsource": rule_request.logsource,
+            "detection": rule_request.detection,
+            "attack_techniques": rule_request.attack_techniques,
+            "kill_chain_phases": rule_request.kill_chain_phases,
+            "references": rule_request.references,
+            "falsepositives": rule_request.falsepositives,
+            "enabled": rule_request.enabled
+        }
+        
+        success = await security_service.update_sigma_rule(rule_id, rule_data, customer_id)
+        
+        if success:
+            return {"message": "Sigma rule updated", "rule_id": rule_id}
+        else:
+            raise HTTPException(status_code=404, detail="Sigma rule not found")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update Sigma rule {rule_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update rule: {str(e)}")
+
+@router.delete("/sigma-rules/{rule_id}")
+async def delete_sigma_rule(
+    rule_id: str,
+    customer_id: str = Header(..., alias="X-Customer-ID")
+) -> Dict[str, str]:
+    """Delete a Sigma detection rule"""
+    try:
+        success = await security_service.delete_sigma_rule(rule_id, customer_id)
+        
+        if success:
+            return {"message": "Sigma rule deleted", "rule_id": rule_id}
+        else:
+            raise HTTPException(status_code=404, detail="Sigma rule not found")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete Sigma rule {rule_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete rule: {str(e)}")
+
 @router.get("/events")
 async def list_security_events(
     customer_id: str = Header(..., alias="X-Customer-ID"),

@@ -272,6 +272,24 @@ class SecurityService:
             "confidence": min(confidence, 1.0)
         }
     
+    async def update_sigma_rule(self, rule_id: str, rule_data: Dict[str, Any], customer_id: str = None) -> bool:
+        """Update existing Sigma rule"""
+        try:
+            return await self.security_dao.update_sigma_rule(rule_id, rule_data, customer_id)
+            
+        except Exception as e:
+            logger.error(f"Failed to update Sigma rule {rule_id}: {e}")
+            raise
+    
+    async def delete_sigma_rule(self, rule_id: str, customer_id: str = None) -> bool:
+        """Delete Sigma rule"""
+        try:
+            return await self.security_dao.delete_sigma_rule(rule_id, customer_id)
+            
+        except Exception as e:
+            logger.error(f"Failed to delete Sigma rule {rule_id}: {e}")
+            raise
+    
     # Security Events Management
     
     async def create_security_event(self, event_data: Dict[str, Any]) -> str:

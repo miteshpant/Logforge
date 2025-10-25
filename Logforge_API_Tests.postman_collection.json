@@ -2406,6 +2406,543 @@
 					]
 				}
 			]
+		},
+		{
+			"name": "M4 - Security Analytics",
+			"item": [
+				{
+					"name": "Security Health Check",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/security/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"health"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Security Dashboard",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/security/dashboard?time_range=24h",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"dashboard"
+							],
+							"query": [
+								{
+									"key": "time_range",
+									"value": "24h"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Sigma Rules",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/security/sigma-rules",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"sigma-rules"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Sigma Rule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Custom Brute Force Detection\",\n  \"description\": \"Detects brute force login attempts with multiple failed logins\",\n  \"severity\": \"high\",\n  \"author\": \"Security Team\",\n  \"tags\": [\"authentication\", \"brute-force\", \"security\"],\n  \"logsource\": {\n    \"category\": \"authentication\",\n    \"product\": \"linux\"\n  },\n  \"detection\": {\n    \"selection\": {\n      \"event_type\": \"login_failed\",\n      \"status_code\": [401, 403]\n    },\n    \"condition\": \"selection | count(by=[\\\"src_ip\\\"]) > 5\"\n  },\n  \"attack_techniques\": [\"T1110\"],\n  \"kill_chain_phases\": [\"credential-access\"],\n  \"references\": [\"https://attack.mitre.org/techniques/T1110/\"],\n  \"falsepositives\": [\"Legitimate users with expired passwords\"],\n  \"enabled\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/security/sigma-rules",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"sigma-rules"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Sigma Rule",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/security/sigma-rules/bf001",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"sigma-rules",
+								"bf001"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Test Sigma Rule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/security/sigma-rules/bf001/test",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"sigma-rules",
+								"bf001",
+								"test"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Sigma Rule",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Updated Brute Force Detection\",\n  \"description\": \"Updated rule to detect multiple failed login attempts within a short time window\",\n  \"severity\": \"high\",\n  \"author\": \"Security Team\",\n  \"tags\": [\"authentication\", \"security\", \"brute-force\", \"updated\"],\n  \"logsource\": {\n    \"category\": \"authentication\",\n    \"product\": \"linux\"\n  },\n  \"detection\": {\n    \"selection\": {\n      \"event_type\": \"login_failed\",\n      \"status_code\": [401, 403]\n    },\n    \"timeframe\": \"5m\",\n    \"condition\": \"selection | count() > 10\"\n  },\n  \"attack_techniques\": [\"T1110\"],\n  \"kill_chain_phases\": [\"credential-access\"],\n  \"references\": [\n    \"https://attack.mitre.org/techniques/T1110/\",\n    \"https://www.elastic.co/guide/en/siem/guide/current/prebuilt-rule-0-13-3-potential-brute-force-attack.html\"\n  ],\n  \"falsepositives\": [\n    \"Legitimate user with forgotten password\",\n    \"Service account authentication issues\"\n  ],\n  \"enabled\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/security/sigma-rules/bf001",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"sigma-rules",
+								"bf001"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Sigma Rule",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/security/sigma-rules/bf001",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"sigma-rules",
+								"bf001"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Security Events",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/security/events?limit=50&severity=high",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"events"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "50"
+								},
+								{
+									"key": "severity",
+									"value": "high"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Security Event Status",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"investigating\",\n  \"assigned_to\": \"security_analyst\",\n  \"notes\": [\"Initial investigation started\", \"Checking source IP reputation\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/security/events/{{event_id}}/status?status=investigating&assigned_to=security_analyst",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"events",
+								"{{event_id}}",
+								"status"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "investigating"
+								},
+								{
+									"key": "assigned_to",
+									"value": "security_analyst"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Run Threat Hunting Campaign",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"time_range\": \"24h\",\n  \"severity_filter\": [\"high\", \"critical\"],\n  \"rule_ids\": [\"bf001\", \"ps001\"],\n  \"description\": \"Proactive threat hunting for authentication and PowerShell attacks\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/security/threat-hunting",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"threat-hunting"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Threat Intelligence",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/security/threat-intel?indicator_type=ip",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"threat-intel"
+							],
+							"query": [
+								{
+									"key": "indicator_type",
+									"value": "ip"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Trigger Background Hunting",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/security/background-hunting",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"background-hunting"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List MITRE ATT&CK Techniques",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/security/mitre-attack/techniques",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"mitre-attack",
+								"techniques"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Stream Security Events (SSE)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "text/event-stream",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/security/events/stream",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"events",
+								"stream"
+							]
+						}
+					},
+					"response": []
+				}
+			]
 		}
 	]
 }

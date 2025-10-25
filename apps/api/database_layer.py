@@ -100,8 +100,11 @@ class DatabaseLayer:
     }
     
     # Dangerous operations requiring admin privileges
-    ADMIN_OPERATIONS = ['DROP', 'TRUNCATE', 'DELETE FROM', 'CREATE TABLE']
+    ADMIN_OPERATIONS = ['DROP', 'TRUNCATE', 'CREATE TABLE']
     ADMIN_SERVICES = ['TestService', 'QuotaTestService']  # Services allowed to perform admin operations
+    
+    # Services allowed to perform DELETE operations
+    DELETE_ALLOWED_SERVICES = ['SecurityDAO', 'SecurityService', 'TestService', 'QuotaTestService', 'UserDAO', 'AlertDAO']
     
     # Services allowed to perform UPDATE operations (ALTER TABLE ... UPDATE)
     UPDATE_ALLOWED_SERVICES = ['UserService', 'AlertService', 'SecurityService', 'TestService', 'UserDAO', 'TenantDAO', 'RoleDAO', 'QueryDAO', 'QueryService', 'DashboardDAO', 'DashboardService', 'StorageDAO', 'StorageService', 'AlertDAO', 'SecurityDAO', 'AIDAO', 'ObservabilityDAO', 'EnterpriseDAO', 'SubscriptionDAO', 'QuotaResetService', 'QuotaTestService', 'StorageQuotaSyncService']
@@ -334,6 +337,11 @@ class DatabaseLayer:
             if operation in query_upper:
                 if self.service_name not in self.ADMIN_SERVICES:
                     raise SecurityError(f"Service {self.service_name} not authorized for operation: {operation}")
+        
+        # Check for DELETE operations separately
+        if 'DELETE FROM' in query_upper:
+            if self.service_name not in self.DELETE_ALLOWED_SERVICES:
+                raise SecurityError(f"Service {self.service_name} not authorized for DELETE operations")
         
         # Allow ALTER TABLE ... UPDATE for UPDATE_ALLOWED_SERVICES
         if 'ALTER TABLE' in query_upper and 'UPDATE' in query_upper:

@@ -204,6 +204,139 @@ class SecurityDAO:
             logger.error(f"Failed to get Sigma rule {rule_id}: {e}")
             raise
     
+    async def update_sigma_rule(self, rule_id: str, rule_data: Dict[str, Any], customer_id: str = None) -> bool:
+        """Update Sigma rule in database"""
+        try:
+            # Validate severity level (ClickHouse enum constraint)
+            severity = rule_data.get("severity", "medium")
+            valid_severities = ["low", "medium", "high", "critical"]
+            if severity not in valid_severities:
+                logger.warning(f"Invalid severity '{severity}', defaulting to 'medium'")
+                severity = "medium"
+            
+            # Build rule content JSON from the various rule components
+            rule_content = {
+                "logsource": rule_data.get("logsource", {}),
+                "detection": rule_data.get("detection", {}),
+                "references": rule_data.get("references", []),
+                "falsepositives": rule_data.get("falsepositives", []),
+                "tags": rule_data.get("tags", []),
+                "kill_chain_phases": rule_data.get("kill_chain_phases", []),
+                "author": rule_data.get("author", "logforge"),
+                "date": rule_data.get("date", datetime.now(timezone.utc).strftime("%Y/%m/%d"))
+            }
+            
+            # Build ALTER TABLE UPDATE query with tenant isolation (ClickHouse syntax)
+            if customer_id:
+                query = """
+                ALTER TABLE sigma_rules_mt UPDATE
+                    name = %(name)s,
+                    description = %(description)s,
+                    rule_content = %(rule_content)s,
+                    mitre_techniques = %(mitre_techniques)s,
+                    severity = %(severity)s,
+                    is_enabled = %(is_enabled)s,
+                    updated_at = %(updated_at)s
+                WHERE id = %(rule_id)s AND customer_id = %(customer_id)s
+                """
+                params = {
+                    "rule_id": rule_id,
+                    "customer_id": customer_id,
+                    "name": rule_data.get("title", ""),
+                    "description": rule_data.get("description", ""),
+                    "rule_content": json.dumps(rule_content),
+                    "mitre_techniques": rule_data.get("attack_techniques", []),
+                    "severity": severity,
+                    "is_enabled": 1 if rule_data.get("enabled", True) else 0,
+                    "updated_at": datetime.now(timezone.utc)
+                }
+            else:
+                query = """
+                ALTER TABLE sigma_rules_mt UPDATE
+                    name = %(name)s,
+                    description = %(description)s,
+                    rule_content = %(rule_content)s,
+                    mitre_techniques = %(mitre_techniques)s,
+                    severity = %(severity)s,
+                    is_enabled = %(is_enabled)s,
+                    updated_at = %(updated_at)s
+                WHERE id = %(rule_id)s
+                """
+                params = {
+                    "rule_id": rule_id,
+                    "name": rule_data.get("title", ""),
+                    "description": rule_data.get("description", ""),
+                    "rule_content": json.dumps(rule_content),
+                    "mitre_techniques": rule_data.get("attack_techniques", []),
+                    "severity": severity,
+                    "is_enabled": 1 if rule_data.get("enabled", True) else 0,
+                    "updated_at": datetime.now(timezone.utc)
+                }
+            
+            # First check if the rule exists
+            if customer_id:
+                check_query = """
+                SELECT COUNT(*) as count FROM sigma_rules_mt 
+                WHERE id = %(rule_id)s AND customer_id = %(customer_id)s
+                """
+                check_params = {"rule_id": rule_id, "customer_id": customer_id}
+            else:
+                check_query = "SELECT COUNT(*) as count FROM sigma_rules_mt WHERE id = %(rule_id)s"
+                check_params = {"rule_id": rule_id}
+            
+            check_result = await self.db.fetch_one(check_query, check_params)
+            if not check_result or check_result.get("count", 0) == 0:
+                logger.warning(f"Sigma rule not found for update: {rule_id}")
+                return False
+            
+            # Execute the update
+            await self.db.execute_query(query, params)
+            logger.debug(f"Sigma rule updated: {rule_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to update Sigma rule {rule_id}: {e}")
+            raise
+    
+    async def delete_sigma_rule(self, rule_id: str, customer_id: str = None) -> bool:
+        """Delete Sigma rule from database (with tenant isolation)"""
+        try:
+            # First check if the rule exists
+            if customer_id:
+                check_query = """
+                SELECT COUNT(*) as count FROM sigma_rules_mt 
+                WHERE id = %(rule_id)s AND customer_id = %(customer_id)s
+                """
+                check_params = {"rule_id": rule_id, "customer_id": customer_id}
+            else:
+                check_query = "SELECT COUNT(*) as count FROM sigma_rules_mt WHERE id = %(rule_id)s"
+                check_params = {"rule_id": rule_id}
+            
+            check_result = await self.db.fetch_one(check_query, check_params)
+            if not check_result or check_result.get("count", 0) == 0:
+                logger.warning(f"Sigma rule not found for deletion: {rule_id}")
+                return False
+            
+            # Build DELETE query with tenant isolation
+            if customer_id:
+                query = """
+                DELETE FROM sigma_rules_mt 
+                WHERE id = %(rule_id)s AND customer_id = %(customer_id)s
+                """
+                params = {"rule_id": rule_id, "customer_id": customer_id}
+            else:
+                query = "DELETE FROM sigma_rules_mt WHERE id = %(rule_id)s"
+                params = {"rule_id": rule_id}
+            
+            # Execute the delete using execute_query (ClickHouse accepts DELETE via query)
+            await self.db.execute_query(query, params)
+            logger.debug(f"Sigma rule deleted: {rule_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to delete Sigma rule {rule_id}: {e}")
+            raise
+    
     # Security Events Operations
     
     async def save_security_event(self, event_data: Dict[str, Any]) -> str:

@@ -189,6 +189,7 @@ Alerts Router (alerts.py):
 
 Security Analytics Router (security_api.py) - M4 SIEM:
 ├── GET /v1/security/health             # Security analytics health check
+    
 ├── GET /v1/security/dashboard          # Security overview dashboard with MITRE ATT&CK
 ├── GET /v1/security/sigma-rules        # List all Sigma detection rules
 ├── POST /v1/security/sigma-rules       # Create custom Sigma rules
