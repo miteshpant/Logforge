@@ -489,6 +489,7 @@ class AdvancedQueryEngine:
         """Process aggregation query results"""
         aggregations = {}
         time_series_data = []
+        grouped_data = []
         
         for row in rows:
             row_data = {}
@@ -512,13 +513,23 @@ class AdvancedQueryEngine:
             
             if query.time_series:
                 time_series_data.append(row_data)
+            elif query.group_by:
+                # For group_by queries, collect all rows
+                grouped_data.append(row_data)
             else:
-                # For non-time-series, just use the first row
+                # For simple aggregations without group_by, just use the first row
                 if not aggregations:
                     aggregations = row_data
         
         if query.time_series:
             aggregations['time_series'] = time_series_data
+        elif query.group_by:
+            # Return grouped data as logs since each row represents a group
+            return QueryResponse(
+                logs=grouped_data,
+                aggregations={},
+                total_count=len(grouped_data)
+            )
         
         return QueryResponse(
             logs=[],
