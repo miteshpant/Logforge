@@ -133,6 +133,28 @@ class SecurityService:
     def __init__(self):
         self.security_dao = SecurityDAO()
         self._initialize_default_rules()
+        
+        # Initialize event publisher (lazy loading to avoid circular dependencies)
+        self._security_publisher = None
+    
+    async def _get_security_publisher(self):
+        """Get security event publisher (lazy loading to avoid circular dependencies)"""
+        if self._security_publisher is None:
+            try:
+                # Import here to avoid circular dependency
+                from events.publishers.security_publisher import SecurityEventPublisher
+                import dependencies
+                
+                # Use global event publisher manager
+                if dependencies.event_publisher_manager:
+                    self._security_publisher = SecurityEventPublisher(dependencies.event_publisher_manager)
+                else:
+                    logger.warning("Event publisher manager not available")
+                    
+            except Exception as e:
+                logger.error(f"Failed to initialize security event publisher: {e}")
+                
+        return self._security_publisher
     
     def _initialize_default_rules(self):
         """Initialize with default Sigma rules and threat intelligence"""
@@ -182,6 +204,31 @@ class SecurityService:
             
             # Save to database
             rule_id = await self.security_dao.save_sigma_rule(rule_data)
+            
+            # Publish event after successful creation
+            try:
+                publisher = await self._get_security_publisher()
+                if publisher:
+                    # Create rule data for event
+                    event_rule_data = {
+                        "id": rule_id,
+                        "name": rule_data.get("title"),
+                        "title": rule_data.get("title"),
+                        "severity": rule_data.get("severity", "medium"),
+                        "is_enabled": rule_data.get("enabled", True),
+                        "mitre_techniques": [str(t) for t in attack_techniques],
+                        "kill_chain_phases": rule_data.get("kill_chain_phases", []),
+                        "logsource": rule_data.get("logsource", {}),
+                        "tags": rule_data.get("tags", []),
+                        **rule_data
+                    }
+                    await publisher.publish_sigma_rule_created(
+                        customer_id=rule_data.get("customer_id"),
+                        rule_data=event_rule_data,
+                        created_by="api-user"
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to publish Sigma rule created event: {e}")
             
             logger.info(f"Sigma rule created: {rule_id}")
             return rule_id
@@ -275,7 +322,44 @@ class SecurityService:
     async def update_sigma_rule(self, rule_id: str, rule_data: Dict[str, Any], customer_id: str = None) -> bool:
         """Update existing Sigma rule"""
         try:
-            return await self.security_dao.update_sigma_rule(rule_id, rule_data, customer_id)
+            logger.info(f"🔧 Starting Sigma rule update for rule {rule_id} (customer: {customer_id})")
+            
+            success = await self.security_dao.update_sigma_rule(rule_id, rule_data, customer_id)
+            logger.info(f"🔧 DAO update result for rule {rule_id}: {success}")
+            
+            if success:
+                # Publish event after successful update
+                try:
+                    logger.info(f"🔧 Getting security publisher for update event")
+                    publisher = await self._get_security_publisher()
+                    if publisher:
+                        logger.info(f"🔧 Publisher obtained, fetching updated rule data for {rule_id}")
+                        
+                        # CRITICAL FIX: Wait for ClickHouse UPDATE to be fully applied
+                        # ClickHouse ALTER TABLE UPDATE is asynchronous by default
+                        import asyncio
+                        await asyncio.sleep(0.1)  # 100ms delay for consistency
+                        
+                        # Get updated rule data for event
+                        updated_rule = await self.security_dao.get_sigma_rule_by_id(rule_id, customer_id)
+                        if updated_rule:
+                            logger.info(f"🔧 Publishing Sigma rule updated event for {rule_id} (customer: {customer_id})")
+                            event_published = await publisher.publish_sigma_rule_updated(
+                                customer_id=customer_id,
+                                rule_data=updated_rule,
+                                updated_by="api-user"
+                            )
+                            logger.info(f"🔧 Sigma rule updated event published: {event_published} for rule {rule_id}")
+                        else:
+                            logger.warning(f"🔧 Could not fetch updated rule data for {rule_id} after update")
+                    else:
+                        logger.warning(f"🔧 No security publisher available for update event")
+                except Exception as e:
+                    logger.warning(f"🔧 Failed to publish Sigma rule updated event for {rule_id}: {e}")
+            else:
+                logger.warning(f"🔧 DAO update failed for rule {rule_id}, no event will be published")
+            
+            return success
             
         except Exception as e:
             logger.error(f"Failed to update Sigma rule {rule_id}: {e}")
@@ -284,7 +368,26 @@ class SecurityService:
     async def delete_sigma_rule(self, rule_id: str, customer_id: str = None) -> bool:
         """Delete Sigma rule"""
         try:
-            return await self.security_dao.delete_sigma_rule(rule_id, customer_id)
+            # Get rule data before deletion for event
+            rule_data = await self.security_dao.get_sigma_rule_by_id(rule_id, customer_id)
+            
+            success = await self.security_dao.delete_sigma_rule(rule_id, customer_id)
+            
+            if success and rule_data:
+                # Publish event after successful deletion
+                try:
+                    publisher = await self._get_security_publisher()
+                    if publisher:
+                        await publisher.publish_sigma_rule_deleted(
+                            customer_id=customer_id,
+                            rule_id=rule_id,
+                            rule_name=rule_data.get("name") or rule_data.get("title"),
+                            deleted_by="api-user"
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to publish Sigma rule deleted event: {e}")
+            
+            return success
             
         except Exception as e:
             logger.error(f"Failed to delete Sigma rule {rule_id}: {e}")

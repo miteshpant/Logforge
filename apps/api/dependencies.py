@@ -50,6 +50,7 @@ event_subscriber_manager = None
 log_event_publisher = None
 alert_event_publisher = None
 alert_rule_cache_instance = None
+sigma_rule_cache_instance = None
 
 def get_clickhouse_client():
     """Get or create ClickHouse client"""
@@ -81,6 +82,11 @@ def get_event_publisher_manager():
     """Get event publisher manager instance"""
     global event_publisher_manager
     return event_publisher_manager
+
+def get_sigma_rule_cache():
+    """Get sigma rule cache instance"""
+    global sigma_rule_cache_instance
+    return sigma_rule_cache_instance
 
 # process_log_batch() function removed - now handled by event_processing.py
 
@@ -290,9 +296,9 @@ async def initialize_engines():
             log_event_publisher = None
             alert_event_publisher = None
 
-        # Initialize Redis and Alert Rule Cache
+        # Initialize Redis and Rule Caches (Alert + Sigma)
         try:
-            logger.info("🔄 Initializing Redis and Alert Rule Cache...")
+            logger.info("🔄 Initializing Redis and Rule Caches...")
             
             # Initialize Redis connection
             from events.management.cache import init_redis
@@ -313,6 +319,21 @@ async def initialize_engines():
             # Make alert rule cache globally available
             global alert_rule_cache_instance
             alert_rule_cache_instance = alert_rule_cache
+            
+            # Initialize Sigma Rule Cache and load rules from database
+            from events.management.cache.sigma_rule_cache import SigmaRuleCache
+            sigma_rule_cache = SigmaRuleCache(redis_manager)
+            
+            # Load all sigma rules from database into Redis cache
+            sigma_cache_success = await sigma_rule_cache.initialize_cache_from_db()
+            if sigma_cache_success:
+                logger.info("✅ Sigma rule cache initialized and loaded from database")
+            else:
+                logger.warning("⚠️ Sigma rule cache initialization completed with some failures")
+            
+            # Make sigma rule cache globally available
+            global sigma_rule_cache_instance
+            sigma_rule_cache_instance = sigma_rule_cache
             
         except Exception as e:
             logger.error(f"❌ Redis/Alert cache initialization failed: {e}")

@@ -119,7 +119,8 @@ from .handlers import (
     AlertEventHandler,
     LogEventHandler,
     UsageEventHandler,
-    SystemEventHandler
+    SystemEventHandler,
+    SecurityEventHandler
     # UIEventHandler
 )
 
@@ -547,7 +548,8 @@ class EventSubscriberManager:
             UsageEventHandler(),
             AlertEventHandler(),
             LogEventHandler(),
-            SystemEventHandler()
+            SystemEventHandler(),
+            SecurityEventHandler()
             # UIEventHandler()
         ]
 

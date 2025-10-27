@@ -138,39 +138,174 @@ async def stream_traces(
 async def stream_security_events(
     customer_id: str = Header(..., alias="X-Customer-ID")
 ):
-    """Stream real-time security events"""
+    """Stream real-time security events - Pure event-driven, no polling"""
     try:
-        security_service = SecurityService()
+        from events.subscribers import KafkaEventSubscriber
+        from events.constants import (
+            EVENT_SIGMA_RULE_CREATED, EVENT_SIGMA_RULE_UPDATED, EVENT_SIGMA_RULE_DELETED,
+            EVENT_SIGMA_RULE_ENABLED, EVENT_SIGMA_RULE_DISABLED,
+            EVENT_SECURITY_DETECTION_TRIGGERED, EVENT_SECURITY_DETECTION_RESOLVED, EVENT_SECURITY_DETECTION_ACKNOWLEDGED,
+            TOPIC_SYSTEM_EVENTS, TOPIC_UI_REALTIME_EVENTS
+        )
         
-        async def generate_security_events():
-            while True:
+        # Security event types we want to stream to UI
+        security_events = [
+            EVENT_SIGMA_RULE_CREATED,
+            EVENT_SIGMA_RULE_UPDATED,
+            EVENT_SIGMA_RULE_DELETED,
+            EVENT_SIGMA_RULE_ENABLED,
+            EVENT_SIGMA_RULE_DISABLED,
+            EVENT_SECURITY_DETECTION_TRIGGERED,
+            EVENT_SECURITY_DETECTION_RESOLVED,
+            EVENT_SECURITY_DETECTION_ACKNOWLEDGED
+        ]
+        
+        # Create a queue to receive events from the custom handler
+        event_queue = asyncio.Queue()
+        
+        # Custom handler class to capture security events for this streaming session
+        class StreamingSecurityHandler:
+            """Custom handler to capture security events for streaming"""
+            
+            def __init__(self, target_customer_id: str, event_queue: asyncio.Queue):
+                self.target_customer_id = target_customer_id
+                self.event_queue = event_queue
+                
+            async def handle(self, event) -> bool:
+                """Handle events and put relevant ones in the queue"""
                 try:
-                    # Get recent security events
-                    events = await security_service.get_security_events(
-                        customer_id=customer_id,
-                        limit=20,
-                        status_filter=None
-                    )
-                    
-                    # Filter for recent events (last 5 minutes)
-                    recent_events = [
-                        event for event in events
-                        if datetime.fromisoformat(event.get('timestamp', '1970-01-01')) > 
-                           datetime.now() - timedelta(minutes=5)
-                    ]
-                    
-                    if recent_events:
-                        yield format_sse_message("security_events", recent_events)
-                    
-                    await asyncio.sleep(15)  # Update every 15 seconds
+                    # Only handle events for our target customer and security event types
+                    if (hasattr(event, 'customer_id') and 
+                        (event.customer_id == self.target_customer_id or event.customer_id is None) and  # Include default rules
+                        hasattr(event, 'event_type') and
+                        event.event_type in security_events):
+                        
+                        # Put event in queue for streaming
+                        await self.event_queue.put(event)
+                        logger.debug(f"Security event queued for streaming: {event.event_type}")
+                        return True
+                        
+                    return True
                     
                 except Exception as e:
-                    logger.error("Error streaming security events", error=str(e), customer_id=customer_id)
-                    yield format_sse_message("error", {"message": f"Security events streaming error: {str(e)}"})
-                    break
+                    logger.error(f"Error in security streaming handler: {e}")
+                    return False
+                    
+            def get_handler_name(self) -> str:
+                return f"streaming_security_handler_{self.target_customer_id}"
+                
+            def get_supported_event_types(self) -> List[str]:
+                return security_events
+
+        async def generate_real_time_security_events():
+            """Generate real-time security events as they occur"""
+            subscriber = None
+            try:
+                from events.subscribers import SubscriberConfig
+                
+                # Create subscriber config for security events
+                config = SubscriberConfig(
+                    name=f"streaming_security_{customer_id}",
+                    consumer_group=f"streaming_security_{customer_id}",
+                    topics=[TOPIC_SYSTEM_EVENTS],  # Security events go to system-events topic
+                    event_types=security_events,
+                    enabled=True,
+                    max_batch_size=10,
+                    max_parallel_workers=1
+                )
+                
+                # Create Kafka subscriber for security events
+                subscriber = KafkaEventSubscriber(config)
+                
+                # Create and register our custom streaming handler
+                streaming_handler = StreamingSecurityHandler(customer_id, event_queue)
+                subscriber.register_handler(streaming_handler)
+                
+                logger.info(f"Starting real-time security stream for customer {customer_id}")
+                
+                # Send initial connection confirmation
+                yield format_sse_message("connected", {
+                    "status": "streaming_started",
+                    "customer_id": customer_id,
+                    "event_types": security_events,
+                    "timestamp": datetime.now().isoformat()
+                })
+                
+                # Start the subscriber
+                await subscriber.start()
+                
+                # Listen for events from our queue
+                while True:
+                    try:
+                        # Wait for events with a timeout to allow for graceful shutdown
+                        event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
+                        
+                        # Format security event for streaming
+                        stream_data = {
+                            "event_type": event.event_type,
+                            "customer_id": event.customer_id,
+                            "timestamp": event.metadata.created_at if hasattr(event, 'metadata') and event.metadata else datetime.now().isoformat(),
+                        }
+                        
+                        # Add event-specific data based on event type
+                        if event.event_type.startswith("security.sigma.rule."):
+                            stream_data.update({
+                                "rule_id": event.data.get("rule_id"),
+                                "rule_name": event.data.get("rule_name"),
+                                "severity": event.data.get("severity"),
+                                "enabled": event.data.get("enabled"),
+                                "is_default_rule": event.data.get("is_default_rule", False),
+                                "rule_data": event.data.get("rule_data", {})
+                            })
+                        elif event.event_type.startswith("security.detection."):
+                            stream_data.update({
+                                "detection_id": event.data.get("detection_id"),
+                                "rule_id": event.data.get("rule_id"),
+                                "rule_name": event.data.get("rule_name"),
+                                "severity": event.data.get("severity"),
+                                "confidence": event.data.get("confidence"),
+                                "matched_fields": event.data.get("matched_fields", {}),
+                                "attack_techniques": event.data.get("attack_techniques", [])
+                            })
+                        
+                        # Stream the event immediately
+                        yield format_sse_message("security_event", stream_data, getattr(event.metadata, 'event_id', None) if hasattr(event, 'metadata') else None)
+                        
+                        logger.debug(
+                            "Security event streamed to UI",
+                            customer_id=customer_id,
+                            event_type=event.event_type,
+                            rule_id=stream_data.get("rule_id")
+                        )
+                        
+                    except asyncio.TimeoutError:
+                        # Send keepalive message
+                        yield format_sse_message("keepalive", {
+                            "timestamp": datetime.now().isoformat(),
+                            "status": "listening"
+                        })
+                        
+                    except Exception as e:
+                        logger.error(f"Error processing security event for streaming: {e}")
+                        yield format_sse_message("error", {"message": f"Event processing error: {str(e)}"})
+                        
+            except Exception as e:
+                logger.error(f"Error in real-time security stream for customer {customer_id}: {e}")
+                yield format_sse_message("error", {
+                    "message": f"Stream error: {str(e)}",
+                    "timestamp": datetime.now().isoformat()
+                })
+            finally:
+                # Clean up subscriber
+                if subscriber:
+                    try:
+                        await subscriber.stop()
+                        logger.info(f"Stopped security subscriber for customer {customer_id}")
+                    except Exception as e:
+                        logger.error(f"Error stopping security subscriber: {e}")
         
         return StreamingResponse(
-            generate_security_events(),
+            generate_real_time_security_events(),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -181,8 +316,8 @@ async def stream_security_events(
         )
         
     except Exception as e:
-        logger.error("Failed to start security events stream", error=str(e), customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Failed to start security events stream: {str(e)}")
+        logger.error("Failed to start real-time security stream", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to start security stream: {str(e)}")
 
 
 @router.get("/alerts")

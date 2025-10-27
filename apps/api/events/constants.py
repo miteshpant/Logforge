@@ -199,6 +199,34 @@ UI_REALTIME_EVENT_TYPES = [
 ]
 
 # ============================================================================
+# SECURITY & SIGMA RULE EVENT TYPES
+# ============================================================================
+
+# Sigma rule management
+EVENT_SIGMA_RULE_CREATED = "security.sigma.rule.created"
+EVENT_SIGMA_RULE_UPDATED = "security.sigma.rule.updated"
+EVENT_SIGMA_RULE_DELETED = "security.sigma.rule.deleted"
+EVENT_SIGMA_RULE_ENABLED = "security.sigma.rule.enabled"
+EVENT_SIGMA_RULE_DISABLED = "security.sigma.rule.disabled"
+
+# Security event detections
+EVENT_SECURITY_DETECTION_TRIGGERED = "security.detection.triggered"
+EVENT_SECURITY_DETECTION_RESOLVED = "security.detection.resolved"
+EVENT_SECURITY_DETECTION_ACKNOWLEDGED = "security.detection.acknowledged"
+
+# All security event types
+SECURITY_EVENT_TYPES = [
+    EVENT_SIGMA_RULE_CREATED,
+    EVENT_SIGMA_RULE_UPDATED,
+    EVENT_SIGMA_RULE_DELETED,
+    EVENT_SIGMA_RULE_ENABLED,
+    EVENT_SIGMA_RULE_DISABLED,
+    EVENT_SECURITY_DETECTION_TRIGGERED,
+    EVENT_SECURITY_DETECTION_RESOLVED,
+    EVENT_SECURITY_DETECTION_ACKNOWLEDGED
+]
+
+# ============================================================================
 # SYSTEM EVENT TYPES
 # ============================================================================
 
@@ -231,7 +259,16 @@ SYSTEM_EVENT_TYPES = [
     EVENT_SECURITY_RULE_TRIGGERED,
     EVENT_AUTH_FAILED_ATTEMPTS,
     EVENT_SYSTEM_ERROR_OCCURRED,
-    EVENT_SYSTEM_PERFORMANCE_METRIC
+    EVENT_SYSTEM_PERFORMANCE_METRIC,
+    # Security/Sigma rule events
+    EVENT_SIGMA_RULE_CREATED,
+    EVENT_SIGMA_RULE_UPDATED,
+    EVENT_SIGMA_RULE_DELETED,
+    EVENT_SIGMA_RULE_ENABLED,
+    EVENT_SIGMA_RULE_DISABLED,
+    EVENT_SECURITY_DETECTION_TRIGGERED,
+    EVENT_SECURITY_DETECTION_RESOLVED,
+    EVENT_SECURITY_DETECTION_ACKNOWLEDGED
 ]
 
 # ============================================================================
@@ -348,6 +385,16 @@ EVENT_TYPE_TO_TOPIC = {
     EVENT_UI_ALERT_COUNT_UPDATED: TOPIC_UI_REALTIME_EVENTS,
     EVENT_UI_RULE_STATUS_CHANGED: TOPIC_UI_REALTIME_EVENTS,
 
+    # Security/Sigma rule events (route to system events topic)
+    EVENT_SIGMA_RULE_CREATED: TOPIC_SYSTEM_EVENTS,
+    EVENT_SIGMA_RULE_UPDATED: TOPIC_SYSTEM_EVENTS,
+    EVENT_SIGMA_RULE_DELETED: TOPIC_SYSTEM_EVENTS,
+    EVENT_SIGMA_RULE_ENABLED: TOPIC_SYSTEM_EVENTS,
+    EVENT_SIGMA_RULE_DISABLED: TOPIC_SYSTEM_EVENTS,
+    EVENT_SECURITY_DETECTION_TRIGGERED: TOPIC_SYSTEM_EVENTS,
+    EVENT_SECURITY_DETECTION_RESOLVED: TOPIC_SYSTEM_EVENTS,
+    EVENT_SECURITY_DETECTION_ACKNOWLEDGED: TOPIC_SYSTEM_EVENTS,
+
     # System events
     EVENT_SYSTEM_HEALTH_CHECK: TOPIC_SYSTEM_EVENTS,
     EVENT_SYSTEM_SERVICE_STARTED: TOPIC_SYSTEM_EVENTS,
@@ -413,6 +460,7 @@ ALL_EVENT_TYPES = (
     LOG_EVENT_TYPES +
     TENANT_EVENT_TYPES +
     UI_REALTIME_EVENT_TYPES +
+    SECURITY_EVENT_TYPES +
     SYSTEM_EVENT_TYPES
 )
 
@@ -500,3 +548,8 @@ EVENT_PROCESSING_INTERVAL_SECONDS = 10  # Process events every 10 seconds
 ALERT_RULE_CACHE_PREFIX = "alerts:rules:"
 ALERT_COOLDOWN_CACHE_PREFIX = "alerts:cooldown:"
 ALERT_CACHE_METADATA_KEY = "alerts:cache:metadata"
+
+# Sigma rule cache keys  
+SIGMA_RULE_CACHE_PREFIX = "security:sigma:rules:"
+SIGMA_RULE_CACHE_METADATA_KEY = "security:sigma:cache:metadata"
+SIGMA_DEFAULT_RULES_CACHE_KEY = "security:sigma:default:rules"
