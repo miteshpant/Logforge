@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 class RedisManager:
     """
     Centralized Redis connection manager for alert rule caching and event processing.
-    
+
     Features:
     - Connection pooling for performance
     - Automatic reconnection on failures
@@ -36,8 +36,8 @@ class RedisManager:
     - TTL management for cache expiration
     - Health monitoring
     """
-    
-    def __init__(self, 
+
+    def __init__(self,
                  host: Optional[str] = None,
                  port: Optional[int] = None,
                  db: Optional[int] = None,
@@ -47,7 +47,7 @@ class RedisManager:
                  retry_attempts: Optional[int] = None):
         """
         Initialize Redis manager with connection parameters from config.
-        
+
         Args:
             host: Redis server host (defaults to config value)
             port: Redis server port (defaults to config value)
@@ -59,7 +59,7 @@ class RedisManager:
         """
         # Load configuration
         config = load_config()
-        
+
         self.host = host or config.get("redis_host", REDIS_DEFAULT_HOST)
         self.port = port or config.get("redis_port", REDIS_DEFAULT_PORT)
         self.db = db or config.get("redis_db", REDIS_DEFAULT_DB)
@@ -67,15 +67,15 @@ class RedisManager:
         self.max_connections = max_connections or REDIS_MAX_CONNECTIONS
         self.socket_timeout = socket_timeout or REDIS_SOCKET_TIMEOUT
         self.retry_attempts = retry_attempts or REDIS_RETRY_ATTEMPTS
-        
+
         self._pool: Optional[redis.ConnectionPool] = None
         self._client: Optional[redis.Redis] = None
         self._connected = False
-        
+
     async def connect(self) -> bool:
         """
         Establish Redis connection with retry logic.
-        
+
         Returns:
             True if connection successful, False otherwise
         """
@@ -91,22 +91,22 @@ class RedisManager:
                 retry_on_timeout=True,
                 decode_responses=True  # Automatically decode bytes to strings
             )
-            
+
             # Create Redis client
             self._client = redis.Redis(connection_pool=self._pool)
-            
+
             # Test connection
             await self._client.ping()
             self._connected = True
-            
+
             logger.info(f"✅ Redis connected successfully to {self.host}:{self.port}/{self.db}")
             return True
-            
+
         except Exception as e:
             logger.error(f"❌ Redis connection failed: {e}")
             self._connected = False
             return False
-    
+
     async def disconnect(self):
         """Close Redis connection and cleanup resources."""
         try:
@@ -118,22 +118,22 @@ class RedisManager:
             logger.info("Redis connection closed")
         except Exception as e:
             logger.error(f"Error closing Redis connection: {e}")
-    
+
     @asynccontextmanager
     async def get_client(self):
         """
         Context manager for Redis client with automatic reconnection.
-        
+
         Usage:
             async with redis_manager.get_client() as client:
                 await client.set("key", "value")
         """
         if not self._connected or not self._client:
             await self.connect()
-            
+
         if not self._connected:
             raise ConnectionError("Redis connection not available")
-            
+
         try:
             yield self._client
         except redis.ConnectionError as e:
@@ -143,11 +143,11 @@ class RedisManager:
                 yield self._client
             else:
                 raise ConnectionError("Redis reconnection failed")
-    
+
     async def health_check(self) -> Dict[str, Any]:
         """
         Perform Redis health check.
-        
+
         Returns:
             Health status information
         """
@@ -156,7 +156,7 @@ class RedisManager:
                 start_time = datetime.now()
                 await client.ping()
                 latency_ms = (datetime.now() - start_time).total_seconds() * 1000
-                
+
                 info = await client.info()
                 return {
                     "status": "healthy",
@@ -173,17 +173,17 @@ class RedisManager:
                 "error": str(e),
                 "latency_ms": None
             }
-    
+
     # Key-Value Operations
     async def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
         """
         Set a key-value pair with optional TTL.
-        
+
         Args:
             key: Redis key
             value: Value to store (will be JSON serialized)
             ttl: Time to live in seconds
-            
+
         Returns:
             True if successful
         """
@@ -192,23 +192,24 @@ class RedisManager:
                 # Serialize complex objects to JSON
                 if isinstance(value, (dict, list)):
                     value = json.dumps(value, default=str)
-                
+
                 if ttl:
                     return await client.setex(key, ttl, value)
                 else:
                     return await client.set(key, value)
+                logger.info(f"set cuccessfully {key} to {value}")
         except Exception as e:
             logger.error(f"Redis SET failed for key {key}: {e}")
             return False
-    
+
     async def get(self, key: str, default: Any = None) -> Any:
         """
         Get value by key with JSON deserialization.
-        
+
         Args:
             key: Redis key
             default: Default value if key not found
-            
+
         Returns:
             Stored value or default
         """
@@ -217,7 +218,7 @@ class RedisManager:
                 value = await client.get(key)
                 if value is None:
                     return default
-                
+
                 # Try to deserialize JSON
                 try:
                     return json.loads(value)
@@ -226,14 +227,14 @@ class RedisManager:
         except Exception as e:
             logger.error(f"Redis GET failed for key {key}: {e}")
             return default
-    
+
     async def delete(self, *keys: str) -> int:
         """
         Delete one or more keys.
-        
+
         Args:
             keys: Keys to delete
-            
+
         Returns:
             Number of keys deleted
         """
@@ -243,7 +244,7 @@ class RedisManager:
         except Exception as e:
             logger.error(f"Redis DELETE failed for keys {keys}: {e}")
             return 0
-    
+
     async def exists(self, key: str) -> bool:
         """Check if key exists."""
         try:
@@ -252,7 +253,7 @@ class RedisManager:
         except Exception as e:
             logger.error(f"Redis EXISTS failed for key {key}: {e}")
             return False
-    
+
     async def expire(self, key: str, ttl: int) -> bool:
         """Set TTL for existing key."""
         try:
@@ -261,7 +262,7 @@ class RedisManager:
         except Exception as e:
             logger.error(f"Redis EXPIRE failed for key {key}: {e}")
             return False
-    
+
     # Hash Operations (for structured data)
     async def hset(self, key: str, field: str, value: Any) -> bool:
         """Set hash field."""
@@ -273,7 +274,7 @@ class RedisManager:
         except Exception as e:
             logger.error(f"Redis HSET failed for {key}.{field}: {e}")
             return False
-    
+
     async def hget(self, key: str, field: str, default: Any = None) -> Any:
         """Get hash field value."""
         try:
@@ -281,7 +282,7 @@ class RedisManager:
                 value = await client.hget(key, field)
                 if value is None:
                     return default
-                
+
                 try:
                     return json.loads(value)
                 except (json.JSONDecodeError, TypeError):
@@ -289,13 +290,13 @@ class RedisManager:
         except Exception as e:
             logger.error(f"Redis HGET failed for {key}.{field}: {e}")
             return default
-    
+
     async def hgetall(self, key: str) -> Dict[str, Any]:
         """Get all hash fields."""
         try:
             async with self.get_client() as client:
                 data = await client.hgetall(key)
-                
+
                 # Try to deserialize JSON values
                 result = {}
                 for field, value in data.items():
@@ -303,12 +304,12 @@ class RedisManager:
                         result[field] = json.loads(value)
                     except (json.JSONDecodeError, TypeError):
                         result[field] = value
-                        
+
                 return result
         except Exception as e:
             logger.error(f"Redis HGETALL failed for key {key}: {e}")
             return {}
-    
+
     async def hdel(self, key: str, *fields: str) -> int:
         """Delete hash fields."""
         try:
@@ -317,7 +318,7 @@ class RedisManager:
         except Exception as e:
             logger.error(f"Redis HDEL failed for {key}.{fields}: {e}")
             return 0
-    
+
     # List Operations (for queues)
     async def lpush(self, key: str, *values: Any) -> int:
         """Push values to left of list."""
@@ -333,7 +334,7 @@ class RedisManager:
         except Exception as e:
             logger.error(f"Redis LPUSH failed for key {key}: {e}")
             return 0
-    
+
     async def rpop(self, key: str, default: Any = None) -> Any:
         """Pop value from right of list."""
         try:
@@ -341,7 +342,7 @@ class RedisManager:
                 value = await client.rpop(key)
                 if value is None:
                     return default
-                
+
                 try:
                     return json.loads(value)
                 except (json.JSONDecodeError, TypeError):
@@ -349,7 +350,7 @@ class RedisManager:
         except Exception as e:
             logger.error(f"Redis RPOP failed for key {key}: {e}")
             return default
-    
+
     # Pattern Operations
     async def keys(self, pattern: str = "*") -> List[str]:
         """Get keys matching pattern."""
@@ -359,7 +360,7 @@ class RedisManager:
         except Exception as e:
             logger.error(f"Redis KEYS failed for pattern {pattern}: {e}")
             return []
-    
+
     async def scan_keys(self, pattern: str = "*", count: int = 100) -> List[str]:
         """Efficiently scan keys matching pattern."""
         try:
@@ -375,7 +376,7 @@ class RedisManager:
         except Exception as e:
             logger.error(f"Redis SCAN failed for pattern {pattern}: {e}")
             return []
-    
+
     # Utility Methods
     async def flush_pattern(self, pattern: str) -> int:
         """Delete all keys matching pattern."""

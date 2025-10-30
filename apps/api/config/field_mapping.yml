@@ -1,0 +1,395 @@
+# Sigma Rule Field Mapping Configuration
+# Maps standard MITRE/Sigma field names to common customer log field variations
+# This enables rule matching across different log formats and field naming conventions
+
+version: "1.0"
+description: "Field mapping for Sigma rule evaluation across diverse log formats"
+
+# Standard field to customer field variations mapping
+# Format: "standard_field": ["customer_field1", "customer_field2", ...]
+field_mappings:
+  
+  # Authentication & User Fields
+  user:
+    - "user"
+    - "username" 
+    - "user_name"
+    - "userid"
+    - "user_id"
+    - "login"
+    - "account"
+    - "principal"
+    - "subject"
+    - "actor"
+    
+  src_ip:
+    - "source_ip"
+    - "src_ip"
+    - "sourceip"
+    - "srcip"
+    - "client_ip"
+    - "clientip"
+    - "remote_ip"
+    - "remoteip"
+    - "origin_ip"
+    - "peer_ip"
+    
+  dst_ip:
+    - "destination_ip"
+    - "dest_ip"
+    - "dst_ip"
+    - "destinationip"
+    - "destip"
+    - "target_ip"
+    - "server_ip"
+    - "host_ip"
+    
+  # Log Level & Status
+  log_level:
+    - "level"
+    - "log_level"
+    - "loglevel"
+    - "severity"
+    - "priority"
+    - "criticality"
+    - "alert_level"
+    - "debug_level"
+    - "event_level"
+    
+  status:
+    - "status"
+    - "result"
+    - "outcome"
+    - "response"
+    - "state"
+    - "success"
+    - "failure"
+    - "code"
+    - "return_code"
+    
+  # Message & Description Fields  
+  message:
+    - "message"
+    - "msg"
+    - "description"
+    - "text"
+    - "content"
+    - "body"
+    - "details"
+    - "summary"
+    - "event_data"
+    - "log_message"
+    
+  # Event Classification
+  event_type:
+    - "event_type"
+    - "eventtype" 
+    - "event_name"
+    - "eventname"
+    - "activity"
+    - "action"
+    - "operation"
+    - "category"
+    - "event_category"
+    - "type"
+    
+  # Process & Command Fields
+  process_name:
+    - "process_name"
+    - "processname"
+    - "process"
+    - "executable"
+    - "exe"
+    - "binary"
+    - "program"
+    - "application"
+    - "proc_name"
+    
+  command_line:
+    - "command_line"
+    - "commandline"
+    - "cmd"
+    - "command"
+    - "args"
+    - "arguments"
+    - "parameters"
+    - "cmdline"
+    - "exec_args"
+    
+  process_id:
+    - "process_id"
+    - "processid"
+    - "pid"
+    - "proc_id"
+    - "process_pid"
+    
+  parent_process_id:
+    - "parent_process_id"
+    - "parentprocessid"
+    - "ppid"
+    - "parent_pid"
+    - "parent_proc_id"
+    
+  # File & Path Fields
+  file_name:
+    - "file_name"
+    - "filename"
+    - "file"
+    - "path"
+    - "filepath"
+    - "file_path"
+    - "target_filename"
+    - "object_name"
+    
+  file_path:
+    - "file_path"
+    - "filepath"
+    - "path"
+    - "full_path"
+    - "absolute_path"
+    - "target_path"
+    - "object_path"
+    
+  # Network Fields
+  port:
+    - "port"
+    - "dst_port"
+    - "dest_port"
+    - "destination_port"
+    - "target_port"
+    - "server_port"
+    
+  src_port:
+    - "source_port"
+    - "src_port"
+    - "sourceport"
+    - "srcport"
+    - "client_port"
+    - "origin_port"
+    
+  protocol:
+    - "protocol"
+    - "proto"
+    - "ip_protocol"
+    - "network_protocol"
+    - "transport_protocol"
+    
+  # Service & Application Fields
+  service:
+    - "service"
+    - "service_name"
+    - "servicename"
+    - "daemon"
+    - "application"
+    - "app"
+    - "program"
+    - "subsystem"
+    
+  # Host & System Fields
+  hostname:
+    - "hostname"
+    - "host"
+    - "computer"
+    - "computername"
+    - "machine"
+    - "node"
+    - "system"
+    - "server"
+    
+  # Time Fields
+  timestamp:
+    - "timestamp"
+    - "time"
+    - "datetime"
+    - "event_time"
+    - "log_time"
+    - "created"
+    - "occurred"
+    - "ts"
+    - "@timestamp"
+    
+  # Registry Fields (Windows)
+  registry_key:
+    - "registry_key"
+    - "reg_key"
+    - "key_path"
+    - "registry_path"
+    - "hive_key"
+    
+  registry_value:
+    - "registry_value"
+    - "reg_value"
+    - "value_name"
+    - "registry_value_name"
+    
+  # DNS Fields
+  query:
+    - "query"
+    - "dns_query"
+    - "domain"
+    - "hostname"
+    - "fqdn"
+    - "dns_name"
+    
+  # HTTP/Web Fields
+  url:
+    - "url"
+    - "uri"
+    - "request_url"
+    - "target_url"
+    - "web_url"
+    
+  user_agent:
+    - "user_agent"
+    - "useragent"
+    - "ua"
+    - "client_agent"
+    - "browser"
+    
+  http_method:
+    - "http_method"
+    - "method"
+    - "request_method"
+    - "verb"
+    
+  status_code:
+    - "status_code"
+    - "http_status"
+    - "response_code"
+    - "http_code"
+    - "return_code"
+    - "status"
+    - "result_code"
+    - "error_code"
+    
+  # Hash Fields
+  md5:
+    - "md5"
+    - "md5_hash"
+    - "file_md5"
+    - "hash_md5"
+    
+  sha1:
+    - "sha1"
+    - "sha1_hash"
+    - "file_sha1"
+    - "hash_sha1"
+    
+  sha256:
+    - "sha256"
+    - "sha256_hash"
+    - "file_sha256"
+    - "hash_sha256"
+
+# Value mapping for common field value transformations
+value_mappings:
+  
+  # Map message content patterns to event_type values
+  event_type_patterns:
+    login_failed:
+      - "login.*failed"
+      - "authentication.*failed"
+      - "failed.*login"
+      - "invalid.*password"
+      - "access.*denied"
+      - "login.*unsuccessful"
+      - "auth.*failure"
+      
+    login_success:
+      - "login.*successful"
+      - "login.*success"
+      - "authentication.*successful"
+      - "logged.*in"
+      - "auth.*success"
+      - "session.*created"
+      
+    process_creation:
+      - "process.*created"
+      - "new.*process"
+      - "process.*started"
+      - "executable.*launched"
+      
+    file_creation:
+      - "file.*created"
+      - "new.*file"
+      - "file.*written"
+      
+    network_connection:
+      - "connection.*established"
+      - "network.*connection"
+      - "tcp.*connection"
+      - "socket.*created"
+      
+  # Map log levels to standardized status values
+  status_mappings:
+    failed:
+      - "error"
+      - "err"
+      - "fail"
+      - "failed"
+      - "failure"
+      - "warn"
+      - "warning"
+      - "critical"
+      - "fatal"
+      
+    success:
+      - "info"
+      - "information"
+      - "success"
+      - "ok"
+      - "successful"
+      - "debug"
+      - "trace"
+
+# Product/Service specific field mappings
+product_mappings:
+  
+  windows:
+    event_id: ["EventID", "event_id", "eventid"]
+    channel: ["Channel", "log_name", "logname"]
+    computer: ["Computer", "hostname", "host"]
+    
+  linux:
+    facility: ["facility", "syslog_facility"]
+    severity: ["severity", "syslog_severity"] 
+    tag: ["tag", "syslog_tag", "program"]
+    
+  apache:
+    src_ip: ["remote_addr", "client_ip", "src_ip"]
+    request: ["request", "http_request"]
+    status: ["status", "http_status", "response_code"]
+    
+  nginx:
+    src_ip: ["remote_addr", "client_ip"]
+    http_method: ["request_method", "method"]
+    url: ["request_uri", "uri", "url"]
+    
+  aws:
+    src_ip: ["sourceIPAddress", "source_ip"]
+    user: ["userIdentity", "user"]
+    event_type: ["eventName", "event_type"]
+
+# Configuration for field normalization behavior
+normalization_config:
+  
+  # Whether to apply case-insensitive field matching
+  case_insensitive: true
+  
+  # Whether to try partial field name matching (e.g., "ip" matches "source_ip")
+  partial_matching: false
+  
+  # Maximum number of alternative field names to check per standard field
+  max_alternatives: 10
+  
+  # Whether to cache successful field mappings for performance
+  enable_caching: true
+  
+  # Priority order for field mapping (higher number = higher priority)
+  field_priorities:
+    exact_match: 100
+    case_insensitive_match: 90
+    underscore_variation: 80  # user_name vs username
+    prefix_match: 70         # src_ip vs source_ip
+    suffix_match: 60
+    partial_match: 50

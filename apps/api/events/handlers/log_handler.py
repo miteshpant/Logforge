@@ -12,7 +12,8 @@ from ..constants import (
     EVENT_LOGS_PARSED,
     EVENT_LOGS_INDEXED,
     EVENT_LOGS_ARCHIVED,
-    EVENT_LOGS_DELETED
+    EVENT_LOGS_DELETED,
+    EVENT_LOGS_NORMALIZED
 )
 
 logger = structlog.get_logger(__name__)
@@ -39,56 +40,140 @@ class LogEventHandler(EventHandler):
             return True
 
     async def _handle_logs_batch_ingested(self, event: BaseEvent) -> bool:
-        """Handle logs.batch.ingested event using new event processing"""
+        """Handle logs.batch.ingested event using SmartIngestionService + dual-write"""
         try:
             # Import here to avoid circular dependencies
-            from event_processing import handle_log_ingestion_event
+            from services.smart_ingestion_service import get_smart_ingestion_service
+            from events.management.processors.log_processor import process_dual_write_optimized, track_ingestion_metrics
+            from events.publishers.log_publisher import LogEventPublisher
+            from datetime import datetime
             
-            # Convert event to the format expected by handle_log_ingestion_event
-            # Use the correct field names that match what the publisher sends
-            event_data = {
-                'customer_id': event.customer_id,
-                'logs': event.data.get('logs', []),
-                'ingestion_endpoint': event.data.get('ingestion_endpoint', '/logs'),  # Fix: Use correct field name
-                'source_format': event.data.get('source_format', 'json'),            # Fix: Use correct field name  
-                'log_count': event.data.get('log_count', 0),
-                'bytes_processed': event.data.get('bytes_processed', 0),
-                'processing_time_ms': event.data.get('processing_time_ms', 0),
+            customer_id = event.customer_id
+            raw_logs = event.data.get('logs', [])
+            source_format = event.data.get('source_format', 'json')
+            batch_info = {
                 'batch_id': event.data.get('batch_id', ''),
-                'timestamp': event.data.get('timestamp', '')
+                'endpoint': event.data.get('ingestion_endpoint', '/logs'),
+                'bytes_processed': event.data.get('bytes_processed', 0),
+                'success_count': event.data.get('log_count', 0),
+                'error_count': event.data.get('error_count', 0),
+                'timestamp': event.data.get('timestamp', datetime.utcnow().isoformat()),
+                'source_format': source_format
             }
             
             logger.info(
-                f"Processing log batch ingestion event via event_processing module",
+                "🚀 SMART PROCESSING: Processing log batch ingestion event",
                 event_id=event.metadata.event_id,
-                customer_id=event.customer_id,
-                log_count=event_data['log_count'],
-                bytes_processed=event_data['bytes_processed']
+                customer_id=customer_id,
+                log_count=len(raw_logs),
+                source_format=source_format
             )
             
-            # Process the event using our new modular functions
-            success = await handle_log_ingestion_event(event_data)
+            start_time = datetime.now()
             
-            if success:
-                logger.info(
-                    f"Log batch ingestion event processed successfully",
-                    event_id=event.metadata.event_id,
-                    customer_id=event.customer_id
-                )
-            else:
+            # Step 1: Process logs with SmartIngestionService (field mapping + normalization)
+            smart_service = get_smart_ingestion_service()
+            ingestion_result = await smart_service.process_logs_with_normalization(
+                raw_logs=raw_logs,
+                customer_id=customer_id,
+                source_format=source_format
+            )
+            
+            logger.info(
+                f"Smart normalization completed",
+                event_id=event.metadata.event_id,
+                customer_id=customer_id,
+                processed_logs=len(ingestion_result.log_entries),
+                errors=len(ingestion_result.errors),
+                normalization_time_ms=ingestion_result.processing_time_ms,
+                field_mapping_applied=ingestion_result.field_mapping_applied
+            )
+            
+            # Step 2: Prepare dual-write data
+            raw_table_data, normalized_table_data = await smart_service.prepare_dual_write_data(
+                ingestion_result, customer_id
+            )
+            
+            # Step 3: Perform optimized dual-write to both tables
+            dual_write_success = await process_dual_write_optimized(
+                raw_table_data=raw_table_data,
+                normalized_table_data=normalized_table_data,
+                customer_id=customer_id
+            )
+            
+            if not dual_write_success:
                 logger.error(
-                    f"Log batch ingestion event processing failed",
+                    "Dual-write failed",
                     event_id=event.metadata.event_id,
-                    customer_id=event.customer_id
+                    customer_id=customer_id
                 )
+                return False
             
-            return success
+            # Step 4: Track ingestion metrics
+            total_processing_time = (datetime.now() - start_time).total_seconds() * 1000
+            await track_ingestion_metrics(
+                customer_id=customer_id,
+                endpoint=batch_info.get('endpoint', '/logs'),
+                log_count=len(ingestion_result.log_entries),
+                bytes_processed=batch_info.get('bytes_processed', 0),
+                format_type=source_format,
+                processing_time_ms=int(total_processing_time)
+            )
+            
+            # Step 5: Publish normalized event for alert/sigma processing
+            # Get the publisher manager from somewhere in the system
+            try:
+                from events.manager import get_publisher_manager
+                publisher_manager = get_publisher_manager()
+                log_publisher = LogEventPublisher(publisher_manager)
+                
+                await log_publisher.publish_normalized_batch(
+                    customer_id=customer_id,
+                    normalized_logs=ingestion_result.normalized_data,
+                    batch_info=batch_info,
+                    normalization_time_ms=ingestion_result.processing_time_ms,
+                    correlation_id=event.metadata.correlation_id,
+                    trace_id=event.metadata.trace_id
+                )
+                
+                logger.info(
+                    "📤 NORMALIZED EVENT PUBLISHED: Normalized logs ready for alert/sigma engines",
+                    event_id=event.metadata.event_id,
+                    customer_id=customer_id,
+                    normalized_logs=len(ingestion_result.normalized_data)
+                )
+                
+            except Exception as e:
+                logger.warning(
+                    f"Failed to publish normalized event, but dual-write succeeded: {e}",
+                    event_id=event.metadata.event_id,
+                    customer_id=customer_id
+                )
+                # Don't fail the whole operation if event publishing fails
+            
+            # Performance validation
+            performance_target_met = ingestion_result.processing_time_ms < 2.0
+            
+            logger.info(
+                "🚀 SMART PROCESSING COMPLETE",
+                event_id=event.metadata.event_id,
+                customer_id=customer_id,
+                processed_logs=len(ingestion_result.log_entries),
+                errors=len(ingestion_result.errors),
+                normalization_time_ms=ingestion_result.processing_time_ms,
+                total_time_ms=total_processing_time,
+                field_mapping_applied=ingestion_result.field_mapping_applied,
+                performance_target_met='✅ TARGET MET' if performance_target_met else '⚠️ TARGET MISSED'
+            )
+            
+            return True
             
         except Exception as e:
             logger.error(
-                f"Exception in log batch ingestion handler: {e}",
+                f"🚀 SMART PROCESSING FAILED: {e}",
                 event_id=event.metadata.event_id,
-                customer_id=event.customer_id
+                customer_id=event.customer_id,
+                exc_info=True
             )
             return False
 

@@ -92,9 +92,39 @@ async def handle_log_ingestion_event(event_data: Dict[str, Any]) -> bool:
         except Exception as e:
             logger.error(f"Step 3/3 failed: Ingestion metrics tracking for {customer_id}: {e}")
 
+        # Step 4: Process sigma rules for security detection (NEW)
+        try:
+            from .sigma_processor import sigma_processor
+            
+            # Create event data for sigma processing
+            sigma_event_data = {
+                'customer_id': customer_id,
+                'logs': logs_data,  # Use original logs_data
+                'ingestion_endpoint': endpoint,
+                'source_format': format_type,
+                'log_count': log_count,
+                'bytes_processed': bytes_processed,
+                'processing_time_ms': processing_time_ms
+            }
+            
+            # Process logs through sigma rule engine
+            sigma_success = await sigma_processor.process_log_batch(sigma_event_data)
+            
+            if sigma_success:
+                logger.debug(f"Step 4: Sigma rule processing completed for {customer_id}")
+            else:
+                logger.warning(f"Step 4: Sigma rule processing failed for {customer_id}")
+            
+            # Note: We don't increment success_count for sigma processing as it's optional
+            # The main ingestion should succeed even if sigma processing fails
+            
+        except Exception as e:
+            logger.error(f"Step 4: Sigma rule processing error for {customer_id}: {e}")
+            # Don't fail the main ingestion due to sigma processing errors
+
         # Log overall success
         success_rate = (success_count / total_steps) * 100
-        logger.info(f"Event processing completed for customer {customer_id}: {success_count}/{total_steps} steps successful ({success_rate:.1f}%)")
+        logger.info(f"Event processing completed for customer {customer_id}: {success_count}/{total_steps} core steps successful ({success_rate:.1f}%)")
 
         # Return True if at least log processing succeeded (critical path)
         return success_count >= 1

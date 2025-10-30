@@ -111,6 +111,7 @@ EVENT_LOGS_RESTORED = "logs.restored"
 EVENT_LOGS_PARSED = "log.parsed"
 EVENT_LOGS_INDEXED = "log.indexed"
 EVENT_LOGS_DELETED = "log.deleted"
+EVENT_LOGS_NORMALIZED = "logs.normalized"  # Field-normalized logs for analytics
 
 # All log event types
 LOG_EVENT_TYPES = [
@@ -123,7 +124,8 @@ LOG_EVENT_TYPES = [
     EVENT_LOGS_RESTORED,
     EVENT_LOGS_PARSED,
     EVENT_LOGS_INDEXED,
-    EVENT_LOGS_DELETED
+    EVENT_LOGS_DELETED,
+    EVENT_LOGS_NORMALIZED
 ]
 
 # ============================================================================
@@ -358,6 +360,7 @@ EVENT_TYPE_TO_TOPIC = {
     EVENT_LOGS_PARSED: TOPIC_LOG_EVENTS,
     EVENT_LOGS_INDEXED: TOPIC_LOG_EVENTS,
     EVENT_LOGS_DELETED: TOPIC_LOG_EVENTS,
+    EVENT_LOGS_NORMALIZED: TOPIC_LOG_EVENTS,
 
     # Tenant/User events
     EVENT_TENANT_CREATED: TOPIC_TENANT_EVENTS,

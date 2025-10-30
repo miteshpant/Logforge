@@ -79,7 +79,7 @@ class NotificationChannelConfig:
     enabled: bool = True
     config: Dict[str, Any] = None
     customer_id: Optional[str] = None
-    
+
     def __post_init__(self):
         if self.config is None:
             self.config = {}
@@ -115,7 +115,7 @@ class AlertRule:
     created_at: datetime = None
     updated_at: datetime = None
     created_by: Optional[str] = None
-    
+
     def __post_init__(self):
         if self.conditions is None:
             self.conditions = []
@@ -149,7 +149,7 @@ class AlertInstance:
     notification_count: int = 0
     last_notification_at: Optional[datetime] = None
     tags: List[str] = None
-    
+
     def __post_init__(self):
         if self.trigger_data is None:
             self.trigger_data = {}
@@ -159,7 +159,7 @@ class AlertInstance:
 
 class AlertEngine:
     """M3 Alert Engine - Rule-based alerting system"""
-    
+
     def __init__(self):
         self.query_engine = None
         self.rules: Dict[str, AlertRule] = {}
@@ -168,51 +168,51 @@ class AlertEngine:
         self.rule_states: Dict[str, Dict[str, Any]] = {}  # For stateful rules
         self.evaluation_tasks: Dict[str, asyncio.Task] = {}
         self.is_running = False
-        
+
     async def start(self):
         """Start the alert engine"""
         logger.info("Starting M3 Alert Engine...")
         self.is_running = True
-        
+
         # Load rules and channels from storage
         await self._load_configuration()
-        
+
         # Start evaluation loops for all enabled rules
         for rule in self.rules.values():
             if rule.enabled:
                 await self._start_rule_evaluation(rule)
-        
+
         logger.info("M3 Alert Engine started successfully")
-    
+
     async def stop(self):
         """Stop the alert engine"""
         logger.info("Stopping M3 Alert Engine...")
         self.is_running = False
-        
+
         # Cancel all evaluation tasks
         for task in self.evaluation_tasks.values():
             task.cancel()
-        
+
         # Wait for tasks to complete
         if self.evaluation_tasks:
             await asyncio.gather(*self.evaluation_tasks.values(), return_exceptions=True)
-        
+
         self.evaluation_tasks.clear()
         logger.info("M3 Alert Engine stopped")
-    
+
     async def _load_configuration(self):
         """Load alert rules and notification channels"""
         # Initialize with default notification channels
         await self._create_default_channels()
-        
+
         # Load rules from database
         await self._load_rules_from_database()
-        
+
         # Fall back to example rules only if no database rules found
         if not self.rules:
             logger.warning("No database rules found, creating example rules")
             await self._create_example_rules()
-    
+
     async def _create_default_channels(self):
         """Create default notification channels"""
         default_channels = [
@@ -238,37 +238,37 @@ class AlertEngine:
                 }
             )
         ]
-        
+
         for channel in default_channels:
             self.notification_channels[channel.channel_id] = channel
-        
+
         logger.info(f"Created {len(default_channels)} default notification channels")
-    
+
     async def _load_rules_from_database(self):
         """Load alert rules from database"""
         try:
             # Import here to avoid circular dependencies
             from dao.alert_dao import AlertDAO
             from database_layer import DatabaseLayer
-            
+
             db = DatabaseLayer()
             alert_dao = AlertDAO(db)
-            
+
             # Get all enabled alert rules from database
             query = """
-            SELECT * FROM alert_rules_mt 
+            SELECT * FROM alert_rules_mt
             WHERE is_enabled = 1
             ORDER BY created_at DESC
             """
-            
+
             rows = await db.execute_query(query)
             loaded_count = 0
-            
+
             for row in rows:
                 try:
                     # Parse the condition_config JSON
                     condition_config = json.loads(row.get("condition_config", "{}"))
-                    
+
                     # Convert database row to AlertRule object
                     rule = AlertRule(
                         rule_id=row["id"],
@@ -289,25 +289,25 @@ class AlertEngine:
                         updated_at=row.get("updated_at"),
                         created_by=row.get("created_by")
                     )
-                    
+
                     self.rules[rule.rule_id] = rule
                     loaded_count += 1
-                    
+
                     logger.debug(f"Loaded rule: {rule.name} (ID: {rule.rule_id}, Customer: {rule.customer_id})")
-                    
+
                 except Exception as e:
                     logger.error(f"Failed to load rule {row.get('id', 'unknown')}: {e}")
                     continue
-            
+
             logger.info(f"Successfully loaded {loaded_count} alert rules from database")
-            
+
         except Exception as e:
             logger.error(f"Failed to load rules from database: {e}")
-    
+
     def _parse_conditions(self, conditions_data):
         """Parse conditions from database format to AlertCondition objects"""
         parsed_conditions = []
-        
+
         for condition in conditions_data:
             try:
                 parsed_condition = AlertCondition(
@@ -320,36 +320,36 @@ class AlertEngine:
                 parsed_conditions.append(parsed_condition)
             except Exception as e:
                 logger.warning(f"Failed to parse condition {condition}: {e}")
-                
+
         return parsed_conditions
-    
+
     async def reload_rules_from_database(self):
         """Reload rules from database and update running evaluations"""
         try:
             logger.info("Reloading alert rules from database...")
-            
+
             # Stop all current evaluation tasks
             for task in self.evaluation_tasks.values():
                 task.cancel()
             self.evaluation_tasks.clear()
-            
+
             # Clear current rules
             self.rules.clear()
-            
+
             # Reload from database
             await self._load_rules_from_database()
-            
+
             # Restart evaluation loops for enabled rules
             if self.is_running:
                 for rule in self.rules.values():
                     if rule.enabled:
                         await self._start_rule_evaluation(rule)
-            
+
             logger.info(f"Successfully reloaded {len(self.rules)} alert rules")
-            
+
         except Exception as e:
             logger.error(f"Failed to reload rules from database: {e}")
-    
+
     async def _create_example_rules(self):
         """Create example alert rules for different scenarios"""
         example_rules = [
@@ -379,7 +379,7 @@ class AlertEngine:
                 rule_id="failed-login-attempts",
                 name="Failed Login Attempts",
                 description="Multiple failed login attempts detected",
-                customer_id="default", 
+                customer_id="default",
                 severity=AlertSeverity.HIGH,
                 rule_type=AlertRuleType.FREQUENCY,
                 conditions=[
@@ -422,28 +422,28 @@ class AlertEngine:
                 tags=["performance", "api"]
             )
         ]
-        
+
         for rule in example_rules:
             self.rules[rule.rule_id] = rule
-        
+
         logger.info(f"Created {len(example_rules)} example alert rules")
-    
+
     async def _start_rule_evaluation(self, rule: AlertRule):
         """Start evaluation loop for a specific rule"""
         if rule.rule_id in self.evaluation_tasks:
             # Cancel existing task
             self.evaluation_tasks[rule.rule_id].cancel()
-        
+
         # Start new evaluation task
         task = asyncio.create_task(self._evaluate_rule_loop(rule))
         self.evaluation_tasks[rule.rule_id] = task
-        
+
         logger.info(f"Started evaluation loop for rule: {rule.name}")
-    
+
     async def _evaluate_rule_loop(self, rule: AlertRule):
         """Continuous evaluation loop for a rule"""
         interval_seconds = self._parse_interval(rule.evaluation_interval)
-        
+
         while self.is_running and rule.enabled:
             try:
                 await self._evaluate_rule(rule)
@@ -453,7 +453,7 @@ class AlertEngine:
             except Exception as e:
                 logger.error(f"Error evaluating rule {rule.name}: {e}")
                 await asyncio.sleep(interval_seconds)
-    
+
     async def _evaluate_rule(self, rule: AlertRule):
         """Evaluate a single alert rule"""
         try:
@@ -461,46 +461,46 @@ class AlertEngine:
             if not self.query_engine:
                 from query_engine import get_query_engine
                 self.query_engine = get_query_engine()
-            
+
             # Build query from rule conditions and filters
             query_request = await self._build_query_from_rule(rule)
-            
+
             # Execute query
             result = await self.query_engine.execute_query(query_request)
-            
+
             # Check if alert should be triggered
             should_trigger = await self._should_trigger_alert(rule, result)
-            
+
             if should_trigger:
                 await self._trigger_alert(rule, result)
             else:
                 await self._check_alert_resolution(rule)
-                
+
         except Exception as e:
             logger.error(f"Failed to evaluate rule {rule.name}: {e}")
-    
+
     async def _build_query_from_rule(self, rule: AlertRule) -> AdvancedQueryRequest:
         """Build query request from alert rule"""
         # Determine time window from conditions
         time_window = "5m"  # default
         if rule.conditions:
             time_window = rule.conditions[0].time_window
-        
+
         window_seconds = self._parse_interval(time_window)
         end_time = datetime.utcnow()
         start_time = end_time - timedelta(seconds=window_seconds)
-        
+
         # Build aggregations from conditions
         aggregations = []
         for condition in rule.conditions:
             agg_type = condition.aggregation or "count"
             field = condition.field if condition.field != "*" else "*"
-            
+
             aggregations.append(QueryAggregation(
                 type=AggregationType(agg_type),
                 field=field
             ))
-        
+
         # Convert filter dicts to QueryFilter objects
         query_filters = []
         for filter_dict in rule.filters or []:
@@ -514,7 +514,7 @@ class AlertEngine:
             else:
                 # Already a QueryFilter object
                 query_filters.append(filter_dict)
-        
+
         # Add customer_id filter if not already present
         has_customer_filter = any(f.field == "customer_id" for f in query_filters if hasattr(f, 'field'))
         if not has_customer_filter:
@@ -523,7 +523,7 @@ class AlertEngine:
                 operator=QueryOperator.EQ,
                 value=rule.customer_id
             ))
-        
+
         return AdvancedQueryRequest(
             start_time=start_time,
             end_time=end_time,
@@ -531,73 +531,73 @@ class AlertEngine:
             aggregations=aggregations,
             limit=1000
         )
-    
+
     async def _should_trigger_alert(self, rule: AlertRule, query_result: Any) -> bool:
         """Determine if alert should be triggered based on rule conditions"""
         if not rule.conditions:
             return False
-        
+
         # Check cooldown period
         if await self._is_in_cooldown(rule):
             return False
-        
+
         # Check rate limiting
         if await self._is_rate_limited(rule):
             return False
-        
+
         # Evaluate conditions
         for condition in rule.conditions:
             if not await self._evaluate_condition(condition, query_result):
                 return False
-        
+
         return True
-    
+
     async def _evaluate_condition(self, condition: AlertCondition, query_result: Any) -> bool:
         """Evaluate a single alert condition"""
         try:
             # Extract value from query result based on aggregation
             actual_value = self._extract_metric_value(query_result, condition)
-            
+
             # Debug logging
             logger.info(f"Condition evaluation - field: {condition.field}, aggregation: {condition.aggregation}, actual_value: {actual_value}, operator: {condition.operator}, threshold: {condition.value}")
-            
+
             # Compare with threshold
             result = self._compare_values(actual_value, condition.operator, condition.value)
             logger.info(f"Condition result: {result}")
-            
+
             return result
-            
+
         except Exception as e:
             logger.error(f"Error evaluating condition: {e}")
             return False
-    
+
     def _extract_metric_value(self, query_result: Any, condition: AlertCondition) -> float:
         """Extract metric value from query result"""
         # Extract value from aggregation results
         if hasattr(query_result, 'aggregations') and query_result.aggregations:
             # aggregations is a dict, not a list
             aggs = query_result.aggregations
-            
+
             # For count(*) aggregation, look for count_all key
             if condition.aggregation == 'count' and condition.field == '*':
                 if 'count_all' in aggs:
                     return float(aggs['count_all'])
-            
+
             # Look for matching field aggregation
             expected_key = f"{condition.aggregation}_{condition.field.replace('*', 'all')}"
             if expected_key in aggs:
                 return float(aggs[expected_key])
-        
+
         # Fallback - use total result count
         if hasattr(query_result, 'total_count'):
             return float(query_result.total_count)
-        
+
         return 0.0
-    
+
     def _compare_values(self, actual: float, operator: ThresholdOperator, expected: Union[str, int, float]) -> bool:
         """Compare actual value with expected using operator"""
         expected_float = float(expected)
-        
+
         if operator == ThresholdOperator.GT:
             return actual > expected_float
         elif operator == ThresholdOperator.GTE:
@@ -610,26 +610,26 @@ class AlertEngine:
             return actual == expected_float
         elif operator == ThresholdOperator.NE:
             return actual != expected_float
-        
+
         return False
-    
+
     async def _is_in_cooldown(self, rule: AlertRule) -> bool:
         """Check if rule is in cooldown period"""
         rule_state = self.rule_states.get(rule.rule_id, {})
         last_trigger = rule_state.get('last_trigger_time')
-        
+
         if not last_trigger:
             return False
-        
+
         cooldown_seconds = self._parse_interval(rule.cooldown_period)
         return (datetime.utcnow() - last_trigger).total_seconds() < cooldown_seconds
-    
+
     async def _is_rate_limited(self, rule: AlertRule) -> bool:
         """Check if rule is rate limited"""
         rule_state = self.rule_states.get(rule.rule_id, {})
         alerts_this_hour = rule_state.get('alerts_this_hour', 0)
         hour_start = rule_state.get('hour_start', datetime.utcnow().replace(minute=0, second=0, microsecond=0))
-        
+
         # Reset counter if new hour
         current_hour = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
         if current_hour > hour_start:
@@ -637,13 +637,13 @@ class AlertEngine:
             rule_state['hour_start'] = current_hour
             rule_state['alerts_this_hour'] = 0
             self.rule_states[rule.rule_id] = rule_state
-        
+
         return alerts_this_hour >= rule.max_alerts_per_hour
-    
+
     async def _trigger_alert(self, rule: AlertRule, query_result: Any):
         """Trigger an alert for the given rule"""
         alert_id = str(uuid.uuid4())
-        
+
         alert = AlertInstance(
             alert_id=alert_id,
             rule_id=rule.rule_id,
@@ -656,21 +656,21 @@ class AlertEngine:
             trigger_data=self._build_alert_context(query_result),
             tags=rule.tags
         )
-        
+
         # Store alert
         self.active_alerts[alert_id] = alert
-        
+
         # Update rule state
         rule_state = self.rule_states.get(rule.rule_id, {})
         rule_state['last_trigger_time'] = datetime.utcnow()
         rule_state['alerts_this_hour'] = rule_state.get('alerts_this_hour', 0) + 1
         self.rule_states[rule.rule_id] = rule_state
-        
+
         # Send notifications
         await self._send_notifications(alert, rule)
-        
+
         logger.warning(f"Alert triggered: {rule.name} (ID: {alert_id})")
-    
+
     def _build_alert_context(self, query_result: Any) -> Dict[str, Any]:
         """Build context data for the alert"""
         context = {
@@ -678,31 +678,31 @@ class AlertEngine:
             "query_total": getattr(query_result, 'total', 0),
             "execution_time_ms": getattr(query_result, 'execution_time_ms', 0)
         }
-        
+
         # Add aggregation results if available
         if hasattr(query_result, 'aggregations'):
             context['aggregations'] = query_result.aggregations
-        
+
         return context
-    
+
     async def _send_notifications(self, alert: AlertInstance, rule: AlertRule):
         """Send notifications for an alert"""
         for channel_id in rule.notification_channels:
             channel = self.notification_channels.get(channel_id)
             if not channel or not channel.enabled:
                 continue
-            
+
             try:
                 await self._send_notification(alert, channel)
                 alert.notification_count += 1
                 alert.last_notification_at = datetime.utcnow()
             except Exception as e:
                 logger.error(f"Failed to send notification via {channel.name}: {e}")
-    
+
     async def _send_notification(self, alert: AlertInstance, channel: NotificationChannelConfig):
         """Send notification via specific channel"""
         message = self._format_alert_message(alert)
-        
+
         if channel.type == NotificationChannel.EMAIL:
             await self._send_email_notification(alert, channel, message)
         elif channel.type == NotificationChannel.SLACK:
@@ -713,7 +713,7 @@ class AlertEngine:
             await self._send_pagerduty_notification(alert, channel, message)
         else:
             logger.warning(f"Unsupported notification channel: {channel.type}")
-    
+
     def _format_alert_message(self, alert: AlertInstance) -> str:
         """Format alert message for notifications"""
         return f"""
@@ -731,60 +731,60 @@ Rule ID: {alert.rule_id}
 
 Context: {json.dumps(alert.trigger_data, indent=2)}
 """
-    
+
     async def _send_email_notification(self, alert: AlertInstance, channel: NotificationChannelConfig, message: str):
         """Send email notification (placeholder implementation)"""
         # In a real implementation, this would use SMTP
         logger.info(f"EMAIL notification sent for alert {alert.alert_id} via {channel.name}")
-    
+
     async def _send_slack_notification(self, alert: AlertInstance, channel: NotificationChannelConfig, message: str):
         """Send Slack notification (placeholder implementation)"""
         # In a real implementation, this would use Slack API
         logger.info(f"SLACK notification sent for alert {alert.alert_id} via {channel.name}")
-    
+
     async def _send_webhook_notification(self, alert: AlertInstance, channel: NotificationChannelConfig, message: str):
         """Send webhook notification (placeholder implementation)"""
         # In a real implementation, this would make HTTP requests
         logger.info(f"WEBHOOK notification sent for alert {alert.alert_id} via {channel.name}")
-    
+
     async def _send_pagerduty_notification(self, alert: AlertInstance, channel: NotificationChannelConfig, message: str):
         """Send PagerDuty notification (placeholder implementation)"""
         # In a real implementation, this would use PagerDuty Events API
         logger.info(f"PAGERDUTY notification sent for alert {alert.alert_id} via {channel.name}")
-    
+
     async def _check_alert_resolution(self, rule: AlertRule):
         """Check if any active alerts for this rule should be resolved"""
-        rule_alerts = [alert for alert in self.active_alerts.values() 
+        rule_alerts = [alert for alert in self.active_alerts.values()
                       if alert.rule_id == rule.rule_id and alert.status == AlertStatus.ACTIVE]
-        
+
         for alert in rule_alerts:
             # In a more sophisticated implementation, we'd re-evaluate conditions
             # For now, we'll implement a simple time-based resolution
             time_since_trigger = (datetime.utcnow() - alert.triggered_at).total_seconds()
-            
+
             # Auto-resolve after 1 hour if conditions are no longer met
             if time_since_trigger > 3600:
                 await self._resolve_alert(alert.alert_id, "Auto-resolved: conditions no longer met")
-    
+
     async def _resolve_alert(self, alert_id: str, resolution_reason: str):
         """Resolve an active alert"""
         alert = self.active_alerts.get(alert_id)
         if not alert or alert.status != AlertStatus.ACTIVE:
             return
-        
+
         alert.status = AlertStatus.RESOLVED
         alert.resolved_at = datetime.utcnow()
         alert.trigger_data['resolution_reason'] = resolution_reason
-        
+
         logger.info(f"Alert resolved: {alert.name} (ID: {alert_id}) - {resolution_reason}")
-    
+
     def _parse_interval(self, interval: str) -> int:
         """Parse interval string to seconds"""
         if not interval:
             return 60  # default 1 minute
-        
+
         interval = interval.lower().strip()
-        
+
         if interval.endswith('s'):
             return int(interval[:-1])
         elif interval.endswith('m'):
@@ -796,36 +796,36 @@ Context: {json.dumps(alert.trigger_data, indent=2)}
         else:
             # Assume minutes if no unit
             return int(interval) * 60
-    
+
     # Public API methods
-    
+
     async def create_rule(self, rule: AlertRule) -> AlertRule:
         """Create a new alert rule"""
         rule.rule_id = rule.rule_id or str(uuid.uuid4())
         rule.created_at = datetime.utcnow()
         rule.updated_at = datetime.utcnow()
-        
+
         self.rules[rule.rule_id] = rule
-        
+
         if rule.enabled and self.is_running:
             await self._start_rule_evaluation(rule)
-        
+
         logger.info(f"Created alert rule: {rule.name}")
         return rule
-    
+
     async def update_rule(self, rule_id: str, updates: Dict[str, Any]) -> Optional[AlertRule]:
         """Update an existing alert rule"""
         rule = self.rules.get(rule_id)
         if not rule:
             return None
-        
+
         # Update fields
         for key, value in updates.items():
             if hasattr(rule, key):
                 setattr(rule, key, value)
-        
+
         rule.updated_at = datetime.utcnow()
-        
+
         # Restart evaluation if rule is enabled
         if rule.enabled and self.is_running:
             await self._start_rule_evaluation(rule)
@@ -833,80 +833,80 @@ Context: {json.dumps(alert.trigger_data, indent=2)}
             # Stop evaluation for disabled rule
             self.evaluation_tasks[rule_id].cancel()
             del self.evaluation_tasks[rule_id]
-        
+
         logger.info(f"Updated alert rule: {rule.name}")
         return rule
-    
+
     async def delete_rule(self, rule_id: str) -> bool:
         """Delete an alert rule"""
         if rule_id not in self.rules:
             return False
-        
+
         # Stop evaluation
         if rule_id in self.evaluation_tasks:
             self.evaluation_tasks[rule_id].cancel()
             del self.evaluation_tasks[rule_id]
-        
+
         # Remove rule
         rule = self.rules.pop(rule_id)
-        
+
         # Clean up rule state
         self.rule_states.pop(rule_id, None)
-        
+
         logger.info(f"Deleted alert rule: {rule.name}")
         return True
-    
+
     async def get_rule(self, rule_id: str) -> Optional[AlertRule]:
         """Get alert rule by ID"""
         return self.rules.get(rule_id)
-    
+
     async def list_rules(self, customer_id: Optional[str] = None) -> List[AlertRule]:
         """List alert rules, optionally filtered by customer"""
         rules = list(self.rules.values())
-        
+
         if customer_id:
             rules = [rule for rule in rules if rule.customer_id == customer_id]
-        
+
         return rules
-    
+
     async def get_alert(self, alert_id: str) -> Optional[AlertInstance]:
         """Get alert instance by ID"""
         return self.active_alerts.get(alert_id)
-    
+
     async def list_alerts(self, customer_id: Optional[str] = None, status: Optional[AlertStatus] = None) -> List[AlertInstance]:
         """List alerts with optional filters"""
         alerts = list(self.active_alerts.values())
-        
+
         if customer_id:
             alerts = [alert for alert in alerts if alert.customer_id == customer_id]
-        
+
         if status:
             alerts = [alert for alert in alerts if alert.status == status]
-        
+
         return alerts
-    
+
     async def acknowledge_alert(self, alert_id: str, acknowledged_by: str) -> bool:
         """Acknowledge an alert"""
         alert = self.active_alerts.get(alert_id)
         if not alert or alert.status != AlertStatus.ACTIVE:
             return False
-        
+
         alert.status = AlertStatus.ACKNOWLEDGED
         alert.acknowledged_at = datetime.utcnow()
         alert.acknowledged_by = acknowledged_by
-        
+
         logger.info(f"Alert acknowledged: {alert.name} by {acknowledged_by}")
         return True
-    
+
     async def resolve_alert(self, alert_id: str, resolved_by: str, reason: str = "") -> bool:
         """Manually resolve an alert"""
         alert = self.active_alerts.get(alert_id)
         if not alert:
             return False
-        
+
         await self._resolve_alert(alert_id, f"Manually resolved by {resolved_by}: {reason}")
         return True
-    
+
     async def test_rule(self, rule: AlertRule) -> Dict[str, Any]:
         """Test an alert rule without triggering notifications"""
         try:
@@ -914,13 +914,13 @@ Context: {json.dumps(alert.trigger_data, indent=2)}
             if not self.query_engine:
                 from query_engine import get_query_engine
                 self.query_engine = get_query_engine()
-                
+
             query_request = await self._build_query_from_rule(rule)
             logger.info(f"Alert test query: start={query_request.start_time}, end={query_request.end_time}, filters={[f'{f.field}={f.value}' for f in query_request.filters]}")
             result = await self.query_engine.execute_query(query_request)
             logger.info(f"Query result: aggregations={getattr(result, 'aggregations', None)}, total_count={getattr(result, 'total_count', None)}")
             should_trigger = await self._should_trigger_alert(rule, result)
-            
+
             return {
                 "rule_id": rule.rule_id,
                 "rule_name": rule.name,
@@ -936,7 +936,7 @@ Context: {json.dumps(alert.trigger_data, indent=2)}
                 "error": str(e),
                 "would_trigger": False
             }
-    
+
     def get_health(self) -> Dict[str, Any]:
         """Get alert engine health status"""
         return {
@@ -947,20 +947,20 @@ Context: {json.dumps(alert.trigger_data, indent=2)}
             "last_evaluation": datetime.now().isoformat(),
             "engine_uptime": "healthy"
         }
-    
+
     def get_stats(self, customer_id: Optional[str] = None) -> Dict[str, Any]:
         """Get detailed alert engine statistics"""
         # Filter by customer if provided
         customer_rules = [r for r in self.rules.values() if not customer_id or r.customer_id == customer_id]
         customer_alerts = [a for a in self.active_alerts.values() if not customer_id or a.customer_id == customer_id]
-        
+
         enabled_rules = len([r for r in customer_rules if r.enabled])
         disabled_rules = len([r for r in customer_rules if not r.enabled])
-        
+
         active_alerts = len([a for a in customer_alerts if a.status == AlertStatus.ACTIVE])
         acknowledged_alerts = len([a for a in customer_alerts if a.status == AlertStatus.ACKNOWLEDGED])
         resolved_alerts = len([a for a in customer_alerts if a.status == AlertStatus.RESOLVED])
-        
+
         return {
             "total_rules": len(customer_rules),
             "enabled_rules": enabled_rules,

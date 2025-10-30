@@ -320,11 +320,40 @@ async def initialize_engines():
             global alert_rule_cache_instance
             alert_rule_cache_instance = alert_rule_cache
             
+            # Check for MITRE Rules Migration and Load if Needed
+            try:
+                logger.info("🔍 Checking MITRE rules migration status...")
+                
+                from dao.security_dao import SecurityDAO
+                security_dao = SecurityDAO()
+                
+                # Check if migration marker exists and rules need to be loaded
+                if await security_dao.should_load_mitre_rules():
+                    logger.info("🎯 Loading default MITRE ATT&CK rules from migration...")
+                    from mitre_default_loader import mitre_default_loader
+                    
+                    # Load default MITRE rules into database (migration-triggered)
+                    mitre_result = await mitre_default_loader.load_default_mitre_rules()
+                    
+                    if mitre_result["status"] == "success":
+                        # Mark migration as completed
+                        await security_dao.mark_mitre_migration_completed()
+                        logger.info(f"✅ Migration completed: {mitre_result['rules_loaded']}/{mitre_result['total_techniques']} MITRE rules loaded ({mitre_result['success_rate']:.1f}% success)")
+                    else:
+                        logger.warning(f"⚠️ MITRE rules migration completed with issues: {mitre_result.get('error', 'Unknown error')}")
+                else:
+                    mitre_count = await security_dao.get_mitre_rules_count()
+                    logger.info(f"ℹ️ MITRE rules already loaded ({mitre_count}/286) or migration not required")
+                    
+            except Exception as e:
+                logger.error(f"❌ MITRE rules migration check failed: {e}")
+                # Continue startup even if MITRE loading fails
+            
             # Initialize Sigma Rule Cache and load rules from database
             from events.management.cache.sigma_rule_cache import SigmaRuleCache
             sigma_rule_cache = SigmaRuleCache(redis_manager)
             
-            # Load all sigma rules from database into Redis cache
+            # Load all sigma rules from database into Redis cache (includes default MITRE rules)
             sigma_cache_success = await sigma_rule_cache.initialize_cache_from_db()
             if sigma_cache_success:
                 logger.info("✅ Sigma rule cache initialized and loaded from database")

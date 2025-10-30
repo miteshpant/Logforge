@@ -122,20 +122,21 @@ class SecurityEventHandler(EventHandler):
             
             logger.info(f"🚨 Security detection event: {event_type}, rule {rule_id}, severity {severity} (customer: {customer_id})")
             
-            # For now, just log the security detection event
-            # In the future, this could trigger additional processing:
-            # - Send security notifications
-            # - Create SIEM tickets
-            # - Trigger automated incident response
-            # - Update security dashboards
-            # - Escalate based on severity
-            
             if event_type == EVENT_SECURITY_DETECTION_TRIGGERED:
                 logger.debug(f"🚨 New security detection triggered: {detection_id}")
+                
+                # Save the security detection to database for persistence
+                await self._save_security_detection_to_database(event_data)
+                
             elif event_type == EVENT_SECURITY_DETECTION_RESOLVED:
                 logger.debug(f"✅ Security detection resolved: {detection_id}")
+                # Update status in database
+                await self._update_security_detection_status(detection_id, customer_id, "resolved")
+                
             elif event_type == EVENT_SECURITY_DETECTION_ACKNOWLEDGED:
                 logger.debug(f"👁️ Security detection acknowledged: {detection_id}")
+                # Update status in database  
+                await self._update_security_detection_status(detection_id, customer_id, "acknowledged")
             
             return True
             
@@ -145,10 +146,7 @@ class SecurityEventHandler(EventHandler):
 
     async def _process_logs_with_sigma_rules(self, event_data: Dict[str, Any], sigma_rules: List[Dict[str, Any]]) -> int:
         """
-        Process logs with Sigma rules to detect security events.
-        
-        This is a placeholder implementation. The actual Sigma rule matching logic
-        will be implemented in a separate component.
+        Process logs with Sigma rules to detect security events using the SigmaRuleEngine.
         
         Args:
             event_data: Log batch event data
@@ -161,25 +159,89 @@ class SecurityEventHandler(EventHandler):
             logs = event_data.get('logs', [])
             customer_id = event_data.get('customer_id')
             
-            # Placeholder for actual Sigma rule matching
-            # This would involve:
-            # 1. Parse each log entry
-            # 2. Apply each Sigma rule's detection logic
-            # 3. Generate security events for matches
-            # 4. Publish detection events
+            if not logs or not sigma_rules:
+                logger.debug(f"📭 No logs or rules to process for customer {customer_id}")
+                return 0
             
-            detections_count = 0
+            logger.info(f"🛡️ Processing {len(logs)} logs with {len(sigma_rules)} Sigma rules for customer {customer_id}")
             
-            logger.debug(f"🔍 Would process {len(logs)} logs with {len(sigma_rules)} Sigma rules for customer {customer_id}")
+            # Import the Sigma engine
+            from sigma_engine import sigma_engine
             
-            # For now, just simulate some processing
-            # TODO: Implement actual Sigma rule matching logic
+            # Evaluate logs against Sigma rules
+            matches = await sigma_engine.evaluate_logs_against_rules(logs, sigma_rules, customer_id)
+            
+            detections_count = len(matches)
+            
+            if detections_count > 0:
+                logger.info(f"🚨 Found {detections_count} security detections for customer {customer_id}")
+                for match in matches:
+                    logger.info(f"🔍 Detection: {match.rule_id} - {match.rule_title} (severity: {match.severity.value})")
+            else:
+                logger.debug(f"✅ No security detections found for customer {customer_id}")
             
             return detections_count
             
         except Exception as e:
             logger.error(f"Error processing logs with Sigma rules: {e}")
             return 0
+
+    async def _save_security_detection_to_database(self, event_data: Dict[str, Any]) -> bool:
+        """Save security detection to database for persistence."""
+        try:
+            from services.security_service import SecurityService
+            
+            security_service = SecurityService()
+            
+            # Transform event data for database storage
+            detection_data = {
+                "id": event_data.get("detection_id"),
+                "customer_id": event_data.get("customer_id"),
+                "rule_id": event_data.get("rule_id"),
+                "rule_title": event_data.get("rule_name"),
+                "severity": event_data.get("severity", "medium"),
+                "status": "triggered",
+                "timestamp": event_data.get("event_timestamp"),
+                "event_data": event_data,  # Store full event data
+                "matched_fields": event_data.get("matched_fields", {}),
+                "attack_techniques": event_data.get("attack_techniques", []),
+                "kill_chain_phase": None,  # Could be derived from attack_techniques
+                "assigned_to": None,
+                "investigation_notes": [],
+                "artifacts": [],
+                "source_logs": []
+            }
+            
+            event_id = await security_service.create_security_event(detection_data)
+            logger.info(f"💾 Security detection saved to database: {event_id}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to save security detection to database: {e}")
+            return False
+
+    async def _update_security_detection_status(self, detection_id: str, customer_id: str, status: str) -> bool:
+        """Update security detection status in database."""
+        try:
+            from services.security_service import SecurityService
+            
+            security_service = SecurityService()
+            
+            success = await security_service.update_security_event_status(
+                detection_id, customer_id, status
+            )
+            
+            if success:
+                logger.info(f"💾 Security detection status updated: {detection_id} -> {status}")
+            else:
+                logger.warning(f"Failed to update security detection status: {detection_id}")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Failed to update security detection status: {e}")
+            return False
 
     def get_supported_event_types(self) -> List[str]:
         """Support security events and log events for Sigma rule matching"""

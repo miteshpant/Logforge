@@ -57,7 +57,13 @@ class DatabaseLayer:
         'PlatformSetup': os.getenv('PLATFORM_SETUP_KEY', 'platform-setup-key'),
         'IngestionTestService': 'ingestion-test-service-key',
         'AuditService': os.getenv('AUDIT_SERVICE_KEY', 'audit-service-key-dev'),
-        'StorageQuotaSyncService': os.getenv('STORAGE_QUOTA_SYNC_KEY', 'storage-quota-sync-service-key')
+        'StorageQuotaSyncService': os.getenv('STORAGE_QUOTA_SYNC_KEY', 'storage-quota-sync-service-key'),
+        # MITRE and Sigma Security Services
+        'MitreDefaultLoader': os.getenv('MITRE_DEFAULT_LOADER_KEY', 'mitre-default-loader-service-key'),
+        'SecuritySubscriptionChecker': os.getenv('SECURITY_SUBSCRIPTION_CHECKER_KEY', 'security-subscription-checker-service-key'),
+        'SigmaProcessor': os.getenv('SIGMA_PROCESSOR_KEY', 'sigma-processor-service-key'),
+        # Migration Service
+        'MigrationService': os.getenv('MIGRATION_SERVICE_KEY', 'migration-service-key')
     }
     
     # Table access control by service
@@ -96,7 +102,13 @@ class DatabaseLayer:
         'QuotaTestService': ['tenant_quotas_mt', 'quota_usage_history_mt'],
         'QuotaHistoryAPI': ['quota_usage_history_mt'],
         # Storage Quota Sync Service - needs access to logs and quotas
-        'StorageQuotaSyncService': ['logs_raw_mt', 'tenant_quotas_mt']
+        'StorageQuotaSyncService': ['logs_raw_mt', 'tenant_quotas_mt'],
+        # MITRE and Sigma Security Services
+        'MitreDefaultLoader': ['sigma_rules_mt'],  # Needs to insert default MITRE rules
+        'SecuritySubscriptionChecker': ['tenant_subscriptions_mt'],  # Needs to check subscription access
+        'SigmaProcessor': ['security_events_mt', 'sigma_rules_mt'],  # Needs to create security events and read rules
+        # Migration Service
+        'MigrationService': ['system_migrations', 'sigma_rules_mt', 'security_events_mt']  # Needs to check migrations and manage security tables
     }
     
     # Dangerous operations requiring admin privileges

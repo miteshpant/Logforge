@@ -17,7 +17,8 @@ from ..constants import (
     EVENT_LOGS_ARCHIVED,
     EVENT_LOGS_PARSED,
     EVENT_LOGS_INDEXED,
-    EVENT_LOGS_DELETED
+    EVENT_LOGS_DELETED,
+    EVENT_LOGS_NORMALIZED
 )
 
 logger = structlog.get_logger(__name__)
@@ -565,6 +566,96 @@ class LogEventPublisher:
                 "Error publishing real-time log batch event",
                 customer_id=customer_id,
                 error=str(e)
+            )
+            return False
+
+    async def publish_normalized_batch(
+        self,
+        customer_id: str,
+        normalized_logs: List[Dict[str, Any]],
+        batch_info: Dict[str, Any],
+        normalization_time_ms: float,
+        correlation_id: Optional[str] = None,
+        trace_id: Optional[str] = None
+    ) -> bool:
+        """
+        Publish event when logs are normalized and ready for alert/sigma processing
+        
+        Args:
+            customer_id: Customer identifier
+            normalized_logs: Field-mapped logs ready for rule evaluation
+            batch_info: Original batch information 
+            normalization_time_ms: Time taken for field mapping and normalization
+            correlation_id: Request correlation ID
+            trace_id: Distributed tracing ID
+        """
+        try:
+            event_data = {
+                "batch_id": batch_info.get("batch_id"),
+                "log_count": len(normalized_logs),
+                "customer_id": customer_id,
+                "normalized_logs": normalized_logs,  # Field-mapped data ready for rules
+                "timestamp": datetime.utcnow().isoformat(),
+                "field_mapping_applied": True,
+                "source_format": batch_info.get("source_format", "json"),
+                "normalization_time_ms": normalization_time_ms,
+                "original_batch_info": {
+                    "ingestion_endpoint": batch_info.get("endpoint", "unknown"),
+                    "bytes_processed": batch_info.get("bytes_processed", 0),
+                    "success_count": batch_info.get("success_count", 0),
+                    "error_count": batch_info.get("error_count", 0)
+                }
+            }
+
+            metadata = EventMetadata(
+                source_service="smart-ingestion-service",
+                correlation_id=correlation_id,
+                trace_id=trace_id,
+                priority=EventPriority.HIGH  # High priority for real-time detection
+            )
+
+            event = BaseEvent(
+                event_type=EVENT_LOGS_NORMALIZED,
+                customer_id=customer_id,
+                data=event_data,
+                metadata=metadata
+            )
+
+            results = await self.publisher_manager.publish(event)
+            
+            # Check if any publisher succeeded
+            success_count = sum(1 for result in results.values() if result)
+            total_publishers = len(results)
+            success = success_count > 0
+
+            if success:
+                self.logger.info(
+                    "Normalized log batch event published",
+                    customer_id=customer_id,
+                    batch_id=batch_info.get("batch_id"),
+                    log_count=len(normalized_logs),
+                    normalization_time_ms=normalization_time_ms,
+                    source_format=batch_info.get("source_format"),
+                    successful_publishers=success_count,
+                    total_publishers=total_publishers,
+                    publisher_results=results
+                )
+            else:
+                self.logger.error(
+                    "Failed to publish normalized log batch event to any publisher",
+                    customer_id=customer_id,
+                    batch_id=batch_info.get("batch_id"),
+                    publisher_results=results
+                )
+
+            return success
+
+        except Exception as e:
+            self.logger.error(
+                "Error publishing normalized log batch event",
+                customer_id=customer_id,
+                error=str(e),
+                exc_info=True
             )
             return False
 

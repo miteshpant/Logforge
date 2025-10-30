@@ -580,3 +580,93 @@ class SecurityDAO:
         except Exception as e:
             logger.error(f"Failed to get threat intel indicators: {e}")
             raise
+    
+    # =================================================================
+    # MIGRATION HELPER METHODS
+    # =================================================================
+    
+    async def should_load_mitre_rules(self) -> bool:
+        """Check if MITRE rules should be loaded based on migration status"""
+        try:
+            # Check if migration marker exists
+            marker_query = """
+                SELECT count() as count FROM system_migrations 
+                WHERE migration_name = '003_seed_mitre_rules_marker'
+            """
+            
+            marker_result = await self.db.execute_query(marker_query)
+            
+            if not marker_result or marker_result[0]["count"] == 0:
+                # Migration marker doesn't exist - don't load
+                logger.debug("MITRE migration marker not found")
+                return False
+            
+            # Check if MITRE rules are already loaded
+            rules_query = """
+                SELECT count() as count FROM sigma_rules_mt 
+                WHERE customer_id IS NULL AND id LIKE 'mitre_default_%'
+            """
+            
+            rules_result = await self.db.execute_query(rules_query)
+            existing_rules = rules_result[0]["count"] if rules_result else 0
+            
+            # Load rules if marker exists but rules are not loaded (or incomplete)
+            should_load = existing_rules < 286
+            
+            logger.info(f"Migration check: marker exists, {existing_rules}/286 rules loaded, should_load={should_load}")
+            return should_load
+            
+        except Exception as e:
+            logger.error(f"Error checking MITRE migration status: {e}")
+            return False
+    
+    async def mark_mitre_migration_completed(self) -> bool:
+        """Mark MITRE rules migration as completed"""
+        try:
+            # Check if already marked as completed
+            check_query = """
+                SELECT count() as count FROM system_migrations 
+                WHERE migration_name = '003_seed_mitre_rules_completed'
+            """
+            
+            check_result = await self.db.execute_query(check_query)
+            
+            if check_result and check_result[0]["count"] > 0:
+                logger.debug("MITRE migration already marked as completed")
+                return True
+            
+            # Mark as completed
+            insert_query = """
+                INSERT INTO system_migrations (
+                    migration_name, version, applied_at, description, status
+                ) VALUES (
+                    '003_seed_mitre_rules_completed', 
+                    '1.0.0', 
+                    now(), 
+                    'MITRE rules seeding completed', 
+                    'success'
+                )
+            """
+            
+            await self.db.execute_update(insert_query)
+            logger.info("✅ MITRE rules migration marked as completed")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error marking MITRE migration as completed: {e}")
+            return False
+    
+    async def get_mitre_rules_count(self) -> int:
+        """Get count of loaded MITRE default rules"""
+        try:
+            query = """
+                SELECT count() as count FROM sigma_rules_mt 
+                WHERE customer_id IS NULL AND id LIKE 'mitre_default_%'
+            """
+            
+            result = await self.db.execute_query(query)
+            return result[0]["count"] if result else 0
+            
+        except Exception as e:
+            logger.error(f"Error getting MITRE rules count: {e}")
+            return 0

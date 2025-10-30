@@ -3,7 +3,7 @@ Data models for Logforge API
 Supports multiple log formats and ingestion protocols
 """
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, root_validator
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List, Union, Literal
 from enum import Enum
@@ -91,6 +91,10 @@ class BaseLogEntry(BaseModel):
     ingested_at: Optional[datetime] = Field(None, description="Ingestion timestamp")
     customer_id: Optional[str] = Field("default", description="Customer identifier for multi-tenancy")
 
+    class Config:
+        # Allow customers to send any field names - field mapping will normalize them
+        extra = "allow"
+
     @validator('level')
     def normalize_level(cls, v):
         """Normalize log level to standard values"""
@@ -127,6 +131,30 @@ class BaseLogEntry(BaseModel):
             except:
                 return datetime.utcnow()
         return v if isinstance(v, datetime) else datetime.utcnow()
+
+    @root_validator(pre=True)
+    def apply_comprehensive_field_mapping(cls, values):
+        """Apply comprehensive field mapping using field_mapper.py and field_mapping.yml"""
+        try:
+            # Import field mapper (handles comprehensive YAML-based mappings)
+            from field_mapper import normalize_log_for_sigma
+            
+            # Apply comprehensive field normalization
+            normalized_values = normalize_log_for_sigma(values)
+            
+            # Merge normalized values back into original values
+            # Always use normalized values when available to ensure field mapping works
+            for key, value in normalized_values.items():
+                values[key] = value
+                    
+            return values
+            
+        except Exception as e:
+            # If field mapping fails, log warning but don't break ingestion
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Field mapping failed, using original values: {e}")
+            return values
 
 class LogEntry(BaseLogEntry):
     """Standard JSON log entry"""
