@@ -243,7 +243,7 @@ class NginxAccessLogParser(BaseParser):
             return 'info'
 
 class SyslogParser(BaseParser):
-    """Parser for Syslog messages (RFC 3164 and RFC 5424)"""
+    """Parser for Syslog messages (RFC 3164 and RFC 5424) with IP and user extraction"""
     
     def __init__(self, config: Dict[str, Any] = None):
         super().__init__(config)
@@ -265,6 +265,35 @@ class SyslogParser(BaseParser):
             r'(?P<timestamp>\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}) (?P<hostname>\S+) '
             r'(?P<program>\S+?)(?:\[(?P<pid>\d+)\])?: (?P<message>.*)'
         )
+        
+        # IP address extraction patterns
+        self.ip_patterns = [
+            r'\b(?P<ip>(?:[0-9]{1,3}\.){3}[0-9]{1,3})\b',  # Standard IPv4
+            r'\[(?P<ip>(?:[0-9]{1,3}\.){3}[0-9]{1,3})\]',  # Bracketed IP: [192.168.1.1]
+            r'ip[=:](?P<ip>(?:[0-9]{1,3}\.){3}[0-9]{1,3})',  # Key-value: ip=192.168.1.1
+            r'source[_=:](?P<ip>(?:[0-9]{1,3}\.){3}[0-9]{1,3})',  # source=192.168.1.1
+            r'src[_=:](?P<ip>(?:[0-9]{1,3}\.){3}[0-9]{1,3})',  # src=192.168.1.1
+            r'client[_=:](?P<ip>(?:[0-9]{1,3}\.){3}[0-9]{1,3})',  # client=192.168.1.1
+            r'from\s+(?P<ip>(?:[0-9]{1,3}\.){3}[0-9]{1,3})',  # from 192.168.1.1
+            r'remote[_=:](?P<ip>(?:[0-9]{1,3}\.){3}[0-9]{1,3})',  # remote=192.168.1.1
+        ]
+        
+        # User extraction patterns  
+        self.user_patterns = [
+            r'user[=:\s]+(?P<user>[^\s,]+)',  # user=admin, user:admin, user admin
+            r'username[=:\s]+(?P<user>[^\s,]+)',  # username=admin
+            r'user_id[=:\s]+(?P<user>[^\s,]+)',  # user_id=admin
+            r'userid[=:\s]+(?P<user>[^\s,]+)',  # userid=admin  
+            r'user_name[=:\s]+(?P<user>[^\s,]+)',  # user_name=admin
+            r'login[=:\s]+(?P<user>[^\s,]+)',  # login=admin
+            r'account[=:\s]+(?P<user>[^\s,]+)',  # account=admin
+            r'principal[=:\s]+(?P<user>[^\s,]+)',  # principal=admin
+            r'subject[=:\s]+(?P<user>[^\s,]+)',  # subject=admin
+            r'actor[=:\s]+(?P<user>[^\s,]+)',  # actor=admin
+            r'for\s+user\s+(?P<user>[^\s,]+)',  # for user admin
+            r'by\s+(?P<user>[^\s,]+)',  # by admin
+            r'from\s+user\s+(?P<user>[^\s,]+)',  # from user admin
+        ]
     
     def parse(self, raw_message: str, **kwargs) -> LogEntry:
         """Parse syslog message"""
@@ -299,6 +328,11 @@ class SyslogParser(BaseParser):
         timestamp = self.normalize_timestamp(fields.get('timestamp', ''))
         level = self._severity_to_level(severity)
         
+        # Extract IP and user from message content
+        message = fields.get('message', '')
+        src_ip = self._extract_ip_from_text(message)
+        user = self._extract_user_from_text(message)
+        
         attrs = {
             'syslog_version': fields.get('version', '1'),
             'facility': facility,
@@ -316,10 +350,12 @@ class SyslogParser(BaseParser):
             host=fields.get('hostname', ''),
             service=fields.get('program', self.default_service),
             level=level,
-            msg=fields.get('message', ''),
+            msg=message,
             attrs=attrs,
             severity_num=severity,
-            facility=facility
+            facility=facility,
+            src_ip=src_ip,
+            user_id=user
         )
     
     def _parse_rfc3164(self, fields: Dict[str, str]) -> LogEntry:
@@ -336,6 +372,11 @@ class SyslogParser(BaseParser):
         
         level = self._severity_to_level(severity)
         
+        # Extract IP and user from message content
+        message = fields.get('message', '')
+        src_ip = self._extract_ip_from_text(message)
+        user = self._extract_user_from_text(message)
+        
         attrs = {
             'facility': facility,
             'severity': severity,
@@ -349,10 +390,12 @@ class SyslogParser(BaseParser):
             host=fields.get('hostname', ''),
             service=fields.get('program', self.default_service),
             level=level,
-            msg=fields.get('message', ''),
+            msg=message,
             attrs=attrs,
             severity_num=severity,
-            facility=facility
+            facility=facility,
+            src_ip=src_ip,
+            user_id=user
         )
     
     def _parse_simple(self, fields: Dict[str, str]) -> LogEntry:
@@ -362,6 +405,11 @@ class SyslogParser(BaseParser):
             current_year = datetime.now().year
             timestamp_str = f"{current_year} {timestamp_str}"
         timestamp = self.normalize_timestamp(timestamp_str)
+        
+        # Extract IP and user from message content
+        message = fields.get('message', '')
+        src_ip = self._extract_ip_from_text(message)
+        user = self._extract_user_from_text(message)
         
         attrs = {
             'pid': int(fields['pid']) if fields.get('pid') else None,
@@ -374,8 +422,10 @@ class SyslogParser(BaseParser):
             host=fields.get('hostname', ''),
             service=fields.get('program', self.default_service),
             level=self.default_level,
-            msg=fields.get('message', ''),
-            attrs=attrs
+            msg=message,
+            attrs=attrs,
+            src_ip=src_ip,
+            user_id=user
         )
     
     def _parse_fallback(self, raw_message: str, **kwargs) -> LogEntry:
@@ -408,6 +458,22 @@ class SyslogParser(BaseParser):
             7: 'debug',    # Debug
         }
         return mapping.get(severity, 'info')
+    
+    def _extract_ip_from_text(self, text: str) -> str:
+        """Extract IP address from text using predefined patterns"""
+        for pattern in self.ip_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return match.group('ip')
+        return ''
+    
+    def _extract_user_from_text(self, text: str) -> str:
+        """Extract username from text using predefined patterns"""
+        for pattern in self.user_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return match.group('user')
+        return ''
 
 class CEFParser(BaseParser):
     """Parser for Common Event Format (CEF) logs"""
@@ -672,27 +738,66 @@ class OTLPParser(BaseParser):
             return 'trace'
 
 class TextParser(BaseParser):
-    """Parser for plain text logs with regex pattern matching"""
+    """Parser for plain text logs with regex pattern matching and IP extraction"""
     
     def __init__(self, config: Dict[str, Any] = None):
         super().__init__(config)
         
+        # IP address extraction patterns
+        self.ip_patterns = [
+            r'\b(?P<ip>(?:[0-9]{1,3}\.){3}[0-9]{1,3})\b',  # Standard IPv4
+            r'\[(?P<ip>(?:[0-9]{1,3}\.){3}[0-9]{1,3})\]',  # Bracketed IP: [192.168.1.1]
+            r'ip[=:](?P<ip>(?:[0-9]{1,3}\.){3}[0-9]{1,3})',  # Key-value: ip=192.168.1.1
+            r'source[_=:](?P<ip>(?:[0-9]{1,3}\.){3}[0-9]{1,3})',  # source=192.168.1.1
+            r'src[_=:](?P<ip>(?:[0-9]{1,3}\.){3}[0-9]{1,3})',  # src=192.168.1.1
+            r'client[_=:](?P<ip>(?:[0-9]{1,3}\.){3}[0-9]{1,3})',  # client=192.168.1.1
+            r'from\s+(?P<ip>(?:[0-9]{1,3}\.){3}[0-9]{1,3})',  # from 192.168.1.1
+            r'remote[_=:](?P<ip>(?:[0-9]{1,3}\.){3}[0-9]{1,3})',  # remote=192.168.1.1
+        ]
+        
+        # User extraction patterns  
+        self.user_patterns = [
+            r'user[=:\s]+(?P<user>[^\s,]+)',  # user=admin, user:admin, user admin
+            r'username[=:\s]+(?P<user>[^\s,]+)',  # username=admin
+            r'user_id[=:\s]+(?P<user>[^\s,]+)',  # user_id=admin
+            r'userid[=:\s]+(?P<user>[^\s,]+)',  # userid=admin  
+            r'user_name[=:\s]+(?P<user>[^\s,]+)',  # user_name=admin
+            r'login[=:\s]+(?P<user>[^\s,]+)',  # login=admin
+            r'account[=:\s]+(?P<user>[^\s,]+)',  # account=admin
+            r'principal[=:\s]+(?P<user>[^\s,]+)',  # principal=admin
+            r'subject[=:\s]+(?P<user>[^\s,]+)',  # subject=admin
+            r'actor[=:\s]+(?P<user>[^\s,]+)',  # actor=admin
+            r'for\s+user\s+(?P<user>[^\s,]+)',  # for user admin
+            r'by\s+(?P<user>[^\s,]+)',  # by admin
+            r'from\s+user\s+(?P<user>[^\s,]+)',  # from user admin
+        ]
+        
         # Common log patterns
         self.patterns = self.config.get('patterns', {})
         
-        # Default patterns for common formats
+        # Default patterns for common formats with enhanced IP/user extraction
         if not self.patterns:
             self.patterns = {
+                'auth_login_success': re.compile(
+                    r'(?P<timestamp>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[.,]?\d*)\s+'
+                    r'(?P<level>\w+)\s+.*(?:login|auth).*successful.*(?:user|for)\s+(?P<user>\w+).*'
+                    r'(?:from|ip|source)[=:\s]*(?P<source_ip>(?:[0-9]{1,3}\.){3}[0-9]{1,3})'
+                ),
+                'auth_login_failed': re.compile(
+                    r'(?P<timestamp>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[.,]?\d*)\s+'
+                    r'(?P<level>\w+)\s+.*(?:failed|denied|invalid).*(?:login|auth).*'
+                    r'(?:user|for)\s+(?P<user>\w+).*(?:from|ip|source)[=:\s]*(?P<source_ip>(?:[0-9]{1,3}\.){3}[0-9]{1,3})'
+                ),
                 'timestamp_level_message': re.compile(
-                    r'(?P<timestamp>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[.,]\d{3})\s+'
+                    r'(?P<timestamp>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[.,]?\d*)\s+'
                     r'(?P<level>\w+)\s+(?P<message>.*)'
                 ),
                 'level_timestamp_message': re.compile(
-                    r'(?P<level>\w+)\s+(?P<timestamp>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[.,]\d{3})\s+'
+                    r'(?P<level>\w+)\s+(?P<timestamp>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[.,]?\d*)\s+'
                     r'(?P<message>.*)'
                 ),
                 'java_exception': re.compile(
-                    r'(?P<timestamp>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[.,]\d{3})\s+'
+                    r'(?P<timestamp>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[.,]?\d*)\s+'
                     r'(?P<level>\w+)\s+\[(?P<thread>[^\]]+)\]\s+(?P<logger>\S+)\s+-\s+(?P<message>.*)'
                 ),
             }
@@ -717,8 +822,18 @@ class TextParser(BaseParser):
     def _build_log_entry(self, fields: Dict[str, str], pattern_name: str, **kwargs) -> LogEntry:
         """Build LogEntry from parsed fields"""
         timestamp = self.normalize_timestamp(fields.get('timestamp', ''))
+        message = fields.get('message', '')
         
-        attrs = {k: v for k, v in fields.items() if k not in ['timestamp', 'level', 'message']}
+        # Extract IP and user from message if not already captured
+        src_ip = fields.get('source_ip', '')
+        user = fields.get('user', '')
+        
+        if not src_ip:
+            src_ip = self._extract_ip_from_text(message)
+        if not user:
+            user = self._extract_user_from_text(message)
+        
+        attrs = {k: v for k, v in fields.items() if k not in ['timestamp', 'level', 'message', 'source_ip', 'user']}
         attrs['pattern'] = pattern_name
         
         return LogEntry(
@@ -726,12 +841,14 @@ class TextParser(BaseParser):
             host=kwargs.get('host', self.default_host),
             service=kwargs.get('service', fields.get('logger', self.default_service)),
             level=fields.get('level', self.default_level).lower(),
-            msg=fields.get('message', raw_message),
-            attrs=attrs
+            msg=message,
+            attrs=attrs,
+            src_ip=src_ip,
+            user_id=user
         )
     
     def _parse_fallback(self, raw_message: str, **kwargs) -> LogEntry:
-        """Fallback parser for unstructured text"""
+        """Fallback parser for unstructured text with IP/user extraction"""
         # Try to extract log level from message
         level = self.default_level
         level_patterns = {
@@ -747,14 +864,42 @@ class TextParser(BaseParser):
                 level = lvl
                 break
         
+        # Extract IP and user from the message
+        src_ip = self._extract_ip_from_text(raw_message)
+        user = self._extract_user_from_text(raw_message)
+        
+        attrs = {'parser': 'text_fallback'}
+        if src_ip:
+            attrs['extracted_ip'] = src_ip
+        if user:
+            attrs['extracted_user'] = user
+        
         return LogEntry(
             ts=datetime.utcnow(),
             host=kwargs.get('host', self.default_host),
             service=kwargs.get('service', self.default_service),
             level=level,
             msg=raw_message,
-            attrs={'parser': 'text_fallback'}
+            attrs=attrs,
+            src_ip=src_ip,
+            user_id=user
         )
+    
+    def _extract_ip_from_text(self, text: str) -> str:
+        """Extract IP address from text using predefined patterns"""
+        for pattern in self.ip_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return match.group('ip')
+        return ''
+    
+    def _extract_user_from_text(self, text: str) -> str:
+        """Extract username from text using predefined patterns"""
+        for pattern in self.user_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return match.group('user')
+        return ''
 
 # Parser factory
 class ParserFactory:

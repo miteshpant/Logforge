@@ -4,6 +4,7 @@ Log ingestion API endpoints - all formats and methods
 
 import json
 import time
+import logging
 from typing import Dict, Any, List
 from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Request, HTTPException
@@ -27,6 +28,7 @@ parser_factory = None
 process_logs_background = None
 process_logs_and_tracking_background = None
 ingestion_service = IngestionService()
+logger = logging.getLogger(__name__)
 
 def setup_dependencies(pf, plb, pltb=None):
     """Setup dependencies from main app"""
@@ -526,6 +528,271 @@ async def ingest_structured(
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Structured data parsing failed: {str(e)}")
+
+# Batch processing endpoints
+@router.post("/nginx/batch", response_model=IngestResponse)
+async def ingest_nginx_batch(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    customer_id: str = MiddlewareTenant
+):
+    """Nginx access logs batch ingestion (newline-separated)"""
+    start_time = time.time()
+
+    try:
+        raw_content = await request.body()
+        nginx_logs_text = raw_content.decode('utf-8').strip()
+
+        if not parser_factory:
+            raise HTTPException(status_code=500, detail="Parser factory not initialized")
+
+        # Split by newlines and parse each log
+        nginx_log_lines = [line.strip() for line in nginx_logs_text.split('\n') if line.strip()]
+        
+        if not nginx_log_lines:
+            raise HTTPException(status_code=400, detail="No valid nginx log lines found")
+
+        parser = parser_factory.get_parser("nginx")
+        logs = []
+
+        for i, line in enumerate(nginx_log_lines):
+            try:
+                log = parser.parse(line)
+                logs.append(log)
+            except Exception as e:
+                logger.warning(f"Failed to parse nginx log line {i+1}: {e}")
+                continue
+
+        if not logs:
+            raise HTTPException(status_code=400, detail="No valid nginx log records could be parsed")
+
+        # Prepare logs for storage
+        logs = ingestion_service.prepare_logs_for_storage(logs, customer_id)
+
+        # Calculate metrics for background tracking
+        total_bytes_processed = len(nginx_logs_text.encode('utf-8'))
+        processing_time_ms = int((time.time() - start_time) * 1000)
+
+        # Move ALL tracking to background tasks for fast response
+        if process_logs_and_tracking_background:
+            background_tasks.add_task(
+                process_logs_and_tracking_background,
+                logs,
+                customer_id,
+                "/nginx/batch",
+                "nginx",
+                len(logs),
+                total_bytes_processed,
+                processing_time_ms
+            )
+        else:
+            background_tasks.add_task(process_logs_background, logs, customer_id)
+
+        return IngestResponse(
+            status="success",
+            message=f"Successfully ingested {len(logs)} nginx logs from {len(nginx_log_lines)} lines",
+            processed_count=len(logs)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Nginx batch parsing failed: {str(e)}")
+
+@router.post("/syslog/batch", response_model=IngestResponse)
+async def ingest_syslog_batch(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    customer_id: str = MiddlewareTenant
+):
+    """Syslog messages batch ingestion (newline-separated)"""
+    start_time = time.time()
+
+    try:
+        raw_content = await request.body()
+        syslog_text = raw_content.decode('utf-8').strip()
+
+        if not parser_factory:
+            raise HTTPException(status_code=500, detail="Parser factory not initialized")
+
+        # Split by newlines and parse each log
+        syslog_lines = [line.strip() for line in syslog_text.split('\n') if line.strip()]
+        
+        if not syslog_lines:
+            raise HTTPException(status_code=400, detail="No valid syslog lines found")
+
+        parser = parser_factory.get_parser("syslog")
+        logs = []
+
+        for i, line in enumerate(syslog_lines):
+            try:
+                log = parser.parse(line)
+                logs.append(log)
+            except Exception as e:
+                logger.warning(f"Failed to parse syslog line {i+1}: {e}")
+                continue
+
+        if not logs:
+            raise HTTPException(status_code=400, detail="No valid syslog records could be parsed")
+
+        # Prepare logs for storage
+        logs = ingestion_service.prepare_logs_for_storage(logs, customer_id)
+
+        # Calculate metrics for background tracking
+        total_bytes_processed = len(syslog_text.encode('utf-8'))
+        processing_time_ms = int((time.time() - start_time) * 1000)
+
+        # Move ALL tracking to background tasks for fast response
+        if process_logs_and_tracking_background:
+            background_tasks.add_task(
+                process_logs_and_tracking_background,
+                logs,
+                customer_id,
+                "/syslog/batch",
+                "syslog",
+                len(logs),
+                total_bytes_processed,
+                processing_time_ms
+            )
+        else:
+            background_tasks.add_task(process_logs_background, logs, customer_id)
+
+        return IngestResponse(
+            status="success",
+            message=f"Successfully ingested {len(logs)} syslog entries from {len(syslog_lines)} lines",
+            processed_count=len(logs)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Syslog batch parsing failed: {str(e)}")
+
+@router.post("/cef/batch", response_model=IngestResponse)
+async def ingest_cef_batch(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    customer_id: str = MiddlewareTenant
+):
+    """CEF events batch ingestion (newline-separated)"""
+    start_time = time.time()
+
+    try:
+        raw_content = await request.body()
+        cef_text = raw_content.decode('utf-8').strip()
+
+        if not parser_factory:
+            raise HTTPException(status_code=500, detail="Parser factory not initialized")
+
+        # Split by newlines and parse each log
+        cef_lines = [line.strip() for line in cef_text.split('\n') if line.strip()]
+        
+        if not cef_lines:
+            raise HTTPException(status_code=400, detail="No valid CEF lines found")
+
+        parser = parser_factory.get_parser("cef")
+        logs = []
+
+        for i, line in enumerate(cef_lines):
+            try:
+                log = parser.parse(line)
+                logs.append(log)
+            except Exception as e:
+                logger.warning(f"Failed to parse CEF line {i+1}: {e}")
+                continue
+
+        if not logs:
+            raise HTTPException(status_code=400, detail="No valid CEF records could be parsed")
+
+        # Prepare logs for storage
+        logs = ingestion_service.prepare_logs_for_storage(logs, customer_id)
+
+        # Calculate metrics for background tracking
+        total_bytes_processed = len(cef_text.encode('utf-8'))
+        processing_time_ms = int((time.time() - start_time) * 1000)
+
+        # Move ALL tracking to background tasks for fast response
+        if process_logs_and_tracking_background:
+            background_tasks.add_task(
+                process_logs_and_tracking_background,
+                logs,
+                customer_id,
+                "/cef/batch",
+                "cef",
+                len(logs),
+                total_bytes_processed,
+                processing_time_ms
+            )
+        else:
+            background_tasks.add_task(process_logs_background, logs, customer_id)
+
+        return IngestResponse(
+            status="success",
+            message=f"Successfully ingested {len(logs)} CEF events from {len(cef_lines)} lines",
+            processed_count=len(logs)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"CEF batch parsing failed: {str(e)}")
+
+@router.post("/text/batch", response_model=IngestResponse)
+async def ingest_text_batch(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    customer_id: str = MiddlewareTenant
+):
+    """Plain text logs batch ingestion with IP/user extraction (newline-separated)"""
+    start_time = time.time()
+
+    try:
+        raw_content = await request.body()
+        text_logs = raw_content.decode('utf-8').strip()
+
+        if not parser_factory:
+            raise HTTPException(status_code=500, detail="Parser factory not initialized")
+
+        # Split by newlines and parse each log
+        text_lines = [line.strip() for line in text_logs.split('\n') if line.strip()]
+        
+        if not text_lines:
+            raise HTTPException(status_code=400, detail="No valid text log lines found")
+
+        parser = parser_factory.get_parser("text")
+        logs = []
+
+        for i, line in enumerate(text_lines):
+            try:
+                log = parser.parse(line)
+                logs.append(log)
+            except Exception as e:
+                logger.warning(f"Failed to parse text log line {i+1}: {e}")
+                continue
+
+        if not logs:
+            raise HTTPException(status_code=400, detail="No valid text log records could be parsed")
+
+        # Prepare logs for storage
+        logs = ingestion_service.prepare_logs_for_storage(logs, customer_id)
+
+        # Calculate metrics for background tracking
+        total_bytes_processed = len(text_logs.encode('utf-8'))
+        processing_time_ms = int((time.time() - start_time) * 1000)
+
+        # Move ALL tracking to background tasks for fast response
+        if process_logs_and_tracking_background:
+            background_tasks.add_task(
+                process_logs_and_tracking_background,
+                logs,
+                customer_id,
+                "/text/batch",
+                "text",
+                len(logs),
+                total_bytes_processed,
+                processing_time_ms
+            )
+        else:
+            background_tasks.add_task(process_logs_background, logs, customer_id)
+
+        return IngestResponse(
+            status="success",
+            message=f"Successfully ingested {len(logs)} text logs from {len(text_lines)} lines",
+            processed_count=len(logs)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Text batch parsing failed: {str(e)}")
 
 # Generic format-aware endpoint
 @router.post("", response_model=IngestResponse)

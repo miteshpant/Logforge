@@ -482,6 +482,154 @@
 						}
 					},
 					"response": []
+				},
+				{
+					"name": "Ingest Nginx Batch",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "text/plain"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "192.168.1.100 - admin [30/Oct/2025:12:34:56 +0000] \"GET /api/health HTTP/1.1\" 200 45 \"https://example.com/dashboard\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\"\n10.0.0.50 - test [30/Oct/2025:12:34:57 +0000] \"POST /auth/login HTTP/1.1\" 401 128 \"-\" \"curl/7.68.0\"\n172.16.1.25 - guest [30/Oct/2025:12:34:58 +0000] \"GET /dashboard HTTP/1.1\" 403 89 \"https://app.example.com/\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)\""
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/ingest/nginx/batch",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"ingest",
+								"nginx",
+								"batch"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ingest Syslog Batch",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "text/plain"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "<134>Oct 30 12:34:56 host1 myapp: User login from 192.168.1.100 successful for user admin\n<134>Oct 30 12:34:57 host2 myapp: Failed authentication attempt from 10.0.0.50 for user test\n<134>Oct 30 12:34:58 host3 myapp: Session timeout for user guest from 172.16.1.25"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/ingest/syslog/batch",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"ingest",
+								"syslog",
+								"batch"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ingest CEF Batch",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "text/plain"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "CEF:0|Logforge|Security|1.0|100|User Login Attempt|5|src=192.168.1.100 suser=admin dhost=auth-server act=login outcome=success\nCEF:0|Logforge|Security|1.0|101|Failed Login|8|src=10.0.0.50 suser=test dhost=auth-server act=login outcome=failure msg=Invalid credentials\nCEF:0|Logforge|Security|1.0|102|Session Timeout|4|src=172.16.1.25 suser=guest dhost=auth-server act=logout outcome=timeout"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/ingest/cef/batch",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"ingest",
+								"cef",
+								"batch"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ingest Text Batch with IP/User Extraction",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "text/plain"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "2025-10-30 12:34:56 INFO Login successful for user admin from 192.168.1.100\n2025-10-30 12:34:57 ERROR Failed login attempt from [10.0.0.50] for user_id test\n2025-10-30 12:34:58 WARN Authentication timeout src=172.16.1.25 userid=guest\n2025-10-30 12:34:59 DEBUG API request from client_ip=203.0.113.10 username=developer\n2025-10-30 12:35:00 INFO Database connection established source=192.168.1.200 user=system"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/ingest/text/batch",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"ingest",
+								"text",
+								"batch"
+							]
+						}
+					},
+					"response": []
 				}
 			]
 		},
