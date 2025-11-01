@@ -201,17 +201,15 @@ class AlertEngine:
         logger.info("M3 Alert Engine stopped")
 
     async def _load_configuration(self):
-        """Load alert rules and notification channels"""
+        """Load notification channels only - rules loaded on-demand per customer"""
         # Initialize with default notification channels
         await self._create_default_channels()
-
-        # Load rules from database
-        await self._load_rules_from_database()
-
-        # Fall back to example rules only if no database rules found
-        if not self.rules:
-            logger.warning("No database rules found, creating example rules")
-            await self._create_example_rules()
+        
+        # Initialize alert rule cache for on-demand loading
+        from events.management.cache.alert_rule_cache import AlertRuleCache
+        self.alert_rule_cache = AlertRuleCache()
+        
+        logger.info("AlertEngine configured for on-demand rule loading per customer")
 
     async def _create_default_channels(self):
         """Create default notification channels"""
@@ -244,32 +242,19 @@ class AlertEngine:
 
         logger.info(f"Created {len(default_channels)} default notification channels")
 
-    async def _load_rules_from_database(self):
-        """Load alert rules from database"""
+    async def get_customer_rules(self, customer_id: str) -> List[AlertRule]:
+        """Get alert rules for a customer using Redis cache with database fallback"""
         try:
-            # Import here to avoid circular dependencies
-            from dao.alert_dao import AlertDAO
-            from database_layer import DatabaseLayer
-
-            db = DatabaseLayer()
-            alert_dao = AlertDAO(db)
-
-            # Get all enabled alert rules from database
-            query = """
-            SELECT * FROM alert_rules_mt
-            WHERE is_enabled = 1
-            ORDER BY created_at DESC
-            """
-
-            rows = await db.execute_query(query)
-            loaded_count = 0
-
-            for row in rows:
+            # Get rules from cache (with database fallback) - same approach as Sigma engine
+            rules_data = await self.alert_rule_cache.get_customer_rules(customer_id)
+            
+            alert_rules = []
+            for row in rules_data:
                 try:
                     # Parse the condition_config JSON
                     condition_config = json.loads(row.get("condition_config", "{}"))
 
-                    # Convert database row to AlertRule object
+                    # Convert cache data to AlertRule object (same as before)
                     rule = AlertRule(
                         rule_id=row["id"],
                         name=row["name"],
@@ -289,20 +274,58 @@ class AlertEngine:
                         updated_at=row.get("updated_at"),
                         created_by=row.get("created_by")
                     )
-
-                    self.rules[rule.rule_id] = rule
-                    loaded_count += 1
-
-                    logger.debug(f"Loaded rule: {rule.name} (ID: {rule.rule_id}, Customer: {rule.customer_id})")
-
+                    
+                    alert_rules.append(rule)
+                    
                 except Exception as e:
-                    logger.error(f"Failed to load rule {row.get('id', 'unknown')}: {e}")
+                    logger.error(f"Failed to parse rule {row.get('id', 'unknown')}: {e}")
                     continue
-
-            logger.info(f"Successfully loaded {loaded_count} alert rules from database")
-
+                    
+            logger.debug(f"✅ Loaded {len(alert_rules)} alert rules from cache for customer {customer_id}")
+            return alert_rules
+            
         except Exception as e:
-            logger.error(f"Failed to load rules from database: {e}")
+            logger.error(f"Failed to get customer rules for {customer_id}: {e}")
+            return []
+
+    async def evaluate_customer_logs(self, customer_id: str, logs: List[Dict[str, Any]]) -> List[AlertInstance]:
+        """Evaluate logs for a specific customer against their alert rules"""
+        try:
+            # Get rules for this customer from cache (on-demand)
+            customer_rules = await self.get_customer_rules(customer_id)
+            
+            if not customer_rules:
+                logger.debug(f"No alert rules found for customer {customer_id}")
+                return []
+                
+            logger.debug(f"🔍 Evaluating {len(logs)} logs against {len(customer_rules)} alert rules for customer {customer_id}")
+            
+            triggered_alerts = []
+            
+            # Evaluate each rule against the logs
+            for rule in customer_rules:
+                if not rule.enabled:
+                    continue
+                    
+                try:
+                    # Check if rule should be triggered by these logs
+                    should_trigger = await self._should_trigger_alert_for_logs(rule, logs)
+                    
+                    if should_trigger:
+                        alert = await self._trigger_alert_for_logs(rule, logs)
+                        if alert:
+                            triggered_alerts.append(alert)
+                            
+                except Exception as e:
+                    logger.error(f"Error evaluating rule {rule.name} for customer {customer_id}: {e}")
+                    continue
+                    
+            logger.debug(f"✅ Triggered {len(triggered_alerts)} alerts for customer {customer_id}")
+            return triggered_alerts
+            
+        except Exception as e:
+            logger.error(f"Failed to evaluate customer logs for {customer_id}: {e}")
+            return []
 
     def _parse_conditions(self, conditions_data):
         """Parse conditions from database format to AlertCondition objects"""
