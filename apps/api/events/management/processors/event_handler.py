@@ -61,15 +61,36 @@ async def handle_log_ingestion_event(event_data: Dict[str, Any]) -> bool:
         # DEV MODE: Do exactly what process_logs_and_tracking_async does
         # Map exactly to the old system's 3 steps
 
-        # Step 1: Store logs in logs_raw_mt (exactly like old system)
-        if await process_log_batch_with_client(logs, customer_id):
-            success_count += 1
-            logger.debug(f"Step 1/3 completed: Log batch processed for {customer_id}")
-        else:
-            logger.error(f"Step 1/3 failed: Log batch processing for {customer_id}")
+        # Step 1: Smart normalization + logs_raw_mt write (Phase 2 enhancement)
+        normalized_data = None
+        try:
+            from services.smart_ingestion_service import get_smart_ingestion_service
+            smart_service = get_smart_ingestion_service()
+            
+            # Process logs with single-pass normalization (generates both raw LogEntry and normalized data)
+            ingestion_result = await smart_service.process_logs_with_normalization(
+                logs_data, customer_id, format_type
+            )
+            
+            # Write ONLY to logs_raw_mt (for customer alerts on raw data)
+            raw_write_success = await process_log_batch_with_client(ingestion_result.log_entries, customer_id)
+            
+            if raw_write_success:
+                success_count += 1
+                # Store normalized data for event publishing (consumers will write to logs_normalized_mt)
+                normalized_data = ingestion_result.normalized_data
+                logger.debug(f"Step 1/3 completed: Smart ingestion + raw log storage for {customer_id}")
+            else:
+                logger.error(f"Step 1/3 failed: Smart ingestion for {customer_id}")
+                
+        except Exception as e:
+            logger.error(f"Step 1/3 failed: Smart ingestion error for {customer_id}: {e}")
+            # Fallback to original log processing
+            if await process_log_batch_with_client(logs, customer_id):
+                success_count += 1
+                logger.debug(f"Step 1/3 completed (fallback): Raw log processing for {customer_id}")
 
         # Step 2: Track usage with proper cost calculation (usage_records_mt + tenant_quotas_mt)
-        # This is the EXACT function the old system calls
         from services.tenant_service import TenantService
         tenant_service = TenantService()
         try:
@@ -81,7 +102,6 @@ async def handle_log_ingestion_event(event_data: Dict[str, Any]) -> bool:
             logger.error(f"Step 2/3 failed: Usage tracking for {customer_id}: {e}")
 
         # Step 3: Track ingestion statistics (ingestion_stats_mt)
-        # This is the EXACT function the old system calls
         from services.ingestion_service import IngestionService
         ingestion_service = IngestionService()
         try:
@@ -92,14 +112,14 @@ async def handle_log_ingestion_event(event_data: Dict[str, Any]) -> bool:
         except Exception as e:
             logger.error(f"Step 3/3 failed: Ingestion metrics tracking for {customer_id}: {e}")
 
-        # Step 4: Process sigma rules for security detection (NEW)
+        # Step 4: Process alert rules against RAW logs (preserves customer alert rules)
         try:
             from .sigma_processor import sigma_processor
             
-            # Create event data for sigma processing
-            sigma_event_data = {
+            # Create event data for alert processing (using raw logs as customers expect)
+            alert_event_data = {
                 'customer_id': customer_id,
-                'logs': logs_data,  # Use original logs_data
+                'logs': logs_data,  # Raw logs for customer alert rules
                 'ingestion_endpoint': endpoint,
                 'source_format': format_type,
                 'log_count': log_count,
@@ -107,20 +127,45 @@ async def handle_log_ingestion_event(event_data: Dict[str, Any]) -> bool:
                 'processing_time_ms': processing_time_ms
             }
             
-            # Process logs through sigma rule engine
-            sigma_success = await sigma_processor.process_log_batch(sigma_event_data)
+            # Process logs through alert engine (matches raw logs)
+            alert_success = await sigma_processor.process_log_batch(alert_event_data)
             
-            if sigma_success:
-                logger.debug(f"Step 4: Sigma rule processing completed for {customer_id}")
+            if alert_success:
+                logger.debug(f"Step 4: Alert rule processing completed for {customer_id}")
             else:
-                logger.warning(f"Step 4: Sigma rule processing failed for {customer_id}")
-            
-            # Note: We don't increment success_count for sigma processing as it's optional
-            # The main ingestion should succeed even if sigma processing fails
+                logger.warning(f"Step 4: Alert rule processing failed for {customer_id}")
             
         except Exception as e:
-            logger.error(f"Step 4: Sigma rule processing error for {customer_id}: {e}")
-            # Don't fail the main ingestion due to sigma processing errors
+            logger.error(f"Step 4: Alert rule processing error for {customer_id}: {e}")
+
+        # Step 5: Publish logs.normalized event for Sigma processing (if normalization succeeded)
+        if normalized_data:
+            try:
+                from events.publishers.log_publisher import LogEventPublisher
+                from events.constants import EVENT_LOGS_NORMALIZED
+                
+                publisher = LogEventPublisher()
+                
+                # Publish normalized logs event for Sigma engine consumer
+                publish_success = await publisher.publish_normalized_batch(
+                    normalized_logs=normalized_data,
+                    customer_id=customer_id,
+                    batch_info={
+                        'batch_id': event_data.get('batch_id', f"batch_{datetime.now().isoformat()}"),
+                        'source_format': format_type,
+                        'ingestion_endpoint': endpoint,
+                        'log_count': log_count,
+                        'original_event': event_data
+                    }
+                )
+                
+                if publish_success:
+                    logger.debug(f"Step 5: Published logs.normalized event for {customer_id}")
+                else:
+                    logger.warning(f"Step 5: Failed to publish logs.normalized event for {customer_id}")
+                    
+            except Exception as e:
+                logger.error(f"Step 5: Event publishing error for {customer_id}: {e}")
 
         # Log overall success
         success_rate = (success_count / total_steps) * 100

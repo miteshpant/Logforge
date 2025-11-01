@@ -97,7 +97,7 @@ def process_logs_background(logs: List[LogEntry], customer_id: str = "default"):
         # Import the event processing module
         import event_processing
         import asyncio
-        
+
         # Use event-driven processing
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -105,7 +105,7 @@ def process_logs_background(logs: List[LogEntry], customer_id: str = "default"):
             loop.run_until_complete(event_processing.process_log_batch(logs, customer_id))
         finally:
             loop.close()
-            
+
         logger.info(f"Legacy background processing redirected to event system for customer {customer_id}")
     except Exception as e:
         logger.error(f"Legacy background log processing failed: {e}")
@@ -186,9 +186,9 @@ async def process_logs_and_tracking_async(
         # EVENT-DRIVEN ONLY - Publish log ingestion event for complete processing
         # The event-driven system handles all processing (logs, usage, stats)
         global log_event_publisher
-        
+
         logger.info(f"🚀 EVENT-DRIVEN: Publishing event for complete processing - customer {customer_id}")
-        
+
         batch_info = {
             "batch_id": f"batch_{customer_id}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}",
             "log_count": log_count,
@@ -206,15 +206,14 @@ async def process_logs_and_tracking_async(
             source_format=format_type,
             processing_time_ms=float(processing_time_ms)
         )
-        
-        logger.info(f"🚀 EVENT-DRIVEN: Event published - all processing delegated to event system - customer {customer_id}")
 
+        logger.info(f"🚀 EVENT-DRIVEN: Event published - all processing delegated to event system - customer {customer_id}")
     except Exception as e:
         logger.error(f"🚀 EVENT-DRIVEN: Failed to publish event: {e}")
         raise
 
 # Duplicate functions removed - now handled by event_processing.py:
-# - track_usage_with_cost_calculation() 
+# - track_usage_with_cost_calculation()
 # - update_tenant_quota_only()
 
 async def initialize_engines():
@@ -299,42 +298,42 @@ async def initialize_engines():
         # Initialize Redis and Rule Caches (Alert + Sigma)
         try:
             logger.info("🔄 Initializing Redis and Rule Caches...")
-            
+
             # Initialize Redis connection
             from events.management.cache import init_redis
             redis_manager = await init_redis()
             logger.info("✅ Redis connection initialized successfully")
-            
+
             # Initialize Alert Rule Cache and load rules from database
             from events.management.cache.alert_rule_cache import AlertRuleCache
             alert_rule_cache = AlertRuleCache(redis_manager)
-            
+
             # Load all alert rules from database into Redis cache
             cache_success = await alert_rule_cache.initialize_cache_from_db()
             if cache_success:
                 logger.info("✅ Alert rule cache initialized and loaded from database")
             else:
                 logger.warning("⚠️ Alert rule cache initialization completed with some failures")
-            
+
             # Make alert rule cache globally available
             global alert_rule_cache_instance
             alert_rule_cache_instance = alert_rule_cache
-            
+
             # Check for MITRE Rules Migration and Load if Needed
             try:
                 logger.info("🔍 Checking MITRE rules migration status...")
-                
+
                 from dao.security_dao import SecurityDAO
                 security_dao = SecurityDAO()
-                
+
                 # Check if migration marker exists and rules need to be loaded
                 if await security_dao.should_load_mitre_rules():
                     logger.info("🎯 Loading default MITRE ATT&CK rules from migration...")
                     from mitre_default_loader import mitre_default_loader
-                    
+
                     # Load default MITRE rules into database (migration-triggered)
                     mitre_result = await mitre_default_loader.load_default_mitre_rules()
-                    
+
                     if mitre_result["status"] == "success":
                         # Mark migration as completed
                         await security_dao.mark_mitre_migration_completed()
@@ -344,26 +343,26 @@ async def initialize_engines():
                 else:
                     mitre_count = await security_dao.get_mitre_rules_count()
                     logger.info(f"ℹ️ MITRE rules already loaded ({mitre_count}/286) or migration not required")
-                    
+
             except Exception as e:
                 logger.error(f"❌ MITRE rules migration check failed: {e}")
                 # Continue startup even if MITRE loading fails
-            
+
             # Initialize Sigma Rule Cache and load rules from database
             from events.management.cache.sigma_rule_cache import SigmaRuleCache
             sigma_rule_cache = SigmaRuleCache(redis_manager)
-            
+
             # Load all sigma rules from database into Redis cache (includes default MITRE rules)
             sigma_cache_success = await sigma_rule_cache.initialize_cache_from_db()
             if sigma_cache_success:
                 logger.info("✅ Sigma rule cache initialized and loaded from database")
             else:
                 logger.warning("⚠️ Sigma rule cache initialization completed with some failures")
-            
+
             # Make sigma rule cache globally available
             global sigma_rule_cache_instance
             sigma_rule_cache_instance = sigma_rule_cache
-            
+
         except Exception as e:
             logger.error(f"❌ Redis/Alert cache initialization failed: {e}")
             # This is not critical for startup, so don't fail

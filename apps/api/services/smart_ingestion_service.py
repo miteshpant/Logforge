@@ -6,7 +6,7 @@ Single-pass normalization at ingestion time for sub-5ms end-to-end latency
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any
 from dataclasses import dataclass
 
 from models import LogEntry, BaseLogEntry
@@ -33,7 +33,7 @@ class SmartIngestionService:
     - Single-pass field normalization at ingestion time
     - Comprehensive field mapping using field_mapping.yml
     - Optimized for <2ms processing latency
-    - Dual-write preparation for raw + normalized storage
+    - Generates both LogEntry objects and normalized data for parallel processing
     """
     
     def __init__(self):
@@ -171,58 +171,6 @@ class SmartIngestionService:
         
         return enriched
     
-    async def prepare_dual_write_data(
-        self, 
-        ingestion_result: IngestionResult, 
-        customer_id: str
-    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """
-        Prepare data for dual-write to raw and normalized tables
-        
-        Args:
-            ingestion_result: Result from process_logs_with_normalization
-            customer_id: Customer identifier
-            
-        Returns:
-            Tuple of (raw_table_data, normalized_table_data)
-        """
-        raw_table_data = []
-        normalized_table_data = []
-        
-        for i, log_entry in enumerate(ingestion_result.log_entries):
-            try:
-                # Prepare raw table data (original format for compliance/audit)
-                raw_data = {
-                    "ts": log_entry.ts,
-                    "host": log_entry.host or "",
-                    "service": log_entry.service,
-                    "level": log_entry.level,
-                    "msg": log_entry.msg,
-                    "trace_id": log_entry.trace_id or "",
-                    "span_id": log_entry.span_id or "",
-                    "attrs": log_entry.attrs or {},
-                    "status": log_entry.status or 0,
-                    "src_ip": log_entry.src_ip or "",
-                    "user_id": log_entry.user_id or "",
-                    "severity_num": log_entry.severity_num or 0,
-                    "facility": log_entry.facility or 16,
-                    "parser_version": log_entry.parser_version or "smart_v1",
-                    "ingested_at": log_entry.ingested_at,
-                    "customer_id": customer_id
-                }
-                raw_table_data.append(raw_data)
-                
-                # Prepare normalized table data (for analytics/rules)
-                normalized_data = ingestion_result.normalized_data[i].copy()
-                normalized_data["customer_id"] = customer_id
-                normalized_table_data.append(normalized_data)
-                
-            except Exception as e:
-                logger.error(f"Failed to prepare dual-write data for log {i}: {e}")
-                continue
-        
-        logger.debug(f"Prepared {len(raw_table_data)} raw and {len(normalized_table_data)} normalized records")
-        return raw_table_data, normalized_table_data
     
     def _update_performance_stats(
         self, 

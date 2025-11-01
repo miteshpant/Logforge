@@ -366,3 +366,117 @@ async def process_dual_write_optimized(
         total_time_ms = (datetime.now() - start_time).total_seconds() * 1000
         logger.error(f"Dual-write failed for customer {customer_id} after {total_time_ms:.2f}ms: {e}")
         return False
+
+
+async def process_normalized_write_only(
+    normalized_table_data: List[Dict[str, Any]], 
+    customer_id: str
+) -> bool:
+    """
+    Write only to logs_normalized_mt table (for normalized log writer consumer)
+    
+    Args:
+        normalized_table_data: Prepared data for logs_normalized_mt table  
+        customer_id: Customer/tenant ID for multi-tenant isolation
+        
+    Returns:
+        bool: True if write successful, False otherwise
+    """
+    if not normalized_table_data:
+        logger.warning(f"Empty normalized batch received for customer {customer_id}")
+        return True
+        
+    start_time = datetime.now()
+    
+    try:
+        # Create ClickHouse client for normalized write only
+        client = get_client(
+            host=config["clickhouse_host"],
+            port=config["clickhouse_port"],
+            username=config["clickhouse_user"],
+            password=config["clickhouse_password"],
+            database=config["clickhouse_database"],
+            send_receive_timeout=30
+        ) if config else None
+
+        if not client:
+            logger.error("Failed to create ClickHouse client for normalized write")
+            return False
+
+        try:
+            norm_rows = []
+            
+            for norm_data in normalized_table_data:
+                ts_value = norm_data.get("ts", datetime.now(timezone.utc))
+                if isinstance(ts_value, str):
+                    # Parse ISO string to datetime
+                    try:
+                        ts_value = datetime.fromisoformat(ts_value.replace('Z', '+00:00'))
+                    except:
+                        ts_value = datetime.now(timezone.utc)
+                
+                # Parse ingested_at the same way
+                ingested_at_value = norm_data.get("ingested_at", datetime.now(timezone.utc))
+                if isinstance(ingested_at_value, str):
+                    try:
+                        ingested_at_value = datetime.fromisoformat(ingested_at_value.replace('Z', '+00:00'))
+                    except:
+                        ingested_at_value = datetime.now(timezone.utc)
+                
+                # Build normalized row matching logs_normalized_mt schema
+                # Schema: ts, date, hour, host, service, level, msg, trace_id, span_id, status, src_ip, user_id, severity_num, facility, ingested_at, customer_id
+                row = [
+                    ts_value,  # ts
+                    ts_value.date(),  # date (derived from ts)
+                    ts_value.hour,  # hour (derived from ts)
+                    norm_data.get("host", ""),  # host
+                    norm_data.get("service", "unknown"),  # service
+                    norm_data.get("level", "info"),  # level
+                    norm_data.get("msg", ""),  # msg
+                    norm_data.get("trace_id", ""),  # trace_id
+                    norm_data.get("span_id", ""),  # span_id
+                    norm_data.get("status", 0),  # status
+                    norm_data.get("src_ip", ""),  # src_ip (normalized field name from field mapping)
+                    norm_data.get("user", "") or norm_data.get("user_id", ""),  # user_id (field mapping creates 'user', fallback to 'user_id')
+                    norm_data.get("severity_num", 0),  # severity_num
+                    norm_data.get("facility", 16),  # facility
+                    ingested_at_value,  # ingested_at
+                    customer_id  # customer_id
+                ]
+                norm_rows.append(row)
+            
+            # Insert to logs_normalized_mt only
+            client.insert(
+                "logs_normalized_mt",
+                norm_rows,
+                column_names=[
+                    "ts", "date", "hour", "host", "service", "level", "msg", 
+                    "trace_id", "span_id", "status", "src_ip", "user_id", 
+                    "severity_num", "facility", "ingested_at", "customer_id"
+                ]
+            )
+            
+            # Calculate performance metrics
+            write_time_ms = (datetime.now() - start_time).total_seconds() * 1000
+            
+            # Performance validation (<2ms target)
+            performance_target_met = write_time_ms < 2.0
+            if not performance_target_met:
+                logger.warning(f"Normalized write performance target missed: {write_time_ms:.2f}ms (target: <2ms)")
+            
+            logger.info(
+                f"Normalized write completed for customer {customer_id}: "
+                f"{len(normalized_table_data)} records in {write_time_ms:.2f}ms "
+                f"({write_time_ms/len(normalized_table_data):.3f}ms per record) "
+                f"{'✅ TARGET MET' if performance_target_met else '⚠️ TARGET MISSED'}"
+            )
+            
+            return True
+
+        finally:
+            client.close()
+
+    except Exception as e:
+        write_time_ms = (datetime.now() - start_time).total_seconds() * 1000
+        logger.error(f"Normalized write failed for customer {customer_id} after {write_time_ms:.2f}ms: {e}")
+        return False

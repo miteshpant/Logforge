@@ -30,7 +30,7 @@ class LogEventHandler(EventHandler):
             customer_id=event.customer_id,
             event_type=event.event_type
         )
-        
+
         # Handle different types of log events
         if event.event_type == EVENT_LOGS_BATCH_INGESTED:
             return await self._handle_logs_batch_ingested(event)
@@ -44,10 +44,10 @@ class LogEventHandler(EventHandler):
         try:
             # Import here to avoid circular dependencies
             from services.smart_ingestion_service import get_smart_ingestion_service
-            from events.management.processors.log_processor import process_dual_write_optimized, track_ingestion_metrics
+            from events.management.processors.log_processor import track_ingestion_metrics
             from events.publishers.log_publisher import LogEventPublisher
             from datetime import datetime
-            
+
             customer_id = event.customer_id
             raw_logs = event.data.get('logs', [])
             source_format = event.data.get('source_format', 'json')
@@ -60,7 +60,7 @@ class LogEventHandler(EventHandler):
                 'timestamp': event.data.get('timestamp', datetime.utcnow().isoformat()),
                 'source_format': source_format
             }
-            
+
             logger.info(
                 "🚀 SMART PROCESSING: Processing log batch ingestion event",
                 event_id=event.metadata.event_id,
@@ -68,9 +68,9 @@ class LogEventHandler(EventHandler):
                 log_count=len(raw_logs),
                 source_format=source_format
             )
-            
+
             start_time = datetime.now()
-            
+
             # Step 1: Process logs with SmartIngestionService (field mapping + normalization)
             smart_service = get_smart_ingestion_service()
             ingestion_result = await smart_service.process_logs_with_normalization(
@@ -78,7 +78,7 @@ class LogEventHandler(EventHandler):
                 customer_id=customer_id,
                 source_format=source_format
             )
-            
+
             logger.info(
                 f"Smart normalization completed",
                 event_id=event.metadata.event_id,
@@ -88,28 +88,23 @@ class LogEventHandler(EventHandler):
                 normalization_time_ms=ingestion_result.processing_time_ms,
                 field_mapping_applied=ingestion_result.field_mapping_applied
             )
-            
-            # Step 2: Prepare dual-write data
-            raw_table_data, normalized_table_data = await smart_service.prepare_dual_write_data(
-                ingestion_result, customer_id
+
+            # Step 2: Write to logs_raw_mt (raw logs for customer alerts/compliance)
+            from events.management.processors.log_processor import process_log_batch_with_client
+
+            raw_write_success = await process_log_batch_with_client(
+                ingestion_result.log_entries, customer_id
             )
-            
-            # Step 3: Perform optimized dual-write to both tables
-            dual_write_success = await process_dual_write_optimized(
-                raw_table_data=raw_table_data,
-                normalized_table_data=normalized_table_data,
-                customer_id=customer_id
-            )
-            
-            if not dual_write_success:
+
+            if not raw_write_success:
                 logger.error(
-                    "Dual-write failed",
+                    "Raw log write failed",
                     event_id=event.metadata.event_id,
                     customer_id=customer_id
                 )
                 return False
-            
-            # Step 4: Track ingestion metrics
+
+            # Step 3: Track ingestion metrics
             total_processing_time = (datetime.now() - start_time).total_seconds() * 1000
             await track_ingestion_metrics(
                 customer_id=customer_id,
@@ -120,13 +115,34 @@ class LogEventHandler(EventHandler):
                 processing_time_ms=int(total_processing_time)
             )
             
+            # Step 4: Track monthly ingestion usage and update tenant quotas
+            try:
+                from services.tenant_service import TenantService
+                from events.management.processors.usage_processor import track_usage_with_cost_calculation
+                
+                tenant_service = TenantService()
+                
+                # Track monthly ingestion usage (this was missing!)
+                await track_usage_with_cost_calculation(
+                    tenant_service, 
+                    customer_id, 
+                    "monthly_ingestion", 
+                    batch_info.get('bytes_processed', 0)
+                )
+                
+                logger.debug(f"Monthly ingestion usage tracked for customer {customer_id}: {batch_info.get('bytes_processed', 0)} bytes")
+                
+            except Exception as e:
+                logger.warning(f"Failed to track monthly ingestion usage for customer {customer_id}: {e}")
+                # Don't fail the whole operation if usage tracking fails
+
             # Step 5: Publish normalized event for alert/sigma processing
             # Get the publisher manager from somewhere in the system
             try:
-                from events.manager import get_publisher_manager
-                publisher_manager = get_publisher_manager()
+                from dependencies import get_event_publisher_manager
+                publisher_manager = get_event_publisher_manager()
                 log_publisher = LogEventPublisher(publisher_manager)
-                
+
                 await log_publisher.publish_normalized_batch(
                     customer_id=customer_id,
                     normalized_logs=ingestion_result.normalized_data,
@@ -135,14 +151,14 @@ class LogEventHandler(EventHandler):
                     correlation_id=event.metadata.correlation_id,
                     trace_id=event.metadata.trace_id
                 )
-                
+
                 logger.info(
                     "📤 NORMALIZED EVENT PUBLISHED: Normalized logs ready for alert/sigma engines",
                     event_id=event.metadata.event_id,
                     customer_id=customer_id,
                     normalized_logs=len(ingestion_result.normalized_data)
                 )
-                
+
             except Exception as e:
                 logger.warning(
                     f"Failed to publish normalized event, but dual-write succeeded: {e}",
@@ -150,10 +166,10 @@ class LogEventHandler(EventHandler):
                     customer_id=customer_id
                 )
                 # Don't fail the whole operation if event publishing fails
-            
+
             # Performance validation
             performance_target_met = ingestion_result.processing_time_ms < 2.0
-            
+
             logger.info(
                 "🚀 SMART PROCESSING COMPLETE",
                 event_id=event.metadata.event_id,
@@ -165,9 +181,9 @@ class LogEventHandler(EventHandler):
                 field_mapping_applied=ingestion_result.field_mapping_applied,
                 performance_target_met='✅ TARGET MET' if performance_target_met else '⚠️ TARGET MISSED'
             )
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(
                 f"🚀 SMART PROCESSING FAILED: {e}",

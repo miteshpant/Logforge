@@ -8,7 +8,7 @@ import structlog
 from .base import EventHandler
 from ..base import BaseEvent
 from ..constants import (
-    EVENT_LOGS_BATCH_INGESTED,
+    EVENT_LOGS_NORMALIZED,
     EVENT_SIGMA_RULE_CREATED,
     EVENT_SIGMA_RULE_UPDATED,
     EVENT_SIGMA_RULE_DELETED,
@@ -47,8 +47,8 @@ class SecurityEventHandler(EventHandler):
                 **event.data
             }
 
-            if event_type == EVENT_LOGS_BATCH_INGESTED:
-                return await self._handle_log_batch_event(event_data)
+            if event_type == EVENT_LOGS_NORMALIZED:
+                return await self._handle_normalized_logs_event(event_data)
             elif event_type.startswith("security.sigma.rule."):
                 return await self._handle_sigma_rule_event(event_type, event_data)
             elif event_type.startswith("security.detection."):
@@ -61,13 +61,13 @@ class SecurityEventHandler(EventHandler):
             logger.error(f"Error handling security event {event.event_type}: {e}")
             return False
 
-    async def _handle_log_batch_event(self, event_data: Dict[str, Any]) -> bool:
-        """Handle logs.batch.ingested events for Sigma rule matching."""
+    async def _handle_normalized_logs_event(self, event_data: Dict[str, Any]) -> bool:
+        """Handle logs.normalized events for Sigma rule matching."""
         try:
             customer_id = event_data.get('customer_id')
-            logs_count = len(event_data.get('logs', []))
+            normalized_logs = event_data.get('normalized_logs', [])
             
-            logger.info(f"🛡️ Processing log batch for Sigma rule matching: {logs_count} logs from customer {customer_id}")
+            logger.info(f"🛡️ Processing normalized logs for Sigma rule matching: {len(normalized_logs)} logs from customer {customer_id}")
             
             # Get Sigma rules for this customer (including default rules)
             sigma_rules = await self.sigma_rule_cache.get_customer_rules(customer_id, include_defaults=True)
@@ -78,15 +78,22 @@ class SecurityEventHandler(EventHandler):
             
             logger.debug(f"📋 Found {len(sigma_rules)} Sigma rules for customer {customer_id}")
             
-            # Process logs through Sigma rule matching
-            # For now, this is a placeholder - actual matching logic will be implemented later
-            detections_count = await self._process_logs_with_sigma_rules(event_data, sigma_rules)
+            # Process normalized logs through Sigma rule matching
+            # Use normalized logs instead of raw logs for better field mapping support
+            event_data_for_sigma = {
+                'customer_id': customer_id,
+                'logs': normalized_logs,  # Use normalized logs with field mapping
+                'field_mapping_applied': event_data.get('field_mapping_applied', True),
+                'normalization_time_ms': event_data.get('normalization_time_ms', 0)
+            }
+            
+            detections_count = await self._process_logs_with_sigma_rules(event_data_for_sigma, sigma_rules)
             
             logger.debug(f"✅ Sigma rule processing completed for customer {customer_id}: {detections_count} detections")
             return True
             
         except Exception as e:
-            logger.error(f"Error handling log batch event for Sigma rules: {e}")
+            logger.error(f"Error handling normalized logs event for Sigma rules: {e}")
             return False
 
     async def _handle_sigma_rule_event(self, event_type: str, event_data: Dict[str, Any]) -> bool:
@@ -246,7 +253,7 @@ class SecurityEventHandler(EventHandler):
     def get_supported_event_types(self) -> List[str]:
         """Support security events and log events for Sigma rule matching"""
         return [
-            EVENT_LOGS_BATCH_INGESTED,         # Main log processing for Sigma rule matching
+            EVENT_LOGS_NORMALIZED,             # Process normalized logs for Sigma rule matching
             EVENT_SIGMA_RULE_CREATED,          # Sigma rule creation
             EVENT_SIGMA_RULE_UPDATED,          # Sigma rule updates  
             EVENT_SIGMA_RULE_DELETED,          # Sigma rule deletion
