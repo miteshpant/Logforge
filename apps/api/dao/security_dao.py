@@ -346,34 +346,40 @@ class SecurityDAO:
             
             query = """
             INSERT INTO security_events_mt (
-                id, customer_id, rule_id, rule_title, severity, status,
-                timestamp, event_data, matched_fields, attack_techniques,
-                kill_chain_phase, assigned_to, investigation_notes, artifacts,
-                source_logs, created_at, updated_at
+                id, customer_id, rule_id, title, severity, status,
+                event_type, description, raw_log_data, enrichment_data,
+                mitre_techniques, assigned_to, investigation_notes, artifacts,
+                created_at, updated_at
             ) VALUES (
-                %(id)s, %(customer_id)s, %(rule_id)s, %(rule_title)s, %(severity)s, %(status)s,
-                %(timestamp)s, %(event_data)s, %(matched_fields)s, %(attack_techniques)s,
-                %(kill_chain_phase)s, %(assigned_to)s, %(investigation_notes)s, %(artifacts)s,
-                %(source_logs)s, %(created_at)s, %(updated_at)s
+                %(id)s, %(customer_id)s, %(rule_id)s, %(title)s, %(severity)s, %(status)s,
+                %(event_type)s, %(description)s, %(raw_log_data)s, %(enrichment_data)s,
+                %(mitre_techniques)s, %(assigned_to)s, %(investigation_notes)s, %(artifacts)s,
+                %(created_at)s, %(updated_at)s
             )
             """
+            
+            # Map status to ClickHouse enum
+            status_value = event_data.get("status", "triggered")
+            if status_value == "triggered":
+                status_enum = "new"  # Map triggered to new
+            else:
+                status_enum = status_value
             
             params = {
                 "id": event_id,
                 "customer_id": event_data.get("customer_id", "default"),
                 "rule_id": event_data.get("rule_id", ""),
-                "rule_title": event_data.get("rule_title", ""),
+                "title": event_data.get("rule_title", ""),
                 "severity": event_data.get("severity", "medium"),
-                "status": event_data.get("status", "triggered"),
-                "timestamp": event_data.get("timestamp", datetime.now(timezone.utc)),
-                "event_data": json.dumps(event_data.get("event_data", {})),
-                "matched_fields": json.dumps(event_data.get("matched_fields", {})),
-                "attack_techniques": json.dumps([t.value if hasattr(t, 'value') else str(t) for t in event_data.get("attack_techniques", [])]),
-                "kill_chain_phase": event_data.get("kill_chain_phase"),
+                "status": status_enum,  # Use enum-compatible value
+                "event_type": "detection",  # All security events are detections
+                "description": event_data.get("rule_title", "Security detection"),
+                "raw_log_data": json.dumps(event_data.get("event_data", {})),
+                "enrichment_data": json.dumps(event_data.get("matched_fields", {})),
+                "mitre_techniques": [str(t) for t in event_data.get("attack_techniques", [])],
                 "assigned_to": event_data.get("assigned_to"),
-                "investigation_notes": json.dumps(event_data.get("investigation_notes", [])),
-                "artifacts": json.dumps(event_data.get("artifacts", [])),
-                "source_logs": json.dumps(event_data.get("source_logs", [])),
+                "investigation_notes": [str(note) for note in event_data.get("investigation_notes", [])],
+                "artifacts": [str(artifact) for artifact in event_data.get("artifacts", [])],
                 "created_at": datetime.now(timezone.utc),
                 "updated_at": datetime.now(timezone.utc)
             }

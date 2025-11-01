@@ -59,8 +59,7 @@ field_mappings:
   status:
     - "status"
     - "result"
-    - "outcome"
-    - "response"
+    - "response" 
     - "state"
     - "success"
     - "failure"

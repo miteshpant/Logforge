@@ -346,9 +346,8 @@ class SigmaRuleEngine:
         try:
             detection = rule.detection
             
-            # Check if log source matches rule requirements
-            if not self._check_logsource_match(normalized_log, rule.logsource):
-                return None
+            # Removed logsource matching - SIGMA rules should be generic across environments
+            # Real filtering happens at selection level (event_type, status_code, etc.)
             
             # Evaluate the main selection
             selection = detection.get("selection", {})
@@ -393,40 +392,6 @@ class SigmaRuleEngine:
             logger.error(f"Error evaluating rule {rule.id} against log: {e}")
             return None
     
-    def _check_logsource_match(self, log_entry: Dict[str, Any], logsource: Dict[str, Any]) -> bool:
-        """
-        Check if log entry matches the rule's logsource requirements
-        
-        Args:
-            log_entry: The log entry
-            logsource: The logsource criteria from the rule
-            
-        Returns:
-            bool: True if the log source matches
-        """
-        try:
-            if not logsource:
-                return True  # No logsource requirements
-            
-            # Check product match
-            if "product" in logsource:
-                log_product = log_entry.get("product", "").lower()
-                rule_product = logsource["product"].lower()
-                if log_product != rule_product:
-                    return False
-            
-            # Check service match
-            if "service" in logsource:
-                log_service = log_entry.get("service", "").lower()
-                rule_service = logsource["service"].lower()
-                if log_service != rule_service and log_entry.get("service_name", "").lower() != rule_service:
-                    return False
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error checking logsource match: {e}")
-            return False
     
     def _evaluate_condition_logic(self, condition: str, selection_match: bool) -> bool:
         """

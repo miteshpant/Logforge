@@ -175,8 +175,8 @@ class SecurityEventHandler(EventHandler):
             # Import the Sigma engine
             from sigma_engine import sigma_engine
             
-            # Evaluate logs against Sigma rules
-            matches = await sigma_engine.evaluate_logs_against_rules(logs, sigma_rules, customer_id)
+            # Evaluate logs against Sigma rules (logs are already normalized from EVENT_LOGS_NORMALIZED)
+            matches = await sigma_engine.evaluate_logs_against_rules(logs, sigma_rules, customer_id, logs_normalized=True)
             
             detections_count = len(matches)
             
@@ -201,14 +201,32 @@ class SecurityEventHandler(EventHandler):
             security_service = SecurityService()
             
             # Transform event data for database storage
+            # The actual event structure uses: detection_id, rule_name, triggered_at
+            rule_title = event_data.get("rule_name") or "Unknown Rule"  # rule_name can be None
+            if not rule_title or rule_title == "None":
+                # If rule_name is missing, try to get it from rule_id by looking up the rule
+                try:
+                    rule_id = event_data.get("rule_id")
+                    if rule_id:
+                        # Try to get rule title from Sigma rule cache
+                        sigma_rules = await self.sigma_rule_cache.get_customer_rules(event_data.get("customer_id"), include_defaults=True)
+                        for rule in sigma_rules:
+                            if rule.get("id") == rule_id:
+                                rule_title = rule.get("title", f"Rule {rule_id[:8]}")
+                                break
+                        else:
+                            rule_title = f"Rule {rule_id[:8]}"  # Fallback to rule ID prefix
+                except Exception:
+                    rule_title = f"Rule {event_data.get('rule_id', 'unknown')[:8]}"
+            
             detection_data = {
-                "id": event_data.get("detection_id"),
+                "id": event_data.get("detection_id"),  # Actual field is detection_id, not id
                 "customer_id": event_data.get("customer_id"),
                 "rule_id": event_data.get("rule_id"),
-                "rule_title": event_data.get("rule_name"),
+                "rule_title": rule_title,  # Use the resolved rule title
                 "severity": event_data.get("severity", "medium"),
                 "status": "triggered",
-                "timestamp": event_data.get("event_timestamp"),
+                "timestamp": event_data.get("triggered_at"),  # Actual field is triggered_at, not timestamp
                 "event_data": event_data,  # Store full event data
                 "matched_fields": event_data.get("matched_fields", {}),
                 "attack_techniques": event_data.get("attack_techniques", []),

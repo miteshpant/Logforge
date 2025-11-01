@@ -169,6 +169,7 @@ class SecurityDetection:
             "customer_id": self.customer_id,
             "severity": self.severity.value if hasattr(self.severity, 'value') else str(self.severity),
             "title": self.title,
+            "rule_name": self.title,  # Add rule_name field for SecurityEventHandler while keeping title
             "description": self.description,
             "attack_techniques": self.attack_techniques,
             "kill_chain_phases": self.kill_chain_phases,
