@@ -95,6 +95,16 @@ class ThreatHuntingRequest(BaseModel):
     rule_ids: Optional[List[str]] = None
     description: Optional[str] = "Threat hunting campaign"
 
+# Security Event Status Management Models
+class SecurityEventActionRequest(BaseModel):
+    notes: Optional[str] = None
+
+class SecurityEventResolveRequest(BaseModel):
+    resolution_notes: str
+
+class SecurityEventBulkResolveRequest(BaseModel):
+    resolution_notes: str
+
 class SecurityDashboardResponse(BaseModel):
     total_events: int
     events_by_severity: Dict[str, int]
@@ -413,33 +423,274 @@ async def list_security_events(
         logger.error(f"Failed to list security events: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get events: {str(e)}")
 
-@router.put("/events/{event_id}/status")
-async def update_security_event_status(
-    event_id: str,
-    status: str,
+
+# Security Event Status Management Endpoints
+
+@router.post("/{detection_id}/acknowledge")
+async def acknowledge_security_event(
+    detection_id: str,
+    request: SecurityEventActionRequest,
     customer_id: str = Header(..., alias="X-Customer-ID"),
-    assigned_to: Optional[str] = None,
-    notes: Optional[List[str]] = None
+    current_user: User = Depends(get_current_user)
 ) -> Dict[str, str]:
-    """Update security event status"""
+    """Acknowledge security event - assign to user and mark as investigating"""
     try:
-        success = await security_service.update_security_event_status(
-            event_id=event_id,
+        success = await security_service.acknowledge_security_event(
+            detection_id=detection_id,
             customer_id=customer_id,
-            status=status,
-            assigned_to=assigned_to,
-            notes=notes or []
+            user_id=current_user.id,
+            notes=request.notes
         )
         
-        if success:
-            return {"message": "Security event updated", "event_id": event_id}
-        else:
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to acknowledge security event")
+        
+        return {"message": "Security event acknowledged successfully", "status": "investigating"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to acknowledge security event {detection_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to acknowledge event: {str(e)}")
+
+@router.post("/{detection_id}/investigate")
+async def investigate_security_event(
+    detection_id: str,
+    request: SecurityEventActionRequest,
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user)
+) -> Dict[str, str]:
+    """Mark security event as under investigation"""
+    try:
+        success = await security_service.investigate_security_event(
+            detection_id=detection_id,
+            customer_id=customer_id,
+            user_id=current_user.id,
+            notes=request.notes
+        )
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to update security event")
+        
+        return {"message": "Security event marked as investigating", "status": "investigating"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to investigate security event {detection_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update event: {str(e)}")
+
+@router.post("/{detection_id}/resolve")
+async def resolve_security_event(
+    detection_id: str,
+    request: SecurityEventResolveRequest,
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user)
+) -> Dict[str, str]:
+    """Resolve security event"""
+    try:
+        success = await security_service.resolve_security_event(
+            detection_id=detection_id,
+            customer_id=customer_id,
+            user_id=current_user.id,
+            resolution_notes=request.resolution_notes
+        )
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to resolve security event")
+        
+        return {"message": "Security event resolved successfully", "status": "resolved"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to resolve security event {detection_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to resolve event: {str(e)}")
+
+@router.post("/{detection_id}/false-positive")
+async def mark_false_positive(
+    detection_id: str,
+    request: SecurityEventResolveRequest,
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user)
+) -> Dict[str, str]:
+    """Mark security event as false positive"""
+    try:
+        success = await security_service.mark_false_positive(
+            detection_id=detection_id,
+            customer_id=customer_id,
+            user_id=current_user.id,
+            notes=request.resolution_notes
+        )
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to mark as false positive")
+        
+        return {"message": "Security event marked as false positive", "status": "false_positive"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to mark false positive {detection_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to mark as false positive: {str(e)}")
+
+# Bulk operations for all events from a rule
+@router.post("/rules/{rule_id}/acknowledge-all")
+async def bulk_acknowledge_by_rule(
+    rule_id: str,
+    request: SecurityEventActionRequest,
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Acknowledge all new events for a specific rule"""
+    try:
+        updated_count = await security_service.bulk_acknowledge_by_rule(
+            rule_id=rule_id,
+            customer_id=customer_id,
+            user_id=current_user.id,
+            notes=request.notes
+        )
+        
+        return {
+            "message": f"Acknowledged {updated_count} security events for rule {rule_id}",
+            "updated_count": updated_count,
+            "status": "investigating"
+        }
+    except Exception as e:
+        logger.error(f"Failed to bulk acknowledge by rule {rule_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to acknowledge events: {str(e)}")
+
+@router.post("/rules/{rule_id}/investigate-all")
+async def bulk_investigate_by_rule(
+    rule_id: str,
+    request: SecurityEventActionRequest,
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Mark all new events for a rule as investigating"""
+    try:
+        updated_count = await security_service.bulk_acknowledge_by_rule(  # Same as acknowledge
+            rule_id=rule_id,
+            customer_id=customer_id,
+            user_id=current_user.id,
+            notes=request.notes
+        )
+        
+        return {
+            "message": f"Marked {updated_count} security events as investigating for rule {rule_id}",
+            "updated_count": updated_count,
+            "status": "investigating"
+        }
+    except Exception as e:
+        logger.error(f"Failed to bulk investigate by rule {rule_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to investigate events: {str(e)}")
+
+@router.post("/rules/{rule_id}/resolve-all")
+async def bulk_resolve_by_rule(
+    rule_id: str,
+    request: SecurityEventBulkResolveRequest,
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Resolve all new events for a specific rule"""
+    try:
+        updated_count = await security_service.bulk_resolve_by_rule(
+            rule_id=rule_id,
+            customer_id=customer_id,
+            user_id=current_user.id,
+            notes=request.resolution_notes
+        )
+        
+        return {
+            "message": f"Resolved {updated_count} security events for rule {rule_id}",
+            "updated_count": updated_count,
+            "status": "resolved"
+        }
+    except Exception as e:
+        logger.error(f"Failed to bulk resolve by rule {rule_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to resolve events: {str(e)}")
+
+@router.post("/rules/{rule_id}/false-positive-all")
+async def bulk_false_positive_by_rule(
+    rule_id: str,
+    request: SecurityEventBulkResolveRequest,
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Mark all new events for a rule as false positive"""
+    try:
+        updated_count = await security_service.bulk_false_positive_by_rule(
+            rule_id=rule_id,
+            customer_id=customer_id,
+            user_id=current_user.id,
+            notes=request.resolution_notes
+        )
+        
+        return {
+            "message": f"Marked {updated_count} security events as false positive for rule {rule_id}",
+            "updated_count": updated_count,
+            "status": "false_positive"
+        }
+    except Exception as e:
+        logger.error(f"Failed to bulk false positive by rule {rule_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to mark as false positive: {str(e)}")
+
+# Get events by rule for verification
+@router.get("/rules/{rule_id}/events")
+async def get_events_by_rule(
+    rule_id: str,
+    status: Optional[str] = Query(None),
+    limit: int = Query(100, le=500),
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Get events for a specific rule"""
+    try:
+        events = await security_service.get_events_by_rule(
+            rule_id=rule_id,
+            customer_id=customer_id,
+            status_filter=status,
+            limit=limit
+        )
+        
+        return {
+            "rule_id": rule_id,
+            "events": events,
+            "total_count": len(events),
+            "status_filter": status
+        }
+    except Exception as e:
+        logger.error(f"Failed to get events by rule {rule_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get events: {str(e)}")
+
+@router.get("/{detection_id}/status")
+async def get_security_event_status(
+    detection_id: str,
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Get detailed security event status and investigation history"""
+    try:
+        event = await security_service.get_security_event_details(detection_id, customer_id)
+        
+        if not event:
             raise HTTPException(status_code=404, detail="Security event not found")
+        
+        return {
+            "id": event.get("id"),
+            "rule_id": event.get("rule_id"),
+            "title": event.get("title"),
+            "severity": event.get("severity"),
+            "status": event.get("status"),
+            "created_at": event.get("created_at"),
+            "updated_at": event.get("updated_at"),
+            "assigned_to": event.get("assigned_to"),
+            "investigation_notes": event.get("investigation_notes", []),
+            "mitre_techniques": event.get("mitre_techniques", []),
+            "raw_log_data": event.get("raw_log_data", {}),
+            "enrichment_data": event.get("enrichment_data", {})
+        }
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to update security event {event_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to update event: {str(e)}")
+        logger.error(f"Failed to get security event status {detection_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get event status: {str(e)}")
 
 @router.post("/threat-hunting")
 async def run_threat_hunting(

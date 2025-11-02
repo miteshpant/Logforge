@@ -41,7 +41,7 @@ async def stream_metrics(
     try:
         observability_service = ObservabilityService()
         metric_list = metric_names.split(",")
-        
+
         async def generate_metrics():
             while True:
                 try:
@@ -52,24 +52,24 @@ async def stream_metrics(
                         hours=1,
                         limit=100
                     )
-                    
+
                     # Filter metrics by requested names
                     filtered_metrics = [
-                        metric for metric in metrics 
+                        metric for metric in metrics
                         if metric.get('name') in metric_list
                     ]
-                    
+
                     if filtered_metrics:
                         yield format_sse_message("metrics", filtered_metrics)
-                    
+
                     await asyncio.sleep(5)  # Update every 5 seconds
-                    
+
                 except Exception as e:
-                    logger.error("Error streaming metrics", error=str(e), customer_id=customer_id, 
+                    logger.error("Error streaming metrics", error=str(e), customer_id=customer_id,
                                error_type=type(e).__name__, metric_names=metric_names)
                     yield format_sse_message("error", {"message": f"Metrics streaming error: {str(e)}"})
                     break
-        
+
         return StreamingResponse(
             generate_metrics(),
             media_type="text/event-stream",
@@ -80,7 +80,7 @@ async def stream_metrics(
                 "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
             }
         )
-        
+
     except Exception as e:
         logger.error("Failed to start metrics stream", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to start metrics stream: {str(e)}")
@@ -93,7 +93,7 @@ async def stream_traces(
     """Stream real-time trace data"""
     try:
         observability_service = ObservabilityService()
-        
+
         async def generate_traces():
             while True:
                 try:
@@ -107,17 +107,17 @@ async def stream_traces(
                         },
                         limit=10
                     )
-                    
+
                     if traces:
                         yield format_sse_message("traces", traces)
-                    
+
                     await asyncio.sleep(10)  # Update every 10 seconds
-                    
+
                 except Exception as e:
                     logger.error("Error streaming traces", error=str(e), customer_id=customer_id)
                     yield format_sse_message("error", {"message": f"Traces streaming error: {str(e)}"})
                     break
-        
+
         return StreamingResponse(
             generate_traces(),
             media_type="text/event-stream",
@@ -128,7 +128,7 @@ async def stream_traces(
                 "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
             }
         )
-        
+
     except Exception as e:
         logger.error("Failed to start traces stream", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to start traces stream: {str(e)}")
@@ -144,10 +144,10 @@ async def stream_security_events(
         from events.constants import (
             EVENT_SIGMA_RULE_CREATED, EVENT_SIGMA_RULE_UPDATED, EVENT_SIGMA_RULE_DELETED,
             EVENT_SIGMA_RULE_ENABLED, EVENT_SIGMA_RULE_DISABLED,
-            EVENT_SECURITY_DETECTION_TRIGGERED, EVENT_SECURITY_DETECTION_RESOLVED, EVENT_SECURITY_DETECTION_ACKNOWLEDGED,
+            EVENT_SECURITY_DETECTION_TRIGGERED, EVENT_SECURITY_DETECTION_RESOLVED, EVENT_SECURITY_DETECTION_ACKNOWLEDGED, EVENT_SECURITY_DETECTION_FALSE_POSITIVE,
             TOPIC_SYSTEM_EVENTS, TOPIC_UI_REALTIME_EVENTS
         )
-        
+
         # Security event types we want to stream to UI
         security_events = [
             EVENT_SIGMA_RULE_CREATED,
@@ -157,43 +157,44 @@ async def stream_security_events(
             EVENT_SIGMA_RULE_DISABLED,
             EVENT_SECURITY_DETECTION_TRIGGERED,
             EVENT_SECURITY_DETECTION_RESOLVED,
-            EVENT_SECURITY_DETECTION_ACKNOWLEDGED
+            EVENT_SECURITY_DETECTION_ACKNOWLEDGED,
+            EVENT_SECURITY_DETECTION_FALSE_POSITIVE
         ]
-        
+
         # Create a queue to receive events from the custom handler
         event_queue = asyncio.Queue()
-        
+
         # Custom handler class to capture security events for this streaming session
         class StreamingSecurityHandler:
             """Custom handler to capture security events for streaming"""
-            
+
             def __init__(self, target_customer_id: str, event_queue: asyncio.Queue):
                 self.target_customer_id = target_customer_id
                 self.event_queue = event_queue
-                
+
             async def handle(self, event) -> bool:
                 """Handle events and put relevant ones in the queue"""
                 try:
                     # Only handle events for our target customer and security event types
-                    if (hasattr(event, 'customer_id') and 
+                    if (hasattr(event, 'customer_id') and
                         (event.customer_id == self.target_customer_id or event.customer_id is None) and  # Include default rules
                         hasattr(event, 'event_type') and
                         event.event_type in security_events):
-                        
+
                         # Put event in queue for streaming
                         await self.event_queue.put(event)
                         logger.debug(f"Security event queued for streaming: {event.event_type}")
                         return True
-                        
+
                     return True
-                    
+
                 except Exception as e:
                     logger.error(f"Error in security streaming handler: {e}")
                     return False
-                    
+
             def get_handler_name(self) -> str:
                 return f"streaming_security_handler_{self.target_customer_id}"
-                
+
             def get_supported_event_types(self) -> List[str]:
                 return security_events
 
@@ -202,7 +203,7 @@ async def stream_security_events(
             subscriber = None
             try:
                 from events.subscribers import SubscriberConfig
-                
+
                 # Create subscriber config for security events
                 config = SubscriberConfig(
                     name=f"streaming_security_{customer_id}",
@@ -213,16 +214,16 @@ async def stream_security_events(
                     max_batch_size=10,
                     max_parallel_workers=1
                 )
-                
+
                 # Create Kafka subscriber for security events
                 subscriber = KafkaEventSubscriber(config)
-                
+
                 # Create and register our custom streaming handler
                 streaming_handler = StreamingSecurityHandler(customer_id, event_queue)
                 subscriber.register_handler(streaming_handler)
-                
+
                 logger.info(f"Starting real-time security stream for customer {customer_id}")
-                
+
                 # Send initial connection confirmation
                 yield format_sse_message("connected", {
                     "status": "streaming_started",
@@ -230,23 +231,23 @@ async def stream_security_events(
                     "event_types": security_events,
                     "timestamp": datetime.now().isoformat()
                 })
-                
+
                 # Start the subscriber
                 await subscriber.start()
-                
+
                 # Listen for events from our queue
                 while True:
                     try:
                         # Wait for events with a timeout to allow for graceful shutdown
                         event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
-                        
+
                         # Format security event for streaming
                         stream_data = {
                             "event_type": event.event_type,
                             "customer_id": event.customer_id,
                             "timestamp": event.metadata.created_at if hasattr(event, 'metadata') and event.metadata else datetime.now().isoformat(),
                         }
-                        
+
                         # Add event-specific data based on event type
                         if event.event_type.startswith("security.sigma.rule."):
                             stream_data.update({
@@ -267,28 +268,28 @@ async def stream_security_events(
                                 "matched_fields": event.data.get("matched_fields", {}),
                                 "attack_techniques": event.data.get("attack_techniques", [])
                             })
-                        
+
                         # Stream the event immediately
                         yield format_sse_message("security_event", stream_data, getattr(event.metadata, 'event_id', None) if hasattr(event, 'metadata') else None)
-                        
+
                         logger.debug(
                             "Security event streamed to UI",
                             customer_id=customer_id,
                             event_type=event.event_type,
                             rule_id=stream_data.get("rule_id")
                         )
-                        
+
                     except asyncio.TimeoutError:
                         # Send keepalive message
                         yield format_sse_message("keepalive", {
                             "timestamp": datetime.now().isoformat(),
                             "status": "listening"
                         })
-                        
+
                     except Exception as e:
                         logger.error(f"Error processing security event for streaming: {e}")
                         yield format_sse_message("error", {"message": f"Event processing error: {str(e)}"})
-                        
+
             except Exception as e:
                 logger.error(f"Error in real-time security stream for customer {customer_id}: {e}")
                 yield format_sse_message("error", {
@@ -303,7 +304,7 @@ async def stream_security_events(
                         logger.info(f"Stopped security subscriber for customer {customer_id}")
                     except Exception as e:
                         logger.error(f"Error stopping security subscriber: {e}")
-        
+
         return StreamingResponse(
             generate_real_time_security_events(),
             media_type="text/event-stream",
@@ -314,7 +315,7 @@ async def stream_security_events(
                 "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
             }
         )
-        
+
     except Exception as e:
         logger.error("Failed to start real-time security stream", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to start security stream: {str(e)}")
@@ -328,48 +329,48 @@ async def stream_alerts(
     try:
         from events.subscribers import KafkaEventSubscriber
         from events.constants import EVENT_UI_ALERT_TRIGGERED, EVENT_UI_ALERT_ACKNOWLEDGED, EVENT_UI_ALERT_RESOLVED, TOPIC_UI_REALTIME_EVENTS
-        
+
         # Event types we want to stream to UI
         ui_alert_events = [
             EVENT_UI_ALERT_TRIGGERED,
-            EVENT_UI_ALERT_ACKNOWLEDGED, 
+            EVENT_UI_ALERT_ACKNOWLEDGED,
             EVENT_UI_ALERT_RESOLVED
         ]
-        
+
         # Create a queue to receive events from the custom handler
         event_queue = asyncio.Queue()
-        
+
         # Custom handler class to capture UI events for this streaming session
         class StreamingAlertHandler:
             """Custom handler to capture UI alert events for streaming"""
-            
+
             def __init__(self, target_customer_id: str, event_queue: asyncio.Queue):
                 self.target_customer_id = target_customer_id
                 self.event_queue = event_queue
-                
+
             async def handle(self, event) -> bool:
                 """Handle events and put relevant ones in the queue"""
                 try:
                     # Only handle events for our target customer and UI alert types
-                    if (hasattr(event, 'customer_id') and 
+                    if (hasattr(event, 'customer_id') and
                         event.customer_id == self.target_customer_id and
                         hasattr(event, 'event_type') and
                         event.event_type in ui_alert_events):
-                        
+
                         # Put event in queue for streaming
                         await self.event_queue.put(event)
                         logger.debug(f"UI event queued for streaming: {event.event_type}")
                         return True
-                        
+
                     return True
-                    
+
                 except Exception as e:
                     logger.error(f"Error in streaming handler: {e}")
                     return False
-                    
+
             def get_handler_name(self) -> str:
                 return f"streaming_alert_handler_{self.target_customer_id}"
-                
+
             def get_supported_event_types(self) -> List[str]:
                 return ui_alert_events
 
@@ -378,7 +379,7 @@ async def stream_alerts(
             subscriber = None
             try:
                 from events.subscribers import SubscriberConfig
-                
+
                 # Create subscriber config for UI events
                 config = SubscriberConfig(
                     name=f"streaming_alerts_{customer_id}",
@@ -389,16 +390,16 @@ async def stream_alerts(
                     max_batch_size=10,
                     max_parallel_workers=1
                 )
-                
+
                 # Create Kafka subscriber for UI events
                 subscriber = KafkaEventSubscriber(config)
-                
+
                 # Create and register our custom streaming handler
                 streaming_handler = StreamingAlertHandler(customer_id, event_queue)
                 subscriber.register_handler(streaming_handler)
-                
+
                 logger.info(f"Starting real-time alert stream for customer {customer_id}")
-                
+
                 # Send initial connection confirmation
                 yield format_sse_message("connected", {
                     "status": "streaming_started",
@@ -406,20 +407,20 @@ async def stream_alerts(
                     "event_types": ui_alert_events,
                     "timestamp": datetime.now().isoformat()
                 })
-                
+
                 # Start the subscriber
                 await subscriber.start()
-                
+
                 # Listen for events from our queue
                 while True:
                     try:
                         # Wait for events with a timeout to allow for graceful shutdown
                         event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
-                        
+
                         # Format UI event for streaming
                         stream_data = {
                             "alert_id": event.data.get("alert_id"),
-                            "rule_id": event.data.get("rule_id"), 
+                            "rule_id": event.data.get("rule_id"),
                             "rule_name": event.data.get("rule_name"),
                             "severity": event.data.get("severity"),
                             "status": event.data.get("status"),
@@ -429,28 +430,28 @@ async def stream_alerts(
                             "timestamp": event.metadata.created_at if hasattr(event, 'metadata') and event.metadata else datetime.now().isoformat(),
                             "ui_metadata": event.data.get("ui_metadata", {})
                         }
-                        
+
                         # Stream the event immediately
                         yield format_sse_message("alert_event", stream_data, getattr(event.metadata, 'event_id', None) if hasattr(event, 'metadata') else None)
-                        
+
                         logger.debug(
                             "Alert event streamed to UI",
                             customer_id=customer_id,
                             alert_id=stream_data.get("alert_id"),
                             event_type=event.event_type
                         )
-                        
+
                     except asyncio.TimeoutError:
                         # Send keepalive message
                         yield format_sse_message("keepalive", {
                             "timestamp": datetime.now().isoformat(),
                             "status": "listening"
                         })
-                        
+
                     except Exception as e:
                         logger.error(f"Error processing alert event for streaming: {e}")
                         yield format_sse_message("error", {"message": f"Event processing error: {str(e)}"})
-                        
+
             except Exception as e:
                 logger.error(f"Error in real-time alert stream for customer {customer_id}: {e}")
                 yield format_sse_message("error", {
@@ -465,7 +466,7 @@ async def stream_alerts(
                         logger.info(f"Stopped subscriber for customer {customer_id}")
                     except Exception as e:
                         logger.error(f"Error stopping subscriber: {e}")
-        
+
         return StreamingResponse(
             generate_real_time_alerts(),
             media_type="text/event-stream",
@@ -476,7 +477,7 @@ async def stream_alerts(
                 "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
             }
         )
-        
+
     except Exception as e:
         logger.error("Failed to start real-time alerts stream", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to start alerts stream: {str(e)}")
@@ -489,7 +490,7 @@ async def stream_usage_data(
     """Stream real-time usage data"""
     try:
         usage_service = UsageService()
-        
+
         async def generate_usage():
             while True:
                 try:
@@ -497,17 +498,17 @@ async def stream_usage_data(
                     usage_data = await usage_service.get_tenant_usage_summary(
                         tenant_id=customer_id
                     )
-                    
+
                     if usage_data:
                         yield format_sse_message("usage", usage_data)
-                    
+
                     await asyncio.sleep(30)  # Update every 30 seconds
-                    
+
                 except Exception as e:
                     logger.error("Error streaming usage data", error=str(e), customer_id=customer_id)
                     yield format_sse_message("error", {"message": f"Usage streaming error: {str(e)}"})
                     break
-        
+
         return StreamingResponse(
             generate_usage(),
             media_type="text/event-stream",
@@ -518,7 +519,7 @@ async def stream_usage_data(
                 "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
             }
         )
-        
+
     except Exception as e:
         logger.error("Failed to start usage stream", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to start usage stream: {str(e)}")
@@ -531,7 +532,7 @@ async def stream_ai_insights(
     """Stream real-time AI insights and anomaly detections"""
     try:
         ai_service = AIService()
-        
+
         async def generate_ai_insights():
             while True:
                 try:
@@ -541,17 +542,17 @@ async def stream_ai_insights(
                         hours=1,
                         limit=10
                     )
-                    
+
                     if insights:
                         yield format_sse_message("ai_insights", insights)
-                    
+
                     await asyncio.sleep(45)  # Update every 45 seconds
-                    
+
                 except Exception as e:
                     logger.error("Error streaming AI insights", error=str(e), customer_id=customer_id)
                     yield format_sse_message("error", {"message": f"AI insights streaming error: {str(e)}"})
                     break
-        
+
         return StreamingResponse(
             generate_ai_insights(),
             media_type="text/event-stream",
@@ -562,7 +563,7 @@ async def stream_ai_insights(
                 "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
             }
         )
-        
+
     except Exception as e:
         logger.error("Failed to start AI insights stream", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to start AI insights stream: {str(e)}")
@@ -576,7 +577,7 @@ async def streaming_health():
         "message": "Streaming service operational",
         "endpoints": [
             "/v1/stream/metrics",
-            "/v1/stream/traces", 
+            "/v1/stream/traces",
             "/v1/stream/security",
             "/v1/stream/alerts",
             "/v1/stream/usage",

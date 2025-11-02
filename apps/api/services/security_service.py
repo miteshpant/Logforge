@@ -457,6 +457,347 @@ class SecurityService:
             logger.error(f"Failed to update security event {event_id}: {e}")
             raise
     
+    # Security Event Status Management Methods
+    
+    async def acknowledge_security_event(
+        self,
+        detection_id: str,
+        customer_id: str,
+        user_id: str,
+        notes: Optional[str] = None
+    ) -> bool:
+        """Acknowledge security event - assign to user and mark as investigating"""
+        try:
+            # Validate event exists
+            event = await self.security_dao.get_security_event_by_id(detection_id, customer_id)
+            if not event:
+                raise ValueError(f"Security event not found: {detection_id}")
+            
+            if event['status'] != 'new':
+                raise ValueError(f"Cannot acknowledge event with status: {event['status']}")
+            
+            # Update status to investigating and assign to user
+            success = await self.security_dao.update_security_event_status(
+                detection_id=detection_id,
+                customer_id=customer_id,
+                status='investigating',
+                assigned_to=user_id,
+                investigation_note=f"Event acknowledged by {user_id}" + (f": {notes}" if notes else "")
+            )
+            
+            if success:
+                # Publish event status change for streaming API
+                try:
+                    publisher = await self._get_security_publisher()
+                    if publisher:
+                        # Update the event status in the existing event data
+                        event['status'] = 'investigating'
+                        event['assigned_to'] = user_id
+                        
+                        await publisher.publish_security_detection_acknowledged(
+                            customer_id=customer_id,
+                            detection_id=detection_id,
+                            acknowledged_by=user_id,
+                            acknowledgment_notes=notes,
+                            event_data=event  # Use existing event data
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to publish status change event: {e}")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Failed to acknowledge security event {detection_id}: {e}")
+            raise
+    
+    async def mark_false_positive(
+        self,
+        detection_id: str,
+        customer_id: str,
+        user_id: str,
+        notes: str
+    ) -> bool:
+        """Mark security event as false positive"""
+        try:
+            event = await self.security_dao.get_security_event_by_id(detection_id, customer_id)
+            if not event:
+                raise ValueError(f"Security event not found: {detection_id}")
+            
+            success = await self.security_dao.update_security_event_status(
+                detection_id=detection_id,
+                customer_id=customer_id,
+                status='false_positive',
+                assigned_to=user_id,
+                investigation_note=f"Marked as false positive by {user_id}: {notes}"
+            )
+            
+            if success:
+                try:
+                    publisher = await self._get_security_publisher()
+                    if publisher:
+                        # Update the event status in the existing event data
+                        event['status'] = 'false_positive'
+                        event['assigned_to'] = user_id
+                        
+                        await publisher.publish_security_detection_false_positive(
+                            customer_id=customer_id,
+                            detection_id=detection_id,
+                            marked_by=user_id,
+                            notes=notes,
+                            event_data=event  # Use existing event data
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to publish status change event: {e}")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Failed to mark false positive {detection_id}: {e}")
+            raise
+    
+    async def resolve_security_event(
+        self,
+        detection_id: str,
+        customer_id: str,
+        user_id: str,
+        resolution_notes: str
+    ) -> bool:
+        """Resolve security event"""
+        try:
+            event = await self.security_dao.get_security_event_by_id(detection_id, customer_id)
+            if not event:
+                raise ValueError(f"Security event not found: {detection_id}")
+            
+            if event['status'] == 'resolved':
+                raise ValueError("Event already resolved")
+            
+            success = await self.security_dao.update_security_event_status(
+                detection_id=detection_id,
+                customer_id=customer_id,
+                status='resolved',
+                investigation_note=f"Resolved by {user_id}: {resolution_notes}"
+            )
+            
+            if success:
+                try:
+                    publisher = await self._get_security_publisher()
+                    if publisher:
+                        # Update the event status in the existing event data
+                        event['status'] = 'resolved'
+                        event['assigned_to'] = user_id
+                        
+                        await publisher.publish_security_detection_resolved(
+                            customer_id=customer_id,
+                            detection_id=detection_id,
+                            resolved_by=user_id,
+                            resolution_notes=resolution_notes,
+                            event_data=event  # Use existing event data
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to publish status change event: {e}")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Failed to resolve security event {detection_id}: {e}")
+            raise
+    
+    async def investigate_security_event(
+        self,
+        detection_id: str,
+        customer_id: str,
+        user_id: str,
+        notes: Optional[str] = None
+    ) -> bool:
+        """Mark event as under investigation"""
+        try:
+            event = await self.security_dao.get_security_event_by_id(detection_id, customer_id)
+            if not event:
+                raise ValueError(f"Security event not found: {detection_id}")
+            
+            success = await self.security_dao.update_security_event_status(
+                detection_id=detection_id,
+                customer_id=customer_id,
+                status='investigating',
+                assigned_to=user_id,
+                investigation_note=f"Investigation started by {user_id}" + (f": {notes}" if notes else "")
+            )
+            
+            if success:
+                try:
+                    publisher = await self._get_security_publisher()
+                    if publisher:
+                        # Update the event status in the existing event data
+                        event['status'] = 'investigating'
+                        event['assigned_to'] = user_id
+                        
+                        await publisher.publish_security_detection_investigating(
+                            customer_id=customer_id,
+                            detection_id=detection_id,
+                            assigned_to=user_id,
+                            investigation_notes=notes,
+                            event_data=event  # Use existing event data
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to publish status change event: {e}")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Failed to investigate security event {detection_id}: {e}")
+            raise
+    
+    # Bulk Operations
+    async def bulk_acknowledge_by_rule(
+        self,
+        rule_id: str,
+        customer_id: str,
+        user_id: str,
+        notes: Optional[str] = None
+    ) -> int:
+        """Acknowledge all new events for a specific rule"""
+        try:
+            updated_count = await self.security_dao.bulk_update_events_by_rule(
+                rule_id=rule_id,
+                customer_id=customer_id,
+                status='investigating',
+                assigned_to=user_id,
+                investigation_note=f"Bulk acknowledged by {user_id}" + (f": {notes}" if notes else "")
+            )
+            
+            # Publish bulk operation event
+            try:
+                publisher = await self._get_security_publisher()
+                if publisher:
+                    await self._publish_bulk_operation(
+                        publisher, rule_id, customer_id, 'bulk_acknowledge', user_id, updated_count
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to publish bulk operation event: {e}")
+            
+            return updated_count
+            
+        except Exception as e:
+            logger.error(f"Failed to bulk acknowledge by rule {rule_id}: {e}")
+            raise
+    
+    async def bulk_false_positive_by_rule(
+        self,
+        rule_id: str,
+        customer_id: str,
+        user_id: str,
+        notes: str
+    ) -> int:
+        """Mark all new events for a rule as false positive"""
+        try:
+            updated_count = await self.security_dao.bulk_update_events_by_rule(
+                rule_id=rule_id,
+                customer_id=customer_id,
+                status='false_positive',
+                assigned_to=user_id,
+                investigation_note=f"Bulk false positive by {user_id}: {notes}"
+            )
+            
+            try:
+                publisher = await self._get_security_publisher()
+                if publisher:
+                    await self._publish_bulk_operation(
+                        publisher, rule_id, customer_id, 'bulk_false_positive', user_id, updated_count
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to publish bulk operation event: {e}")
+            
+            return updated_count
+            
+        except Exception as e:
+            logger.error(f"Failed to bulk false positive by rule {rule_id}: {e}")
+            raise
+    
+    async def bulk_resolve_by_rule(
+        self,
+        rule_id: str,
+        customer_id: str,
+        user_id: str,
+        notes: str
+    ) -> int:
+        """Resolve all new events for a rule"""
+        try:
+            updated_count = await self.security_dao.bulk_update_events_by_rule(
+                rule_id=rule_id,
+                customer_id=customer_id,
+                status='resolved',
+                assigned_to=user_id,
+                investigation_note=f"Bulk resolved by {user_id}: {notes}"
+            )
+            
+            try:
+                publisher = await self._get_security_publisher()
+                if publisher:
+                    await self._publish_bulk_operation(
+                        publisher, rule_id, customer_id, 'bulk_resolve', user_id, updated_count
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to publish bulk operation event: {e}")
+            
+            return updated_count
+            
+        except Exception as e:
+            logger.error(f"Failed to bulk resolve by rule {rule_id}: {e}")
+            raise
+    
+    async def get_security_event_details(
+        self,
+        detection_id: str,
+        customer_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Get full security event details including status and notes"""
+        try:
+            return await self.security_dao.get_security_event_by_id(detection_id, customer_id)
+        except Exception as e:
+            logger.error(f"Failed to get security event details {detection_id}: {e}")
+            raise
+    
+    async def get_events_by_rule(
+        self,
+        rule_id: str,
+        customer_id: str,
+        status_filter: Optional[str] = None,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """Get events for a specific rule"""
+        try:
+            return await self.security_dao.get_events_by_rule_id(rule_id, customer_id, status_filter, limit)
+        except Exception as e:
+            logger.error(f"Failed to get events by rule {rule_id}: {e}")
+            raise
+    
+    # Helper methods for event publishing
+    async def _publish_status_change(
+        self,
+        publisher,
+        detection_id: str,
+        customer_id: str,
+        new_status: str,
+        user_id: str
+    ):
+        """Publish individual event status change"""
+        # This would use the publisher to send events to streaming API
+        # Implementation depends on your event system
+        logger.debug(f"Publishing status change: {detection_id} -> {new_status} by {user_id}")
+    
+    async def _publish_bulk_operation(
+        self,
+        publisher,
+        rule_id: str,
+        customer_id: str,
+        operation: str,
+        user_id: str,
+        affected_count: int
+    ):
+        """Publish bulk operation event"""
+        # This would use the publisher to send bulk operation events
+        logger.debug(f"Publishing bulk operation: {operation} on rule {rule_id} affected {affected_count} events")
+    
     # Threat Intelligence Management
     
     async def add_threat_indicator(self, indicator_data: Dict[str, Any]) -> str:

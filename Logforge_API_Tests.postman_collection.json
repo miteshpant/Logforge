@@ -2868,9 +2868,9 @@
 					"response": []
 				},
 				{
-					"name": "Update Security Event Status",
+					"name": "Acknowledge Security Event",
 					"request": {
-						"method": "PUT",
+						"method": "POST",
 						"header": [
 							{
 								"key": "Authorization",
@@ -2890,28 +2890,374 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"status\": \"investigating\",\n  \"assigned_to\": \"security_analyst\",\n  \"notes\": [\"Initial investigation started\", \"Checking source IP reputation\"]\n}"
+							"raw": "{\n  \"notes\": \"Security event acknowledged for investigation\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/v1/security/events/{{event_id}}/status?status=investigating&assigned_to=security_analyst",
+							"raw": "{{base_url}}/v1/security/{{event_id}}/acknowledge",
 							"host": [
 								"{{base_url}}"
 							],
 							"path": [
 								"v1",
 								"security",
-								"events",
+								"{{event_id}}",
+								"acknowledge"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Mark Security Event as Investigating",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"notes\": \"Starting deep investigation into this security event\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/security/{{event_id}}/investigate",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"{{event_id}}",
+								"investigate"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Resolve Security Event",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"resolution_notes\": \"Investigation completed. Confirmed legitimate activity after analysis.\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/security/{{event_id}}/resolve",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"{{event_id}}",
+								"resolve"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Mark Security Event as False Positive",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"resolution_notes\": \"Analysis confirms this is a false positive. Updating rule threshold to prevent similar alerts.\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/security/{{event_id}}/false-positive",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"{{event_id}}",
+								"false-positive"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Security Event Status Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/security/{{event_id}}/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
 								"{{event_id}}",
 								"status"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Bulk Acknowledge Events by Rule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"notes\": \"Bulk acknowledging all events from this rule for investigation\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/security/rules/{{rule_id}}/acknowledge-all",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"rules",
+								"{{rule_id}}",
+								"acknowledge-all"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Bulk Investigate Events by Rule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"notes\": \"Starting investigation on all events from this rule\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/security/rules/{{rule_id}}/investigate-all",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"rules",
+								"{{rule_id}}",
+								"investigate-all"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Bulk Resolve Events by Rule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"resolution_notes\": \"Bulk resolving all events from this rule - confirmed as expected behavior\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/security/rules/{{rule_id}}/resolve-all",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"rules",
+								"{{rule_id}}",
+								"resolve-all"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Bulk Mark Events as False Positive by Rule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"resolution_notes\": \"Bulk marking all events from this rule as false positives - rule needs tuning\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/security/rules/{{rule_id}}/false-positive-all",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"rules",
+								"{{rule_id}}",
+								"false-positive-all"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Events by Rule ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/security/rules/{{rule_id}}/events?status=new&limit=100",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"rules",
+								"{{rule_id}}",
+								"events"
 							],
 							"query": [
 								{
 									"key": "status",
-									"value": "investigating"
+									"value": "new"
 								},
 								{
-									"key": "assigned_to",
-									"value": "security_analyst"
+									"key": "limit",
+									"value": "100"
 								}
 							]
 						}

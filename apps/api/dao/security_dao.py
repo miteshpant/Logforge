@@ -486,6 +486,184 @@ class SecurityDAO:
             logger.error(f"Failed to update security event {event_id}: {e}")
             raise
     
+    # Security Event Status Management Operations
+    
+    async def update_security_event_status(
+        self,
+        detection_id: str,
+        customer_id: str,
+        status: str,
+        assigned_to: Optional[str] = None,
+        investigation_note: Optional[str] = None
+    ) -> bool:
+        """Update security event status using existing table fields"""
+        try:
+            # Build update query dynamically
+            update_fields = ["status = %(status)s", "updated_at = now64(3)"]
+            params = {"status": status, "detection_id": detection_id, "customer_id": customer_id}
+            
+            if assigned_to is not None:
+                update_fields.append("assigned_to = %(assigned_to)s")
+                params["assigned_to"] = assigned_to
+            
+            # Add investigation note to existing array
+            if investigation_note:
+                update_fields.append("investigation_notes = arrayConcat(investigation_notes, [%(investigation_note)s])")
+                params["investigation_note"] = f"{datetime.now(timezone.utc).isoformat()}: {investigation_note}"
+            
+            query = f"""
+            ALTER TABLE security_events_mt 
+            UPDATE {', '.join(update_fields)}
+            WHERE id = %(detection_id)s AND customer_id = %(customer_id)s
+            """
+            
+            await self.db.execute_query(query, params)
+            logger.debug(f"Security event status updated: {detection_id} -> {status}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to update security event status: {e}")
+            return False
+    
+    async def bulk_update_events_by_rule(
+        self,
+        rule_id: str,
+        customer_id: str,
+        status: str,
+        assigned_to: Optional[str] = None,
+        investigation_note: Optional[str] = None
+    ) -> int:
+        """Bulk update all events for a specific rule"""
+        try:
+            # First, count how many events will be updated (all events for the rule)
+            count_query_before = """
+            SELECT count() as count_to_update 
+            FROM security_events_mt 
+            WHERE rule_id = %(rule_id)s AND customer_id = %(customer_id)s
+            """
+            count_params_before = {
+                "rule_id": rule_id,
+                "customer_id": customer_id
+            }
+            
+            count_results_before = await self.db.fetch_all(count_query_before, count_params_before)
+            events_to_update = count_results_before[0]['count_to_update'] if count_results_before else 0
+            
+            if events_to_update == 0:
+                logger.debug(f"No events found for rule {rule_id}")
+                return 0
+            
+            # Now perform the update
+            update_fields = ["status = %(status)s", "updated_at = now64(3)"]
+            params = {
+                "status": status,
+                "rule_id": rule_id,
+                "customer_id": customer_id
+            }
+            
+            if assigned_to is not None:
+                update_fields.append("assigned_to = %(assigned_to)s")
+                params["assigned_to"] = assigned_to
+            
+            if investigation_note:
+                update_fields.append("investigation_notes = arrayConcat(investigation_notes, [%(investigation_note)s])")
+                params["investigation_note"] = f"{datetime.now(timezone.utc).isoformat()}: {investigation_note}"
+            
+            query = f"""
+            ALTER TABLE security_events_mt 
+            UPDATE {', '.join(update_fields)}
+            WHERE rule_id = %(rule_id)s AND customer_id = %(customer_id)s
+            """
+            
+            await self.db.execute_query(query, params)
+            
+            logger.debug(f"Bulk updated {events_to_update} events for rule {rule_id} to status {status}")
+            return events_to_update
+            
+        except Exception as e:
+            logger.error(f"Failed to bulk update events by rule: {e}")
+            return 0
+    
+    async def get_security_event_by_id(
+        self,
+        detection_id: str,
+        customer_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Get security event by ID for specific customer"""
+        try:
+            query = """
+            SELECT * FROM security_events_mt 
+            WHERE id = %(detection_id)s AND customer_id = %(customer_id)s
+            LIMIT 1
+            """
+            
+            result = await self.db.fetch_one(query, {
+                "detection_id": detection_id,
+                "customer_id": customer_id
+            })
+            
+            if not result:
+                return None
+            
+            # Parse JSON fields
+            for json_field in ["raw_log_data", "enrichment_data"]:
+                if result.get(json_field):
+                    try:
+                        result[json_field] = json.loads(result[json_field])
+                    except (json.JSONDecodeError, TypeError):
+                        result[json_field] = {}
+            
+            return dict(result)
+            
+        except Exception as e:
+            logger.error(f"Failed to get security event: {e}")
+            return None
+    
+    async def get_events_by_rule_id(
+        self,
+        rule_id: str,
+        customer_id: str,
+        status_filter: Optional[str] = None,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """Get events for a specific rule"""
+        try:
+            query = """
+            SELECT * FROM security_events_mt 
+            WHERE rule_id = %(rule_id)s AND customer_id = %(customer_id)s
+            """
+            params = {
+                "rule_id": rule_id,
+                "customer_id": customer_id,
+                "limit": limit
+            }
+            
+            if status_filter:
+                query += " AND status = %(status_filter)s"
+                params["status_filter"] = status_filter
+            
+            query += " ORDER BY created_at DESC LIMIT %(limit)s"
+            
+            results = await self.db.fetch_all(query, params)
+            events = []
+            
+            for result in results:
+                event_dict = dict(result)
+                # Parse JSON fields
+                for json_field in ["raw_log_data", "enrichment_data"]:
+                    if event_dict.get(json_field):
+                        try:
+                            event_dict[json_field] = json.loads(event_dict[json_field])
+                        except (json.JSONDecodeError, TypeError):
+                            event_dict[json_field] = {}
+                events.append(event_dict)
+            
+            return events
+            
+        except Exception as e:
+            logger.error(f"Failed to get events by rule: {e}")
+            return []
+    
     # Threat Intelligence Operations
     
     async def save_threat_intel_indicator(self, indicator_data: Dict[str, Any]) -> str:

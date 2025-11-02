@@ -17,7 +17,7 @@ from ..constants import (
     EVENT_SIGMA_RULE_DISABLED,
     EVENT_SECURITY_DETECTION_TRIGGERED,
     EVENT_SECURITY_DETECTION_RESOLVED,
-    EVENT_SECURITY_DETECTION_ACKNOWLEDGED
+    EVENT_SECURITY_DETECTION_ACKNOWLEDGED, EVENT_SECURITY_DETECTION_FALSE_POSITIVE
 )
 
 logger = structlog.get_logger(__name__)
@@ -79,7 +79,7 @@ class SecurityEventPublisher:
             )
 
             results = await self.publisher_manager.publish(event)
-            
+
             # Check if any publisher succeeded
             success_count = sum(1 for result in results.values() if result)
             total_publishers = len(results)
@@ -164,7 +164,7 @@ class SecurityEventPublisher:
             )
 
             results = await self.publisher_manager.publish(event)
-            
+
             success_count = sum(1 for result in results.values() if result)
             success = success_count > 0
 
@@ -239,7 +239,7 @@ class SecurityEventPublisher:
             )
 
             results = await self.publisher_manager.publish(event)
-            
+
             success_count = sum(1 for result in results.values() if result)
             success = success_count > 0
 
@@ -463,3 +463,342 @@ class SecurityEventPublisher:
                 error=str(e)
             )
             return False
+
+    async def publish_security_detection_acknowledged(
+        self,
+        customer_id: str,
+        detection_id: str,
+        acknowledged_by: str,
+        acknowledgment_notes: Optional[str] = None,
+        event_data: Optional[Dict[str, Any]] = None,
+        correlation_id: Optional[str] = None,
+        trace_id: Optional[str] = None
+    ) -> bool:
+        """
+        Publish event when a security detection is acknowledged
+        """
+        try:
+            # Combine action data with full event details
+            action_data = {
+                "detection_id": detection_id,
+                "acknowledged_by": acknowledged_by,
+                "acknowledged_at": datetime.utcnow().isoformat(),
+                "status": "investigating",
+                "acknowledgment_notes": acknowledgment_notes,
+                "event_type": "status_change"
+            }
+
+            # Include full event data if provided
+            if event_data:
+                # Extract important fields from the security event
+                action_data.update({
+                    "rule_id": event_data.get("rule_id"),
+                    "rule_name": event_data.get("title", "Unknown Rule"),
+                    "severity": event_data.get("severity"),
+                    "confidence": 1.0,  # Default confidence for status changes
+                    "attack_techniques": self._parse_mitre_techniques(event_data.get("mitre_techniques", "[]")),
+                    "matched_fields": self._parse_enrichment_data(event_data.get("enrichment_data", "{}")),
+                })
+
+            final_event_data = action_data
+
+            event = BaseEvent(
+                event_type=EVENT_SECURITY_DETECTION_ACKNOWLEDGED,
+                customer_id=customer_id,
+                data=final_event_data,
+                metadata=EventMetadata(
+                    source_service="security-service",
+                    priority=EventPriority.HIGH,
+                    correlation_id=correlation_id,
+                    trace_id=trace_id
+                )
+            )
+
+            success = await self.publisher_manager.publish(event)
+
+            if success:
+                self.logger.info(
+                    "Security detection acknowledged event published",
+                    customer_id=customer_id,
+                    detection_id=detection_id,
+                    acknowledged_by=acknowledged_by
+                )
+            else:
+                self.logger.warning(
+                    "Failed to publish security detection acknowledged event",
+                    customer_id=customer_id,
+                    detection_id=detection_id
+                )
+
+            return success
+
+        except Exception as e:
+            self.logger.error(
+                "Error publishing security detection acknowledged event",
+                customer_id=customer_id,
+                detection_id=detection_id,
+                error=str(e)
+            )
+            return False
+
+    async def publish_security_detection_resolved(
+        self,
+        customer_id: str,
+        detection_id: str,
+        resolved_by: str,
+        resolution_notes: Optional[str] = None,
+        event_data: Optional[Dict[str, Any]] = None,
+        correlation_id: Optional[str] = None,
+        trace_id: Optional[str] = None
+    ) -> bool:
+        """
+        Publish event when a security detection is resolved
+        """
+        try:
+            # Combine action data with full event details
+            action_data = {
+                "detection_id": detection_id,
+                "resolved_by": resolved_by,
+                "resolved_at": datetime.utcnow().isoformat(),
+                "status": "resolved",
+                "resolution_notes": resolution_notes,
+                "event_type": "status_change"
+            }
+
+            # Include full event data if provided
+            if event_data:
+                # Extract important fields from the security event
+                action_data.update({
+                    "rule_id": event_data.get("rule_id"),
+                    "rule_name": event_data.get("title", "Unknown Rule"),
+                    "severity": event_data.get("severity"),
+                    "confidence": 1.0,  # Default confidence for status changes
+                    "attack_techniques": self._parse_mitre_techniques(event_data.get("mitre_techniques", "[]")),
+                    "matched_fields": self._parse_enrichment_data(event_data.get("enrichment_data", "{}")),
+                })
+
+            event = BaseEvent(
+                event_type=EVENT_SECURITY_DETECTION_RESOLVED,
+                customer_id=customer_id,
+                data=action_data,
+                metadata=EventMetadata(
+                    source_service="security-service",
+                    priority=EventPriority.HIGH,
+                    correlation_id=correlation_id,
+                    trace_id=trace_id
+                )
+            )
+
+            success = await self.publisher_manager.publish(event)
+
+            if success:
+                self.logger.info(
+                    "Security detection resolved event published",
+                    customer_id=customer_id,
+                    detection_id=detection_id,
+                    resolved_by=resolved_by
+                )
+            else:
+                self.logger.warning(
+                    "Failed to publish security detection resolved event",
+                    customer_id=customer_id,
+                    detection_id=detection_id
+                )
+
+            return success
+
+        except Exception as e:
+            self.logger.error(
+                "Error publishing security detection resolved event",
+                customer_id=customer_id,
+                detection_id=detection_id,
+                error=str(e)
+            )
+            return False
+
+    async def publish_security_detection_false_positive(
+        self,
+        customer_id: str,
+        detection_id: str,
+        marked_by: str,
+        notes: Optional[str] = None,
+        event_data: Optional[Dict[str, Any]] = None,
+        correlation_id: Optional[str] = None,
+        trace_id: Optional[str] = None
+    ) -> bool:
+        """
+        Publish event when a security detection is marked as false positive
+        """
+        try:
+            # Combine action data with full event details
+            action_data = {
+                "detection_id": detection_id,
+                "marked_by": marked_by,
+                "marked_at": datetime.utcnow().isoformat(),
+                "status": "false_positive",
+                "notes": notes,
+                "event_type": "status_change"
+            }
+
+            # Include full event data if provided
+            if event_data:
+                # Extract important fields from the security event
+                action_data.update({
+                    "rule_id": event_data.get("rule_id"),
+                    "rule_name": event_data.get("title", "Unknown Rule"),
+                    "severity": event_data.get("severity"),
+                    "confidence": 1.0,  # Default confidence for status changes
+                    "attack_techniques": self._parse_mitre_techniques(event_data.get("mitre_techniques", "[]")),
+                    "matched_fields": self._parse_enrichment_data(event_data.get("enrichment_data", "{}")),
+                })
+
+            final_event_data = action_data
+
+            # Use resolved event type for false positives (same topic)
+            event = BaseEvent(
+                event_type=EVENT_SECURITY_DETECTION_FALSE_POSITIVE,
+                customer_id=customer_id,
+                data=final_event_data,
+                metadata=EventMetadata(
+                    source_service="security-service",
+                    priority=EventPriority.MEDIUM,
+                    correlation_id=correlation_id,
+                    trace_id=trace_id
+                )
+            )
+
+            success = await self.publisher_manager.publish(event)
+
+            if success:
+                self.logger.info(
+                    "Security detection false positive event published",
+                    customer_id=customer_id,
+                    detection_id=detection_id,
+                    marked_by=marked_by
+                )
+            else:
+                self.logger.warning(
+                    "Failed to publish security detection false positive event",
+                    customer_id=customer_id,
+                    detection_id=detection_id
+                )
+
+            return success
+
+        except Exception as e:
+            self.logger.error(
+                "Error publishing security detection false positive event",
+                customer_id=customer_id,
+                detection_id=detection_id,
+                error=str(e)
+            )
+            return False
+
+    async def publish_security_detection_investigating(
+        self,
+        customer_id: str,
+        detection_id: str,
+        assigned_to: str,
+        investigation_notes: Optional[str] = None,
+        event_data: Optional[Dict[str, Any]] = None,
+        correlation_id: Optional[str] = None,
+        trace_id: Optional[str] = None
+    ) -> bool:
+        """
+        Publish event when a security detection is being investigated
+        """
+        try:
+            # Combine action data with full event details
+            action_data = {
+                "detection_id": detection_id,
+                "assigned_to": assigned_to,
+                "investigation_started_at": datetime.utcnow().isoformat(),
+                "status": "investigating",
+                "investigation_notes": investigation_notes,
+                "event_type": "status_change"
+            }
+
+            # Include full event data if provided
+            if event_data:
+                # Extract important fields from the security event
+                action_data.update({
+                    "rule_id": event_data.get("rule_id"),
+                    "rule_name": event_data.get("title", "Unknown Rule"),
+                    "severity": event_data.get("severity"),
+                    "confidence": 1.0,  # Default confidence for status changes
+                    "attack_techniques": self._parse_mitre_techniques(event_data.get("mitre_techniques", "[]")),
+                    "matched_fields": self._parse_enrichment_data(event_data.get("enrichment_data", "{}")),
+                })
+
+            final_event_data = action_data
+
+            event = BaseEvent(
+                event_type=EVENT_SECURITY_DETECTION_ACKNOWLEDGED,  # Reuse acknowledged for investigating
+                customer_id=customer_id,
+                data=final_event_data,
+                metadata=EventMetadata(
+                    source_service="security-service",
+                    priority=EventPriority.HIGH,
+                    correlation_id=correlation_id,
+                    trace_id=trace_id
+                )
+            )
+
+            success = await self.publisher_manager.publish(event)
+
+            if success:
+                self.logger.info(
+                    "Security detection investigating event published",
+                    customer_id=customer_id,
+                    detection_id=detection_id,
+                    assigned_to=assigned_to
+                )
+            else:
+                self.logger.warning(
+                    "Failed to publish security detection investigating event",
+                    customer_id=customer_id,
+                    detection_id=detection_id
+                )
+
+            return success
+
+        except Exception as e:
+            self.logger.error(
+                "Error publishing security detection investigating event",
+                customer_id=customer_id,
+                detection_id=detection_id,
+                error=str(e)
+            )
+            return False
+
+    def _parse_mitre_techniques(self, mitre_techniques_str: str) -> List[str]:
+        """Parse MITRE techniques from string format to list"""
+        try:
+            import json
+            if isinstance(mitre_techniques_str, str):
+                # Handle string representation of list like "['T1110']"
+                if mitre_techniques_str.startswith('[') and mitre_techniques_str.endswith(']'):
+                    return json.loads(mitre_techniques_str.replace("'", '"'))
+                # Handle comma-separated string
+                elif ',' in mitre_techniques_str:
+                    return [t.strip() for t in mitre_techniques_str.split(',')]
+                # Handle single technique
+                elif mitre_techniques_str:
+                    return [mitre_techniques_str]
+            elif isinstance(mitre_techniques_str, list):
+                return mitre_techniques_str
+            return []
+        except Exception:
+            return []
+
+    def _parse_enrichment_data(self, enrichment_data_str: str) -> Dict[str, Any]:
+        """Parse enrichment data from string format to dict"""
+        try:
+            import json
+            if isinstance(enrichment_data_str, str) and enrichment_data_str:
+                return json.loads(enrichment_data_str)
+            elif isinstance(enrichment_data_str, dict):
+                return enrichment_data_str
+            return {}
+        except Exception:
+            return {}
