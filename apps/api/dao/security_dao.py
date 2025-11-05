@@ -744,7 +744,7 @@ class SecurityDAO:
             
             results = await self.db.fetch_all(query, params)
             
-            # Process results to parse JSON fields
+            # Process results to parse JSON fields and format dates
             processed_indicators = []
             for indicator in results:
                 processed_indicator = dict(indicator)
@@ -756,6 +756,17 @@ class SecurityDAO:
                             processed_indicator[json_field] = json.loads(processed_indicator[json_field])
                         except (json.JSONDecodeError, TypeError):
                             processed_indicator[json_field] = []
+                
+                # Convert datetime fields to ISO strings
+                for date_field in ["first_seen", "last_seen"]:
+                    if processed_indicator.get(date_field):
+                        date_value = processed_indicator[date_field]
+                        if hasattr(date_value, 'isoformat'):
+                            processed_indicator[date_field] = date_value.isoformat()
+                
+                # Ensure required fields for API response
+                processed_indicator.setdefault("value", processed_indicator.get("indicator_value", ""))
+                processed_indicator.setdefault("severity", "medium")
                 
                 processed_indicators.append(processed_indicator)
             

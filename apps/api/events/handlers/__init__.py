@@ -10,6 +10,7 @@ from .system_handler import SystemEventHandler
 from .ui_handler import UIEventHandler
 from .security_handler import SecurityEventHandler
 from .normalized_log_handler import NormalizedLogEventHandler
+from .threat_intel_handler import ThreatIntelHandler
 
 __all__ = [
     'EventHandler',
@@ -19,5 +20,6 @@ __all__ = [
     'SystemEventHandler',
     'UIEventHandler',
     'SecurityEventHandler',
-    'NormalizedLogEventHandler'
+    'NormalizedLogEventHandler',
+    'ThreatIntelHandler'
 ]
