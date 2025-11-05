@@ -3265,7 +3265,7 @@
 					"response": []
 				},
 				{
-					"name": "Run Threat Hunting Campaign",
+					"name": "Start Threat Hunting Campaign",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -3298,6 +3298,73 @@
 								"v1",
 								"security",
 								"threat-hunting"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Threat Hunting Campaign Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/security/threat-hunting/{{campaign_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"threat-hunting",
+								"{{campaign_id}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Threat Hunting Campaigns",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/security/threat-hunting?limit=20",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"security",
+								"threat-hunting"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20"
+								}
 							]
 						}
 					},

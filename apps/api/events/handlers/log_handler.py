@@ -114,24 +114,24 @@ class LogEventHandler(EventHandler):
                 format_type=source_format,
                 processing_time_ms=int(total_processing_time)
             )
-            
+
             # Step 4: Track monthly ingestion usage and update tenant quotas
             try:
                 from services.tenant_service import TenantService
                 from events.management.processors.usage_processor import track_usage_with_cost_calculation
-                
+
                 tenant_service = TenantService()
-                
+
                 # Track monthly ingestion usage (this was missing!)
                 await track_usage_with_cost_calculation(
-                    tenant_service, 
-                    customer_id, 
-                    "monthly_ingestion", 
+                    tenant_service,
+                    customer_id,
+                    "monthly_ingestion",
                     batch_info.get('bytes_processed', 0)
                 )
-                
+
                 logger.debug(f"Monthly ingestion usage tracked for customer {customer_id}: {batch_info.get('bytes_processed', 0)} bytes")
-                
+
             except Exception as e:
                 logger.warning(f"Failed to track monthly ingestion usage for customer {customer_id}: {e}")
                 # Don't fail the whole operation if usage tracking fails

@@ -829,51 +829,217 @@ class SecurityService:
     
     # Advanced Security Analytics
     
-    async def run_threat_hunting_campaign(self, campaign_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute threat hunting campaign"""
+    async def start_threat_hunting_campaign(self, campaign_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Start a threat hunting campaign (returns immediately with campaign status)"""
         try:
-            campaign_id = campaign_data.get("id", "hunting-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S"))
+            # Create campaign record in database
+            campaign_id = await self.security_dao.create_threat_hunting_campaign(campaign_data)
             
-            # Get enabled Sigma rules for hunting
-            rules = await self.get_sigma_rules(
-                customer_id=campaign_data.get("customer_id"),
-                enabled_only=True
-            )
+            logger.info(f"Started threat hunting campaign: {campaign_id}")
             
-            # Simulate threat hunting results
-            hunting_results = {
+            # Return campaign status immediately
+            return {
                 "campaign_id": campaign_id,
+                "status": "started",
                 "description": campaign_data.get("description", "Threat hunting campaign"),
-                "start_time": datetime.now(timezone.utc).isoformat(),
-                "rules_evaluated": len(rules),
-                "events_found": [],
-                "indicators_detected": [],
-                "recommendations": []
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "progress_percentage": 0
             }
             
-            # Simulate finding some security events
-            hunting_results["events_found"] = [
-                {
-                    "rule_id": "bf001",
-                    "rule_title": "Brute Force Detection",
-                    "severity": "high",
-                    "confidence": 0.85,
-                    "timestamp": datetime.now(timezone.utc).isoformat()
+        except Exception as e:
+            logger.error(f"Failed to start threat hunting campaign: {e}")
+            raise
+    
+    async def execute_threat_hunting_campaign(self, campaign_id: str, customer_id: str) -> bool:
+        """Execute threat hunting campaign with enhanced analysis and unique findings"""
+        import time
+        start_time = time.time()
+        
+        try:
+            # Update campaign status to running
+            await self.security_dao.update_campaign_progress(campaign_id, {
+                "status": "running", 
+                "progress_percentage": 10,
+                "started_at": datetime.now(timezone.utc)
+            })
+            
+            # Get campaign details for rule filtering
+            campaign = await self.security_dao.get_campaign_status(campaign_id, customer_id)
+            rule_ids_filter = campaign.get("rule_ids", []) if campaign else []
+            time_range = campaign.get("time_range", "24h") if campaign else "24h"
+            severity_filter = campaign.get("severity_filter", []) if campaign else []
+            
+            # Get enabled Sigma rules for hunting (filtered by campaign rules if specified)
+            all_rules = await self.get_sigma_rules(customer_id=customer_id, enabled_only=True)
+            
+            # Filter rules based on campaign specification
+            if rule_ids_filter:
+                rules = [rule for rule in all_rules if rule.get("id") in rule_ids_filter]
+            else:
+                rules = all_rules
+            
+            # Update progress after rule retrieval
+            await self.security_dao.update_campaign_progress(campaign_id, {
+                "rules_evaluated": len(rules),
+                "progress_percentage": 30
+            })
+            
+            # Calculate time range for analysis
+            hours_back = self._parse_time_range(time_range)
+            
+            # EFFICIENT: Get existing security events for specified rules
+            events = await self.security_dao.get_security_events_by_rules(
+                customer_id=customer_id,
+                rule_ids=rule_ids_filter,  # Focus on campaign rules only
+                time_range_hours=hours_back,
+                severity_filter=severity_filter,
+                limit=10000  # Much smaller, focused dataset
+            )
+            
+            # Filter events by time range and severity
+            filtered_events = []
+            for event in events:
+                # Time filter
+                if not self._is_recent(event.get("created_at"), hours=hours_back):
+                    continue
+                    
+                # Severity filter
+                if severity_filter and event.get("severity") not in severity_filter:
+                    continue
+                    
+                filtered_events.append(event)
+            
+            await self.security_dao.update_campaign_progress(campaign_id, {
+                "progress_percentage": 60
+            })
+            
+            # Perform enhanced threat analysis using existing security events
+            threat_analysis = await self._analyze_existing_security_events(
+                events=filtered_events,
+                rule_ids=rule_ids_filter,
+                customer_id=customer_id,
+                time_range=time_range
+            )
+            
+            # Get threat intelligence indicators
+            indicators = await self.security_dao.get_threat_intel_indicators(customer_id=customer_id)
+            
+            # Calculate costs based on rules used and time range
+            cost_analysis = await self._calculate_hunting_costs(rules, time_range, customer_id)
+            
+            # Execution metrics
+            execution_time = time.time() - start_time
+            
+            # Store enhanced results in campaign
+            enhanced_results = {
+                "unique_findings": threat_analysis["unique_findings"],
+                "threat_summary": threat_analysis["summary"],
+                "cost_analysis": cost_analysis,
+                "execution_metrics": {
+                    "execution_time_seconds": round(execution_time, 2),
+                    "events_analyzed": len(filtered_events),
+                    "total_events_processed": len(events),
+                    "performance_score": "excellent" if execution_time < 5 else "good"
                 }
-            ]
+            }
             
-            hunting_results["recommendations"] = [
-                "Enable additional monitoring for failed login attempts",
-                "Review user access patterns for anomalies",
-                "Consider implementing rate limiting on authentication endpoints"
-            ]
+            await self.security_dao.update_campaign_progress(campaign_id, {
+                "events_found": len(threat_analysis["unique_findings"]),
+                "indicators_detected": len(indicators),
+                "progress_percentage": 100,
+                "completed_at": datetime.now(timezone.utc),
+                "status": "completed",
+                "enhanced_results": enhanced_results  # Store rich results
+            })
             
-            logger.info(f"Threat hunting campaign executed: {campaign_id}")
-            return hunting_results
+            logger.info(f"Enhanced threat hunting campaign completed: {campaign_id} - {len(threat_analysis['unique_findings'])} unique threats found")
+            return True
             
         except Exception as e:
-            logger.error(f"Failed to run threat hunting campaign: {e}")
-            raise
+            logger.error(f"Failed to execute threat hunting campaign {campaign_id}: {e}")
+            
+            # Mark campaign as failed
+            await self.security_dao.update_campaign_progress(campaign_id, {
+                "status": "failed",
+                "error_message": str(e),
+                "completed_at": datetime.now(timezone.utc)
+            })
+            return False
+    
+    async def get_campaign_status(self, campaign_id: str, customer_id: str) -> Optional[Dict[str, Any]]:
+        """Get threat hunting campaign status with enhanced results"""
+        try:
+            campaign = await self.security_dao.get_campaign_status(campaign_id, customer_id)
+            
+            if not campaign:
+                return None
+            
+            # Base response
+            response = {
+                "campaign_id": campaign["id"],
+                "status": campaign["status"],
+                "description": campaign["description"],
+                "time_range": campaign["time_range"],
+                "created_at": campaign["created_at"].isoformat() if campaign["created_at"] else None,
+                "started_at": campaign["started_at"].isoformat() if campaign["started_at"] else None,
+                "completed_at": campaign["completed_at"].isoformat() if campaign["completed_at"] else None,
+                "progress_percentage": campaign["progress_percentage"],
+                "rules_evaluated": campaign["rules_evaluated"],
+                "events_found": campaign["events_found"],
+                "indicators_detected": campaign["indicators_detected"],
+                "error_message": campaign["error_message"]
+            }
+            
+            # Add enhanced results if campaign is completed and has rich data
+            enhanced_results = campaign.get("enhanced_results")
+            if enhanced_results and campaign["status"] == "completed":
+                response.update({
+                    "summary": enhanced_results.get("threat_summary", {}),
+                    "unique_findings": enhanced_results.get("unique_findings", []),
+                    "cost_analysis": enhanced_results.get("cost_analysis", {}),
+                    "execution_metrics": enhanced_results.get("execution_metrics", {})
+                })
+                
+                # Calculate value metrics
+                unique_findings = enhanced_results.get("unique_findings", [])
+                cost_analysis = enhanced_results.get("cost_analysis", {})
+                total_cost = cost_analysis.get("total_cost", 0)
+                
+                if unique_findings and total_cost > 0:
+                    response["cost_per_unique_finding"] = round(total_cost / len(unique_findings), 2)
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Failed to get campaign status: {e}")
+            return None
+    
+    async def get_customer_campaigns(self, customer_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get customer's threat hunting campaigns"""
+        try:
+            campaigns = await self.security_dao.get_customer_campaigns(customer_id, limit)
+            
+            # Format campaigns for API response
+            formatted_campaigns = []
+            for campaign in campaigns:
+                formatted_campaign = {
+                    "campaign_id": campaign["id"],
+                    "status": campaign["status"],
+                    "description": campaign["description"],
+                    "time_range": campaign["time_range"],
+                    "created_at": campaign["created_at"].isoformat() if campaign["created_at"] else None,
+                    "progress_percentage": campaign["progress_percentage"],
+                    "rules_evaluated": campaign["rules_evaluated"],
+                    "events_found": campaign["events_found"],
+                    "indicators_detected": campaign["indicators_detected"]
+                }
+                formatted_campaigns.append(formatted_campaign)
+            
+            return formatted_campaigns
+            
+        except Exception as e:
+            logger.error(f"Failed to get customer campaigns: {e}")
+            return []
     
     async def get_security_dashboard_data(self, customer_id: str) -> Dict[str, Any]:
         """Get security dashboard analytics data"""
@@ -949,4 +1115,625 @@ class SecurityService:
         # Sort by count and return top 5
         sorted_rules = sorted(rule_counts.values(), key=lambda x: x["count"], reverse=True)
         return sorted_rules[:5]
+
+    async def get_threat_hunt_rules_with_pricing(self, customer_id: str, customer_tier: str = "smb") -> Dict[str, Any]:
+        """Get available threat hunting rules with pricing from Redis cache and YAML config"""
+        try:
+            import yaml
+            from pathlib import Path
+            from events.management.cache.redis_manager import get_redis_manager
+            
+            # Load pricing from YAML file
+            config_path = Path(__file__).parent.parent / "config" / "pricing.yml"
+            with open(config_path, 'r') as f:
+                pricing_config = yaml.safe_load(f)
+            
+            # Get Redis manager with proper environment configuration
+            redis_manager = await get_redis_manager()
+            
+            # Read customer's custom rules from Redis
+            customer_rules_key = f"security:sigma:rules:{customer_id}"
+            customer_rules = await redis_manager.get(customer_rules_key, [])
+            
+            # Read default rules from Redis
+            default_rules_key = "security:sigma:default:rules"
+            default_rules = await redis_manager.get(default_rules_key, [])
+            
+            # Prepare response with pricing
+            rules_with_pricing = []
+            
+            # Add customer's custom rules
+            for rule in customer_rules:
+                severity = rule.get("severity", "medium").lower()
+                pricing_key = f"threat_hunting.custom_rule.{severity}"
+                base_price = pricing_config["feature_pricing"].get(pricing_key, {}).get("base_price", 2.00)
+                
+                # Apply tier discount
+                tier_discount = pricing_config["tier_discounts"].get(customer_tier, {}).get("discount_percent", 0) / 100
+                final_price = base_price * (1 - tier_discount)
+                
+                rules_with_pricing.append({
+                    "id": rule.get("id"),
+                    "name": rule.get("name") or rule.get("title"),
+                    "description": rule.get("description"),
+                    "severity": severity,
+                    "rule_type": "custom",
+                    "mitre_techniques": rule.get("mitre_techniques", []),
+                    "price_per_7h": round(final_price, 2)
+                })
+            
+            # Add default rules
+            for rule in default_rules:
+                severity = rule.get("severity", "medium").lower()
+                pricing_key = f"threat_hunting.default_rule.{severity}"
+                base_price = pricing_config["feature_pricing"].get(pricing_key, {}).get("base_price", 1.00)
+                
+                # Apply tier discount
+                tier_discount = pricing_config["tier_discounts"].get(customer_tier, {}).get("discount_percent", 0) / 100
+                final_price = base_price * (1 - tier_discount)
+                
+                rules_with_pricing.append({
+                    "id": rule.get("id"),
+                    "name": rule.get("name") or rule.get("title"),
+                    "description": rule.get("description"),
+                    "severity": severity,
+                    "rule_type": "default",
+                    "mitre_techniques": rule.get("mitre_techniques", []),
+                    "price_per_7h": round(final_price, 2)
+                })
+            
+            # Group by severity for easier frontend consumption
+            pricing_summary = {}
+            for severity in ["low", "medium", "high", "critical"]:
+                custom_price = pricing_config["feature_pricing"].get(f"threat_hunting.custom_rule.{severity}", {}).get("base_price", 2.00)
+                default_price = pricing_config["feature_pricing"].get(f"threat_hunting.default_rule.{severity}", {}).get("base_price", 1.00)
+                
+                tier_discount = pricing_config["tier_discounts"].get(customer_tier, {}).get("discount_percent", 0) / 100
+                
+                pricing_summary[severity] = {
+                    "custom_rule_price": round(custom_price * (1 - tier_discount), 2),
+                    "default_rule_price": round(default_price * (1 - tier_discount), 2)
+                }
+            
+            return {
+                "rules": rules_with_pricing,
+                "pricing_summary": pricing_summary,
+                "total_available": len(rules_with_pricing),
+                "customer_rules_count": len(customer_rules),
+                "default_rules_count": len(default_rules),
+                "tier": customer_tier,
+                "currency": "USD"
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get threat hunt rules with pricing: {e}")
+            raise
+
+    # Enhanced Threat Hunting Helper Methods
+    
+    def _parse_time_range(self, time_range: str) -> int:
+        """Parse time range string to hours"""
+        time_range = time_range.lower()
+        if time_range.endswith('h'):
+            return int(time_range[:-1])
+        elif time_range.endswith('d'):
+            return int(time_range[:-1]) * 24
+        elif time_range == '24h':
+            return 24
+        elif time_range == '7d':
+            return 168  # 7 * 24
+        elif time_range == '30d':
+            return 720  # 30 * 24
+        else:
+            return 24  # Default to 24 hours
+
+    async def _analyze_threats_for_hunting(
+        self, 
+        events: List[Dict[str, Any]], 
+        rules: List[Dict[str, Any]], 
+        customer_id: str,
+        time_range: str
+    ) -> Dict[str, Any]:
+        """Perform enhanced threat analysis with unique findings"""
+        try:
+            # Group events by unique threat patterns
+            unique_findings = []
+            finding_counter = 1
+            
+            # Group events by rule_id and key indicators for deduplication
+            threat_groups = {}
+            
+            for event in events:
+                rule_id = event.get("rule_id", "unknown")
+                severity = event.get("severity", "medium")
+                
+                # Extract key indicators for grouping (unique threat identification)
+                key_indicators = self._extract_threat_indicators(event)
+                
+                # Create unique key for this threat pattern
+                threat_key = f"{rule_id}_{key_indicators.get('primary_indicator', 'unknown')}"
+                
+                if threat_key not in threat_groups:
+                    threat_groups[threat_key] = {
+                        "events": [],
+                        "rule_id": rule_id,
+                        "severity": severity,
+                        "indicators": key_indicators,
+                        "first_seen": event.get("created_at"),
+                        "last_seen": event.get("created_at")
+                    }
+                
+                threat_groups[threat_key]["events"].append(event)
+                
+                # Update time bounds
+                event_time = event.get("created_at")
+                if event_time:
+                    if not threat_groups[threat_key]["first_seen"] or event_time < threat_groups[threat_key]["first_seen"]:
+                        threat_groups[threat_key]["first_seen"] = event_time
+                    if not threat_groups[threat_key]["last_seen"] or event_time > threat_groups[threat_key]["last_seen"]:
+                        threat_groups[threat_key]["last_seen"] = event_time
+
+            # Convert groups to unique findings
+            for threat_key, group in threat_groups.items():
+                rule_info = self._get_rule_info_by_id(group["rule_id"], rules)
+                
+                finding = {
+                    "finding_id": f"THF-{finding_counter:03d}",
+                    "rule_id": group["rule_id"],
+                    "rule_name": rule_info.get("name") or rule_info.get("title", "Unknown Rule"),
+                    "severity": group["severity"],
+                    "threat_type": self._determine_threat_type(rule_info),
+                    "attack_technique": self._extract_attack_technique(rule_info),
+                    "affected_asset": group["indicators"].get("affected_asset", "unknown"),
+                    "source_indicators": group["indicators"],
+                    "first_seen": group["first_seen"],
+                    "last_seen": group["last_seen"],
+                    "event_count": len(group["events"]),
+                    "confidence": self._calculate_confidence(group),
+                    "recommended_action": self._generate_recommendation(group, rule_info),
+                    "threat_context": self._generate_threat_context(group, rule_info)
+                }
+                
+                unique_findings.append(finding)
+                finding_counter += 1
+
+            # Sort by severity and confidence
+            unique_findings.sort(key=lambda x: (
+                {"critical": 4, "high": 3, "medium": 2, "low": 1}.get(x["severity"], 0),
+                x["confidence"]
+            ), reverse=True)
+
+            # Create summary
+            summary = {
+                "total_events_analyzed": len(events),
+                "unique_threats_found": len(unique_findings),
+                "high_priority_threats": len([f for f in unique_findings if f["severity"] in ["high", "critical"]]),
+                "attack_techniques_detected": list(set([f["attack_technique"] for f in unique_findings if f["attack_technique"]]))
+            }
+
+            return {
+                "unique_findings": unique_findings,
+                "summary": summary
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to analyze threats for hunting: {e}")
+            return {"unique_findings": [], "summary": {"total_events_analyzed": 0, "unique_threats_found": 0, "high_priority_threats": 0, "attack_techniques_detected": []}}
+
+    def _extract_threat_indicators(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract key threat indicators from event for deduplication"""
+        event_data = event.get("event_data", {})
+        matched_fields = event.get("matched_fields", {})
+        
+        # Extract primary indicators based on common security fields
+        indicators = {}
+        
+        # Network indicators
+        src_ip = event_data.get("src_ip") or matched_fields.get("src_ip") or event_data.get("source_ip")
+        dst_ip = event_data.get("dst_ip") or matched_fields.get("dst_ip") or event_data.get("destination_ip")
+        
+        # User indicators
+        user = event_data.get("user") or matched_fields.get("user") or event_data.get("username")
+        
+        # Asset indicators
+        hostname = event_data.get("hostname") or matched_fields.get("hostname") or event_data.get("host")
+        
+        # Process indicators
+        process = event_data.get("process") or matched_fields.get("process") or event_data.get("process_name")
+        
+        # Determine primary indicator for grouping
+        primary_indicator = src_ip or user or hostname or process or "generic"
+        
+        indicators = {
+            "primary_indicator": primary_indicator,
+            "src_ip": src_ip,
+            "dst_ip": dst_ip,
+            "user": user,
+            "affected_asset": hostname or "unknown",
+            "process": process
+        }
+        
+        # Add specific indicators based on event type
+        if "login" in str(event_data).lower():
+            indicators["failed_logins"] = event_data.get("failed_count", 1)
+            indicators["login_type"] = "authentication"
+            
+        if "network" in str(event_data).lower():
+            indicators["port"] = event_data.get("dst_port") or matched_fields.get("dst_port")
+            indicators["protocol"] = event_data.get("protocol") or matched_fields.get("protocol")
+        
+        return indicators
+
+    def _get_rule_info_by_id(self, rule_id: str, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Get rule information by ID"""
+        for rule in rules:
+            if rule.get("id") == rule_id:
+                return rule
+        return {"name": f"Rule {rule_id[:8]}", "description": "Unknown rule"}
+
+    def _determine_threat_type(self, rule_info: Dict[str, Any]) -> str:
+        """Determine threat type from rule information"""
+        rule_name = rule_info.get("name", "").lower()
+        description = rule_info.get("description", "").lower()
+        tags = rule_info.get("tags", [])
+        
+        if any(term in rule_name + description for term in ["brute", "force", "login", "auth"]):
+            return "Credential Access"
+        elif any(term in rule_name + description for term in ["lateral", "movement", "spread"]):
+            return "Lateral Movement"
+        elif any(term in rule_name + description for term in ["exec", "command", "powershell", "script"]):
+            return "Execution"
+        elif any(term in rule_name + description for term in ["network", "connection", "traffic"]):
+            return "Command and Control"
+        elif "persistence" in tags or any(term in rule_name + description for term in ["persist", "startup"]):
+            return "Persistence"
+        else:
+            return "General Security"
+
+    def _extract_attack_technique(self, rule_info: Dict[str, Any]) -> Optional[str]:
+        """Extract MITRE ATT&CK technique from rule"""
+        mitre_techniques = rule_info.get("mitre_techniques", [])
+        attack_techniques = rule_info.get("attack_techniques", [])
+        
+        # Return first technique found
+        all_techniques = mitre_techniques + attack_techniques
+        return all_techniques[0] if all_techniques else None
+
+    def _calculate_confidence(self, group: Dict[str, Any]) -> int:
+        """Calculate confidence score for threat finding"""
+        base_confidence = 60
+        
+        # More events = higher confidence
+        event_count = len(group["events"])
+        if event_count > 10:
+            base_confidence += 30
+        elif event_count > 5:
+            base_confidence += 20
+        elif event_count > 2:
+            base_confidence += 10
+        
+        # High severity = higher confidence
+        if group["severity"] == "critical":
+            base_confidence += 25
+        elif group["severity"] == "high":
+            base_confidence += 15
+        elif group["severity"] == "medium":
+            base_confidence += 5
+        
+        # Multiple indicators = higher confidence
+        indicators = group["indicators"]
+        if indicators.get("src_ip") and indicators.get("user"):
+            base_confidence += 10
+        
+        return min(base_confidence, 95)  # Cap at 95%
+
+    def _generate_recommendation(self, group: Dict[str, Any], rule_info: Dict[str, Any]) -> str:
+        """Generate actionable recommendation"""
+        indicators = group["indicators"]
+        threat_type = self._determine_threat_type(rule_info)
+        
+        if threat_type == "Credential Access":
+            if indicators.get("src_ip"):
+                return f"Block source IP {indicators['src_ip']} and review account security for affected users"
+            else:
+                return "Review user account security and implement additional authentication controls"
+        elif threat_type == "Lateral Movement":
+            return f"Isolate affected asset {indicators.get('affected_asset', 'unknown')} and review network segmentation"
+        elif threat_type == "Execution":
+            return f"Investigate process execution on {indicators.get('affected_asset', 'unknown')} and review endpoint security"
+        elif threat_type == "Command and Control":
+            return f"Block network connections and investigate potential malware on {indicators.get('affected_asset', 'unknown')}"
+        else:
+            return f"Investigate security event on {indicators.get('affected_asset', 'unknown')} and implement appropriate controls"
+
+    def _generate_threat_context(self, group: Dict[str, Any], rule_info: Dict[str, Any]) -> str:
+        """Generate threat context description"""
+        indicators = group["indicators"]
+        event_count = len(group["events"])
+        threat_type = self._determine_threat_type(rule_info)
+        
+        if threat_type == "Credential Access" and event_count > 5:
+            return f"Coordinated brute force attack with {event_count} attempts targeting authentication systems"
+        elif threat_type == "Lateral Movement":
+            return f"Potential lateral movement activity detected across {event_count} events"
+        elif threat_type == "Execution" and indicators.get("process"):
+            return f"Suspicious process execution detected {event_count} times: {indicators['process']}"
+        else:
+            return f"Security pattern detected across {event_count} events requiring investigation"
+
+    async def _calculate_hunting_costs(self, rules: List[Dict[str, Any]], time_range: str, customer_id: str) -> Dict[str, Any]:
+        """Calculate threat hunting campaign costs"""
+        try:
+            import yaml
+            from pathlib import Path
+            
+            # Load pricing config
+            config_path = Path(__file__).parent.parent / "config" / "pricing.yml"
+            with open(config_path, 'r') as f:
+                pricing_config = yaml.safe_load(f)
+            
+            # Calculate time blocks (normalize to 7-hour periods)
+            hours = self._parse_time_range(time_range)
+            time_blocks = max(1, hours / 7.0)  # Minimum 1 block
+            
+            # TODO: Get customer tier from tenant data
+            customer_tier = "smb"  # Default for now
+            tier_discount = pricing_config["tier_discounts"].get(customer_tier, {}).get("discount_percent", 0) / 100
+            
+            total_cost = 0
+            cost_breakdown = []
+            
+            # Group rules by type and severity
+            rule_costs = {}
+            
+            for rule in rules:
+                customer_rule_id = rule.get("customer_id")
+                rule_type = "custom" if customer_rule_id and customer_rule_id != "default" else "default"
+                severity = rule.get("severity", "medium").lower()
+                
+                pricing_key = f"threat_hunting.{rule_type}_rule.{severity}"
+                base_price = pricing_config["feature_pricing"].get(pricing_key, {}).get("base_price", 1.00)
+                
+                # Apply tier discount and time blocks
+                final_price = base_price * (1 - tier_discount) * time_blocks
+                
+                rule_cost_key = f"{rule_type}_{severity}"
+                if rule_cost_key not in rule_costs:
+                    rule_costs[rule_cost_key] = {"count": 0, "total_cost": 0, "rule_type": rule_type, "severity": severity}
+                
+                rule_costs[rule_cost_key]["count"] += 1
+                rule_costs[rule_cost_key]["total_cost"] += final_price
+                total_cost += final_price
+            
+            # Format breakdown
+            for cost_info in rule_costs.values():
+                cost_breakdown.append({
+                    "rule_type": cost_info["rule_type"],
+                    "severity": cost_info["severity"],
+                    "rule_count": cost_info["count"],
+                    "cost": round(cost_info["total_cost"], 2)
+                })
+            
+            return {
+                "total_cost": round(total_cost, 2),
+                "cost_breakdown": cost_breakdown,
+                "time_blocks_used": round(time_blocks, 2),
+                "time_range": time_range,
+                "tier": customer_tier,
+                "currency": "USD"
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to calculate hunting costs: {e}")
+            return {"total_cost": 0, "cost_breakdown": [], "currency": "USD"}
+
+    async def _analyze_existing_security_events(
+        self, 
+        events: List[Dict[str, Any]], 
+        rule_ids: List[str],
+        customer_id: str,
+        time_range: str
+    ) -> Dict[str, Any]:
+        """Analyze existing security events for unique threat patterns"""
+        try:
+            # Group events for deduplication
+            threat_groups = {}
+            
+            for event in events:
+                rule_id = event.get("rule_id")
+                
+                # Extract threat indicators from raw_log_data and enrichment_data
+                raw_log = event.get("raw_log_data", {})
+                enrichment = event.get("enrichment_data", {})
+                
+                # Create unique threat signature
+                threat_indicators = self._extract_threat_signature_from_security_event(raw_log, enrichment, event)
+                threat_key = f"{rule_id}_{threat_indicators.get('primary_indicator', 'unknown')}"
+                
+                if threat_key not in threat_groups:
+                    threat_groups[threat_key] = {
+                        "events": [],
+                        "rule_id": rule_id,
+                        "rule_name": event.get("title", "Unknown Rule"),
+                        "severity": event.get("severity", "medium"),
+                        "indicators": threat_indicators,
+                        "first_seen": event.get("created_at"),
+                        "last_seen": event.get("created_at"),
+                        "mitre_techniques": event.get("mitre_techniques", [])
+                    }
+                
+                threat_groups[threat_key]["events"].append(event)
+                
+                # Update time bounds
+                event_time = event.get("created_at")
+                if event_time:
+                    if not threat_groups[threat_key]["first_seen"] or event_time < threat_groups[threat_key]["first_seen"]:
+                        threat_groups[threat_key]["first_seen"] = event_time
+                    if not threat_groups[threat_key]["last_seen"] or event_time > threat_groups[threat_key]["last_seen"]:
+                        threat_groups[threat_key]["last_seen"] = event_time
+            
+            # Convert to unique findings with actionable intelligence
+            unique_findings = []
+            for i, (threat_key, group) in enumerate(threat_groups.items(), 1):
+                finding = {
+                    "finding_id": f"THF-{i:03d}",
+                    "rule_id": group["rule_id"],
+                    "rule_name": group["rule_name"],
+                    "severity": group["severity"],
+                    "threat_type": self._classify_threat_type_from_group(group),
+                    "attack_technique": group["mitre_techniques"][0] if group["mitre_techniques"] else None,
+                    "affected_asset": group["indicators"].get("affected_asset", "unknown"),
+                    "source_indicators": group["indicators"],
+                    "first_seen": group["first_seen"],
+                    "last_seen": group["last_seen"],
+                    "event_count": len(group["events"]),
+                    "confidence": self._calculate_threat_confidence_from_group(group),
+                    "recommended_action": self._generate_actionable_recommendation_from_group(group),
+                    "threat_context": self._generate_threat_narrative_from_group(group)
+                }
+                unique_findings.append(finding)
+            
+            # Sort by severity and confidence
+            unique_findings.sort(key=lambda x: (
+                {"critical": 4, "high": 3, "medium": 2, "low": 1}.get(x["severity"], 0),
+                x["confidence"]
+            ), reverse=True)
+            
+            # Create summary
+            summary = {
+                "total_events_analyzed": len(events),
+                "unique_threats_found": len(unique_findings),
+                "high_priority_threats": len([f for f in unique_findings if f["severity"] in ["high", "critical"]]),
+                "attack_techniques_detected": list(set([f["attack_technique"] for f in unique_findings if f["attack_technique"]]))
+            }
+            
+            return {
+                "unique_findings": unique_findings,
+                "summary": summary
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to analyze existing security events: {e}")
+            return {"unique_findings": [], "summary": {"total_events_analyzed": 0, "unique_threats_found": 0, "high_priority_threats": 0, "attack_techniques_detected": []}}
+
+    def _extract_threat_signature_from_security_event(self, raw_log: Dict[str, Any], enrichment: Dict[str, Any], event: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract threat signature from security event for deduplication"""
+        # Extract nested normalized log data and threat context
+        normalized_log = raw_log.get("normalized_log", {})
+        threat_context = enrichment.get("threat_context", {})
+        network_indicators = threat_context.get("network_indicators", {})
+        
+        # Combine all data sources for comprehensive indicator extraction
+        combined_data = {**raw_log, **enrichment, **normalized_log, **network_indicators}
+        
+        # Extract primary indicators from multiple possible locations
+        src_ip = (network_indicators.get("src_ip") or 
+                 normalized_log.get("src_ip") or 
+                 combined_data.get("source_ip"))
+        
+        user = (network_indicators.get("user") or 
+               normalized_log.get("user") or 
+               combined_data.get("username"))
+        
+        hostname = (network_indicators.get("host") or 
+                   normalized_log.get("host") or 
+                   normalized_log.get("hostname") or
+                   combined_data.get("hostname"))
+        
+        process = (combined_data.get("process") or 
+                  combined_data.get("process_name"))
+        
+        event_type = normalized_log.get("event_type")
+        status_code = normalized_log.get("status_code")
+        
+        # Determine primary indicator for grouping (prefer specific indicators over generic rule ID)
+        primary_indicator = (src_ip or user or hostname or process or 
+                           f"{event_type}_{status_code}" if event_type else
+                           f"rule_{event.get('rule_id', 'unknown')[:8]}")
+        
+        return {
+            "primary_indicator": primary_indicator,
+            "src_ip": src_ip,
+            "user": user,
+            "affected_asset": hostname or "unknown",
+            "process": process,
+            "event_type": event_type,
+            "status_code": status_code,
+            "raw_indicators": combined_data
+        }
+
+    def _classify_threat_type_from_group(self, group: Dict[str, Any]) -> str:
+        """Classify threat type from security event group"""
+        rule_name = group.get("rule_name", "").lower()
+        indicators = group.get("indicators", {})
+        
+        if any(term in rule_name for term in ["brute", "force", "login", "auth", "credential"]):
+            return "Credential Access"
+        elif any(term in rule_name for term in ["lateral", "movement", "spread"]):
+            return "Lateral Movement"
+        elif any(term in rule_name for term in ["exec", "command", "powershell", "script"]):
+            return "Execution"
+        elif any(term in rule_name for term in ["network", "connection", "traffic", "c2"]):
+            return "Command and Control"
+        elif any(term in rule_name for term in ["persist", "startup", "install"]):
+            return "Persistence"
+        else:
+            return "Security Event"
+
+    def _calculate_threat_confidence_from_group(self, group: Dict[str, Any]) -> int:
+        """Calculate confidence score for threat finding from event group"""
+        base_confidence = 70  # Start higher for already-processed security events
+        
+        # More events = higher confidence
+        event_count = len(group["events"])
+        if event_count > 10:
+            base_confidence += 20
+        elif event_count > 5:
+            base_confidence += 15
+        elif event_count > 2:
+            base_confidence += 10
+        
+        # Severity impact
+        severity = group.get("severity", "medium")
+        if severity == "critical":
+            base_confidence += 20
+        elif severity == "high":
+            base_confidence += 15
+        elif severity == "medium":
+            base_confidence += 5
+        
+        return min(base_confidence, 95)  # Cap at 95%
+
+    def _generate_actionable_recommendation_from_group(self, group: Dict[str, Any]) -> str:
+        """Generate actionable recommendation from event group"""
+        threat_type = self._classify_threat_type_from_group(group)
+        indicators = group.get("indicators", {})
+        
+        if threat_type == "Credential Access":
+            if indicators.get("src_ip"):
+                return f"Block source IP {indicators['src_ip']} and review account security for user {indicators.get('user', 'affected users')}"
+            return "Review account security and implement additional authentication controls"
+        elif threat_type == "Lateral Movement":
+            return f"Isolate affected asset {indicators.get('affected_asset', 'unknown')} and review network segmentation"
+        elif threat_type == "Execution":
+            return f"Investigate process execution on {indicators.get('affected_asset', 'unknown')} and review endpoint security"
+        elif threat_type == "Command and Control":
+            return f"Block network connections from {indicators.get('affected_asset', 'unknown')} and investigate potential malware"
+        else:
+            return f"Investigate security events on {indicators.get('affected_asset', 'unknown')} and implement appropriate controls"
+
+    def _generate_threat_narrative_from_group(self, group: Dict[str, Any]) -> str:
+        """Generate threat narrative from event group"""
+        event_count = len(group["events"])
+        threat_type = self._classify_threat_type_from_group(group)
+        rule_name = group.get("rule_name", "Unknown Rule")
+        
+        if threat_type == "Credential Access":
+            return f"Multiple authentication-related security events detected: {event_count} instances of '{rule_name}' indicating potential credential compromise"
+        elif threat_type == "Lateral Movement":
+            return f"Lateral movement pattern detected: {event_count} security events suggesting attacker progression through network"
+        elif threat_type == "Execution":
+            return f"Suspicious execution activity: {event_count} instances of '{rule_name}' indicating potential malicious code execution"
+        else:
+            return f"Security pattern detected: {event_count} instances of '{rule_name}' requiring investigation"
     

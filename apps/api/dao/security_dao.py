@@ -374,8 +374,8 @@ class SecurityDAO:
                 "status": status_enum,  # Use enum-compatible value
                 "event_type": "detection",  # All security events are detections
                 "description": event_data.get("rule_title", "Security detection"),
-                "raw_log_data": json.dumps(event_data.get("event_data", {})),
-                "enrichment_data": json.dumps(event_data.get("matched_fields", {})),
+                "raw_log_data": event_data.get("raw_log_data") or json.dumps(event_data.get("event_data", {})),
+                "enrichment_data": event_data.get("enrichment_data") or json.dumps(event_data.get("matched_fields", {})),
                 "mitre_techniques": [str(t) for t in event_data.get("attack_techniques", [])],
                 "assigned_to": event_data.get("assigned_to"),
                 "investigation_notes": [str(note) for note in event_data.get("investigation_notes", [])],
@@ -854,3 +854,350 @@ class SecurityDAO:
         except Exception as e:
             logger.error(f"Error getting MITRE rules count: {e}")
             return 0
+    
+    # Threat Hunting Campaign Operations
+    
+    async def create_threat_hunting_campaign(self, campaign_data: Dict[str, Any]) -> str:
+        """Create a new threat hunting campaign and return campaign ID"""
+        try:
+            campaign_id = campaign_data.get("id", f"hunt_{uuid.uuid4().hex[:8]}")
+            
+            query = """
+                INSERT INTO threat_hunting_campaigns_mt (
+                    id, customer_id, description, status, time_range, 
+                    severity_filter, rule_ids, created_at, started_at, 
+                    rules_evaluated, events_found, indicators_detected, 
+                    progress_percentage, error_message
+                ) VALUES (
+                    %(id)s, %(customer_id)s, %(description)s, %(status)s, %(time_range)s,
+                    %(severity_filter)s, %(rule_ids)s, %(created_at)s, %(started_at)s,
+                    %(rules_evaluated)s, %(events_found)s, %(indicators_detected)s,
+                    %(progress_percentage)s, %(error_message)s
+                )
+            """
+            
+            params = {
+                "id": campaign_id,
+                "customer_id": campaign_data.get("customer_id"),
+                "description": campaign_data.get("description", "Threat hunting campaign"),
+                "status": "started",
+                "time_range": campaign_data.get("time_range", "24h"),
+                "severity_filter": campaign_data.get("severity_filter", []),
+                "rule_ids": campaign_data.get("rule_ids", []),
+                "created_at": datetime.now(timezone.utc),
+                "started_at": datetime.now(timezone.utc),
+                "rules_evaluated": 0,
+                "events_found": 0,
+                "indicators_detected": 0,
+                "progress_percentage": 0,
+                "error_message": None
+            }
+            
+            await self.db.execute_update(query, params)
+            logger.info(f"Created threat hunting campaign: {campaign_id}")
+            
+            return campaign_id
+            
+        except Exception as e:
+            logger.error(f"Failed to create threat hunting campaign: {e}")
+            raise
+    
+    async def update_campaign_progress(self, campaign_id: str, progress_data: Dict[str, Any]) -> bool:
+        """Update threat hunting campaign progress"""
+        try:
+            set_clauses = []
+            params = {"campaign_id": campaign_id}
+            
+            if "progress_percentage" in progress_data:
+                set_clauses.append("progress_percentage = %(progress_percentage)s")
+                params["progress_percentage"] = progress_data["progress_percentage"]
+            
+            if "rules_evaluated" in progress_data:
+                set_clauses.append("rules_evaluated = %(rules_evaluated)s")
+                params["rules_evaluated"] = progress_data["rules_evaluated"]
+            
+            if "events_found" in progress_data:
+                set_clauses.append("events_found = %(events_found)s")
+                params["events_found"] = progress_data["events_found"]
+            
+            if "indicators_detected" in progress_data:
+                set_clauses.append("indicators_detected = %(indicators_detected)s")
+                params["indicators_detected"] = progress_data["indicators_detected"]
+            
+            if "status" in progress_data:
+                set_clauses.append("status = %(status)s")
+                params["status"] = progress_data["status"]
+            
+            if "error_message" in progress_data:
+                set_clauses.append("error_message = %(error_message)s")
+                params["error_message"] = progress_data["error_message"]
+            
+            if progress_data.get("status") == "completed":
+                set_clauses.append("completed_at = %(completed_at)s")
+                params["completed_at"] = datetime.now(timezone.utc)
+            
+            if not set_clauses:
+                return True  # Nothing to update
+            
+            query = f"""
+                ALTER TABLE threat_hunting_campaigns_mt 
+                UPDATE {', '.join(set_clauses)}
+                WHERE id = %(campaign_id)s
+            """
+            
+            await self.db.execute_update(query, params)
+            logger.debug(f"Updated campaign {campaign_id} progress")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to update campaign progress: {e}")
+            return False
+    
+    async def get_campaign_status(self, campaign_id: str, customer_id: str) -> Optional[Dict[str, Any]]:
+        """Get threat hunting campaign status"""
+        try:
+            query = """
+                SELECT * FROM threat_hunting_campaigns_mt 
+                WHERE id = %(campaign_id)s AND customer_id = %(customer_id)s
+            """
+            
+            params = {
+                "campaign_id": campaign_id,
+                "customer_id": customer_id
+            }
+            
+            result = await self.db.fetch_one(query, params)
+            
+            if not result:
+                return None
+            
+            # Convert result to dict and process arrays
+            campaign = dict(result)
+            if campaign.get("severity_filter"):
+                campaign["severity_filter"] = list(campaign["severity_filter"])
+            if campaign.get("rule_ids"):
+                campaign["rule_ids"] = list(campaign["rule_ids"])
+            
+            return campaign
+            
+        except Exception as e:
+            logger.error(f"Failed to get campaign status: {e}")
+            return None
+    
+    async def get_customer_campaigns(self, customer_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get customer's threat hunting campaigns"""
+        try:
+            query = """
+                SELECT * FROM threat_hunting_campaigns_mt 
+                WHERE customer_id = %(customer_id)s 
+                ORDER BY created_at DESC 
+                LIMIT %(limit)s
+            """
+            
+            params = {
+                "customer_id": customer_id,
+                "limit": limit
+            }
+            
+            results = await self.db.fetch_all(query, params)
+            
+            campaigns = []
+            for campaign in results:
+                campaign_dict = dict(campaign)
+                if campaign_dict.get("severity_filter"):
+                    campaign_dict["severity_filter"] = list(campaign_dict["severity_filter"])
+                if campaign_dict.get("rule_ids"):
+                    campaign_dict["rule_ids"] = list(campaign_dict["rule_ids"])
+                campaigns.append(campaign_dict)
+            
+            return campaigns
+            
+        except Exception as e:
+            logger.error(f"Failed to get customer campaigns: {e}")
+            return []
+
+    async def get_normalized_logs_for_hunting(
+        self, 
+        customer_id: str, 
+        time_range_hours: int = 24, 
+        severity_filter: List[str] = None,
+        limit: int = 50000
+    ) -> List[Dict[str, Any]]:
+        """Get normalized logs for threat hunting from logs_normalized_mt table"""
+        try:
+            # Build base query
+            where_conditions = ["customer_id = %(customer_id)s"]
+            params = {
+                "customer_id": customer_id,
+                "limit": limit
+            }
+            
+            # Add time range filter
+            if time_range_hours:
+                where_conditions.append("ts >= now() - INTERVAL %(hours)s HOUR")
+                params["hours"] = time_range_hours
+            
+            # Add severity filter if provided
+            if severity_filter:
+                # Map severity to level field in logs_normalized_mt
+                severity_conditions = []
+                for i, severity in enumerate(severity_filter):
+                    severity_key = f"severity_{i}"
+                    severity_conditions.append(f"level = %({severity_key})s")
+                    params[severity_key] = severity.upper()  # Assuming levels are uppercase
+                
+                if severity_conditions:
+                    where_conditions.append(f"({' OR '.join(severity_conditions)})")
+            
+            query = f"""
+                SELECT 
+                    ts,
+                    date,
+                    hour,
+                    host,
+                    service,
+                    level,
+                    msg,
+                    trace_id,
+                    span_id,
+                    status,
+                    src_ip,
+                    user_id,
+                    severity_num,
+                    facility,
+                    ingested_at,
+                    customer_id
+                FROM logs_normalized_mt 
+                WHERE {' AND '.join(where_conditions)}
+                ORDER BY ts DESC 
+                LIMIT %(limit)s
+            """
+            
+            results = await self.db.fetch_all(query, params)
+            
+            # Convert to list of dictionaries with standardized field names
+            logs = []
+            for row in results:
+                log_dict = {
+                    "timestamp": row["ts"],
+                    "date": row["date"], 
+                    "hour": row["hour"],
+                    "host": row["host"],
+                    "hostname": row["host"],  # Alias for compatibility
+                    "service": row["service"],
+                    "level": row["level"],
+                    "severity": row["level"].lower() if row["level"] else "info",  # Normalized severity
+                    "message": row["msg"],
+                    "msg": row["msg"],
+                    "trace_id": row["trace_id"],
+                    "span_id": row["span_id"],
+                    "status": row["status"],
+                    "status_code": row["status"],  # Alias for compatibility
+                    "src_ip": row["src_ip"],
+                    "source_ip": row["src_ip"],  # Alias for compatibility
+                    "user": row["user_id"], 
+                    "user_id": row["user_id"],
+                    "username": row["user_id"],  # Alias for compatibility
+                    "severity_num": row["severity_num"],
+                    "facility": row["facility"],
+                    "ingested_at": row["ingested_at"],
+                    "customer_id": row["customer_id"],
+                    "created_at": row["ts"],  # For compatibility with existing code
+                    
+                    # Additional standardized fields for threat hunting
+                    "event_data": {
+                        "ts": row["ts"],
+                        "host": row["host"],
+                        "service": row["service"], 
+                        "level": row["level"],
+                        "msg": row["msg"],
+                        "status": row["status"],
+                        "src_ip": row["src_ip"],
+                        "user": row["user_id"]
+                    },
+                    "matched_fields": {}  # Will be populated by rule evaluation
+                }
+                logs.append(log_dict)
+            
+            logger.info(f"Retrieved {len(logs)} normalized logs for threat hunting (customer: {customer_id}, time_range: {time_range_hours}h)")
+            return logs
+            
+        except Exception as e:
+            logger.error(f"Failed to get normalized logs for hunting: {e}")
+            return []
+
+    async def get_security_events_by_rules(
+        self, 
+        customer_id: str,
+        rule_ids: List[str] = None,
+        time_range_hours: int = 24,
+        severity_filter: List[str] = None,
+        limit: int = 10000
+    ) -> List[Dict[str, Any]]:
+        """Get security events filtered by specific rules for efficient threat hunting"""
+        try:
+            # Build efficient query targeting specific rules
+            where_conditions = ["customer_id = %(customer_id)s"]
+            params = {"customer_id": customer_id, "limit": limit}
+            
+            # Rule ID filter (core of threat hunting efficiency)
+            if rule_ids:
+                rule_placeholders = []
+                for i, rule_id in enumerate(rule_ids):
+                    placeholder = f"rule_id_{i}"
+                    rule_placeholders.append(f"%({placeholder})s")
+                    params[placeholder] = rule_id
+                where_conditions.append(f"rule_id IN ({', '.join(rule_placeholders)})")
+            
+            # Time range filter
+            if time_range_hours:
+                where_conditions.append("created_at >= now() - INTERVAL %(hours)s HOUR")
+                params["hours"] = time_range_hours
+            
+            # Severity filter
+            if severity_filter:
+                severity_conditions = []
+                for i, severity in enumerate(severity_filter):
+                    severity_key = f"severity_{i}"
+                    severity_conditions.append(f"severity = %({severity_key})s")
+                    params[severity_key] = severity
+                if severity_conditions:
+                    where_conditions.append(f"({' OR '.join(severity_conditions)})")
+            
+            query = f"""
+                SELECT 
+                    id, rule_id, title, severity, status,
+                    raw_log_data,      -- Original log for context
+                    enrichment_data,   -- Matched fields and indicators
+                    mitre_techniques,  -- Attack techniques
+                    created_at, updated_at
+                FROM security_events_mt 
+                WHERE {' AND '.join(where_conditions)}
+                ORDER BY created_at DESC 
+                LIMIT %(limit)s
+            """
+            
+            results = await self.db.fetch_all(query, params)
+            
+            # Parse JSON fields for analysis
+            processed_events = []
+            for event in results:
+                processed_event = dict(event)
+                
+                # Parse raw_log_data and enrichment_data for threat analysis
+                for json_field in ["raw_log_data", "enrichment_data"]:
+                    if processed_event.get(json_field):
+                        try:
+                            processed_event[json_field] = json.loads(processed_event[json_field])
+                        except (json.JSONDecodeError, TypeError):
+                            processed_event[json_field] = {}
+                
+                processed_events.append(processed_event)
+            
+            logger.info(f"Retrieved {len(processed_events)} security events for threat hunting (customer: {customer_id}, rules: {len(rule_ids) if rule_ids else 'all'})")
+            return processed_events
+            
+        except Exception as e:
+            logger.error(f"Failed to get security events by rules for hunting: {e}")
+            return []

@@ -156,6 +156,47 @@ feature_pricing:
     base_price: 2.00
     description: "AI-powered log analysis"
 
+  # Threat Hunting Features (per rule per 7-hour period)
+  "threat_hunting.default_rule.low":
+    unit: "rule/7hour"
+    base_price: 0.50
+    description: "Default Sigma rule - Low severity"
+    
+  "threat_hunting.default_rule.medium":
+    unit: "rule/7hour"
+    base_price: 0.75
+    description: "Default Sigma rule - Medium severity"
+    
+  "threat_hunting.default_rule.high":
+    unit: "rule/7hour"
+    base_price: 1.25
+    description: "Default Sigma rule - High severity"
+    
+  "threat_hunting.default_rule.critical":
+    unit: "rule/7hour"
+    base_price: 2.00
+    description: "Default Sigma rule - Critical severity"
+    
+  "threat_hunting.custom_rule.low":
+    unit: "rule/7hour"
+    base_price: 1.25
+    description: "Customer Sigma rule - Low severity"
+    
+  "threat_hunting.custom_rule.medium":
+    unit: "rule/7hour"
+    base_price: 1.75
+    description: "Customer Sigma rule - Medium severity"
+    
+  "threat_hunting.custom_rule.high":
+    unit: "rule/7hour"
+    base_price: 2.75
+    description: "Customer Sigma rule - High severity"
+    
+  "threat_hunting.custom_rule.critical":
+    unit: "rule/7hour"
+    base_price: 4.00
+    description: "Customer Sigma rule - Critical severity"
+
   # Export Features
   "export.basic":
     unit: "GB"

@@ -200,22 +200,25 @@ class SecurityEventHandler(EventHandler):
             return 0
 
     async def _save_security_detection_to_database(self, event_data: Dict[str, Any]) -> bool:
-        """Save security detection to database for persistence."""
+        """Save security detection to database with enhanced enrichment data."""
         try:
+            import json
+            from datetime import datetime, timezone
             from services.security_service import SecurityService
-
             security_service = SecurityService()
 
             # Transform event data for database storage
             # The actual event structure uses: detection_id, rule_name, triggered_at
             rule_title = event_data.get("rule_name") or "Unknown Rule"  # rule_name can be None
+            rule_id = event_data.get("rule_id")
+            customer_id = event_data.get("customer_id")
+
             if not rule_title or rule_title == "None":
                 # If rule_name is missing, try to get it from rule_id by looking up the rule
                 try:
-                    rule_id = event_data.get("rule_id")
                     if rule_id:
                         # Try to get rule title from Sigma rule cache
-                        sigma_rules = await self.sigma_rule_cache.get_customer_rules(event_data.get("customer_id"), include_defaults=True)
+                        sigma_rules = await self.sigma_rule_cache.get_customer_rules(customer_id, include_defaults=True)
                         for rule in sigma_rules:
                             if rule.get("id") == rule_id:
                                 rule_title = rule.get("title", f"Rule {rule_id[:8]}")
@@ -224,33 +227,243 @@ class SecurityEventHandler(EventHandler):
                             rule_title = f"Rule {rule_id[:8]}"  # Fallback to rule ID prefix
                 except Exception:
                     rule_title = f"Rule {event_data.get('rule_id', 'unknown')[:8]}"
+            # Raw log data: Store the normalized log that triggered the detection
+            artifact_data = event_data.get("enrichment_data", {})
+            matched_fields = event_data.get("matched_fields", {})
+
+            # If artifact_data is empty, reconstruct log data from matched_fields
+            if not artifact_data and matched_fields:
+                reconstructed_log = {}
+                for field, match_info in matched_fields.items():
+                    if isinstance(match_info, dict) and "log_value" in match_info:
+                        reconstructed_log[field] = match_info["log_value"]
+                artifact_data = reconstructed_log
+
+            raw_log_data = {
+                "normalized_log": artifact_data,
+                "source_format": "json",
+                "field_mapping_applied": True,
+                "log_source": {
+                    "host": artifact_data.get("host") or artifact_data.get("hostname"),
+                    "service": artifact_data.get("service"),
+                    "event_type": artifact_data.get("event_type"),
+                    "src_ip" : artifact_data.get("src_ip")
+                }
+            }
+
+            # Simplified enrichment data using normalized log and matched fields
+            enrichment_data = {
+                "detection_metadata": {
+                    "detection_id": event_data.get("detection_id"),
+                    "rule_engine": "sigma",
+                    "detection_confidence": event_data.get("confidence", 0.85),
+                    "triggered_at": event_data.get("triggered_at")
+                },
+                "rule_details": {
+                    "rule_id": rule_id,
+                    "rule_title": rule_title,
+                    "rule_severity": event_data.get("severity", "medium")
+                },
+                "matched_conditions": event_data.get("matched_fields", {}),
+                "normalized_log_data": artifact_data,
+                "threat_context": {
+                    "attack_techniques": event_data.get("attack_techniques", []),
+                    "kill_chain_phases": event_data.get("kill_chain_phases", []),
+                    "network_indicators": {
+                        "src_ip": artifact_data.get("src_ip"),
+                        "user": artifact_data.get("user"),
+                        "host": artifact_data.get("host") or artifact_data.get("hostname"),
+                        "service": artifact_data.get("service"),
+                        "event_type": artifact_data.get("event_type"),
+                        "status_code": artifact_data.get("status_code")
+                    }
+                },
+                "threat_intelligence_correlation": await self._correlate_with_threat_intel(artifact_data, customer_id)
+            }
+
+            # Enhanced MITRE ATT&CK techniques with sub-techniques
+            mitre_techniques = []
+            attack_techniques = event_data.get("attack_techniques", [])
+            for technique in attack_techniques:
+                if isinstance(technique, str):
+                    mitre_techniques.append(technique)
+                elif isinstance(technique, dict):
+                    # Support for detailed technique mapping
+                    technique_id = technique.get("id") or technique.get("technique_id")
+                    if technique_id:
+                        mitre_techniques.append(technique_id)
 
             detection_data = {
                 "id": event_data.get("detection_id"),  # Actual field is detection_id, not id
-                "customer_id": event_data.get("customer_id"),
-                "rule_id": event_data.get("rule_id"),
+                "customer_id": customer_id,
+                "rule_id": rule_id,
                 "rule_title": rule_title,  # Use the resolved rule title
                 "severity": event_data.get("severity", "medium"),
                 "status": "triggered",
                 "timestamp": event_data.get("triggered_at"),  # Actual field is triggered_at, not timestamp
-                "event_data": event_data,  # Store full event data
+                "event_data": event_data,  # Store full event data for backward compatibility
                 "matched_fields": event_data.get("matched_fields", {}),
-                "attack_techniques": event_data.get("attack_techniques", []),
+                "attack_techniques": mitre_techniques,
                 "kill_chain_phase": None,  # Could be derived from attack_techniques
                 "assigned_to": None,
                 "investigation_notes": [],
                 "artifacts": [],
-                "source_logs": []
+                "source_logs": [],
+                # Enhanced fields for threat hunting
+                "raw_log_data": json.dumps(raw_log_data, default=str),
+                "enrichment_data": json.dumps(enrichment_data, default=str),
+                "mitre_techniques": mitre_techniques
             }
 
             event_id = await security_service.create_security_event(detection_data)
-            logger.info(f"💾 Security detection saved to database: {event_id}")
+            logger.info(f"💾 Enhanced security detection saved to database: {event_id} with {len(mitre_techniques)} MITRE techniques")
 
             return True
 
         except Exception as e:
-            logger.error(f"Failed to save security detection to database: {e}")
+            logger.error(f"Failed to save enhanced security detection to database: {e}")
             return False
+
+    async def _correlate_with_threat_intel(self, event_data: Dict[str, Any], customer_id: str) -> Dict[str, Any]:
+        """Correlate detection with threat intelligence indicators."""
+        try:
+            from services.security_service import SecurityService
+
+            security_service = SecurityService()
+            correlation_results = {
+                "ioc_matches": [],
+                "threat_score": 0,
+                "threat_categories": [],
+                "related_campaigns": [],
+                "attribution": None,
+                "confidence_score": 0.0
+            }
+
+            # Get threat intelligence indicators for this customer
+            try:
+                threat_indicators = await security_service.get_threat_indicators(customer_id)
+            except Exception as e:
+                logger.warning(f"Could not retrieve threat intel for customer {customer_id}: {e}")
+                threat_indicators = []
+
+            # Extract potential IOCs from the detection event
+            potential_iocs = {
+                "ip_addresses": [],
+                "domains": [],
+                "urls": [],
+                "file_hashes": [],
+                "email_addresses": []
+            }
+
+            # Extract from artifact_data (the original log)
+            artifact_data = event_data.get("artifact_data", {})
+            original_log = event_data.get("original_log", {})
+            normalized_log = event_data.get("normalized_log", {})
+
+            # Combine all data sources for IOC extraction
+            all_data = {**artifact_data, **original_log, **normalized_log}
+
+            # Extract IP addresses
+            for key in ["src_ip", "dst_ip", "client_ip", "remote_ip", "source_ip", "destination_ip"]:
+                if key in all_data and all_data[key]:
+                    potential_iocs["ip_addresses"].append(all_data[key])
+
+            # Extract domains and URLs
+            for key in ["domain", "hostname", "url", "referer", "user_agent"]:
+                if key in all_data and all_data[key]:
+                    value = str(all_data[key])
+                    # Simple domain extraction (can be enhanced)
+                    if "." in value and not value.startswith("http"):
+                        potential_iocs["domains"].append(value)
+                    elif value.startswith("http"):
+                        potential_iocs["urls"].append(value)
+
+            # Extract file hashes
+            for key in ["file_hash", "md5", "sha1", "sha256", "hash"]:
+                if key in all_data and all_data[key]:
+                    potential_iocs["file_hashes"].append(all_data[key])
+
+            # Correlate with threat intelligence
+            total_matches = 0
+            threat_score = 0
+
+            for indicator in threat_indicators:
+                indicator_value = indicator.get("value", "").lower()
+                indicator_type = indicator.get("indicator_type", "")
+
+                matched = False
+
+                # Check IP addresses
+                if indicator_type == "ip" and indicator_value in [ip.lower() for ip in potential_iocs["ip_addresses"]]:
+                    matched = True
+
+                # Check domains
+                elif indicator_type == "domain" and indicator_value in [domain.lower() for domain in potential_iocs["domains"]]:
+                    matched = True
+
+                # Check URLs
+                elif indicator_type == "url":
+                    for url in potential_iocs["urls"]:
+                        if indicator_value in url.lower():
+                            matched = True
+                            break
+
+                # Check file hashes
+                elif indicator_type in ["hash", "md5", "sha1", "sha256"] and indicator_value in [h.lower() for h in potential_iocs["file_hashes"]]:
+                    matched = True
+
+                if matched:
+                    total_matches += 1
+                    confidence = indicator.get("confidence", 50)
+                    severity_weight = {"low": 1, "medium": 2, "high": 3, "critical": 4}.get(indicator.get("severity", "medium"), 2)
+
+                    match_info = {
+                        "indicator_id": indicator.get("id"),
+                        "indicator_type": indicator_type,
+                        "indicator_value": indicator_value,
+                        "threat_type": indicator.get("threat_type", []),
+                        "severity": indicator.get("severity", "medium"),
+                        "confidence": confidence,
+                        "source": indicator.get("source", "unknown"),
+                        "description": indicator.get("description"),
+                        "first_seen": indicator.get("first_seen"),
+                        "last_seen": indicator.get("last_seen")
+                    }
+
+                    correlation_results["ioc_matches"].append(match_info)
+                    threat_score += severity_weight * (confidence / 100)
+
+                    # Add threat categories
+                    for threat_type in indicator.get("threat_type", []):
+                        if threat_type not in correlation_results["threat_categories"]:
+                            correlation_results["threat_categories"].append(threat_type)
+
+            # Calculate overall threat and confidence scores
+            correlation_results["threat_score"] = min(int(threat_score), 100)
+            correlation_results["confidence_score"] = min(total_matches * 0.2, 1.0) if total_matches > 0 else 0.0
+
+            # Generate attribution and campaign info (placeholder for future enhancement)
+            if total_matches > 0:
+                correlation_results["attribution"] = f"Matched {total_matches} threat indicators"
+                if "apt" in str(correlation_results["threat_categories"]).lower():
+                    correlation_results["related_campaigns"] = ["APT activity detected"]
+                elif "ransomware" in str(correlation_results["threat_categories"]).lower():
+                    correlation_results["related_campaigns"] = ["Ransomware campaign"]
+
+            logger.debug(f"🕵️ Threat intelligence correlation: {total_matches} matches, score: {threat_score}")
+            return correlation_results
+
+        except Exception as e:
+            logger.error(f"Error correlating with threat intelligence: {e}")
+            return {
+                "ioc_matches": [],
+                "threat_score": 0,
+                "threat_categories": [],
+                "related_campaigns": [],
+                "attribution": None,
+                "confidence_score": 0.0,
+                "error": str(e)
+            }
 
 
     def get_supported_event_types(self) -> List[str]:

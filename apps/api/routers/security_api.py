@@ -121,8 +121,23 @@ def get_customer_id(x_customer_id: str = Header(...)) -> str:
         raise HTTPException(status_code=400, detail="X-Customer-ID header required")
     return x_customer_id
 
+async def execute_threat_hunting_background(campaign_id: str, customer_id: str):
+    """Background task to execute threat hunting campaign"""
+    try:
+        logger.info(f"Starting background execution of campaign {campaign_id} for customer {customer_id}")
+        
+        success = await security_service.execute_threat_hunting_campaign(campaign_id, customer_id)
+        
+        if success:
+            logger.info(f"Campaign {campaign_id} completed successfully")
+        else:
+            logger.warning(f"Campaign {campaign_id} failed")
+            
+    except Exception as e:
+        logger.error(f"Error executing campaign {campaign_id} for {customer_id}: {e}")
+
 async def run_background_threat_hunting():
-    """Background task to run continuous threat hunting"""
+    """Background task to run continuous threat hunting (legacy)"""
     # This would run continuously in a production environment
     # For demo, we'll run it once for all test customers
     test_customers = ["test-customer", "demo-customer", "security-customer"]
@@ -133,9 +148,13 @@ async def run_background_threat_hunting():
                 "customer_id": customer_id,
                 "description": "Background threat hunting campaign"
             }
-            results = await security_service.run_threat_hunting_campaign(campaign_data)
-            if results.get("events_found"):
-                logger.info(f"Background threat hunting found {len(results['events_found'])} events for customer {customer_id}")
+            # Use new async implementation
+            campaign_status = await security_service.start_threat_hunting_campaign(campaign_data)
+            await security_service.execute_threat_hunting_campaign(
+                campaign_status["campaign_id"], 
+                customer_id
+            )
+            logger.info(f"Background threat hunting completed for customer {customer_id}")
         except Exception as e:
             logger.error(f"Error in background threat hunting for {customer_id}: {e}")
 
@@ -693,12 +712,12 @@ async def get_security_event_status(
         raise HTTPException(status_code=500, detail=f"Failed to get event status: {str(e)}")
 
 @router.post("/threat-hunting")
-async def run_threat_hunting(
+async def start_threat_hunting(
     request: ThreatHuntingRequest,
     background_tasks: BackgroundTasks,
     customer_id: str = Header(..., alias="X-Customer-ID")
 ) -> Dict[str, Any]:
-    """Execute threat hunting campaign"""
+    """Start threat hunting campaign (returns immediately with campaign ID)"""
     try:
         campaign_data = {
             "customer_id": customer_id,
@@ -708,16 +727,56 @@ async def run_threat_hunting(
             "rule_ids": request.rule_ids
         }
         
-        # Run threat hunting campaign
-        results = await security_service.run_threat_hunting_campaign(campaign_data)
+        # Start campaign (returns immediately)
+        campaign_status = await security_service.start_threat_hunting_campaign(campaign_data)
         
-        # Schedule background follow-up if needed
-        background_tasks.add_task(run_background_threat_hunting)
+        # Schedule background execution
+        background_tasks.add_task(
+            execute_threat_hunting_background, 
+            campaign_status["campaign_id"], 
+            customer_id
+        )
         
-        return results
+        return campaign_status
     except Exception as e:
-        logger.error(f"Failed to run threat hunting: {e}")
+        logger.error(f"Failed to start threat hunting: {e}")
         raise HTTPException(status_code=500, detail=f"Threat hunting failed: {str(e)}")
+
+@router.get("/threat-hunting/{campaign_id}")
+async def get_threat_hunting_status(
+    campaign_id: str,
+    customer_id: str = Header(..., alias="X-Customer-ID")
+) -> Dict[str, Any]:
+    """Get threat hunting campaign status"""
+    try:
+        status = await security_service.get_campaign_status(campaign_id, customer_id)
+        
+        if not status:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        
+        return status
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get campaign status: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get status: {str(e)}")
+
+@router.get("/threat-hunting")
+async def list_threat_hunting_campaigns(
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    limit: int = Query(20, ge=1, le=100)
+) -> Dict[str, Any]:
+    """List customer's threat hunting campaigns"""
+    try:
+        campaigns = await security_service.get_customer_campaigns(customer_id, limit)
+        
+        return {
+            "campaigns": campaigns,
+            "total_count": len(campaigns)
+        }
+    except Exception as e:
+        logger.error(f"Failed to list campaigns: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list campaigns: {str(e)}")
 
 @router.get("/threat-intel")
 async def list_threat_intel(
@@ -844,6 +903,28 @@ async def stream_security_events(
         logger.error("Failed to start security events stream", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to start security events stream: {str(e)}")
 
+
+# Threat Hunting Rules Discovery Endpoint
+@router.get("/threat-hunt/rules")
+async def get_threat_hunt_rules(
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Get available threat hunting rules with pricing for customer"""
+    try:
+        # TODO: Get customer tier from user/tenant data - for now default to 'smb'
+        customer_tier = "smb"  
+        
+        result = await security_service.get_threat_hunt_rules_with_pricing(
+            customer_id=customer_id,
+            customer_tier=customer_tier
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Failed to get threat hunt rules: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get threat hunt rules: {str(e)}")
 
 # Initialize default security content on startup
 @router.on_event("startup")

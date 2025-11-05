@@ -96,6 +96,28 @@ services:
       - logforge-network
 
 
+  # ClickHouse Migration Service
+  clickhouse-migrations:
+    image: curlimages/curl:latest
+    container_name: logforge-clickhouse-migrations
+    volumes:
+      - ./clickhouse/run_migrations.sh:/run_migrations.sh
+      - ./clickhouse/entrypoint-migrations.sh:/entrypoint-migrations.sh
+      - ./clickhouse/migrations:/migrations
+    environment:
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=8123
+      - CLICKHOUSE_USER=logforge
+      - CLICKHOUSE_PASSWORD=logforge123
+      - CLICKHOUSE_DATABASE=logforge
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    command: ["/bin/sh", "/entrypoint-migrations.sh"]
+    networks:
+      - logforge-network
+    restart: "no"  # Only run once, not restart on failure
+
   # FastAPI Backend
   api:
     build:
@@ -125,6 +147,8 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
+      clickhouse-migrations:
+        condition: service_completed_successfully
       redpanda:
         condition: service_healthy
       minio:

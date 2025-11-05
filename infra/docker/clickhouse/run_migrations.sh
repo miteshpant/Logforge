@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # ClickHouse Migration Runner
 # Usage: ./run_migrations.sh [migration_number]
@@ -7,31 +7,48 @@
 set -e
 
 CLICKHOUSE_HOST=${CLICKHOUSE_HOST:-localhost}
-CLICKHOUSE_PORT=${CLICKHOUSE_PORT:-8124}
+CLICKHOUSE_PORT=${CLICKHOUSE_PORT:-8123}
 CLICKHOUSE_USER=${CLICKHOUSE_USER:-logforge}
 CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-logforge123}
 CLICKHOUSE_DATABASE=${CLICKHOUSE_DATABASE:-logforge}
 
-MIGRATIONS_DIR="$(dirname "$0")/migrations"
+# Use absolute path for migrations directory (container) or relative path (local)
+MIGRATIONS_DIR="${MIGRATIONS_DIR:-$(dirname "$0")/migrations}"
 
-# Function to execute SQL file
+# Function to execute SQL file (handles multi-statement files)
 execute_migration() {
     local migration_file="$1"
     local migration_name=$(basename "$migration_file" .sql)
     
     echo "🔄 Running migration: $migration_name"
     
-    # Execute the migration
-    if curl -s -X POST \
-        -u "${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}" \
-        -H "Content-Type: text/plain" \
-        --data-binary "@${migration_file}" \
-        "http://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=${CLICKHOUSE_DATABASE}" > /dev/null; then
-        echo "✅ Migration $migration_name completed successfully"
-    else
-        echo "❌ Migration $migration_name failed"
-        return 1
-    fi
+    # Read the file and split by semicolons, then execute each statement
+    # Remove comments and empty lines, then process each statement
+    temp_file="/tmp/migration_temp.sql"
+    
+    # Clean the file: remove comments and empty lines, split by semicolons
+    grep -v '^--' "$migration_file" | grep -v '^$' | tr '\n' ' ' | sed 's/;/;\n/g' > "$temp_file"
+    
+    # Execute each non-empty statement
+    while IFS= read -r statement; do
+        # Skip empty statements
+        statement=$(echo "$statement" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        if [ -n "$statement" ] && [ "$statement" != ";" ]; then
+            echo "  Executing: $(echo "$statement" | cut -c1-60)..."
+            if ! echo "$statement" | curl -s -X POST \
+                -u "${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}" \
+                -H "Content-Type: text/plain" \
+                --data-binary @- \
+                "http://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=${CLICKHOUSE_DATABASE}"; then
+                echo "❌ Migration $migration_name failed on statement: $statement"
+                rm -f "$temp_file"
+                return 1
+            fi
+        fi
+    done < "$temp_file"
+    
+    rm -f "$temp_file"
+    echo "✅ Migration $migration_name completed successfully"
 }
 
 # Function to check if ClickHouse is accessible
@@ -123,7 +140,7 @@ main() {
             else
                 execute_migration "$migration_file"
                 record_migration "$migration_name"
-                ((migration_count++))
+                migration_count=$((migration_count + 1))
             fi
         done
         

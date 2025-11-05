@@ -415,6 +415,7 @@ class SecurityEventPublisher:
             trace_id: Distributed tracing ID
         """
         try:
+            # Start with core detection fields
             event_data = {
                 "detection_id": detection_data.get("id"),
                 "rule_id": detection_data.get("rule_id"),
@@ -426,6 +427,38 @@ class SecurityEventPublisher:
                 "event_timestamp": detection_data.get("event_timestamp"),
                 "triggered_at": datetime.utcnow().isoformat()
             }
+            
+            # Add ALL enriched log data fields that are directly in detection_data
+            enriched_fields = [
+                "src_ip", "user", "host", "hostname", "service", "event_type", 
+                "status_code", "message", "msg", "ts", "timestamp", "level", 
+                "log_level", "user_id", "severity_num", "facility", "parser_version",
+                "ingested_at", "query", "trace_id", "span_id", "attrs"
+            ]
+            
+            for field in enriched_fields:
+                if field in detection_data and detection_data[field] is not None:
+                    event_data[field] = detection_data[field]
+            
+            # Add structured data sections
+            if "artifact_data" in detection_data and detection_data["artifact_data"]:
+                event_data["raw_log_data"] = detection_data["artifact_data"]
+                
+            if "normalized_log" in detection_data and detection_data["normalized_log"]:
+                event_data["enrichment_data"] = detection_data["normalized_log"]
+                
+            # Add additional metadata
+            event_data.update({
+                "title": detection_data.get("title"),
+                "description": detection_data.get("description"),
+                "kill_chain_phases": detection_data.get("kill_chain_phases", []),
+                "source_format": detection_data.get("source_format"),
+                "field_mapping_applied": detection_data.get("field_mapping_applied", False),
+                "rule_version": detection_data.get("rule_version"),
+                "processing_time_ms": detection_data.get("processing_time_ms", 0),
+                "recommended_actions": detection_data.get("recommended_actions", []),
+                "investigation_queries": detection_data.get("investigation_queries", [])
+            })
 
             metadata = EventMetadata(
                 source_service="security-service",
