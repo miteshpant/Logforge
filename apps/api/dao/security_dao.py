@@ -936,6 +936,20 @@ class SecurityDAO:
                 set_clauses.append("completed_at = %(completed_at)s")
                 params["completed_at"] = datetime.now(timezone.utc)
             
+            # Handle enhanced_results - store as JSON string
+            if "enhanced_results" in progress_data:
+                import json
+                from datetime import datetime as dt
+                
+                def serialize_datetime(obj):
+                    """JSON serializer for datetime objects"""
+                    if isinstance(obj, dt):
+                        return obj.isoformat()
+                    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+                
+                set_clauses.append("enhanced_results = %(enhanced_results)s")
+                params["enhanced_results"] = json.dumps(progress_data["enhanced_results"], default=serialize_datetime)
+            
             if not set_clauses:
                 return True  # Nothing to update
             
@@ -978,6 +992,13 @@ class SecurityDAO:
                 campaign["severity_filter"] = list(campaign["severity_filter"])
             if campaign.get("rule_ids"):
                 campaign["rule_ids"] = list(campaign["rule_ids"])
+            
+            # Parse enhanced_results JSON if it exists
+            if campaign.get("enhanced_results"):
+                try:
+                    campaign["enhanced_results"] = json.loads(campaign["enhanced_results"])
+                except (json.JSONDecodeError, TypeError):
+                    campaign["enhanced_results"] = None
             
             return campaign
             

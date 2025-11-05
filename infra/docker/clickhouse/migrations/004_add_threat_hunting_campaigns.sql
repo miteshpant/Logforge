@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS threat_hunting_campaigns_mt
     events_found UInt32 DEFAULT 0,
     indicators_detected UInt32 DEFAULT 0,
     progress_percentage UInt8 DEFAULT 0,
+    enhanced_results String,
     error_message Nullable(String)
 )
 ENGINE = MergeTree()
