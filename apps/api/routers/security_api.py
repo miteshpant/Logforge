@@ -809,40 +809,7 @@ async def list_threat_intel(
         logger.error(f"Failed to list threat intelligence: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get indicators: {str(e)}")
 
-@router.post("/background-hunting")
-async def trigger_background_hunting(
-    background_tasks: BackgroundTasks,
-    customer_id: str = Header(..., alias="X-Customer-ID")
-) -> Dict[str, str]:
-    """Trigger background threat hunting"""
-    try:
-        background_tasks.add_task(run_background_threat_hunting)
-        return {"message": "Background threat hunting triggered", "status": "scheduled"}
-    except Exception as e:
-        logger.error(f"Failed to trigger background hunting: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to trigger hunting: {str(e)}")
 
-@router.get("/mitre-attack/techniques")
-async def list_mitre_techniques() -> Dict[str, Any]:
-    """List MITRE ATT&CK techniques"""
-    try:
-        # Return available MITRE ATT&CK techniques from our enum
-        techniques = []
-        for technique in AttackTechnique:
-            techniques.append({
-                "id": technique.value,
-                "name": technique.name,
-                "description": f"MITRE ATT&CK Technique {technique.value}"
-            })
-        
-        return {
-            "techniques": techniques,
-            "total_count": len(techniques),
-            "framework_version": "v12.0"
-        }
-    except Exception as e:
-        logger.error(f"Failed to list MITRE techniques: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get techniques: {str(e)}")
 
 
 def format_sse_message(event_type: str, data: Any, event_id: Optional[str] = None) -> str:
