@@ -46,6 +46,8 @@ class MetricType(str, Enum):
 # Pydantic models for API requests/responses
 class SpanRequest(BaseModel):
     """OpenTelemetry span ingestion request"""
+    model_config = {"extra": "allow"}  # Allow extra fields for custom attributes
+    
     trace_id: str = Field(..., description="Unique trace identifier")
     span_id: str = Field(..., description="Unique span identifier")
     parent_span_id: Optional[str] = Field(None, description="Parent span ID")
@@ -117,52 +119,93 @@ async def ingest_trace_spans(
     request: BatchSpanRequest,
     customer_id: str = Header(..., alias="X-Customer-ID")
 ):
-    """Ingest OpenTelemetry trace spans"""
+    """Ingest OpenTelemetry trace spans asynchronously via events"""
     try:
-        observability_service = ObservabilityService()
+        # Import here to avoid circular dependencies
+        from events.publishers.observability_publisher import ObservabilityEventPublisher
+        from dependencies import get_event_publisher_manager
+        import uuid
+        from datetime import datetime, timezone
 
-        # Process each span in the batch
-        ingested_spans = []
-        errors = []
+        start_time = datetime.now(timezone.utc)
 
-        for span_req in request.spans:
-            try:
-                # Convert to dict format for service
-                span_data = {
-                    'trace_id': span_req.trace_id,
-                    'span_id': span_req.span_id,
-                    'parent_span_id': span_req.parent_span_id,
-                    'operation_name': span_req.operation_name,
-                    'service_name': span_req.service_name,
-                    'start_time': span_req.start_time.isoformat(),
-                    'end_time': span_req.end_time.isoformat() if span_req.end_time else None,
-                    'kind': span_req.kind.value,
-                    'status': span_req.status.value,
-                    'attributes': span_req.attributes,
-                    'events': span_req.events,
-                    'links': span_req.links,
-                    'resource': span_req.resource
+        # Convert span requests to dict format preserving ALL original fields
+        spans_data = []
+        conversion_errors = []
+
+        if not request.spans:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "message": "No valid spans to process",
+                    "spans_ingested": 0,
+                    "customer_id": customer_id,
+                    "errors": conversion_errors
                 }
+            )
 
-                span_id = await observability_service.ingest_trace_span(span_data, customer_id)
-                ingested_spans.append(span_id)
+        # Calculate processing time for API response
+        processing_time_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
 
-            except Exception as e:
-                errors.append(f"Failed to ingest span {span_req.span_id}: {str(e)}")
+        # Create batch info for event
+        batch_info = {
+            "batch_id": str(uuid.uuid4()),
+            "timestamp": start_time.isoformat(),
+            "success_count": len(request.spans),
+            "error_count": len(conversion_errors),
+            "bytes_processed": len(str(request.dict()))  # Approximate
+        }
 
-        return JSONResponse(
-            status_code=202,
-            content={
-                "message": "Traces ingested successfully",
-                "spans_ingested": len(ingested_spans),
-                "customer_id": customer_id,
-                "errors": errors
-            }
+        # Get the initialized event publisher manager
+        publisher_manager = get_event_publisher_manager()
+        if not publisher_manager:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "message": "Event publisher not available",
+                    "spans_ingested": 0,
+                    "customer_id": customer_id,
+                    "errors": ["Event system not initialized"]
+                }
+            )
+
+        # Initialize event publisher
+        observability_publisher = ObservabilityEventPublisher(publisher_manager)
+
+        # Publish traces batch ingestion event
+        event_published = await observability_publisher.publish_traces_batch_ingested(
+            customer_id=customer_id,
+            batch_info=batch_info,
+            spans_data=request.spans,
+            processing_time_ms=processing_time_ms
         )
 
+        if event_published:
+            return JSONResponse(
+                status_code=202,  # Accepted - will be processed asynchronously
+                content={
+                    "message": "Traces accepted for processing",
+                    "spans_accepted": len(request.spans),
+                    "customer_id": customer_id,
+                    "batch_id": batch_info["batch_id"],
+                    "processing_status": "queued",
+                    "errors": conversion_errors
+                }
+            )
+        else:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "message": "Failed to queue traces for processing",
+                    "spans_ingested": 0,
+                    "customer_id": customer_id,
+                    "errors": conversion_errors + ["Event publishing failed"]
+                }
+            )
+
     except Exception as e:
-        logger.error("Failed to ingest traces", error=str(e), customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Failed to ingest traces: {str(e)}")
+        logger.error("Failed to queue traces for processing", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to queue traces for processing: {str(e)}")
 
 
 @router.post("/metrics/ingest")
@@ -524,7 +567,7 @@ async def stream_metrics(
     try:
         observability_service = ObservabilityService()
         metric_list = metric_names.split(",")
-        
+
         async def generate_metrics():
             while True:
                 try:
@@ -535,23 +578,23 @@ async def stream_metrics(
                         hours=1,
                         limit=100
                     )
-                    
+
                     # Filter metrics by requested names
                     filtered_metrics = [
-                        metric for metric in metrics 
+                        metric for metric in metrics
                         if metric.get('name') in metric_list
                     ]
-                    
+
                     if filtered_metrics:
                         yield format_sse_message("metrics", filtered_metrics)
-                    
+
                     await asyncio.sleep(5)  # Update every 5 seconds
-                    
+
                 except Exception as e:
                     logger.error("Error streaming metrics", error=str(e), customer_id=customer_id)
                     yield format_sse_message("error", {"message": f"Metrics streaming error: {str(e)}"})
                     break
-        
+
         return StreamingResponse(
             generate_metrics(),
             media_type="text/event-stream",
@@ -562,7 +605,7 @@ async def stream_metrics(
                 "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
             }
         )
-        
+
     except Exception as e:
         logger.error("Failed to start metrics stream", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to start metrics stream: {str(e)}")
@@ -575,7 +618,7 @@ async def stream_traces(
     """Stream real-time trace data"""
     try:
         observability_service = ObservabilityService()
-        
+
         async def generate_traces():
             while True:
                 try:
@@ -589,17 +632,17 @@ async def stream_traces(
                         },
                         limit=10
                     )
-                    
+
                     if traces:
                         yield format_sse_message("traces", traces)
-                    
+
                     await asyncio.sleep(10)  # Update every 10 seconds
-                    
+
                 except Exception as e:
                     logger.error("Error streaming traces", error=str(e), customer_id=customer_id)
                     yield format_sse_message("error", {"message": f"Traces streaming error: {str(e)}"})
                     break
-        
+
         return StreamingResponse(
             generate_traces(),
             media_type="text/event-stream",
@@ -610,7 +653,7 @@ async def stream_traces(
                 "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
             }
         )
-        
+
     except Exception as e:
         logger.error("Failed to start traces stream", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to start traces stream: {str(e)}")

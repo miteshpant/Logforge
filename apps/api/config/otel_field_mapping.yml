@@ -1,0 +1,616 @@
+# OpenTelemetry Field Mapping Configuration
+# Maps customer variations to standardized table column names
+# for traces_mt and service_topology_mt tables
+
+# ============================================================================
+# TRACE SPAN FIELD MAPPINGS (traces_mt table)
+# ============================================================================
+
+# Core span identification fields
+trace_id:
+  variations:
+    - trace_id
+    - traceId
+    - trace.id
+    - traceID
+    - span_trace_id
+    - x-trace-id
+
+span_id:
+  variations:
+    - span_id
+    - spanId
+    - span.id
+    - spanID
+    - id
+
+parent_span_id:
+  variations:
+    - parent_span_id
+    - parentSpanId
+    - parent.span.id
+    - parent_span
+    - parentId
+    - parent_id
+    - parent.id
+
+# Service identification
+service_name:
+  variations:
+    - service_name
+    - serviceName
+    - service.name
+    - svc.name
+    - svc_name
+    - app.name
+    - application.name
+    - appName
+    - applicationName
+    - microservice.name
+    - component.name
+    - resource.service.name
+    - resource.serviceName
+    - resource.app.name
+    - resource.application.name
+    - installation.service.name
+    - topology.service
+    - config.service.name
+
+operation_name:
+  variations:
+    - operation_name
+    - operationName
+    - operation.name
+    - op.name
+    - op_name
+    - method.name
+    - method_name
+    - methodName
+    - endpoint.name
+    - endpoint_name
+    - action.name
+    - action_name
+
+# Timing fields
+start_time:
+  variations:
+    - start_time
+    - startTime
+    - start.time
+    - timestamp
+    - start_timestamp
+    - startTimestamp
+    - begin_time
+    - beginTime
+
+end_time:
+  variations:
+    - end_time
+    - endTime
+    - end.time
+    - finish_time
+    - finishTime
+    - complete_time
+    - completeTime
+    - end_timestamp
+    - endTimestamp
+
+duration_ms:
+  variations:
+    - duration_ms
+    - durationMs
+    - duration.ms
+    - duration
+    - duration_milliseconds
+    - elapsed_ms
+    - elapsedMs
+    - elapsed.ms
+    - execution_time
+    - executionTime
+
+# Span metadata
+kind:
+  variations:
+    - kind
+    - span.kind
+    - span_kind
+    - spanKind
+    - type
+    - span.type
+    - span_type
+
+status:
+  variations:
+    - status
+    - span.status
+    - span_status
+    - spanStatus
+    - result
+    - outcome
+
+status_message:
+  variations:
+    - status_message
+    - statusMessage
+    - status.message
+    - error_message
+    - errorMessage
+    - error.message
+    - message
+
+# ============================================================================
+# SERVICE TOPOLOGY FIELD MAPPINGS (service_topology_mt table)
+# ============================================================================
+
+# Service versioning and deployment
+service_version:
+  variations:
+    - service_version
+    - serviceVersion
+    - service.version
+    - app.version
+    - application.version
+    - version
+    - build.version
+    - buildVersion
+    - release.version
+    - releaseVersion
+
+service_instance_id:
+  variations:
+    - service_instance_id
+    - serviceInstanceId
+    - service.instance.id
+    - instance.id
+    - instanceId
+    - pod.name
+    - podName
+    - container.name
+    - containerName
+    - host.id
+    - hostId
+    - resource.service_instance_id
+    - resource.serviceInstanceId
+    - resource.service.instance.id
+    - resource.k8s.pod.name
+    - resource.pod.name
+    - resource.container.id
+    - resource.host.id
+    - installation.instance.id
+    - topology.instance
+    - config.instance.id
+
+deployment_environment:
+  variations:
+    - deployment_environment
+    - deploymentEnvironment
+    - deployment.environment
+    - environment
+    - env
+    - stage
+    - deployment.stage
+    - service.environment
+    - app.environment
+    - resource.deployment.environment
+    - resource.deploymentEnvironment
+    - resource.service.environment
+    - resource.environment
+    - resource.env
+    - installation.env
+    - installation.environment
+    - topology.env
+    - config.env
+    - config.environment
+    - cluster.environment
+    - infra.env
+
+# Infrastructure context
+namespace:
+  variations:
+    - namespace
+    - k8s.namespace.name
+    - kubernetes.namespace
+    - k8s.namespace
+    - service.namespace
+    - app.namespace
+
+cluster:
+  variations:
+    - cluster
+    - k8s.cluster.name
+    - kubernetes.cluster
+    - k8s.cluster
+    - cluster.name
+    - clusterName
+
+host:
+  variations:
+    - host
+    - host.name
+    - hostname
+    - server.name
+    - serverName
+    - node.name
+    - nodeName
+    - machine.name
+    - machineName
+
+container_id:
+  variations:
+    - container_id
+    - containerId
+    - container.id
+    - docker.container.id
+    - containerID
+    - pod.id
+    - podId
+
+# Service characteristics
+service_type:
+  variations:
+    - service_type
+    - serviceType
+    - service.type
+    - component.type
+    - componentType
+    - app.type
+    - application.type
+
+health_status:
+  variations:
+    - health_status
+    - healthStatus
+    - health.status
+    - status
+    - service.status
+    - serviceStatus
+    - state
+    - service.state
+
+# Performance metrics
+request_count:
+  variations:
+    - request_count
+    - requestCount
+    - request.count
+    - requests
+    - total_requests
+    - totalRequests
+    - call_count
+    - callCount
+
+error_count:
+  variations:
+    - error_count
+    - errorCount
+    - error.count
+    - errors
+    - total_errors
+    - totalErrors
+    - failure_count
+    - failureCount
+
+avg_response_time_ms:
+  variations:
+    - avg_response_time_ms
+    - avgResponseTimeMs
+    - avg.response.time.ms
+    - average_response_time
+    - averageResponseTime
+    - mean_response_time
+    - meanResponseTime
+    - avg_latency_ms
+    - avgLatencyMs
+
+# ============================================================================
+# METRIC FIELD MAPPINGS (metrics_mt table)
+# ============================================================================
+
+metric_name:
+  variations:
+    - metric_name
+    - metricName
+    - metric.name
+    - name
+    - measurement.name
+    - measurementName
+    - counter.name
+    - counterName
+    - gauge.name
+    - gaugeName
+
+metric_type:
+  variations:
+    - metric_type
+    - metricType
+    - metric.type
+    - type
+    - measurement.type
+    - measurementType
+    - kind
+
+value:
+  variations:
+    - value
+    - metric.value
+    - metricValue
+    - measurement
+    - count
+    - gauge
+    - amount
+    - quantity
+
+timestamp:
+  variations:
+    - timestamp
+    - time
+    - metric.timestamp
+    - metricTimestamp
+    - recorded_at
+    - recordedAt
+    - measured_at
+    - measuredAt
+    - observation_time
+    - observationTime
+
+# Labels/attributes for metrics
+labels:
+  variations:
+    - labels
+    - tags
+    - attributes
+    - dimensions
+    - metadata
+    - properties
+    - context
+
+# ============================================================================
+# COMMON ATTRIBUTE MAPPINGS
+# ============================================================================
+
+# HTTP attributes
+http_method:
+  variations:
+    - http.method
+    - http_method
+    - httpMethod
+    - method
+    - request.method
+    - requestMethod
+    - verb
+
+http_status_code:
+  variations:
+    - http.status_code
+    - http_status_code
+    - httpStatusCode
+    - status_code
+    - statusCode
+    - response.status
+    - responseStatus
+    - http.response.status_code
+
+http_url:
+  variations:
+    - http.url
+    - http_url
+    - httpUrl
+    - url
+    - request.url
+    - requestUrl
+    - endpoint
+    - path
+    - route
+
+# Database attributes
+db_system:
+  variations:
+    - db.system
+    - db_system
+    - dbSystem
+    - database.system
+    - databaseSystem
+    - db.type
+    - db_type
+    - database_type
+
+db_name:
+  variations:
+    - db.name
+    - db_name
+    - dbName
+    - database
+    - database.name
+    - databaseName
+    - schema
+
+# Error attributes
+error_type:
+  variations:
+    - error.type
+    - error_type
+    - errorType
+    - exception.type
+    - exceptionType
+    - error.class
+    - error_class
+
+error_message:
+  variations:
+    - error.message
+    - error_message
+    - errorMessage
+    - exception.message
+    - exceptionMessage
+    - error.msg
+    - error_msg
+
+# User attributes
+user_id:
+  variations:
+    - user.id
+    - user_id
+    - userId
+    - account.id
+    - accountId
+    - customer.id
+    - customerId
+    - principal.id
+    - principalId
+
+# ============================================================================
+# SPECIAL MAPPINGS & TRANSFORMATIONS
+# ============================================================================
+
+# Value transformations for enum fields
+service_type_mappings:
+  api:
+    - api
+    - rest
+    - web
+    - http
+    - service
+    - microservice
+    - webservice
+  database:
+    - database
+    - db
+    - sql
+    - nosql
+    - postgres
+    - mysql
+    - mongodb
+    - redis
+    - cassandra
+    - elasticsearch
+  cache:
+    - cache
+    - redis
+    - memcached
+    - hazelcast
+  queue:
+    - queue
+    - message
+    - kafka
+    - rabbitmq
+    - sqs
+    - pubsub
+    - activemq
+  external:
+    - external
+    - third-party
+    - 3rd-party
+    - vendor
+    - partner
+
+health_status_mappings:
+  healthy:
+    - healthy
+    - ok
+    - up
+    - running
+    - active
+    - green
+  degraded:
+    - degraded
+    - slow
+    - warning
+    - yellow
+  unhealthy:
+    - unhealthy
+    - down
+    - failed
+    - error
+    - critical
+    - red
+  unknown:
+    - unknown
+    - pending
+    - starting
+    - initializing
+
+span_kind_mappings:
+  server:
+    - server
+    - inbound
+    - request
+  client:
+    - client
+    - outbound
+    - call
+  producer:
+    - producer
+    - publisher
+    - sender
+  consumer:
+    - consumer
+    - subscriber
+    - receiver
+  internal:
+    - internal
+    - local
+    - function
+
+span_status_mappings:
+  ok:
+    - ok
+    - success
+    - successful
+    - completed
+    - finished
+  error:
+    - error
+    - failed
+    - exception
+    - timeout
+  unset:
+    - unset
+    - unknown
+    - pending
+
+# ============================================================================
+# NESTED FIELD EXTRACTION
+# ============================================================================
+
+# Extract fields from nested objects
+nested_extractions:
+  # Extract service info from resource
+  service_name_from_resource:
+    - resource.service.name
+    - resource.serviceName
+    - resource.app.name
+    - resource.application.name
+
+  service_version_from_resource:
+    - resource.service.version
+    - resource.serviceVersion
+    - resource.app.version
+    - resource.version
+
+  # Extract service instance ID from resource
+  service_instance_id_from_resource:
+    - resource.service_instance_id
+    - resource.serviceInstanceId
+    - resource.service.instance.id
+    - resource.k8s.pod.name
+    - resource.pod.name
+    - resource.container.id
+    - resource.host.id
+
+  # Extract HTTP info from attributes
+  http_method_from_attributes:
+    - attributes.http.method
+    - attributes.method
+    - attributes.verb
+
+  # Extract Kubernetes info from resource
+  k8s_pod_from_resource:
+    - resource.k8s.pod.name
+    - resource.kubernetes.pod.name
+    - resource.pod.name
+
+  k8s_namespace_from_resource:
+    - resource.k8s.namespace.name
+    - resource.kubernetes.namespace
+    - resource.namespace
+

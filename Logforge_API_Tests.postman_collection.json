@@ -3405,9 +3405,14 @@
 						}
 					},
 					"response": []
-				},
+				}
+			]
+		},
+		{
+			"name": "Observability API",
+			"item": [
 				{
-					"name": "Trigger Background Hunting",
+					"name": "Ingest Trace Spans",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -3420,24 +3425,114 @@
 								"key": "X-Customer-ID",
 								"value": "{{tenant_id}}",
 								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
 							}
 						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"spans\": [\n    {\n      \"trace_id\": \"{{$randomUUID}}\",\n      \"span_id\": \"{{$randomUUID}}\",\n      \"parent_span_id\": null,\n      \"operation_name\": \"http_request\",\n      \"service_name\": \"web-api\",\n      \"start_time\": \"2024-11-05T10:00:00Z\",\n      \"end_time\": \"2024-11-05T10:00:05Z\",\n      \"duration_ms\": 5000,\n      \"kind\": \"server\",\n      \"status\": \"ok\",\n      \"attributes\": {\n        \"http.method\": \"GET\",\n        \"http.url\": \"/api/users\",\n        \"http.status_code\": 200\n      },\n      \"events\": [],\n      \"links\": [],\n      \"resource\": {\n        \"service.name\": \"web-api\",\n        \"service.version\": \"1.0.0\"\n      }\n    }\n  ]\n}"
+						},
 						"url": {
-							"raw": "{{base_url}}/v1/security/background-hunting",
+							"raw": "{{base_url}}/v1/observability/traces/ingest",
 							"host": [
 								"{{base_url}}"
 							],
 							"path": [
 								"v1",
-								"security",
-								"background-hunting"
+								"observability",
+								"traces",
+								"ingest"
 							]
 						}
 					},
 					"response": []
 				},
 				{
-					"name": "List MITRE ATT&CK Techniques",
+					"name": "Ingest Metrics",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"metrics\": [\n    {\n      \"metric_name\": \"cpu_usage\",\n      \"metric_type\": \"gauge\",\n      \"value\": 75.5,\n      \"timestamp\": \"2024-11-05T10:00:00Z\",\n      \"labels\": {\n        \"host\": \"web-server-01\",\n        \"env\": \"production\"\n      },\n      \"service_name\": \"web-api\",\n      \"resource\": {\n        \"service.name\": \"web-api\"\n      }\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/observability/metrics/ingest",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"observability",
+								"metrics",
+								"ingest"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Search Traces",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"service_name\": \"web-api\",\n  \"start_time\": \"2024-11-05T09:00:00Z\",\n  \"end_time\": \"2024-11-05T11:00:00Z\",\n  \"min_duration_ms\": 1000,\n  \"status\": \"ok\",\n  \"limit\": 50,\n  \"offset\": 0\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/observability/traces/search",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"observability",
+								"traces",
+								"search"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Trace Details",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -3453,22 +3548,319 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/v1/security/mitre-attack/techniques",
+							"raw": "{{base_url}}/v1/observability/traces/{{trace_id}}",
 							"host": [
 								"{{base_url}}"
 							],
 							"path": [
 								"v1",
-								"security",
-								"mitre-attack",
-								"techniques"
+								"observability",
+								"traces",
+								"{{trace_id}}"
+							],
+							"variable": [
+								{
+									"key": "trace_id",
+									"value": "sample-trace-id-123"
+								}
 							]
 						}
 					},
 					"response": []
 				},
 				{
-					"name": "Stream Security Events (SSE)",
+					"name": "Get Service Map",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/observability/service-map?time_range_hours=24",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"observability",
+								"service-map"
+							],
+							"query": [
+								{
+									"key": "time_range_hours",
+									"value": "24"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get APM Overview",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/observability/apm/overview?time_range_hours=24",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"observability",
+								"apm",
+								"overview"
+							],
+							"query": [
+								{
+									"key": "time_range_hours",
+									"value": "24"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Service APM Metrics",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/observability/apm/{{service_name}}?time_range_hours=1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"observability",
+								"apm",
+								"{{service_name}}"
+							],
+							"query": [
+								{
+									"key": "time_range_hours",
+									"value": "1"
+								}
+							],
+							"variable": [
+								{
+									"key": "service_name",
+									"value": "web-api"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Trace Analytics",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/observability/analytics?time_range_hours=24",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"observability",
+								"analytics"
+							],
+							"query": [
+								{
+									"key": "time_range_hours",
+									"value": "24"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Query Metrics",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"metric_name\": \"cpu_usage\",\n  \"service_name\": \"web-api\",\n  \"start_time\": \"2024-11-05T09:00:00Z\",\n  \"end_time\": \"2024-11-05T11:00:00Z\",\n  \"labels\": {\n    \"env\": \"production\"\n  },\n  \"aggregation\": \"avg\",\n  \"granularity\": \"5m\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/observability/metrics/query",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"observability",
+								"metrics",
+								"query"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Service Health",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/observability/service/{{service_name}}/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"observability",
+								"service",
+								"{{service_name}}",
+								"health"
+							],
+							"variable": [
+								{
+									"key": "service_name",
+									"value": "web-api"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Performance Trends",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/observability/trends?days=7",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"observability",
+								"trends"
+							],
+							"query": [
+								{
+									"key": "days",
+									"value": "7"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Observability Health Check",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/observability/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"observability",
+								"health"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Stream Real-time Metrics",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -3489,14 +3881,56 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/v1/security/events/stream",
+							"raw": "{{base_url}}/v1/observability/metrics/stream?metric_names=cpu_usage,memory_usage,disk_usage",
 							"host": [
 								"{{base_url}}"
 							],
 							"path": [
 								"v1",
-								"security",
-								"events",
+								"observability",
+								"metrics",
+								"stream"
+							],
+							"query": [
+								{
+									"key": "metric_names",
+									"value": "cpu_usage,memory_usage,disk_usage"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Stream Real-time Traces",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "text/event-stream",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/observability/traces/stream",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"observability",
+								"traces",
 								"stream"
 							]
 						}

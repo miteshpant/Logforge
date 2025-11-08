@@ -11,6 +11,7 @@ from .ui_handler import UIEventHandler
 from .security_handler import SecurityEventHandler
 from .normalized_log_handler import NormalizedLogEventHandler
 from .threat_intel_handler import ThreatIntelHandler
+from .observability_handler import ObservabilityEventHandler
 
 __all__ = [
     'EventHandler',
@@ -21,5 +22,6 @@ __all__ = [
     'UIEventHandler',
     'SecurityEventHandler',
     'NormalizedLogEventHandler',
-    'ThreatIntelHandler'
+    'ThreatIntelHandler',
+    'ObservabilityEventHandler'
 ]

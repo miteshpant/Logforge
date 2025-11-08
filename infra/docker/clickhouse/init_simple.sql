@@ -851,20 +851,43 @@ SETTINGS index_granularity = 8192;
 -- 6. M5 OBSERVABILITY ENGINE TABLES (observability_engine.py)
 -- =====================================================
 
--- Service topology and dependencies
+-- Service topology and dependencies (Phase 3: Full Instance Tracking)
 CREATE TABLE IF NOT EXISTS service_topology_mt (
-    service_name String,
-    service_type Enum8('api' = 1, 'database' = 2, 'cache' = 3, 'queue' = 4, 'external' = 5),
-    dependencies Array(String), -- Array of dependent service names
+    id String DEFAULT generateUUIDv4(),
+    customer_id String,
+    
+    -- Core OpenTelemetry service identification
+    service_name String,                    -- "web-api"
+    service_version String DEFAULT 'unknown', -- "1.2.0"
+    service_instance_id String DEFAULT '',  -- "web-api-pod-123" or generateUUIDv4()
+    deployment_environment String DEFAULT 'production', -- "production", "staging", "dev"
+    
+    -- Infrastructure context (Kubernetes/Container aware)
+    namespace String DEFAULT '',            -- "ecommerce", "platform"
+    cluster String DEFAULT '',              -- "us-west-2", "eu-central-1"
+    host String DEFAULT '',                 -- "node-01.company.com"
+    container_id String DEFAULT '',         -- Docker/K8s container ID
+    
+    -- Service characteristics
+    service_type Enum8('api' = 1, 'database' = 2, 'cache' = 3, 'queue' = 4, 'external' = 5, 'application' = 6),
+    dependencies Array(String),             -- Array of dependent service identifiers
+    endpoints Array(String),                -- Array of operation names/endpoints
+    
+    -- Health and performance
     health_status Enum8('healthy' = 1, 'degraded' = 2, 'unhealthy' = 3, 'unknown' = 4),
-    metadata String, -- JSON blob with service metadata
     last_seen DateTime64(3),
+    request_count UInt64 DEFAULT 0,         -- Total requests seen
+    error_count UInt64 DEFAULT 0,           -- Total errors seen
+    avg_response_time_ms Float64 DEFAULT 0, -- Average response time
+    
+    -- Metadata and timestamps
+    metadata String DEFAULT '{}',           -- JSON blob with additional service metadata
+    resource_attributes String DEFAULT '{}', -- OpenTelemetry resource attributes
     created_at DateTime64(3) DEFAULT now64(3),
-    updated_at DateTime64(3) DEFAULT now64(3),
-    customer_id String
+    updated_at DateTime64(3) DEFAULT now64(3)
 ) ENGINE = ReplacingMergeTree(updated_at)
-PARTITION BY toYYYYMM(created_at)
-ORDER BY (customer_id, service_name)
+PARTITION BY (customer_id, toYYYYMM(created_at))
+ORDER BY (customer_id, deployment_environment, service_name, service_version, service_instance_id)
 SETTINGS index_granularity = 8192;
 
 -- =====================================================
