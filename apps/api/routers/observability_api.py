@@ -113,7 +113,7 @@ class MetricQueryRequest(BaseModel):
     start_time: datetime = Field(..., description="Start time filter (required)")
     end_time: datetime = Field(..., description="End time filter (required)")
     labels: Dict[str, str] = Field(default_factory=dict, description="Label filters")
-    aggregation: str = Field("avg", description="Aggregation function (avg, sum, max, min)")
+    aggregation: Optional[str] = Field(None, description="Aggregation function (avg, sum, max, min, count)")
     granularity: str = Field("1m", description="Time granularity (1m, 5m, 1h)")
 
 
@@ -517,6 +517,15 @@ async def query_metrics(
             aggregated = await observability_service.get_metric_aggregation(
                 customer_id, query.metric_name, query.aggregation, hours
             )
+
+            if aggregated is None:
+                return {
+                    "message": f"No metric data found for '{query.metric_name}' in the specified time range",
+                    "metrics": {},
+                    "aggregation": query.aggregation,
+                    "granularity": query.granularity,
+                    "customer_id": customer_id
+                }
 
             return {
                 "metrics": {query.metric_name: [aggregated]},

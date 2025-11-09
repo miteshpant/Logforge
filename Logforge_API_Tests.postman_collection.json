@@ -3748,7 +3748,23 @@
 					"response": []
 				},
 				{
-					"name": "Query Metrics",
+					"name": "Metrics Query - Raw Time Series",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Set dynamic timestamps",
+									"const now = new Date();",
+									"const tenDaysAgo = new Date(now.getTime() - (10 * 24 * 60 * 60 * 1000));",
+									"",
+									"pm.environment.set('current_time', now.toISOString());",
+									"pm.environment.set('ten_days_ago', tenDaysAgo.toISOString());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [
@@ -3770,7 +3786,455 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"metric_name\": \"cpu_usage\",\n  \"service_name\": \"web-api\",\n  \"start_time\": \"2024-11-05T09:00:00Z\",\n  \"end_time\": \"2024-11-05T11:00:00Z\",\n  \"labels\": {\n    \"env\": \"production\"\n  },\n  \"aggregation\": \"avg\",\n  \"granularity\": \"5m\"\n}"
+							"raw": "{\n  \"metric_name\": \"cpu_usage\",\n  \"start_time\": \"{{ten_days_ago}}\",\n  \"end_time\": \"{{current_time}}\",\n  \"granularity\": \"1h\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/observability/metrics/query",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"observability",
+								"metrics",
+								"query"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Metrics Query - Aggregated Data",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Set dynamic timestamps",
+									"const now = new Date();",
+									"const tenDaysAgo = new Date(now.getTime() - (10 * 24 * 60 * 60 * 1000));",
+									"",
+									"pm.environment.set('current_time', now.toISOString());",
+									"pm.environment.set('ten_days_ago', tenDaysAgo.toISOString());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"metric_name\": \"cpu_usage\",\n  \"start_time\": \"{{ten_days_ago}}\",\n  \"end_time\": \"{{current_time}}\",\n  \"aggregation\": \"avg\",\n  \"granularity\": \"1h\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/observability/metrics/query",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"observability",
+								"metrics",
+								"query"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Metrics Query - Service Specific",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Set dynamic timestamps",
+									"const now = new Date();",
+									"const tenDaysAgo = new Date(now.getTime() - (10 * 24 * 60 * 60 * 1000));",
+									"",
+									"pm.environment.set('current_time', now.toISOString());",
+									"pm.environment.set('ten_days_ago', tenDaysAgo.toISOString());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"metric_name\": \"response_time\",\n  \"service_name\": \"web-api\",\n  \"start_time\": \"{{ten_days_ago}}\",\n  \"end_time\": \"{{current_time}}\",\n  \"aggregation\": \"avg\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/observability/metrics/query",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"observability",
+								"metrics",
+								"query"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Metrics Query - Multiple Aggregations (MAX)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Set dynamic timestamps",
+									"const now = new Date();",
+									"const tenDaysAgo = new Date(now.getTime() - (10 * 24 * 60 * 60 * 1000));",
+									"",
+									"pm.environment.set('current_time', now.toISOString());",
+									"pm.environment.set('ten_days_ago', tenDaysAgo.toISOString());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"metric_name\": \"cpu_usage\",\n  \"start_time\": \"{{ten_days_ago}}\",\n  \"end_time\": \"{{current_time}}\",\n  \"aggregation\": \"max\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/observability/metrics/query",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"observability",
+								"metrics",
+								"query"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Metrics Query - Request Count (SUM)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Set dynamic timestamps",
+									"const now = new Date();",
+									"const tenDaysAgo = new Date(now.getTime() - (10 * 24 * 60 * 60 * 1000));",
+									"",
+									"pm.environment.set('current_time', now.toISOString());",
+									"pm.environment.set('ten_days_ago', tenDaysAgo.toISOString());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"metric_name\": \"request_count\",\n  \"start_time\": \"{{ten_days_ago}}\",\n  \"end_time\": \"{{current_time}}\",\n  \"aggregation\": \"sum\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/observability/metrics/query",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"observability",
+								"metrics",
+								"query"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Metrics Query - Label Filtering",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Set dynamic timestamps",
+									"const now = new Date();",
+									"const tenDaysAgo = new Date(now.getTime() - (10 * 24 * 60 * 60 * 1000));",
+									"",
+									"pm.environment.set('current_time', now.toISOString());",
+									"pm.environment.set('ten_days_ago', tenDaysAgo.toISOString());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"metric_name\": \"response_time\",\n  \"start_time\": \"{{ten_days_ago}}\",\n  \"end_time\": \"{{current_time}}\",\n  \"labels\": {\n    \"environment\": \"production\",\n    \"region\": \"us-east-1\"\n  },\n  \"aggregation\": \"avg\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/observability/metrics/query",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"observability",
+								"metrics",
+								"query"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Metrics Query - Real-Time (Last 5 minutes)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Set dynamic timestamps for real-time monitoring",
+									"const now = new Date();",
+									"const fiveMinutesAgo = new Date(now.getTime() - (5 * 60 * 1000));",
+									"",
+									"pm.environment.set('current_time', now.toISOString());",
+									"pm.environment.set('five_minutes_ago', fiveMinutesAgo.toISOString());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"metric_name\": \"cpu_usage\",\n  \"start_time\": \"{{five_minutes_ago}}\",\n  \"end_time\": \"{{current_time}}\",\n  \"granularity\": \"1m\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/observability/metrics/query",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"observability",
+								"metrics",
+								"query"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Metrics Query - Business Metrics",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Set dynamic timestamps",
+									"const now = new Date();",
+									"const tenDaysAgo = new Date(now.getTime() - (10 * 24 * 60 * 60 * 1000));",
+									"",
+									"pm.environment.set('current_time', now.toISOString());",
+									"pm.environment.set('ten_days_ago', tenDaysAgo.toISOString());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"metric_name\": \"daily_active_users\",\n  \"start_time\": \"{{ten_days_ago}}\",\n  \"end_time\": \"{{current_time}}\",\n  \"aggregation\": \"max\",\n  \"granularity\": \"1h\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/observability/metrics/query",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"observability",
+								"metrics",
+								"query"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Metrics Query - Error Rate Analysis",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Set dynamic timestamps",
+									"const now = new Date();",
+									"const tenDaysAgo = new Date(now.getTime() - (10 * 24 * 60 * 60 * 1000));",
+									"",
+									"pm.environment.set('current_time', now.toISOString());",
+									"pm.environment.set('ten_days_ago', tenDaysAgo.toISOString());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"metric_name\": \"error_rate\",\n  \"service_name\": \"payment-service\",\n  \"start_time\": \"{{ten_days_ago}}\",\n  \"end_time\": \"{{current_time}}\",\n  \"aggregation\": \"avg\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/v1/observability/metrics/query",

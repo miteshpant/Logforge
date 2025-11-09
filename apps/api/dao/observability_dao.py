@@ -175,7 +175,7 @@ class ObservabilityDAO:
             }
 
             results = await self.db.execute_query(query, params)
-            
+
             # Parse JSON fields
             for result in results:
                 for json_field in ["attributes", "events", "links", "resource"]:
@@ -828,6 +828,12 @@ class ObservabilityDAO:
 
             if results:
                 result = results[0]
+                data_points = result.get("data_points", 0)
+                
+                # If no actual data points found, return None (no mock data)
+                if data_points == 0:
+                    return None
+                
                 # Safely handle aggregated value (can be NULL/None from ClickHouse)
                 aggregated_value = result.get("aggregated_value", 0)
                 if aggregated_value is None or (isinstance(aggregated_value, float) and
@@ -838,7 +844,7 @@ class ObservabilityDAO:
                     "metric_name": metric_name,
                     "aggregation": aggregation,
                     "value": float(aggregated_value),
-                    "data_points": result.get("data_points", 0),
+                    "data_points": data_points,
                     "time_range": {
                         "start": result.get("start_time").isoformat() if result.get("start_time") else None,
                         "end": result.get("end_time").isoformat() if result.get("end_time") else None,
@@ -846,13 +852,8 @@ class ObservabilityDAO:
                     }
                 }
             else:
-                return {
-                    "metric_name": metric_name,
-                    "aggregation": aggregation,
-                    "value": 0,
-                    "data_points": 0,
-                    "time_range": {"hours": hours}
-                }
+                # Return None when no data found - let API handle response
+                return None
 
         except Exception as e:
             logger.error(f"Failed to get metric aggregation: {e}")
