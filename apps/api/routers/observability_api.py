@@ -560,13 +560,14 @@ async def query_metrics(
 @router.get("/service/{service_name}/health")
 async def get_service_health(
     service_name: str,
-    customer_id: str = Header(..., alias="X-Customer-ID")
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    hours: int = Query(1, description="Time range in hours for health calculation", ge=1, le=168)
 ):
     """Get detailed health status for a service"""
     try:
         observability_service = ObservabilityService()
 
-        health = await observability_service.get_service_health_status(service_name, customer_id)
+        health = await observability_service.get_service_health_status(service_name, customer_id, hours)
 
         return {
             "service_name": service_name,

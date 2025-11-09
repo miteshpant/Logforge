@@ -485,9 +485,9 @@ class ObservabilityService:
             time_window=f"{hours}h"
         )
 
-    async def get_service_health_status(self, service_name: str, customer_id: str) -> Dict[str, Any]:
+    async def get_service_health_status(self, service_name: str, customer_id: str, hours: int = 1) -> Dict[str, Any]:
         """Get detailed health status for a service"""
-        apm_metrics = await self.get_service_apm_metrics(service_name, customer_id, hours=1)
+        apm_metrics = await self.get_service_apm_metrics(service_name, customer_id, hours=hours)
 
         # Determine health status based on metrics
         health_status = 'healthy'
