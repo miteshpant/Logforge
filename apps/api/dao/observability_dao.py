@@ -169,21 +169,39 @@ class ObservabilityDAO:
                 %(service_name)s, %(resource)s, %(customer_id)s, %(ingested_at)s
             )
             """
+            # Ensure proper formatting for ClickHouse DateTime64
+            if "timestamp" in metric_data and metric_data["timestamp"]:
+                if isinstance(metric_data["timestamp"], str):
+                    # Parse and convert to ClickHouse-compatible format
+                    timestamp = datetime.fromisoformat(metric_data["timestamp"].replace('Z', '+00:00'))
+                    metric_data["timestamp"] = timestamp.strftime('%Y-%m-%d %H:%M:%S')
+                elif isinstance(metric_data["timestamp"], datetime):
+                    metric_data["timestamp"] = metric_data["timestamp"].strftime('%Y-%m-%d %H:%M:%S')
 
-            params = {
-                "id": metric_id,
-                "metric_name": metric_data.get("metric_name", ""),
-                "metric_type": metric_data.get("metric_type", "gauge"),
-                "value": metric_data.get("value", 0.0),
-                "timestamp": metric_data.get("timestamp", datetime.now(timezone.utc)),
-                "labels": json.dumps(metric_data.get("labels", {})),
-                "service_name": metric_data.get("service_name", ""),
-                "resource": json.dumps(metric_data.get("resource", {})),
-                "customer_id": metric_data.get("customer_id", "default"),
-                "ingested_at": datetime.now(timezone.utc)
-            }
+            # Set required fields with proper formatting
+            metric_data["id"] = metric_id
+            metric_data["ingested_at"] = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
-            await self.db.execute_query(query, params)
+            # Ensure JSON fields are properly serialized
+            if "labels" in metric_data and not isinstance(metric_data["labels"], str):
+                metric_data["labels"] = json.dumps(metric_data["labels"])
+            if "resource" in metric_data and not isinstance(metric_data["resource"], str):
+                metric_data["resource"] = json.dumps(metric_data["resource"])
+            logger.info(f"metric data {metric_data}")
+            db_data = {
+                        "id": metric_data["id"],
+                        "metric_name": metric_data["metric_name"],
+                        "metric_type": metric_data["metric_type"],
+                        "value": metric_data["value"],
+                        "labels": metric_data["labels"],
+                        "timestamp": metric_data["timestamp"],
+                        "service_name": metric_data["service_name"],
+                        "resource": metric_data["resource"],
+                        "customer_id":metric_data["customer_id"],
+                        "ingested_at": metric_data["ingested_at"]
+                      }
+            logger.info(f"DB DATA {db_data}")
+            await self.db.execute_query(query, db_data)
             logger.debug(f"Metric saved: {metric_id}")
 
             return metric_id

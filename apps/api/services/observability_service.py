@@ -210,28 +210,16 @@ class ObservabilityService:
         Returns:
             Generated metric ID
         """
-        # Validate required fields
-        required_fields = ['name', 'type', 'value']
+        # Validate required fields (expecting normalized field names matching metrics_mt table)
+        required_fields = ['metric_name', 'metric_type', 'value']
         for field in required_fields:
             if not metric_data.get(field):
-                raise ValueError(f"Missing required field: {field}")
+                raise ValueError(f"Missing required normalized field: {field}")
 
-        # Create Metric object
-        metric = Metric(
-            id=str(uuid.uuid4()),
-            name=metric_data['name'],
-            type=metric_data['type'],
-            value=float(metric_data['value']),
-            unit=metric_data.get('unit', ''),
-            description=metric_data.get('description', ''),
-            attributes=metric_data.get('attributes', {}),
-            resource=metric_data.get('resource', {}),
-            timestamp=datetime.fromisoformat(metric_data.get('timestamp', datetime.utcnow().isoformat()).replace('Z', '+00:00')),
-            customer_id=customer_id
-        )
-
+        # Prepare database record directly from normalized data (no dataclass conversion needed)
+        metric_data[ "customer_id"] = customer_id
         # Save to database
-        return await self.dao.save_metric(asdict(metric))
+        return await self.dao.save_metric(metric_data)
 
     async def get_metrics(self, customer_id: str, metric_name: Optional[str] = None,
                          hours: int = 24, limit: int = 1000) -> List[Dict[str, Any]]:

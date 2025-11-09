@@ -63,13 +63,13 @@ class ObservabilityEventPublisher:
                     span_dict = {}
                     if hasattr(span, '__dict__'):
                         span_dict.update(span.__dict__)
-                    
+
                     # Extract known fields
-                    known_fields = ['trace_id', 'span_id', 'parent_span_id', 'operation_name', 
-                                  'service_name', 'start_time', 'end_time', 'duration_ms', 
-                                  'kind', 'status', 'status_message', 'attributes', 'events', 
+                    known_fields = ['trace_id', 'span_id', 'parent_span_id', 'operation_name',
+                                  'service_name', 'start_time', 'end_time', 'duration_ms',
+                                  'kind', 'status', 'status_message', 'attributes', 'events',
                                   'links', 'resource']
-                    
+
                     for field in known_fields:
                         if hasattr(span, field):
                             try:
@@ -77,15 +77,15 @@ class ObservabilityEventPublisher:
                                 # Convert Pydantic enums to string
                                 if hasattr(value, 'value'):
                                     value = value.value
-                                # Convert datetime to ISO string  
+                                # Convert datetime to ISO string
                                 elif hasattr(value, 'isoformat'):
                                     value = value.isoformat()
                                 span_dict[field] = value
                             except Exception:
                                 pass
-                
+
                 converted_spans.append(span_dict)
-            
+
             self.logger.info(f"Converted {len(spans_data)} spans to dictionaries for event publishing")
 
             event_data = {
@@ -116,7 +116,7 @@ class ObservabilityEventPublisher:
             )
 
             results = await self.publisher_manager.publish(event)
-            
+
             # Check if any publisher succeeded
             success_count = sum(1 for result in results.values() if result)
             total_publishers = len(results)
@@ -156,7 +156,7 @@ class ObservabilityEventPublisher:
         self,
         customer_id: str,
         batch_info: Dict[str, Any],
-        metrics_data: List[Dict[str, Any]],
+        metrics_data: List[Any],  # Can be Pydantic objects or dicts
         processing_time_ms: float,
         correlation_id: Optional[str] = None,
         trace_id: Optional[str] = None
@@ -167,12 +167,51 @@ class ObservabilityEventPublisher:
         Args:
             customer_id: Customer identifier
             batch_info: Information about the ingested batch
-            metrics_data: List of metric data for processing
+            metrics_data: List of metric data for processing (Pydantic objects or dicts)
             processing_time_ms: Time taken to process the batch
             correlation_id: Request correlation ID
             trace_id: Distributed tracing ID
         """
         try:
+            # Convert Pydantic objects to dictionaries before publishing
+            converted_metrics = []
+            for metric in metrics_data:
+                metric_dict = {}
+
+                if hasattr(metric, 'model_dump'):
+                    # Pydantic v2 model
+                    metric_dict = metric.model_dump()
+                elif hasattr(metric, 'dict'):
+                    # Pydantic v1 model
+                    metric_dict = metric.dict()
+                elif isinstance(metric, dict):
+                    # Already a dict
+                    metric_dict = metric
+                else:
+                    # Convert manually - preserve ALL attributes, not just known ones
+                    if hasattr(metric, '__dict__'):
+                        # Start with object's __dict__ to get all attributes
+                        metric_dict.update(metric.__dict__)
+
+                    # Also try to extract ALL attributes using dir()
+                    for attr_name in dir(metric):
+                        if not attr_name.startswith('_') and not callable(getattr(metric, attr_name, None)):
+                            try:
+                                value = getattr(metric, attr_name)
+                                # Convert Pydantic enums to string
+                                if hasattr(value, 'value'):
+                                    value = value.value
+                                # Convert datetime to ISO string
+                                elif hasattr(value, 'isoformat'):
+                                    value = value.isoformat()
+                                metric_dict[attr_name] = value
+                            except Exception:
+                                pass
+
+                converted_metrics.append(metric_dict)
+
+            self.logger.info(f"Converted {len(metrics_data)} metrics to dictionaries for event publishing")
+
             event_data = {
                 "batch_id": batch_info.get("batch_id"),
                 "metric_count": len(metrics_data),
@@ -182,7 +221,7 @@ class ObservabilityEventPublisher:
                 "timestamp": batch_info.get("timestamp", datetime.utcnow().isoformat()),
                 "success_count": batch_info.get("success_count", len(metrics_data)),
                 "error_count": batch_info.get("error_count", 0),
-                "metrics": metrics_data,  # Include actual metric data for event processing
+                "metrics": converted_metrics,  # Use converted dictionaries
                 "source_format": "otlp"  # OpenTelemetry Protocol
             }
 
@@ -201,7 +240,7 @@ class ObservabilityEventPublisher:
             )
 
             results = await self.publisher_manager.publish(event)
-            
+
             success_count = sum(1 for result in results.values() if result)
             total_publishers = len(results)
             success = success_count > 0

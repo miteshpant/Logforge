@@ -90,7 +90,6 @@ class ObservabilityEventHandler(EventHandler):
 
                     # Step 1: Apply field normalization using otel_field_mapping.yml
                     normalized_span = normalize_otel_service_simple(span_data)
-                    logger.info(f"Normalized span: {normalized_span}")
                     logger.debug(
                         "Applied OTel field normalization",
                         customer_id=customer_id,
@@ -149,7 +148,7 @@ class ObservabilityEventHandler(EventHandler):
         try:
             # Import here to avoid circular dependencies
             from services.observability_service import ObservabilityService
-            from services.otel_field_mapper import normalize_otel_metric
+            from services.simple_otel_mapper import normalize_otel_service_simple
 
             start_time = datetime.now(timezone.utc)
             customer_id = event.customer_id
@@ -177,8 +176,26 @@ class ObservabilityEventHandler(EventHandler):
 
             for metric_data in metrics_data:
                 try:
+                    # metric_data should already be a dict from the publisher conversion
+                    if not isinstance(metric_data, dict):
+                        logger.error(f"Expected dict from publisher, got {type(metric_data)}: {metric_data}")
+                        continue
+
+                    if not metric_data:
+                        logger.error("Received empty metric dict from publisher")
+                        continue
+
                     # Step 1: Apply field normalization using otel_field_mapping.yml
-                    normalized_metric = normalize_otel_metric(metric_data)
+                    normalized_metric = normalize_otel_service_simple(metric_data)
+                    logger.info(f"normalized_metric {normalized_metric}")
+                    logger.debug(
+                        "Applied OTel field normalization for metric",
+                        customer_id=customer_id,
+                        original_metric_name=metric_data.get('metric_name') or metric_data.get('metricName') or metric_data.get('name'),
+                        normalized_metric_name=normalized_metric.get('metric_name'),
+                        original_service=metric_data.get('service_name') or metric_data.get('serviceName') or metric_data.get('service', {}).get('name'),
+                        normalized_service=normalized_metric.get('service_name')
+                    )
 
                     # Step 2: Process the normalized metric (stores to metrics_mt table)
                     metric_id = await observability_service.ingest_metric(normalized_metric, customer_id)

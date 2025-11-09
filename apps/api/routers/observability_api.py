@@ -72,14 +72,19 @@ class BatchSpanRequest(BaseModel):
 
 
 class MetricRequest(BaseModel):
-    """Time series metric ingestion request"""
-    metric_name: str = Field(..., description="Metric name")
-    metric_type: MetricType = Field(..., description="Metric type")
+    """Time series metric ingestion request - validation only, no field modification"""
+    model_config = {"extra": "allow"}  # Allow extra fields for custom attributes
+    
+    # Core required fields for validation only
+    metric_name: Optional[str] = Field(default=None, description="Metric name")
+    metric_type: Optional[MetricType] = Field(default=None, description="Metric type") 
     value: Union[int, float] = Field(..., description="Metric value")
-    timestamp: datetime = Field(..., description="Metric timestamp")
-    labels: Dict[str, str] = Field(default_factory=dict, description="Metric labels")
-    service_name: str = Field(..., description="Service generating the metric")
-    resource: Dict[str, Any] = Field(default_factory=dict, description="Resource attributes")
+    timestamp: Optional[datetime] = Field(default=None, description="Metric timestamp")
+    
+    # Optional fields - no defaults added, let normalizer handle field mapping
+    # labels: will be mapped from properties/tags/attributes/etc by normalizer
+    # service_name: will be mapped from serviceName/service.name/etc by normalizer
+    # resource: will be mapped from various resource fields by normalizer
 
 
 class BatchMetricRequest(BaseModel):
@@ -213,47 +218,89 @@ async def ingest_metrics(
     request: BatchMetricRequest,
     customer_id: str = Header(..., alias="X-Customer-ID")
 ):
-    """Ingest time series metrics"""
+    """Ingest time series metrics asynchronously via events"""
     try:
-        observability_service = ObservabilityService()
+        # Import here to avoid circular dependencies
+        from events.publishers.observability_publisher import ObservabilityEventPublisher
+        from dependencies import get_event_publisher_manager
+        import uuid
+        from datetime import datetime, timezone
 
-        # Process each metric in the batch
-        ingested_metrics = []
-        errors = []
+        start_time = datetime.now(timezone.utc)
 
-        for metric_req in request.metrics:
-            try:
-                # Convert to dict format for service
-                metric_data = {
-                    'name': metric_req.metric_name,
-                    'type': metric_req.metric_type.value,
-                    'value': metric_req.value,
-                    'unit': '',
-                    'description': '',
-                    'attributes': metric_req.labels,
-                    'resource': metric_req.resource,
-                    'timestamp': metric_req.timestamp.isoformat()
+        if not request.metrics:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "message": "No valid metrics to process",
+                    "metrics_ingested": 0,
+                    "customer_id": customer_id,
+                    "errors": []
                 }
+            )
 
-                metric_id = await observability_service.ingest_metric(metric_data, customer_id)
-                ingested_metrics.append(metric_id)
+        # Calculate processing time for API response
+        processing_time_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
 
-            except Exception as e:
-                errors.append(f"Failed to ingest metric {metric_req.metric_name}: {str(e)}")
+        # Create batch info for event
+        batch_info = {
+            "batch_id": str(uuid.uuid4()),
+            "timestamp": start_time.isoformat(),
+            "success_count": len(request.metrics),
+            "error_count": 0,
+            "bytes_processed": len(str(request.dict()))  # Approximate
+        }
 
-        return JSONResponse(
-            status_code=202,
-            content={
-                "message": "Metrics ingested successfully",
-                "metrics_ingested": len(ingested_metrics),
-                "customer_id": customer_id,
-                "errors": errors
-            }
+        # Get the initialized event publisher manager
+        publisher_manager = get_event_publisher_manager()
+        if not publisher_manager:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "message": "Event publisher not available",
+                    "metrics_ingested": 0,
+                    "customer_id": customer_id,
+                    "errors": ["Event system not initialized"]
+                }
+            )
+
+        # Initialize event publisher
+        observability_publisher = ObservabilityEventPublisher(publisher_manager)
+
+        # Publish metrics batch ingestion event
+        event_published = await observability_publisher.publish_metrics_batch_ingested(
+            customer_id=customer_id,
+            batch_info=batch_info,
+            metrics_data=request.metrics,
+            processing_time_ms=processing_time_ms
         )
 
+        if event_published:
+            return JSONResponse(
+                status_code=202,  # Accepted - will be processed asynchronously
+                content={
+                    "message": "Metrics accepted for processing",
+                    "metrics_accepted": len(request.metrics),
+                    "customer_id": customer_id,
+                    "batch_id": batch_info["batch_id"],
+                    "processing_status": "queued",
+                    "errors": []
+                }
+            )
+        else:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "message": "Failed to queue metrics for processing",
+                    "metrics_ingested": 0,
+                    "customer_id": customer_id,
+                    "errors": ["Event publishing failed"]
+                }
+            )
+
     except Exception as e:
-        logger.error("Failed to ingest metrics", error=str(e), customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Failed to ingest metrics: {str(e)}")
+        logger.error("Failed to queue metrics for processing", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to queue metrics for processing: {str(e)}")
 
 
 @router.post("/traces/search")
