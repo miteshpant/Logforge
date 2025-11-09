@@ -3,7 +3,7 @@ M5 Observability API - OpenTelemetry Traces & Metrics Endpoints
 Multi-tenant APM capabilities with database-backed service/dao pattern
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Request, Header
+from fastapi import APIRouter, HTTPException, Depends, Request, Header, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, ValidationError
 from datetime import datetime, timedelta
@@ -47,7 +47,7 @@ class MetricType(str, Enum):
 class SpanRequest(BaseModel):
     """OpenTelemetry span ingestion request"""
     model_config = {"extra": "allow"}  # Allow extra fields for custom attributes
-    
+
     trace_id: str = Field(..., description="Unique trace identifier")
     span_id: str = Field(..., description="Unique span identifier")
     parent_span_id: Optional[str] = Field(None, description="Parent span ID")
@@ -74,13 +74,13 @@ class BatchSpanRequest(BaseModel):
 class MetricRequest(BaseModel):
     """Time series metric ingestion request - validation only, no field modification"""
     model_config = {"extra": "allow"}  # Allow extra fields for custom attributes
-    
+
     # Core required fields for validation only
     metric_name: Optional[str] = Field(default=None, description="Metric name")
-    metric_type: Optional[MetricType] = Field(default=None, description="Metric type") 
+    metric_type: Optional[MetricType] = Field(default=None, description="Metric type")
     value: Union[int, float] = Field(..., description="Metric value")
     timestamp: Optional[datetime] = Field(default=None, description="Metric timestamp")
-    
+
     # Optional fields - no defaults added, let normalizer handle field mapping
     # labels: will be mapped from properties/tags/attributes/etc by normalizer
     # service_name: will be mapped from serviceName/service.name/etc by normalizer
@@ -93,6 +93,7 @@ class BatchMetricRequest(BaseModel):
 
 
 class TraceQueryRequest(BaseModel):
+    model_config = {"extra": "allow"}  # Allow extra fields for custom attributes
     """Trace search/query request"""
     service_name: Optional[str] = Field(None, description="Filter by service name")
     operation_name: Optional[str] = Field(None, description="Filter by operation name")
@@ -308,33 +309,43 @@ async def search_traces(
     query: TraceQueryRequest,
     customer_id: str = Header(..., alias="X-Customer-ID")
 ):
-    """Search traces with filters"""
+    """Search traces with filters - supports both normalized and customer field variations"""
     try:
+        # Import field normalizer
+        from services.simple_otel_mapper import normalize_otel_service_simple
+        
         observability_service = ObservabilityService()
 
-        # Build filters dict for service
+        # Convert query to dict and normalize field names to handle customer variations
+        query_dict = query.dict(exclude_none=True)  # Only include non-None values
+        normalized_query = normalize_otel_service_simple(query_dict)
+        
+        # Build filters dict using normalized field names
         filters = {}
 
-        if query.service_name:
-            filters['service_name'] = query.service_name
+        # Use normalized fields (supports serviceName -> service_name, etc.)
+        if normalized_query.get('service_name') or query.service_name:
+            filters['service_name'] = normalized_query.get('service_name') or query.service_name
 
-        if query.operation_name:
-            filters['operation_name'] = query.operation_name
+        if normalized_query.get('operation_name') or query.operation_name:
+            filters['operation_name'] = normalized_query.get('operation_name') or query.operation_name
 
-        if query.start_time:
-            filters['start_time'] = query.start_time
+        if normalized_query.get('start_time') or query.start_time:
+            filters['start_time'] = normalized_query.get('start_time') or query.start_time
 
-        if query.end_time:
-            filters['end_time'] = query.end_time
+        if normalized_query.get('end_time') or query.end_time:
+            filters['end_time'] = normalized_query.get('end_time') or query.end_time
 
-        if query.min_duration_ms:
-            filters['min_duration_ms'] = query.min_duration_ms
+        if normalized_query.get('min_duration_ms') or query.min_duration_ms:
+            filters['min_duration_ms'] = normalized_query.get('min_duration_ms') or query.min_duration_ms
 
-        if query.max_duration_ms:
-            filters['max_duration_ms'] = query.max_duration_ms
+        if normalized_query.get('max_duration_ms') or query.max_duration_ms:
+            filters['max_duration_ms'] = normalized_query.get('max_duration_ms') or query.max_duration_ms
 
-        if query.status:
-            filters['status'] = query.status.value
+        # Handle status field (might be mapped from result/outcome/etc.)
+        status_value = normalized_query.get('status') or (query.status.value if query.status else None)
+        if status_value:
+            filters['status'] = status_value
 
         filters['limit'] = query.limit
         filters['offset'] = query.offset
@@ -430,23 +441,40 @@ async def get_apm_overview(
 async def get_apm_metrics(
     service_name: str,
     time_range_hours: int = 1,
+    deployment_environment: Optional[str] = Query(None, description="Deployment environment (production, staging, dev)"),
+    namespace: Optional[str] = Query(None, description="Kubernetes namespace"),
+    cluster: Optional[str] = Query(None, description="Cluster name"),
     customer_id: str = Header(..., alias="X-Customer-ID")
 ):
-    """Get APM metrics for a specific service"""
+    """Get APM metrics for a specific service with environment context"""
     try:
         observability_service = ObservabilityService()
 
-        metrics = await observability_service.get_service_apm_metrics(service_name, customer_id, time_range_hours)
+        # Create service context for environment-aware filtering
+        service_context = {
+            "service_name": service_name,
+            "deployment_environment": deployment_environment,
+            "namespace": namespace,
+            "cluster": cluster
+        }
+
+        metrics = await observability_service.get_service_apm_metrics_with_context(
+            service_context, customer_id, time_range_hours
+        )
 
         return {
             "service_name": service_name,
+            "deployment_environment": deployment_environment,
+            "namespace": namespace,
+            "cluster": cluster,
             "metrics": metrics.to_dict(),
             "time_range_hours": time_range_hours,
             "customer_id": customer_id
         }
 
     except Exception as e:
-        logger.error("Failed to get APM metrics", error=str(e), customer_id=customer_id)
+        logger.error("Failed to get APM metrics", error=str(e), customer_id=customer_id, 
+                    service_name=service_name, deployment_environment=deployment_environment)
         raise HTTPException(status_code=500, detail=f"Failed to get APM metrics: {str(e)}")
 
 

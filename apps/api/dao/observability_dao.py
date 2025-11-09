@@ -153,6 +153,95 @@ class ObservabilityDAO:
             logger.error(f"Failed to get traces for service {service_name}: {e}")
             raise
 
+    async def get_traces_by_service_with_context(self, service_context: Dict[str, Any], customer_id: str,
+                                               limit: int = 100, hours: int = 24) -> List[Dict[str, Any]]:
+        """Get traces for a service with environment context filtering using normalization service"""
+        try:
+            # First, get all traces for the service without environment filtering
+            query = """
+            SELECT * FROM traces_mt
+            WHERE service_name = %(service_name)s
+            AND customer_id = %(customer_id)s
+            AND start_time >= now() - INTERVAL %(hours)s HOUR
+            ORDER BY start_time DESC
+            LIMIT %(limit)s
+            """
+
+            params = {
+                "service_name": service_context.get("service_name"),
+                "customer_id": customer_id,
+                "hours": hours,
+                "limit": limit
+            }
+
+            results = await self.db.execute_query(query, params)
+            
+            # Parse JSON fields
+            for result in results:
+                for json_field in ["attributes", "events", "links", "resource"]:
+                    if result.get(json_field):
+                        try:
+                            result[json_field] = json.loads(result[json_field])
+                        except (json.JSONDecodeError, TypeError):
+                            result[json_field] = {} if json_field in ["attributes", "resource"] else []
+
+            # Apply environment context filtering using normalization service
+            if any([service_context.get("deployment_environment"),
+                   service_context.get("namespace"),
+                   service_context.get("cluster")]):
+
+                # Import normalization service
+                try:
+                    from services.simple_otel_mapper import normalize_otel_service_simple
+                except ImportError:
+                    logger.warning("Could not import normalization service, skipping environment filtering")
+                    return results
+
+                filtered_results = []
+                for result in results:
+                    # Normalize the resource attributes to get standard field names
+                    resource_data = result.get("resource", {})
+                    if resource_data:
+                        normalized = normalize_otel_service_simple(resource_data)
+
+                        # Check if this trace matches the environment context exactly
+                        matches = True
+
+                        if service_context.get("deployment_environment"):
+                            trace_env = normalized.get("deployment_environment")
+                            # Must have the exact environment value - exclude if missing or different
+                            if trace_env != service_context.get("deployment_environment"):
+                                matches = False
+
+                        if service_context.get("namespace") and matches:
+                            trace_ns = normalized.get("namespace")
+                            # Must have the exact namespace value - exclude if missing or different
+                            if trace_ns != service_context.get("namespace"):
+                                matches = False
+
+                        if service_context.get("cluster") and matches:
+                            trace_cluster = normalized.get("cluster")
+                            # Must have the exact cluster value - exclude if missing or different
+                            if trace_cluster != service_context.get("cluster"):
+                                matches = False
+
+                        if matches:
+                            # Add normalized environment info to result for debugging
+                            result["_normalized_env"] = {
+                                "deployment_environment": normalized.get("deployment_environment"),
+                                "namespace": normalized.get("namespace"),
+                                "cluster": normalized.get("cluster")
+                            }
+                            filtered_results.append(result)
+
+                logger.info(f"Environment filtering: {len(results)} -> {len(filtered_results)} traces")
+                return filtered_results
+
+            return results
+        except Exception as e:
+            logger.error(f"Failed to get traces for service with context {service_context}: {e}")
+            raise
+
     # Metrics Operations
 
     async def save_metric(self, metric_data: Dict[str, Any]) -> str:

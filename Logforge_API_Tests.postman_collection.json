@@ -3658,7 +3658,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/v1/observability/apm/{{service_name}}?time_range_hours=1",
+							"raw": "{{base_url}}/v1/observability/apm/{{service_name}}?time_range_hours=1&deployment_environment={{deployment_environment}}&namespace={{namespace}}&cluster={{cluster}}",
 							"host": [
 								"{{base_url}}"
 							],
@@ -3672,12 +3672,39 @@
 								{
 									"key": "time_range_hours",
 									"value": "1"
+								},
+								{
+									"key": "deployment_environment",
+									"value": "{{deployment_environment}}",
+									"description": "Deployment environment (production, staging, dev)"
+								},
+								{
+									"key": "namespace",
+									"value": "{{namespace}}",
+									"description": "Kubernetes namespace"
+								},
+								{
+									"key": "cluster",
+									"value": "{{cluster}}",
+									"description": "Cluster name"
 								}
 							],
 							"variable": [
 								{
 									"key": "service_name",
 									"value": "web-api"
+								},
+								{
+									"key": "deployment_environment",
+									"value": "production"
+								},
+								{
+									"key": "namespace",
+									"value": "production"
+								},
+								{
+									"key": "cluster",
+									"value": "prod-cluster-1"
 								}
 							]
 						}

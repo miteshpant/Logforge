@@ -133,13 +133,20 @@ class ObservabilityService:
             start = datetime.fromisoformat(span_data['start_time'].replace('Z', '+00:00'))
             end = datetime.fromisoformat(span_data['end_time'].replace('Z', '+00:00'))
             duration_ms = int((end - start).total_seconds() * 1000)
-
         # Validate required fields
         required_fields = ['trace_id', 'operation_name', 'service_name']
         for field in required_fields:
             if not span_data.get(field):
                 raise ValueError(f"Missing required field: {field}")
+        processed_resource = span_data.get('resource', {}).copy()
 
+        # Add environment context using proper OTEL field names
+        if span_data.get('deployment_environment'):
+            processed_resource["deployment.environment"] = span_data.get('deployment_environment')
+        if span_data.get('cluster'):
+            processed_resource["cluster"] = span_data.get('cluster')
+        if span_data.get('namespace'):
+            processed_resource["namespace"] = span_data.get('namespace')
         # Create TraceSpan object
         trace_span = TraceSpan(
             id=str(uuid.uuid4()),
@@ -156,10 +163,9 @@ class ObservabilityService:
             attributes=span_data.get('attributes', {}),
             events=span_data.get('events', []),
             links=span_data.get('links', []),
-            resource=span_data.get('resource', {}),
+            resource=processed_resource,
             customer_id=customer_id
         )
-
         # Save to database
         span_id = await self.dao.save_trace_span(asdict(trace_span))
 
@@ -385,6 +391,67 @@ class ObservabilityService:
             )
 
         # Calculate metrics
+        total_requests = len(traces)
+        error_count = len([t for t in traces if t['status'] == 'error'])
+        error_rate = (error_count / total_requests) * 100 if total_requests > 0 else 0
+
+        # Response time statistics
+        durations = [t['duration_ms'] for t in traces if t['duration_ms'] > 0]
+        avg_response_time = sum(durations) / len(durations) if durations else 0
+
+        # Calculate percentiles
+        sorted_durations = sorted(durations)
+        p95_index = int(0.95 * len(sorted_durations))
+        p99_index = int(0.99 * len(sorted_durations))
+        p95_response_time = sorted_durations[p95_index] if sorted_durations else 0
+        p99_response_time = sorted_durations[p99_index] if sorted_durations else 0
+
+        # Request rate (requests per second)
+        time_span_seconds = hours * 3600
+        request_rate = total_requests / time_span_seconds
+        throughput = total_requests / (hours * 60)  # requests per minute
+
+        return APMMetrics(
+            service_name=service_name,
+            request_rate=request_rate,
+            error_rate=error_rate,
+            avg_response_time=avg_response_time,
+            p95_response_time=p95_response_time,
+            p99_response_time=p99_response_time,
+            throughput=throughput,
+            error_count=error_count,
+            total_requests=total_requests,
+            time_window=f"{hours}h"
+        )
+
+    async def get_service_apm_metrics_with_context(self, service_context: Dict[str, Any],
+                                                 customer_id: str, hours: int = 24) -> APMMetrics:
+        """Get detailed APM metrics for a service with environment context filtering"""
+        service_name = service_context.get("service_name")
+        deployment_environment = service_context.get("deployment_environment")
+        namespace = service_context.get("namespace")
+        cluster = service_context.get("cluster")
+
+        # Get trace data with environment context
+        traces = await self.dao.get_traces_by_service_with_context(
+            service_context, customer_id, limit=10000, hours=hours
+        )
+
+        if not traces:
+            return APMMetrics(
+                service_name=service_name,
+                request_rate=0,
+                error_rate=0,
+                avg_response_time=0,
+                p95_response_time=0,
+                p99_response_time=0,
+                throughput=0,
+                error_count=0,
+                total_requests=0,
+                time_window=f"{hours}h"
+            )
+
+        # Calculate metrics (same logic as original method)
         total_requests = len(traces)
         error_count = len([t for t in traces if t['status'] == 'error'])
         error_rate = (error_count / total_requests) * 100 if total_requests > 0 else 0
