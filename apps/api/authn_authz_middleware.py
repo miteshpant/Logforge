@@ -439,6 +439,10 @@ def get_endpoint_permission(path: str, method: str) -> str:
         return "observability:read:tenant"
     elif path.startswith("/v1/stream/"):
         return "observability:read:tenant"  # Streaming endpoints require observability read access
+    elif path.startswith("/v1/streaming/config"):
+        if method in ["POST", "PUT", "DELETE"]:
+            return "observability:write:tenant"  # Streaming config management requires write access
+        return "observability:read:tenant"  # Reading streaming config requires read access
     elif path == "/v1/tenants" or (path.startswith("/v1/tenants") and path.count("/") == 2):
         # /v1/tenants (list all) requires platform admin
         # /v1/tenants (create) requires platform admin

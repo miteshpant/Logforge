@@ -10,12 +10,14 @@ import structlog
 import json
 import asyncio
 from datetime import datetime, timedelta
+import random
 
 from services.observability_service import ObservabilityService
 from services.security_service import SecurityService
 from services.alert_service import AlertService
 from services.usage_service import UsageService
 from services.ai_service import AIService
+from services.streaming_config_service import get_streaming_config_service
 
 logger = structlog.get_logger(__name__)
 
@@ -34,44 +36,251 @@ def format_sse_message(event_type: str, data: Any, event_id: Optional[str] = Non
 
 @router.get("/metrics")
 async def stream_metrics(
-    metric_names: str = "cpu_usage,memory_usage,disk_usage",
     customer_id: str = Header(..., alias="X-Customer-ID")
 ):
-    """Stream real-time metrics data"""
+    """Stream real-time metrics data - Pure event-driven, no polling"""
     try:
-        observability_service = ObservabilityService()
-        metric_list = metric_names.split(",")
+        from events.subscribers import KafkaEventSubscriber
+        from events.constants import EVENT_METRICS_BATCH_INGESTED, EVENT_METRIC_PROCESSED, TOPIC_SYSTEM_EVENTS
 
-        async def generate_metrics():
-            while True:
+        # Metrics event types we want to stream to UI
+        metrics_events = [
+            EVENT_METRICS_BATCH_INGESTED,
+            EVENT_METRIC_PROCESSED
+        ]
+
+        # Create a queue to receive events from the custom handler
+        event_queue = asyncio.Queue()
+
+        # Custom handler class to capture metrics events for this streaming session
+        class StreamingMetricsHandler:
+            """Custom handler to capture metrics events for streaming with config-based filtering"""
+
+            def __init__(self, target_customer_id: str, event_queue: asyncio.Queue):
+                self.target_customer_id = target_customer_id
+                self.event_queue = event_queue
+                self.streaming_service = get_streaming_config_service()
+                self.rate_limiter = {}
+
+            async def handle(self, event) -> bool:
+                """Handle events and put relevant ones in the queue with config-based filtering"""
                 try:
-                    # Get latest metrics for the specified names
-                    metrics = await observability_service.get_metrics(
-                        customer_id=customer_id,
-                        metric_name=None,
-                        hours=1,
-                        limit=100
-                    )
+                    # Only handle events for our target customer and metrics event types
+                    if (hasattr(event, 'customer_id') and
+                        event.customer_id == self.target_customer_id and
+                        hasattr(event, 'event_type') and
+                        event.event_type in metrics_events):
 
-                    # Filter metrics by requested names
-                    filtered_metrics = [
-                        metric for metric in metrics
-                        if metric.get('name') in metric_list
-                    ]
+                        # Apply streaming configuration filters
+                        if await self._should_stream_event(event):
+                            # Put event in queue for streaming
+                            await self.event_queue.put(event)
+                            logger.debug(f"Metrics event queued for streaming: {event.event_type}")
+                        else:
+                            logger.debug(f"Metrics event filtered out: {event.event_type}")
+                        return True
 
-                    if filtered_metrics:
-                        yield format_sse_message("metrics", filtered_metrics)
-
-                    await asyncio.sleep(5)  # Update every 5 seconds
+                    return True
 
                 except Exception as e:
-                    logger.error("Error streaming metrics", error=str(e), customer_id=customer_id,
-                               error_type=type(e).__name__, metric_names=metric_names)
-                    yield format_sse_message("error", {"message": f"Metrics streaming error: {str(e)}"})
-                    break
+                    logger.error(f"Error in metrics streaming handler: {e}")
+                    return False
+
+            async def _should_stream_event(self, event) -> bool:
+                """Apply streaming configuration filters to determine if event should be streamed"""
+                try:
+                    # Get streaming config for this customer
+                    config = await self.streaming_service.get_streaming_config(
+                        self.target_customer_id,
+                        "metrics.batch.ingested"
+                    )
+                    # If disabled, don't stream
+                    if not config.get("enabled", True):
+                        return False
+
+                    # Apply sample rate (0.0 = 0%, 1.0 = 100%)
+                    sample_rate = config.get("sample_rate", 1.0)
+                    random_rate = random.random()
+                    logger.info(f" random rate is {random_rate}")
+                    if random_rate > sample_rate:
+                        return False
+
+                    # Check rate limiting
+                    max_events_per_minute = config.get("max_events_per_minute", 100)
+                    logger.info(f" max_events_per_minute : {max_events_per_minute}")
+                    if not self._check_rate_limit(max_events_per_minute):
+                        return False
+                    # Check minimum metrics count
+                    min_metrics_count = config.get("min_metrics_count", 1)
+                    metrics_count = event.data.get("metric_count", 0)  # Fixed: use "metric_count" not "metrics_count"
+                    if metrics_count < min_metrics_count:
+                        return False
+                    metrics = event.data.get("metrics", [])
+                    service_name = ""
+                    if metrics:
+                        service_name = metrics[0].get("service_name", "")
+                    # Exclude services
+                    exclude_services = config.get("exclude_services", [])
+                    if service_name in exclude_services:
+                        return False
+
+                    # Include services (if specified, only allow these)
+                    include_services = config.get("include_services", [])
+                    if include_services and service_name not in include_services:
+                        return False
+
+                    # Check priority metrics (always stream if present)
+                    priority_metrics = config.get("priority_metrics", [])
+
+                    for metric in metrics:
+                        if metric.get("metric_name") in priority_metrics:
+                            return True
+
+                    # Check error-only filtering
+                    if config.get("include_errors_only", False):
+                        for metric in metrics:
+                            if metric.get("status") == "error" or metric.get("error_count", 0) > 0:
+                                return True
+                        return False
+                    logger.info("reching here ")
+                    return True
+
+                except Exception as e:
+                    logger.error(f"Error applying streaming filters: {e}")
+                    # Default to streaming on error to avoid losing data
+                    return True
+
+            def _check_rate_limit(self, max_events_per_minute: int) -> bool:
+                """Check if we're within the rate limit for this customer"""
+                current_minute = int(datetime.now().timestamp() / 60)
+                key = f"{self.target_customer_id}_{current_minute}"
+                logger.info(f"key is : {key}")
+                if key not in self.rate_limiter:
+                    self.rate_limiter[key] = 0
+                logger.info( f"self.rate_limiter : {self.rate_limiter}")
+                # Clean old entries
+                old_keys = [k for k in self.rate_limiter.keys() if int(k.split('_')[-1]) < current_minute - 1]
+                for old_key in old_keys:
+                    del self.rate_limiter[old_key]
+
+                if self.rate_limiter[key] >= max_events_per_minute:
+                    return False
+
+                self.rate_limiter[key] += 1
+                logger.info(" I am returning true")
+                return True
+
+            def get_handler_name(self) -> str:
+                return f"streaming_metrics_handler_{self.target_customer_id}"
+
+            def get_supported_event_types(self) -> List[str]:
+                return metrics_events
+
+        async def generate_real_time_metrics():
+            """Generate real-time metrics events as they occur"""
+            subscriber = None
+            try:
+                from events.subscribers import SubscriberConfig
+
+                # Create subscriber config for metrics events
+                config = SubscriberConfig(
+                    name=f"streaming_metrics_{customer_id}",
+                    consumer_group=f"streaming_metrics_{customer_id}",
+                    topics=[TOPIC_SYSTEM_EVENTS],  # Metrics events go to system-events topic
+                    event_types=metrics_events,
+                    enabled=True,
+                    max_batch_size=10,
+                    max_parallel_workers=1
+                )
+
+                # Create Kafka subscriber for metrics events
+                subscriber = KafkaEventSubscriber(config)
+
+                # Create and register our custom streaming handler
+                streaming_handler = StreamingMetricsHandler(customer_id, event_queue)
+                subscriber.register_handler(streaming_handler)
+
+                logger.info(f"Starting real-time metrics stream for customer {customer_id}")
+
+                # Send initial connection confirmation
+                yield format_sse_message("connected", {
+                    "status": "streaming_started",
+                    "customer_id": customer_id,
+                    "event_types": metrics_events,
+                    "timestamp": datetime.now().isoformat()
+                })
+
+                # Start the subscriber
+                await subscriber.start()
+
+                # Listen for events from our queue
+                while True:
+                    try:
+                        # Wait for events with a timeout to allow for graceful shutdown
+                        event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
+
+                        # Format metrics event for streaming
+                        stream_data = {
+                            "event_type": event.event_type,
+                            "customer_id": event.customer_id,
+                            "timestamp": event.metadata.created_at if hasattr(event, 'metadata') and event.metadata else datetime.now().isoformat(),
+                        }
+
+                        # Add event-specific data based on event type
+                        if event.event_type == EVENT_METRICS_BATCH_INGESTED:
+                            stream_data.update({
+                                "batch_id": event.data.get("batch_id"),
+                                "metrics_count": event.data.get("metrics_count"),
+                                "service_name": event.data.get("service_name"),
+                                "metrics": event.data.get("metrics", [])
+                            })
+                        elif event.event_type == EVENT_METRIC_PROCESSED:
+                            stream_data.update({
+                                "metric_name": event.data.get("metric_name"),
+                                "metric_type": event.data.get("metric_type"),
+                                "value": event.data.get("value"),
+                                "labels": event.data.get("labels", {}),
+                                "service_name": event.data.get("service_name")
+                            })
+
+                        # Stream the event immediately
+                        yield format_sse_message("metrics_event", stream_data, getattr(event.metadata, 'event_id', None) if hasattr(event, 'metadata') else None)
+
+                        logger.debug(
+                            "Metrics event streamed to UI",
+                            customer_id=customer_id,
+                            event_type=event.event_type,
+                            metric_name=stream_data.get("metric_name")
+                        )
+
+                    except asyncio.TimeoutError:
+                        # Send keepalive message
+                        yield format_sse_message("keepalive", {
+                            "timestamp": datetime.now().isoformat(),
+                            "status": "listening"
+                        })
+
+                    except Exception as e:
+                        logger.error(f"Error processing metrics event for streaming: {e}")
+                        yield format_sse_message("error", {"message": f"Event processing error: {str(e)}"})
+
+            except Exception as e:
+                logger.error(f"Error in real-time metrics stream for customer {customer_id}: {e}")
+                yield format_sse_message("error", {
+                    "message": f"Stream error: {str(e)}",
+                    "timestamp": datetime.now().isoformat()
+                })
+            finally:
+                # Clean up subscriber
+                if subscriber:
+                    try:
+                        await subscriber.stop()
+                        logger.info(f"Stopped metrics subscriber for customer {customer_id}")
+                    except Exception as e:
+                        logger.error(f"Error stopping metrics subscriber: {e}")
 
         return StreamingResponse(
-            generate_metrics(),
+            generate_real_time_metrics(),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -82,7 +291,7 @@ async def stream_metrics(
         )
 
     except Exception as e:
-        logger.error("Failed to start metrics stream", error=str(e), customer_id=customer_id)
+        logger.error("Failed to start real-time metrics stream", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to start metrics stream: {str(e)}")
 
 
@@ -90,36 +299,273 @@ async def stream_metrics(
 async def stream_traces(
     customer_id: str = Header(..., alias="X-Customer-ID")
 ):
-    """Stream real-time trace data"""
+    """Stream real-time trace data - Pure event-driven, no polling"""
     try:
-        observability_service = ObservabilityService()
+        from events.subscribers import KafkaEventSubscriber
+        from events.constants import EVENT_TRACES_BATCH_INGESTED, EVENT_TRACE_SPAN_PROCESSED, TOPIC_SYSTEM_EVENTS
 
-        async def generate_traces():
-            while True:
+        # Trace event types we want to stream to UI
+        trace_events = [
+            EVENT_TRACES_BATCH_INGESTED,
+            EVENT_TRACE_SPAN_PROCESSED
+        ]
+
+        # Create a queue to receive events from the custom handler
+        event_queue = asyncio.Queue()
+
+        # Custom handler class to capture trace events for this streaming session
+        class StreamingTracesHandler:
+            """Custom handler to capture trace events for streaming with config-based filtering"""
+
+            def __init__(self, target_customer_id: str, event_queue: asyncio.Queue):
+                self.target_customer_id = target_customer_id
+                self.event_queue = event_queue
+                self.streaming_service = get_streaming_config_service()
+                self.rate_limiter = {}
+
+            async def handle(self, event) -> bool:
+                """Handle events and put relevant ones in the queue with config-based filtering"""
                 try:
-                    # Get recent traces
-                    traces = await observability_service.search_traces(
-                        customer_id=customer_id,
-                        filters={
-                            "start_time": datetime.now() - timedelta(minutes=5),
-                            "end_time": datetime.now(),
-                            "limit": 10
-                        },
-                        limit=10
-                    )
+                    # Only handle events for our target customer and trace event types
+                    if (hasattr(event, 'customer_id') and
+                        event.customer_id == self.target_customer_id and
+                        hasattr(event, 'event_type') and
+                        event.event_type in trace_events):
 
-                    if traces:
-                        yield format_sse_message("traces", traces)
+                        # Apply streaming configuration filters
+                        if await self._should_stream_event(event):
+                            # Put event in queue for streaming
+                            await self.event_queue.put(event)
+                            logger.debug(f"Trace event queued for streaming: {event.event_type}")
+                        else:
+                            logger.debug(f"Trace event filtered out: {event.event_type}")
+                        return True
 
-                    await asyncio.sleep(10)  # Update every 10 seconds
+                    return True
 
                 except Exception as e:
-                    logger.error("Error streaming traces", error=str(e), customer_id=customer_id)
-                    yield format_sse_message("error", {"message": f"Traces streaming error: {str(e)}"})
-                    break
+                    logger.error(f"Error in trace streaming handler: {e}")
+                    return False
+
+            async def _should_stream_event(self, event) -> bool:
+                """Apply streaming configuration filters to determine if event should be streamed"""
+                try:
+                    # Get streaming config for this customer
+                    config = await self.streaming_service.get_streaming_config(
+                        self.target_customer_id,
+                        "traces.batch.ingested"
+                    )
+                    logger.info(event)
+                    # If disabled, don't stream
+                    if not config.get("enabled", True):
+                        return False
+
+                    # Apply sample rate (0.0 = 0%, 1.0 = 100%)
+                    sample_rate = config.get("sample_rate", 1.0)
+                    if random.random() > sample_rate:
+                        return False
+
+                    # Check rate limiting
+                    max_events_per_minute = config.get("max_events_per_minute", 50)
+                    if not self._check_rate_limit(max_events_per_minute):
+                        return False
+
+                    # Check minimum traces count
+                    min_traces_count = config.get("min_traces_count", 1)
+                    traces_count = event.data.get("traces_count", 0)
+                    if traces_count < min_traces_count:
+                        return False
+
+                    # Check service filtering
+                    service_name = event.data.get("service_name", "")
+
+                    # Exclude services
+                    exclude_services = config.get("exclude_services", [])
+                    if service_name in exclude_services:
+                        return False
+
+                    # Include services (if specified, only allow these)
+                    include_services = config.get("include_services", [])
+                    if include_services and service_name not in include_services:
+                        return False
+
+                    # Check minimum duration
+                    min_duration_ms = config.get("min_duration_ms", 0)
+                    traces = event.data.get("traces", [])
+
+                    # If duration filtering is enabled, check if any trace meets criteria
+                    if min_duration_ms > 0:
+                        has_long_trace = False
+                        for trace in traces:
+                            if trace.get("duration_ms", 0) >= min_duration_ms:
+                                has_long_trace = True
+                                break
+                        if not has_long_trace:
+                            return False
+
+                    # Check priority operations (always stream if present)
+                    priority_operations = config.get("priority_operations", [])
+                    for trace in traces:
+                        for span in trace.get("spans", []):
+                            if span.get("operation_name") in priority_operations:
+                                return True
+
+                    # Check error-only filtering
+                    if config.get("include_errors_only", False):
+                        for trace in traces:
+                            for span in trace.get("spans", []):
+                                if span.get("status", {}).get("code") == "ERROR":
+                                    return True
+                        return False
+
+                    # Check status filtering
+                    include_status = config.get("include_status", ["ok", "error"])
+                    if include_status:
+                        for trace in traces:
+                            for span in trace.get("spans", []):
+                                span_status = span.get("status", {}).get("code", "ok").lower()
+                                if span_status in [s.lower() for s in include_status]:
+                                    return True
+                        return False
+
+                    return True
+
+                except Exception as e:
+                    logger.error(f"Error applying trace streaming filters: {e}")
+                    # Default to streaming on error to avoid losing data
+                    return True
+
+            def _check_rate_limit(self, max_events_per_minute: int) -> bool:
+                """Check if we're within the rate limit for this customer"""
+                current_minute = int(datetime.now().timestamp() / 60)
+                key = f"{self.target_customer_id}_{current_minute}"
+
+                if key not in self.rate_limiter:
+                    self.rate_limiter[key] = 0
+
+                # Clean old entries
+                old_keys = [k for k in self.rate_limiter.keys() if int(k.split('_')[-1]) < current_minute - 1]
+                for old_key in old_keys:
+                    del self.rate_limiter[old_key]
+
+                if self.rate_limiter[key] >= max_events_per_minute:
+                    return False
+
+                self.rate_limiter[key] += 1
+                return True
+
+            def get_handler_name(self) -> str:
+                return f"streaming_traces_handler_{self.target_customer_id}"
+
+            def get_supported_event_types(self) -> List[str]:
+                return trace_events
+
+        async def generate_real_time_traces():
+            """Generate real-time trace events as they occur"""
+            subscriber = None
+            try:
+                from events.subscribers import SubscriberConfig
+
+                # Create subscriber config for trace events
+                config = SubscriberConfig(
+                    name=f"streaming_traces_{customer_id}",
+                    consumer_group=f"streaming_traces_{customer_id}",
+                    topics=[TOPIC_SYSTEM_EVENTS],  # Trace events go to system-events topic
+                    event_types=trace_events,
+                    enabled=True,
+                    max_batch_size=10,
+                    max_parallel_workers=1
+                )
+
+                # Create Kafka subscriber for trace events
+                subscriber = KafkaEventSubscriber(config)
+
+                # Create and register our custom streaming handler
+                streaming_handler = StreamingTracesHandler(customer_id, event_queue)
+                subscriber.register_handler(streaming_handler)
+
+                logger.info(f"Starting real-time traces stream for customer {customer_id}")
+
+                # Send initial connection confirmation
+                yield format_sse_message("connected", {
+                    "status": "streaming_started",
+                    "customer_id": customer_id,
+                    "event_types": trace_events,
+                    "timestamp": datetime.now().isoformat()
+                })
+
+                # Start the subscriber
+                await subscriber.start()
+
+                # Listen for events from our queue
+                while True:
+                    try:
+                        # Wait for events with a timeout to allow for graceful shutdown
+                        event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
+
+                        # Format trace event for streaming
+                        stream_data = {
+                            "event_type": event.event_type,
+                            "customer_id": event.customer_id,
+                            "timestamp": event.metadata.created_at if hasattr(event, 'metadata') and event.metadata else datetime.now().isoformat(),
+                        }
+
+                        # Add event-specific data based on event type
+                        if event.event_type == EVENT_TRACES_BATCH_INGESTED:
+                            stream_data.update({
+                                "batch_id": event.data.get("batch_id"),
+                                "traces_count": event.data.get("traces_count"),
+                                "service_name": event.data.get("service_name"),
+                                "traces": event.data.get("traces", [])
+                            })
+                        elif event.event_type == EVENT_TRACE_SPAN_PROCESSED:
+                            stream_data.update({
+                                "trace_id": event.data.get("trace_id"),
+                                "span_id": event.data.get("span_id"),
+                                "operation_name": event.data.get("operation_name"),
+                                "service_name": event.data.get("service_name"),
+                                "duration_ms": event.data.get("duration_ms"),
+                                "status": event.data.get("status")
+                            })
+
+                        # Stream the event immediately
+                        yield format_sse_message("traces_event", stream_data, getattr(event.metadata, 'event_id', None) if hasattr(event, 'metadata') else None)
+
+                        logger.debug(
+                            "Trace event streamed to UI",
+                            customer_id=customer_id,
+                            event_type=event.event_type,
+                            trace_id=stream_data.get("trace_id")
+                        )
+
+                    except asyncio.TimeoutError:
+                        # Send keepalive message
+                        yield format_sse_message("keepalive", {
+                            "timestamp": datetime.now().isoformat(),
+                            "status": "listening"
+                        })
+
+                    except Exception as e:
+                        logger.error(f"Error processing trace event for streaming: {e}")
+                        yield format_sse_message("error", {"message": f"Event processing error: {str(e)}"})
+
+            except Exception as e:
+                logger.error(f"Error in real-time traces stream for customer {customer_id}: {e}")
+                yield format_sse_message("error", {
+                    "message": f"Stream error: {str(e)}",
+                    "timestamp": datetime.now().isoformat()
+                })
+            finally:
+                # Clean up subscriber
+                if subscriber:
+                    try:
+                        await subscriber.stop()
+                        logger.info(f"Stopped traces subscriber for customer {customer_id}")
+                    except Exception as e:
+                        logger.error(f"Error stopping traces subscriber: {e}")
 
         return StreamingResponse(
-            generate_traces(),
+            generate_real_time_traces(),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -130,7 +576,7 @@ async def stream_traces(
         )
 
     except Exception as e:
-        logger.error("Failed to start traces stream", error=str(e), customer_id=customer_id)
+        logger.error("Failed to start real-time traces stream", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to start traces stream: {str(e)}")
 
 

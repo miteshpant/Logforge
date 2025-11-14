@@ -62,6 +62,8 @@ class DatabaseLayer:
         'MitreDefaultLoader': os.getenv('MITRE_DEFAULT_LOADER_KEY', 'mitre-default-loader-service-key'),
         'SecuritySubscriptionChecker': os.getenv('SECURITY_SUBSCRIPTION_CHECKER_KEY', 'security-subscription-checker-service-key'),
         'SigmaProcessor': os.getenv('SIGMA_PROCESSOR_KEY', 'sigma-processor-service-key'),
+        # Streaming Configuration Service
+        'StreamingConfigDAO': os.getenv('STREAMING_CONFIG_SERVICE_KEY', 'streaming-config-service-key'),
         # Migration Service
         'MigrationService': os.getenv('MIGRATION_SERVICE_KEY', 'migration-service-key')
     }
@@ -107,6 +109,8 @@ class DatabaseLayer:
         'MitreDefaultLoader': ['sigma_rules_mt'],  # Needs to insert default MITRE rules
         'SecuritySubscriptionChecker': ['tenant_subscriptions_mt'],  # Needs to check subscription access
         'SigmaProcessor': ['security_events_mt', 'sigma_rules_mt'],  # Needs to create security events and read rules
+        # Streaming Configuration Service
+        'StreamingConfigDAO': ['tenant_configs_mt'],  # Needs to manage streaming configurations in tenant configs table
         # Migration Service
         'MigrationService': ['system_migrations', 'sigma_rules_mt', 'security_events_mt']  # Needs to check migrations and manage security tables
     }
@@ -119,7 +123,7 @@ class DatabaseLayer:
     DELETE_ALLOWED_SERVICES = ['SecurityDAO', 'SecurityService', 'TestService', 'QuotaTestService', 'UserDAO', 'AlertDAO']
     
     # Services allowed to perform UPDATE operations (ALTER TABLE ... UPDATE)
-    UPDATE_ALLOWED_SERVICES = ['UserService', 'AlertService', 'SecurityService', 'TestService', 'UserDAO', 'TenantDAO', 'RoleDAO', 'QueryDAO', 'QueryService', 'DashboardDAO', 'DashboardService', 'StorageDAO', 'StorageService', 'AlertDAO', 'SecurityDAO', 'AIDAO', 'ObservabilityDAO', 'EnterpriseDAO', 'SubscriptionDAO', 'QuotaResetService', 'QuotaTestService', 'StorageQuotaSyncService']
+    UPDATE_ALLOWED_SERVICES = ['UserService', 'AlertService', 'SecurityService', 'TestService', 'UserDAO', 'TenantDAO', 'RoleDAO', 'QueryDAO', 'QueryService', 'DashboardDAO', 'DashboardService', 'StorageDAO', 'StorageService', 'AlertDAO', 'SecurityDAO', 'AIDAO', 'ObservabilityDAO', 'EnterpriseDAO', 'SubscriptionDAO', 'QuotaResetService', 'QuotaTestService', 'StorageQuotaSyncService', 'StreamingConfigDAO']
     
     def __init__(self, service_name: str, service_key: str):
         """Initialize database layer with service authentication

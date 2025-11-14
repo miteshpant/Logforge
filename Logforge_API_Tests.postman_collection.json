@@ -4332,7 +4332,12 @@
 						"header": [
 							{
 								"key": "Authorization",
-								"value": "Bearer {{access_token}}",
+								"value": "Bearer {{admin_auth_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
 								"type": "text"
 							}
 						],
@@ -4423,6 +4428,291 @@
 								"observability",
 								"traces",
 								"stream"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Streaming Configuration",
+			"item": [
+				{
+					"name": "Get All Streaming Configs",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/streaming/config/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"streaming",
+								"config",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Metrics Streaming Config",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/streaming/config/metrics",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"streaming",
+								"config",
+								"metrics"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Set Metrics Streaming Config",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Example metrics streaming configuration",
+									"pm.environment.set('metrics_config', JSON.stringify({",
+									"    \"enabled\": true,",
+									"    \"sample_rate\": 0.2,",
+									"    \"min_metrics_count\": 5,",
+									"    \"include_services\": [\"web-api\", \"auth-service\"],",
+									"    \"exclude_services\": [\"health-check\"],",
+									"    \"priority_metrics\": [\"cpu_usage\", \"error_rate\", \"response_time\"],",
+									"    \"max_events_per_minute\": 200,",
+									"    \"include_errors_only\": false,",
+									"    \"min_value_change_threshold\": 0.1",
+									"}));"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{{metrics_config}}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/streaming/config/metrics",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"streaming",
+								"config",
+								"metrics"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Traces Streaming Config",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/streaming/config/traces",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"streaming",
+								"config",
+								"traces"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Set Traces Streaming Config",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Example traces streaming configuration",
+									"pm.environment.set('traces_config', JSON.stringify({",
+									"    \"enabled\": true,",
+									"    \"sample_rate\": 0.1,",
+									"    \"min_traces_count\": 3,",
+									"    \"include_services\": [\"payment-service\", \"web-api\"],",
+									"    \"exclude_services\": [\"health-check\"],",
+									"    \"min_duration_ms\": 500,",
+									"    \"include_errors_only\": false,",
+									"    \"max_events_per_minute\": 100,",
+									"    \"priority_operations\": [\"payment\", \"login\", \"checkout\"],",
+									"    \"include_status\": [\"ok\", \"error\"]",
+									"}));"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{{traces_config}}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/streaming/config/traces",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"streaming",
+								"config",
+								"traces"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Metrics Streaming Config (Reset to Defaults)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/streaming/config/metrics",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"streaming",
+								"config",
+								"metrics"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Traces Streaming Config (Reset to Defaults)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "X-Customer-ID",
+								"value": "{{tenant_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/streaming/config/traces",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"streaming",
+								"config",
+								"traces"
 							]
 						}
 					},
