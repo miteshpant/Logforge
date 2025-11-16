@@ -11,9 +11,12 @@ Handles database operations for:
 
 import json
 import uuid
+import structlog
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, Tuple
 from database_layer import DatabaseLayer
+
+logger = structlog.get_logger(__name__)
 
 
 class AIDAO:
@@ -83,12 +86,49 @@ class AIDAO:
         FROM ai_query_history_mt
         WHERE customer_id = %(customer_id)s AND id = %(query_id)s
         """
-        
+
         params = {'customer_id': customer_id, 'query_id': query_id}
         result = await self.db.fetch_one(query, params)
-        
+
         return dict(result) if result else None
-    
+
+    async def save_query_to_history(self, query_id: str, user_id: str, customer_id: str,
+                                   natural_query: str, generated_sql: str, execution_status: str,
+                                   result_count: int, execution_time_ms: int, intent_type: str,
+                                   confidence_score: float) -> bool:
+        """Save query to history for tracking and learning"""
+        from datetime import datetime, timezone
+
+        query = """
+        INSERT INTO ai_query_history_mt (
+            id, user_id, customer_id, natural_query, generated_sql,
+            execution_status, result_count, execution_time_ms, created_at
+        ) VALUES (
+            %(id)s, %(user_id)s, %(customer_id)s, %(natural_query)s, %(generated_sql)s,
+            %(execution_status)s, %(result_count)s, %(execution_time_ms)s, %(created_at)s
+        )
+        """
+
+        params = {
+            'id': query_id,
+            'user_id': user_id,
+            'customer_id': customer_id,
+            'natural_query': natural_query,
+            'generated_sql': generated_sql,
+            'execution_status': execution_status,
+            'result_count': result_count,
+            'execution_time_ms': execution_time_ms,
+            'created_at': datetime.now(timezone.utc)
+        }
+
+        try:
+            await self.db.execute_query(query, params)
+            logger.debug(f"Query saved to history: {query_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to save query to history: {e}")
+            return False
+
     async def update_query_feedback(self, query_id: str, feedback_score: int, 
                                   feedback_notes: str, customer_id: str) -> bool:
         """Update feedback for a query"""
@@ -493,7 +533,32 @@ class AIDAO:
             solutions.append(solution)
         
         return solutions
-    
+
+    async def get_knowledge_base_stats(self, customer_id: str) -> Dict[str, Any]:
+        """Get actual knowledge base statistics from database"""
+        query = """
+        SELECT
+            COUNT(*) as total_solutions,
+            MAX(created_at) as last_updated
+        FROM ai_analyses_mt
+        WHERE customer_id = %(customer_id)s
+          AND analysis_type = 'root_cause'
+        """
+
+        params = {'customer_id': customer_id}
+        result = await self.db.fetch_one(query, params)
+
+        if result:
+            return {
+                'total_solutions': result['total_solutions'],
+                'last_updated': result['last_updated'].isoformat() if result['last_updated'] else datetime.utcnow().isoformat()
+            }
+
+        return {
+            'total_solutions': 0,
+            'last_updated': datetime.utcnow().isoformat()
+        }
+
     # ==========================================
     # METRICS AND ANALYTICS
     # ==========================================
@@ -543,20 +608,25 @@ class AIDAO:
     # NATURAL LANGUAGE QUERY EXECUTION
     # ==========================================
     
+    async def execute_query(self, sql_query: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Execute a generic SQL query and return results as list of dicts"""
+        results = await self.db.fetch_all(sql_query, params)
+        return [dict(row) for row in results] if results else []
+
     async def execute_nl_query(self, sql_query: str, customer_id: str, max_results: int = 100) -> Dict[str, Any]:
         """Execute generated SQL query against logs database"""
         # Add customer_id parameter to the query if not present
         params = {'customer_id': customer_id}
-        
+
         # Execute the query with limit
         if "LIMIT" not in sql_query.upper():
             sql_query = sql_query.rstrip(';') + f" LIMIT {max_results}"
-        
+
         results = await self.db.fetch_all(sql_query, params)
-        
+
         # Convert results to list of dictionaries
         data = [dict(row) for row in results] if results else []
-        
+
         return {
             "data": data,
             "total_rows": len(data),

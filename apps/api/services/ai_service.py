@@ -232,6 +232,24 @@ class AIService:
         """Get user's natural language query history"""
         return await self.dao.get_query_history(user_id, customer_id, limit)
 
+    async def save_query_to_history(self, query_id: str, user_id: str, customer_id: str,
+                                   natural_query: str, generated_sql: str, execution_status: str,
+                                   result_count: int, execution_time_ms: int, intent_type: str,
+                                   confidence_score: float) -> bool:
+        """Save query to history for tracking and learning"""
+        return await self.dao.save_query_to_history(
+            query_id=query_id,
+            user_id=user_id,
+            customer_id=customer_id,
+            natural_query=natural_query,
+            generated_sql=generated_sql,
+            execution_status=execution_status,
+            result_count=result_count,
+            execution_time_ms=execution_time_ms,
+            intent_type=intent_type,
+            confidence_score=confidence_score
+        )
+
     async def update_query_feedback(self, query_id: str, feedback_score: int,
                                   feedback_notes: str, customer_id: str) -> bool:
         """Update feedback for a query"""
@@ -674,15 +692,14 @@ class AIService:
                         'tags': [category] if category else ['general']
                     })
 
+        # Get actual knowledge base stats
+        kb_stats = await self.dao.get_knowledge_base_stats(customer_id)
 
         return {
             'solutions': solutions[:5],  # Top 5 solutions
             'total_found': len(solutions),
             'search_terms': symptom_list,
-            'knowledge_base_stats': {
-                'total_solutions': 156,
-                'last_updated': datetime.utcnow().isoformat()
-            }
+            'knowledge_base_stats': kb_stats
         }
 
     async def add_solution(self, solution_data: Dict[str, Any], customer_id: str) -> Dict[str, Any]:
