@@ -28,17 +28,22 @@ class UserDAO:
         """Create new user in database using DatabaseLayer method"""
         try:
             # Prepare user data for DatabaseLayer's create_user method
+            # Pass custom ID if provided (for service accounts), otherwise DatabaseLayer generates one
             db_user_data = {
                 'email': user_data['email'].lower(),
                 'name': user_data['name'],
                 'password_hash': user_data['password_hash'],
                 'status': user_data.get('status', STATUS_ACTIVE),
-                'customer_id': user_data.get('customer_id', 'platform')
+                'customer_id': user_data.get('tenant_id') or user_data.get('customer_id', 'platform')
             }
-            
+
+            # Pass custom ID if provided (for service accounts)
+            if user_data.get('id'):
+                db_user_data['id'] = user_data['id']
+
             # Use DatabaseLayer's create_user method
             user_id = await self.db.create_user(db_user_data)
-            
+
             # Return the created user data by fetching it back
             created_user = await self.get_user_by_id(user_id)
             if created_user:
@@ -46,7 +51,7 @@ class UserDAO:
                 return created_user
             else:
                 raise Exception("Failed to retrieve created user")
-            
+
         except Exception as e:
             logger.error("Failed to create user in database", error=str(e), email=user_data.get('email'))
             raise e

@@ -5363,6 +5363,572 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "M7 - Enterprise",
+      "item": [
+        {
+          "name": "Authentication & Authorization",
+          "item": [
+            {
+              "name": "Configure OIDC Provider",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"provider_name\": \"Okta Production\",\n  \"provider_type\": \"okta\",\n  \"client_id\": \"abc123xyz\",\n  \"client_secret\": \"secret_key_here\",\n  \"domain\": \"company.okta.com\",\n  \"scopes\": [\"openid\", \"profile\", \"email\"],\n  \"enabled\": true\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/auth/oidc/configure",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "auth", "oidc", "configure"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "List Auth Providers",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/auth/providers",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "auth", "providers"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Generate API Key",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Production API Key\",\n  \"description\": \"API key for production integration\",\n  \"permissions\": [\"logs:read\", \"logs:write\", \"metrics:read\"],\n  \"expires_at\": \"2025-12-31T23:59:59Z\",\n  \"rate_limit\": 10000,\n  \"ip_whitelist\": [\"192.168.1.100\", \"10.0.0.0/24\"]\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/auth/api-keys",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "auth", "api-keys"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "List API Keys",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/auth/api-keys",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "auth", "api-keys"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Revoke API Key",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/auth/api-keys/key_abc123",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "auth", "api-keys", "key_abc123"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Setup MFA",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"user_id\": \"user_123\",\n  \"mfa_type\": \"totp\",\n  \"backup_codes\": true,\n  \"phone_number\": null\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/auth/mfa/setup",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "auth", "mfa", "setup"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "RBAC & Permissions",
+          "item": [
+            {
+              "name": "List Roles",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/rbac/roles",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "rbac", "roles"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Custom Role",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Security Analyst\",\n  \"description\": \"Read-only access to security logs and alerts\",\n  \"permissions\": [\"logs:read\", \"alerts:read\", \"security:view\"],\n  \"inherits_from\": \"viewer\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/rbac/roles",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "rbac", "roles"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Assign User Roles",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"roles\": [\"admin\", \"security_analyst\"],\n  \"effective_date\": \"2025-11-15T00:00:00Z\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/rbac/users/user_123/roles",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "rbac", "users", "user_123", "roles"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get User Permissions",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  },
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/rbac/permissions",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "rbac", "permissions"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Multi-Tenancy & Compliance",
+          "item": [
+            {
+              "name": "List Tenants",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/tenants",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "tenants"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Tenant",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"tenant_id\": \"tenant_new_123\",\n  \"name\": \"Acme Corporation\",\n  \"tier\": \"enterprise\",\n  \"data_residency\": \"us-east-1\",\n  \"compliance_requirements\": [\"SOC2\", \"HIPAA\", \"GDPR\"],\n  \"retention_policy\": {\"logs\": 90, \"metrics\": 365, \"traces\": 30},\n  \"resource_limits\": {\"daily_ingestion_gb\": 500, \"query_rate\": 1000}\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/tenants",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "tenants"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Tenant Settings",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"data_residency\": \"eu-west-1\",\n  \"compliance_requirements\": [\"GDPR\", \"ISO27001\"],\n  \"retention_policy\": {\"logs\": 180},\n  \"security_settings\": {\"require_mfa\": true, \"ip_whitelist_enabled\": true}\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/tenants/tenant_123/settings",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "tenants", "tenant_123", "settings"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Generate Compliance Report",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/compliance/reports?compliance_framework=SOC2&period_start=2025-11-01T00:00:00Z&period_end=2025-11-15T23:59:59Z&sections=access_controls&sections=audit_trail",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "compliance", "reports"],
+                  "query": [
+                    {"key": "compliance_framework", "value": "SOC2"},
+                    {"key": "period_start", "value": "2025-11-01T00:00:00Z"},
+                    {"key": "period_end", "value": "2025-11-15T23:59:59Z"},
+                    {"key": "sections", "value": "access_controls"},
+                    {"key": "sections", "value": "audit_trail"}
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Legal Hold",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"case_id\": \"CASE-2025-001\",\n  \"custodian\": \"legal@company.com\",\n  \"reason\": \"Litigation hold for incident investigation\",\n  \"date_range\": {\"start\": \"2025-11-01T00:00:00Z\", \"end\": \"2025-11-15T23:59:59Z\"},\n  \"scope\": {\"services\": [\"payment-service\", \"auth-service\"], \"log_levels\": [\"ERROR\", \"WARN\"]}\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/compliance/legal-hold",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "compliance", "legal-hold"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Audit Logs",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/audit-logs?start_time=2025-11-15T00:00:00Z&end_time=2025-11-15T23:59:59Z&action_types=login&action_types=config_change",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "audit-logs"],
+                  "query": [
+                    {"key": "start_time", "value": "2025-11-15T00:00:00Z"},
+                    {"key": "end_time", "value": "2025-11-15T23:59:59Z"},
+                    {"key": "action_types", "value": "login"},
+                    {"key": "action_types", "value": "config_change"}
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Enterprise Integrations",
+          "item": [
+            {
+              "name": "List Integrations",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/integrations",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "integrations"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Configure Integration - Slack",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"webhook_url\": \"https://hooks.slack.com/services/YOUR/WEBHOOK/URL\",\n  \"channel\": \"#alerts\",\n  \"bot_token\": \"xoxb-your-bot-token\",\n  \"enabled\": true,\n  \"notification_types\": [\"alert\", \"incident\", \"deployment\"]\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/integrations/slack/configure",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "integrations", "slack", "configure"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Integration Health",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/integrations/slack/status",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "integrations", "slack", "status"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Administration & Governance",
+          "item": [
+            {
+              "name": "Get Usage & Billing",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/usage/billing?period_start=2025-11-01T00:00:00Z&period_end=2025-11-30T23:59:59Z&breakdown=storage&breakdown=ingestion&breakdown=queries",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "usage", "billing"],
+                  "query": [
+                    {"key": "period_start", "value": "2025-11-01T00:00:00Z"},
+                    {"key": "period_end", "value": "2025-11-30T23:59:59Z"},
+                    {"key": "breakdown", "value": "storage"},
+                    {"key": "breakdown", "value": "ingestion"},
+                    {"key": "breakdown", "value": "queries"}
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get System Health",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/system/health",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "system", "health"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Configure Backup Policy",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"policy_name\": \"Production Backup Policy\",\n  \"schedule\": \"daily\",\n  \"retention_days\": 30,\n  \"storage_location\": \"s3://backups/logforge\",\n  \"encryption\": true,\n  \"compression\": true,\n  \"components\": [\"logs\", \"metrics\", \"config\"],\n  \"disaster_recovery\": {\"rpo_minutes\": 60, \"rto_minutes\": 120, \"geo_redundancy\": true}\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/backup/configure",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "backup", "configure"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Enterprise Metrics & Status",
+          "item": [
+            {
+              "name": "Get Enterprise Metrics",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/metrics",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "metrics"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Enterprise Health Check",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/v1/enterprise/health",
+                  "host": ["{{base_url}}"],
+                  "path": ["v1", "enterprise", "health"]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
     }
   ]
 }

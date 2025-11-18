@@ -162,14 +162,14 @@ class EnterpriseDAO:
     # ==========================================
 
     async def create_api_key(self, key_data: Dict[str, Any]) -> str:
-        """Create new API key"""
+        """Create new API key with service account linkage"""
         query = """
         INSERT INTO api_keys_enterprise_mt (
-            id, name, key_hash, tenant_id, created_by, permissions,
+            id, name, key_hash, service_account_id, tenant_id, created_by, permissions,
             rate_limit, expires_at, last_used, usage_count, is_active,
             created_at, updated_at, customer_id
         ) VALUES (
-            %(id)s, %(name)s, %(key_hash)s, %(tenant_id)s, %(created_by)s, %(permissions)s,
+            %(id)s, %(name)s, %(key_hash)s, %(service_account_id)s, %(tenant_id)s, %(created_by)s, %(permissions)s,
             %(rate_limit)s, %(expires_at)s, %(last_used)s, %(usage_count)s, %(is_active)s,
             %(created_at)s, %(updated_at)s, %(customer_id)s
         )
@@ -179,6 +179,7 @@ class EnterpriseDAO:
             'id': key_data['id'],
             'name': key_data['name'],
             'key_hash': key_data['key_hash'],
+            'service_account_id': key_data.get('service_account_id'),
             'tenant_id': key_data['tenant_id'],
             'created_by': key_data['created_by'],
             'permissions': key_data['permissions'],
@@ -223,16 +224,38 @@ class EnterpriseDAO:
         return [dict(result) for result in results]
 
     async def get_api_key_by_hash(self, key_hash: str, customer_id: str) -> Optional[Dict[str, Any]]:
-        """Get API key by hash for authentication"""
+        """Get API key by hash for authentication (scoped to customer)"""
         query = """
-        SELECT id, name, tenant_id, created_by, permissions, rate_limit,
-               expires_at, last_used, usage_count, is_active
+        SELECT id, name, service_account_id, tenant_id, customer_id, created_by,
+               permissions, rate_limit, expires_at, last_used, usage_count, is_active
         FROM api_keys_enterprise_mt
         WHERE customer_id = %(customer_id)s AND key_hash = %(key_hash)s
           AND is_active = 1 AND (expires_at IS NULL OR expires_at > now64(3))
         """
 
         params = {'customer_id': customer_id, 'key_hash': key_hash}
+        result = await self.db.fetch_one(query, params)
+
+        return dict(result) if result else None
+
+    async def get_api_key_by_hash_global(self, key_hash: str) -> Optional[Dict[str, Any]]:
+        """
+        Get API key by hash (global lookup, no customer filter)
+
+        Used during authentication when we don't know the customer_id yet.
+        The customer_id is extracted from the API key record itself.
+        """
+        query = """
+        SELECT id, name, service_account_id, tenant_id, customer_id, created_by,
+               permissions, rate_limit, expires_at, last_used, usage_count, is_active
+        FROM api_keys_enterprise_mt
+        WHERE key_hash = %(key_hash)s
+          AND is_active = 1
+          AND (expires_at IS NULL OR expires_at > now64(3))
+        LIMIT 1
+        """
+
+        params = {'key_hash': key_hash}
         result = await self.db.fetch_one(query, params)
 
         return dict(result) if result else None

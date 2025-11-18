@@ -100,26 +100,92 @@ class UserService:
         except Exception as e:
             logger.error("User creation failed", error=str(e))
             raise e
-    
+
+    async def create_service_account(self, user_id: str, email: str, tenant_id: str,
+                                    display_name: str, created_by: str) -> User:
+        """
+        Create service account user for API keys
+
+        Service accounts are special users that:
+        - Don't have passwords (can't login via UI)
+        - Are linked to API keys
+        - Have permissions via roles (like regular users)
+        - Show up in audit logs
+
+        Args:
+            user_id: Pre-generated ID (e.g., "svc_apikey_key_abc123")
+            email: Service account email (e.g., "api-key-abc@tenant.system")
+            tenant_id: Customer/tenant ID
+            display_name: Human-readable name (e.g., "API Key: Production CI/CD")
+            created_by: User ID who created this service account
+
+        Returns:
+            User object for the service account
+        """
+        try:
+            user_data = {
+                'id': user_id,
+                'email': email,
+                'tenant_id': tenant_id,
+                'name': display_name,  # Use display_name as name
+                'password_hash': '',  # Empty password - service accounts can't login
+                'status': STATUS_ACTIVE,
+                'created_at': datetime.now(timezone.utc),
+                'updated_at': datetime.now(timezone.utc),
+                'created_by': created_by,  # Track who created it
+                'is_service_account': True  # Flag to identify service accounts
+            }
+
+            # Create service account in database (skip password validation)
+            db_user = await self.user_dao.create_user(user_data)
+
+            # Convert to User model
+            user = User(
+                id=db_user['id'],
+                email=db_user['email'],
+                customer_id=tenant_id,  # Use customer_id field (database uses customer_id)
+                name=db_user['name'],
+                password_hash=db_user['password_hash'],
+                status=UserStatus(db_user['status']),
+                created_at=db_user['created_at'],
+                updated_at=db_user['updated_at'],
+                last_login_at=None,  # Service accounts never login
+                email_verified_at=None
+            )
+
+            logger.info("Service account created",
+                       service_account_id=user.id,
+                       email=user.email,
+                       created_by=created_by)
+            return user
+
+        except Exception as e:
+            logger.error("Service account creation failed",
+                        error=str(e),
+                        user_id=user_id,
+                        email=email)
+            raise e
+
     async def get_user_by_id(self, user_id: str) -> Optional[User]:
         """Get user by ID"""
         try:
             db_user = await self.user_dao.get_user_by_id(user_id)
             if not db_user:
                 return None
-            
+
             return User(
                 id=db_user['id'],
                 email=db_user['email'],
                 name=db_user['name'],
                 password_hash=db_user['password_hash'],  # Include password_hash
+                customer_id=db_user.get('customer_id', 'platform'),  # Include customer_id
                 status=UserStatus(db_user['status']),
                 created_at=db_user['created_at'],
                 updated_at=db_user['updated_at'],
                 last_login_at=db_user.get('last_login_at'),
                 email_verified_at=db_user.get('email_verified_at')
             )
-            
+
         except Exception as e:
             logger.error("Failed to get user by ID", error=str(e), user_id=user_id)
             return None

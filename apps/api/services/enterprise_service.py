@@ -223,38 +223,96 @@ class EnterpriseService:
     # API KEY MANAGEMENT
     # ==========================================
     
-    async def generate_api_key(self, customer_id: str, key_request: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate scoped API key for service integration"""
-        # Generate secure API key
+    async def generate_api_key(self, customer_id: str, key_request: Dict[str, Any], created_by_user_id: str) -> Dict[str, Any]:
+        """
+        Generate scoped API key with service account
+
+        Creates a service account user that backs this API key, allowing
+        the key to work with existing user/permission infrastructure.
+        """
+        # Generate unique IDs with shared random part for easy correlation
+        random_part = secrets.token_hex(8)
+        key_id = f"key_{random_part}"
+        service_account_id = f"svc_{random_part}"
+
+        # Step 1: Create service account user
+        from services.user_service import UserService
+        user_service = UserService()
+
+        service_account_email = f"api-key-{key_id}@{customer_id}.system"
+        display_name = f"API Key: {key_request['name']}"
+
+        service_account = await user_service.create_service_account(
+            user_id=service_account_id,
+            email=service_account_email,
+            tenant_id=customer_id,
+            display_name=display_name,
+            created_by=created_by_user_id
+        )
+
+        logger.info("Service account created for API key",
+                   service_account_id=service_account_id,
+                   key_id=key_id,
+                   created_by=created_by_user_id)
+
+        # Step 1.5: Assign role to service account
+        # API keys get tenant_admin role by default for full programmatic access
+        from services.role_service import RoleService
+        from models import UserRole
+        role_service = RoleService()
+
+        try:
+            await role_service.assign_role(
+                user_id=service_account_id,
+                tenant_id=customer_id,
+                role=UserRole.TENANT_ADMIN,
+                granted_by=created_by_user_id
+            )
+            logger.info("Role assigned to service account",
+                       service_account_id=service_account_id,
+                       role="tenant_admin",
+                       tenant_id=customer_id)
+        except Exception as e:
+            logger.error("Failed to assign role to service account",
+                        error=str(e),
+                        service_account_id=service_account_id)
+            # Continue anyway - the API key was created
+
+        # Step 2: Generate secure API key
         raw_key = secrets.token_urlsafe(32)
         api_key = f"lf_{customer_id[:8]}_{raw_key}"
         key_hash = hashlib.sha256(api_key.encode()).hexdigest()
-        
+
         # Validate permissions
         valid_permissions = [
             'logs:read', 'logs:write', 'alerts:read', 'alerts:write',
             'dashboards:read', 'dashboards:write', 'users:read', 'users:write',
-            'security:read', 'observability:read', 'ai:read', 'ai:write'
+            'security:read', 'observability:read', 'ai:read', 'ai:write',
+            'metrics:read', 'metrics:write', 'traces:read', 'traces:write'
         ]
-        
+
         requested_permissions = key_request.get('permissions', [])
         invalid_permissions = [p for p in requested_permissions if p not in valid_permissions]
         if invalid_permissions:
             raise ValueError(f"Invalid permissions: {invalid_permissions}")
-        
+
         # Parse expiration
         expires_at = None
         if key_request.get('expires_at'):
             expires_at = datetime.fromisoformat(key_request['expires_at'].replace('Z', '+00:00'))
-        
+
+        # Step 3: Create API key linked to service account
         key_data = {
-            'id': str(uuid.uuid4()),
+            'id': key_id,
             'name': key_request['name'],
+            'description': key_request.get('description', ''),
             'key_hash': key_hash,
-            'tenant_id': customer_id,  # For enterprise keys, tenant_id is the customer_id
-            'created_by': key_request.get('created_by', 'system'),
+            'service_account_id': service_account_id,  # Link to service account!
+            'tenant_id': customer_id,
+            'created_by': created_by_user_id,
             'permissions': requested_permissions,
-            'rate_limit': key_request.get('rate_limit', 1000),
+            'rate_limit': key_request.get('rate_limit', 10000),
+            'ip_whitelist': key_request.get('ip_whitelist', []),
             'expires_at': expires_at,
             'last_used': None,
             'usage_count': 0,
@@ -263,15 +321,24 @@ class EnterpriseService:
             'updated_at': datetime.utcnow(),
             'customer_id': customer_id
         }
-        
-        key_id = await self.dao.create_api_key(key_data)
-        
+
+        await self.dao.create_api_key(key_data)
+
+        logger.info("API key created and linked to service account",
+                   key_id=key_id,
+                   service_account_id=service_account_id,
+                   permissions=requested_permissions)
+
         return {
-            'key_id': key_id,
             'api_key': api_key,  # Only returned once during creation
+            'key_id': key_id,
+            'service_account_id': service_account_id,
+            'service_account_email': service_account_email,
             'name': key_request['name'],
+            'description': key_request.get('description', ''),
             'permissions': requested_permissions,
             'rate_limit': key_data['rate_limit'],
+            'ip_whitelist': key_data['ip_whitelist'],
             'expires_at': expires_at.isoformat() if expires_at else None,
             'created_at': key_data['created_at'].isoformat(),
             'warning': 'Store this API key securely. It will not be shown again.'
@@ -317,22 +384,51 @@ class EnterpriseService:
             'revoked_at': datetime.utcnow().isoformat()
         }
     
-    async def authenticate_api_key(self, api_key: str, customer_id: str) -> Optional[Dict[str, Any]]:
-        """Authenticate API key and return permissions"""
+    async def authenticate_api_key(self, api_key: str, customer_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Authenticate API key and return service account info
+
+        Args:
+            api_key: The API key to authenticate
+            customer_id: Optional customer ID for scoped lookup. If None, does global lookup.
+
+        Returns:
+            Dict with key_id, service_account_id, permissions, rate_limit, tenant_id
+            Returns None if key is invalid, expired, or revoked
+        """
         key_hash = hashlib.sha256(api_key.encode()).hexdigest()
-        key_info = await self.dao.get_api_key_by_hash(key_hash, customer_id)
-        
+
+        # Lookup key - with or without customer_id scope
+        if customer_id:
+            key_info = await self.dao.get_api_key_by_hash(key_hash, customer_id)
+        else:
+            # Global lookup (no customer_id filter)
+            key_info = await self.dao.get_api_key_by_hash_global(key_hash)
+
         if not key_info:
             return None
-        
+
+        # Check if key is expired
+        if key_info.get('expires_at'):
+            from datetime import datetime
+            if key_info['expires_at'] < datetime.utcnow():
+                logger.warning("API key expired", key_id=key_info['id'])
+                return None
+
+        # Check if key is active
+        if not key_info.get('is_active'):
+            logger.warning("API key is inactive", key_id=key_info['id'])
+            return None
+
         # Update usage tracking
-        await self.dao.update_api_key_usage(key_info['id'], customer_id)
-        
+        await self.dao.update_api_key_usage(key_info['id'], key_info['customer_id'])
+
         return {
             'key_id': key_info['id'],
+            'service_account_id': key_info.get('service_account_id'),  # NEW: Link to service account
             'permissions': key_info['permissions'],
             'rate_limit': key_info['rate_limit'],
-            'tenant_id': key_info['tenant_id']
+            'tenant_id': key_info['customer_id']  # Use customer_id from key record
         }
     
     # ==========================================

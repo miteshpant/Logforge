@@ -695,15 +695,21 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         is_admin_endpoint = self._is_admin_endpoint(request.url.path)
 
         try:
-            # Step 1: Authentication - Extract and validate JWT token
+            # Step 1: Authentication - Extract and validate JWT token or API key
             auth_context = await self._extract_authentication(request)
 
-            user = await self._validate_user_session(auth_context)
+            user = await self._validate_user_session(auth_context, request)
 
             # Step 2: Tenant Context - Extract tenant ID
-            tenant_id = request.headers.get("X-Customer-ID")
-            if not tenant_id and not request.url.path.startswith("/v1/auth/"):
-                raise HTTPException(400, "X-Customer-ID header required")
+            # For API keys, tenant_id comes from the key; for JWT, from header
+            if hasattr(request.state, "is_api_key_auth") and request.state.is_api_key_auth:
+                # API key auth - tenant_id from service account's customer_id
+                tenant_id = user.customer_id
+            else:
+                # JWT auth - require X-Customer-ID header
+                tenant_id = request.headers.get("X-Customer-ID")
+                if not tenant_id and not request.url.path.startswith("/v1/auth/"):
+                    raise HTTPException(400, "X-Customer-ID header required")
 
             # Step 3: Authorization - Verify user has access to tenant
             user_roles = []
@@ -788,23 +794,71 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         return any(path.startswith(endpoint) for endpoint in self.admin_endpoints)
 
     async def _extract_authentication(self, request: Request) -> Dict[str, Any]:
-        """Extract authentication context from request"""
+        """Extract authentication context from request (supports JWT and API keys)"""
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
             raise HTTPException(401, "Missing or invalid Authorization header")
 
         token = auth_header.split(" ")[1]
-        return {"token": token, "type": "bearer"}
 
-    async def _validate_user_session(self, auth_context: Dict[str, Any]) -> User:
-        """Validate user session from token"""
+        # Detect token type
+        if "." in token:
+            # JWT tokens have dots (header.payload.signature)
+            return {"token": token, "type": "jwt"}
+        elif token.startswith("lf_"):
+            # API keys start with "lf_"
+            return {"token": token, "type": "api_key"}
+        else:
+            raise HTTPException(401, "Invalid token format")
+
+    async def _validate_user_session(self, auth_context: Dict[str, Any], request: Request) -> User:
+        """Validate user session from token (supports both JWT and API keys)"""
         token = auth_context["token"]
-        user = await self.user_service.validate_session(token)
+        token_type = auth_context["type"]
 
-        if not user:
-            raise HTTPException(401, "Invalid or expired session")
+        if token_type == "jwt":
+            # Existing JWT flow
+            user = await self.user_service.validate_session(token)
+            if not user:
+                raise HTTPException(401, "Invalid or expired session")
+            return user
 
-        return user
+        elif token_type == "api_key":
+            # NEW: API key flow with service account loading
+            from services.enterprise_service import EnterpriseService
+            enterprise_service = EnterpriseService()
+
+            # Authenticate API key (global lookup - no customer_id needed)
+            key_info = await enterprise_service.authenticate_api_key(token, None)
+
+            if not key_info:
+                raise HTTPException(401, "Invalid API key")
+
+            # Load the REAL service account user from database
+            service_account_id = key_info.get("service_account_id")
+            if not service_account_id:
+                raise HTTPException(401, "API key not linked to service account")
+
+            user = await self.user_service.get_user_by_id(service_account_id)
+            if not user:
+                raise HTTPException(401, "Service account not found")
+
+            # Mark request as API key auth (for audit logs and tenant_id extraction)
+            request.state.auth_method = "api_key"
+            request.state.api_key_id = key_info["key_id"]
+            request.state.is_api_key_auth = True
+            request.state.api_key_permissions = key_info["permissions"]
+            request.state.api_key_rate_limit = key_info["rate_limit"]
+
+            logger.info("API key authenticated",
+                       key_id=key_info["key_id"],
+                       service_account_id=service_account_id,
+                       tenant_id=key_info["tenant_id"])
+
+            return user  # Real User object from database!
+
+        else:
+            raise HTTPException(401, "Unsupported token type")
 
     async def _validate_feature_access(self, tenant_id: str, endpoint: str) -> Dict[str, Any]:
         """Validate feature access based on subscription"""

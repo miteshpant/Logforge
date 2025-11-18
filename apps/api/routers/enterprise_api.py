@@ -125,12 +125,18 @@ async def list_auth_providers(
 @router.post("/auth/api-keys")
 async def generate_api_key(
     request: APIKeyRequest,
-    customer_id: str = Header(..., alias="X-Customer-ID")
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
 ):
-    """Generate scoped API key for service integration"""
+    """Generate scoped API key with service account"""
     try:
         enterprise_service = EnterpriseService()
-        result = await enterprise_service.generate_api_key(customer_id, request.model_dump())
+        # Pass current user ID as created_by
+        result = await enterprise_service.generate_api_key(
+            customer_id,
+            request.model_dump(),
+            created_by_user_id=current_user.id
+        )
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

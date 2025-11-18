@@ -585,6 +585,7 @@ class User(BaseModel):
     name: str = Field(..., description="Full user name")
     password_hash: Optional[str] = Field(None, description="Hashed password (not returned in API)")
     status: UserStatus = Field(UserStatus.PENDING, description="Account status")
+    customer_id: str = Field(default="platform", description="Customer/tenant ID")
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Account creation time")
     updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last update time")
     last_login_at: Optional[datetime] = Field(None, description="Last login timestamp")

@@ -763,6 +763,7 @@ CREATE TABLE IF NOT EXISTS api_keys_enterprise_mt (
     tenant_id String,
     created_by String,
     permissions Array(String),
+    service_account_id(String),
     rate_limit UInt32 DEFAULT 1000,
     expires_at Nullable(DateTime64(3)),
     last_used Nullable(DateTime64(3)),
@@ -855,31 +856,31 @@ SETTINGS index_granularity = 8192;
 CREATE TABLE IF NOT EXISTS service_topology_mt (
     id String DEFAULT generateUUIDv4(),
     customer_id String,
-    
+
     -- Core OpenTelemetry service identification
     service_name String,                    -- "web-api"
     service_version String DEFAULT 'unknown', -- "1.2.0"
     service_instance_id String DEFAULT '',  -- "web-api-pod-123" or generateUUIDv4()
     deployment_environment String DEFAULT 'production', -- "production", "staging", "dev"
-    
+
     -- Infrastructure context (Kubernetes/Container aware)
     namespace String DEFAULT '',            -- "ecommerce", "platform"
     cluster String DEFAULT '',              -- "us-west-2", "eu-central-1"
     host String DEFAULT '',                 -- "node-01.company.com"
     container_id String DEFAULT '',         -- Docker/K8s container ID
-    
+
     -- Service characteristics
     service_type Enum8('api' = 1, 'database' = 2, 'cache' = 3, 'queue' = 4, 'external' = 5, 'application' = 6),
     dependencies Array(String),             -- Array of dependent service identifiers
     endpoints Array(String),                -- Array of operation names/endpoints
-    
+
     -- Health and performance
     health_status Enum8('healthy' = 1, 'degraded' = 2, 'unhealthy' = 3, 'unknown' = 4),
     last_seen DateTime64(3),
     request_count UInt64 DEFAULT 0,         -- Total requests seen
     error_count UInt64 DEFAULT 0,           -- Total errors seen
     avg_response_time_ms Float64 DEFAULT 0, -- Average response time
-    
+
     -- Metadata and timestamps
     metadata String DEFAULT '{}',           -- JSON blob with additional service metadata
     resource_attributes String DEFAULT '{}', -- OpenTelemetry resource attributes
