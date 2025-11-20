@@ -62,6 +62,10 @@ interface DashboardMetrics {
     apiRequests: number
     alertRulesActive: number
     dataSourcesConnected: number
+    activeAlertsCount: number
+    criticalAlertsCount: number
+    highAlertsCount: number
+    securityEventsCount: number
   }
   recentAlerts: Array<{
     id: number
@@ -131,6 +135,10 @@ const defaultDashboardData: DashboardMetrics = {
     apiRequests: 0,
     alertRulesActive: 0,
     dataSourcesConnected: 0,
+    activeAlertsCount: 0,
+    criticalAlertsCount: 0,
+    highAlertsCount: 0,
+    securityEventsCount: 0,
   },
   recentAlerts: [],
   topServices: [],
@@ -160,7 +168,7 @@ const defaultDashboardData: DashboardMetrics = {
 
 export default function DashboardPage() {
   const { user, tenant, isLoading } = useAuth()
-  const { currentTimeRange } = useTimeRange()
+  const { currentTimeRange, getApiTimeRange } = useTimeRange()
   const [dashboardData, setDashboardData] = useState<DashboardMetrics>(defaultDashboardData)
   const [isFirstTime, setIsFirstTime] = useState(true) // Will check if user has ingested logs
   const [isLoadingData, setIsLoadingData] = useState(true)
@@ -193,23 +201,21 @@ export default function DashboardPage() {
       setIsLoadingData(true)
       setError(null)
 
-      // Get current time for queries - format for ClickHouse compatibility
-      const now = new Date()
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
+      // Use global time range from TimeRangeContext
+      const { start_time, end_time } = getApiTimeRange()
 
-      // Format timestamps for ClickHouse (YYYY-MM-DD HH:MM:SS format)
-      const formatForClickHouse = (date: Date) => {
-        return date.toISOString().slice(0, 19).replace('T', ' ')
+      // Format timestamps for ClickHouse (remove Z and replace T with space)
+      const formatForClickHouse = (isoString: string) => {
+        return isoString.slice(0, 19).replace('T', ' ')
       }
 
-      // Debug: Check if AI API calls are being made
-      console.log('🤖 Starting AI API calls...')
-      
+      // Debug: Check time range
+      console.log('📅 Time Range:', { start_time, end_time })
+      console.log('🤖 Starting dashboard API calls...')
+
       // Parallel API calls for dashboard metrics
       const [
-        todayLogsResult,
-        hourlyLogsResult,
+        totalLogsResult,
         storageResult,
         serviceMapResult,
         recentAlertsResult,
@@ -219,36 +225,22 @@ export default function DashboardPage() {
         aiAnalyticsResult,
         anomalyDetectionResult,
         securityDashboardResult,
-        serviceTopologyResult
+        serviceTopologyResult,
+        activeAlertsResult
       ] = await Promise.all([
-        // 1. Logs Today - Count of logs ingested today
+        // 1. Total Logs - Count of logs in selected time range
         QueryApi.executeQuery({
           query: '*',
           time_range: {
-            start: formatForClickHouse(startOfDay),
-            end: formatForClickHouse(now)
+            start: formatForClickHouse(start_time),
+            end: formatForClickHouse(end_time)
           },
           aggregations: [{ type: 'count', field: '*', alias: 'total_logs' }],
           filters: [],
           limit: 1
         }).catch((err) => {
-          console.warn('Today logs query failed:', err)
-          return { success: false, data: { total_hits: 0, query_id: '', execution_time: 0, logs: [] } }
-        }),
-
-        // 2. Hourly Logs - Count of logs in last hour
-        QueryApi.executeQuery({
-          query: '*',
-          time_range: {
-            start: formatForClickHouse(oneHourAgo),
-            end: formatForClickHouse(now)
-          },
-          aggregations: [{ type: 'count', field: '*', alias: 'hourly_logs' }],
-          filters: [],
-          limit: 1
-        }).catch((err) => {
-          console.warn('Hourly logs query failed:', err)
-          return { success: false, data: { total_hits: 0, query_id: '', execution_time: 0, logs: [] } }
+          console.warn('Total logs query failed:', err)
+          return { success: false, data: { total_hits: 0, query_id: '', execution_time: 0, logs: [], aggregations: {} } }
         }),
 
         // 3. Storage Usage - using proper TenantsApi
@@ -381,10 +373,10 @@ export default function DashboardPage() {
 
         // 11. Security Dashboard for real security intelligence data
         SecurityApi.getSecurityDashboard(currentTimeRange.value).then(result => ({
-          success: result?.success ?? true,
-          data: result?.data ?? {
+          success: true,
+          data: result ?? {
             events_by_severity: {},
-            events_last_24h: 0,
+            total_events: 0,
             top_triggered_rules: [],
             mitre_techniques: [],
             threat_intel_matches: 0,
@@ -396,7 +388,7 @@ export default function DashboardPage() {
             success: false,
             data: {
               events_by_severity: {},
-              events_last_24h: 0,
+              total_events: 0,
               top_triggered_rules: [],
               mitre_techniques: [],
               threat_intel_matches: 0,
@@ -423,13 +415,42 @@ export default function DashboardPage() {
               health_summary: { healthy: 0, warning: 0, critical: 0 }
             }
           }
+        }),
+
+        // 13. Active Alerts - for Active Alerts widget count
+        AlertsApi.listAlertEvents({
+          status: ['active'],
+          limit: 1,
+          offset: 0
+        }).then(result => ({
+          success: true,
+          data: result
+        })).catch((err) => {
+          console.warn('Active alerts query failed:', err)
+          return {
+            success: false,
+            data: { alerts: [], total: 0 }
+          }
         })
       ])
 
-      // Calculate metrics from API responses  
-      const totalLogsToday = todayLogsResult.success ? (todayLogsResult.data as any).total_count || todayLogsResult.data.total_hits : 0
-      const logsPerHour = hourlyLogsResult.success ? (hourlyLogsResult.data as any).total_count || hourlyLogsResult.data.total_hits : 0
-      
+      // Calculate metrics from API responses
+      // Debug: Log raw results to understand structure
+      console.log('📊 Raw Total Logs Result:', totalLogsResult)
+
+      // Parse aggregations.total_logs from the response
+      // Handle both wrapped {success, data} and direct response formats
+      const totalLogsData = totalLogsResult.data || totalLogsResult
+      const totalLogs = totalLogsData?.aggregations?.total_logs || 0
+
+      // Calculate logs per hour by dividing total logs by time range duration
+      const startDate = new Date(start_time)
+      const endDate = new Date(end_time)
+      const durationInHours = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60)
+      const logsPerHour = durationInHours > 0 ? Math.round(totalLogs / durationInHours) : 0
+
+      console.log('📊 Parsed - Total Logs:', totalLogs, 'Duration (hours):', durationInHours.toFixed(2), 'Logs/Hour:', logsPerHour)
+
       // Calculate storage usage - from TenantUsageMetrics
       const storageUsedGB = storageResult.success && 'metrics' in storageResult.data ? storageResult.data.metrics?.total_storage_used_gb || 0 : 0
       // Estimate percentage based on typical tenant storage limits (100GB default)
@@ -481,6 +502,30 @@ export default function DashboardPage() {
 
       // Data Sources Connected (use services detected from service map)
       const dataSourcesConnected = servicesDetected
+
+      // Process Active Alerts data - NEW for Active Alerts widget
+      const activeAlertsData = activeAlertsResult.success ? activeAlertsResult.data : null
+      console.log('🚨 Active Alerts Data:', activeAlertsData)
+      console.log('🚨 Active Alerts Total:', activeAlertsData?.total)
+      console.log('🚨 Active Alerts Array Length:', activeAlertsData?.data?.length)
+
+      // Extract total count from API response
+      const activeAlertsCount = activeAlertsData?.total || 0
+
+      // Count alerts by severity from the alerts array
+      // Note: getPaginated transforms {alerts: [...]} to {data: [...]}
+      const alerts = activeAlertsData?.data || []
+      const criticalAlertsCount = alerts.filter((alert: any) => alert.severity === 'critical').length
+      const highAlertsCount = alerts.filter((alert: any) => alert.severity === 'high').length
+
+      // Security Events count from security dashboard
+      // API returns 'total_events' not 'events_last_24h'
+      console.log('🔒 Security Dashboard Result:', securityDashboardResult)
+      console.log('🔒 Security Dashboard Data:', securityDashboardResult.data)
+      console.log('🔒 Total Events:', securityDashboardResult.data?.total_events)
+      const securityEventsCount = securityDashboardResult.success ?
+        (securityDashboardResult.data?.total_events || 0) : 0
+      console.log('🔒 Final Security Events Count:', securityEventsCount)
 
       // Process AI Intelligence data
       const aiInsightsData = aiInsightsResult.success ? aiInsightsResult.data : null
@@ -544,12 +589,12 @@ export default function DashboardPage() {
       }
 
       // Check if this is first time (no logs ingested)
-      setIsFirstTime(totalLogsToday === 0)
+      setIsFirstTime(totalLogs === 0)
 
       // Update dashboard data
       setDashboardData({
         ingestionStats: {
-          totalLogsToday,
+          totalLogsToday: totalLogs,
           logsPerHour,
           servicesDetected,
           errorRate: Math.round(errorRate * 10) / 10, // Round to 1 decimal
@@ -561,6 +606,10 @@ export default function DashboardPage() {
           apiRequests,
           alertRulesActive,
           dataSourcesConnected,
+          activeAlertsCount,
+          criticalAlertsCount,
+          highAlertsCount,
+          securityEventsCount,
         },
         recentAlerts,
         topServices,
@@ -568,7 +617,7 @@ export default function DashboardPage() {
         securityIntelligence,
         liveInvestigations: [], // TODO: Add investigation API
         businessImpact: {
-          revenueProtected: Math.round((totalLogsToday * 0.1) / 1000) * 1000, // Estimate based on logs processed
+          revenueProtected: Math.round((totalLogs * 0.1) / 1000) * 1000, // Estimate based on logs processed
           slaCompliance: uptime
         },
         serviceTopology,
@@ -588,7 +637,7 @@ export default function DashboardPage() {
     if (tenant && !isLoading) {
       loadDashboardData()
     }
-  }, [tenant?.id, isLoading]) // Only depend on tenant.id, not the entire tenant object
+  }, [tenant?.id, isLoading, currentTimeRange.value]) // Reload when time range changes
 
   if (isLoading) {
     return (
@@ -647,11 +696,12 @@ export default function DashboardPage() {
           </Alert>
         )}
 
-        {/* Key Metrics Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 lg:gap-6" data-testid="key-metrics-grid">
+        {/* Key Metrics Grid - 6 widgets in 2 rows */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3" data-testid="key-metrics-grid">
+          {/* Total Logs */}
           <Card data-testid="metric-logs-today">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Logs Today</CardTitle>
+              <CardTitle className="text-sm font-medium">Total Logs</CardTitle>
               <Database className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -671,10 +721,11 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card data-testid="metric-system-health">
+          {/* Active Alerts - NEW */}
+          <Card data-testid="metric-active-alerts" className="border-l-4 border-l-red-500">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">System Health</CardTitle>
-              <Activity className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Active Alerts</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-red-500" />
             </CardHeader>
             <CardContent>
               {isLoadingData ? (
@@ -684,15 +735,36 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <>
-                  <div className="text-2xl font-bold text-green-600" data-testid="system-uptime">{dashboardData.systemHealth.uptime}%</div>
-                  <p className="text-xs text-muted-foreground" data-testid="query-latency">
-                    {dashboardData.systemHealth.queryLatency}ms avg latency
+                  <div className="text-2xl font-bold text-red-600" data-testid="active-alerts-count">{dashboardData.systemHealth.activeAlertsCount}</div>
+                  <p className="text-xs text-muted-foreground" data-testid="alerts-severity">
+                    {dashboardData.systemHealth.criticalAlertsCount || 0} Critical, {dashboardData.systemHealth.highAlertsCount || 0} High
                   </p>
                 </>
               )}
             </CardContent>
           </Card>
 
+          {/* Security Events - NEW */}
+          <Card data-testid="metric-security-events" className="border-l-4 border-l-orange-500">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Security Events</CardTitle>
+              <Shield className="h-4 w-4 text-orange-500" />
+            </CardHeader>
+            <CardContent>
+              {isLoadingData ? (
+                <div className="space-y-2">
+                  <div className="h-8 bg-slate-200 rounded animate-pulse"></div>
+                  <div className="h-3 bg-slate-200 rounded w-28 animate-pulse"></div>
+                </div>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold text-orange-600" data-testid="security-events-count">{dashboardData.systemHealth.securityEventsCount}</div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Error Rate */}
           <Card data-testid="metric-error-rate">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Error Rate</CardTitle>
@@ -715,6 +787,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
+          {/* Storage Used */}
           <Card data-testid="metric-storage-used">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Storage Used</CardTitle>
@@ -735,6 +808,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
+          {/* API Requests */}
           <Card data-testid="metric-api-requests">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">API Requests</CardTitle>
@@ -751,28 +825,6 @@ export default function DashboardPage() {
                   <div className="text-2xl font-bold text-blue-600" data-testid="api-requests-count">{dashboardData.systemHealth.apiRequests.toLocaleString()}</div>
                   <p className="text-xs text-muted-foreground">
                     Total queries executed
-                  </p>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card data-testid="metric-alert-rules">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Alert Rules</CardTitle>
-              <Shield className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {isLoadingData ? (
-                <div className="space-y-2">
-                  <div className="h-8 bg-slate-200 rounded animate-pulse"></div>
-                  <div className="h-3 bg-slate-200 rounded w-12 animate-pulse"></div>
-                </div>
-              ) : (
-                <>
-                  <div className="text-2xl font-bold text-purple-600" data-testid="alert-rules-count">{dashboardData.systemHealth.alertRulesActive}</div>
-                  <p className="text-xs text-muted-foreground">
-                    Active monitoring rules
                   </p>
                 </>
               )}

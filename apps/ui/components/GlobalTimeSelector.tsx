@@ -116,30 +116,112 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
           <ChevronDown className={`w-4 h-4 ml-2 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
         </Button>
 
+        {/* Debug Display - Show selected time range in local timezone */}
+        <div className="absolute top-full left-0 mt-1 text-xs text-slate-600 bg-yellow-50 border border-yellow-200 rounded px-2 py-1 whitespace-nowrap z-40 font-mono">
+          <div><strong>Start (Local):</strong> {currentTimeRange.startTime.toLocaleString()}</div>
+          <div><strong>End (Local):</strong> {currentTimeRange.endTime.toLocaleString()}</div>
+          <div className="text-xs text-slate-500 mt-1 pt-1 border-t border-yellow-300">
+            <div><strong>API Start:</strong> {currentTimeRange.startTime.toISOString()}</div>
+            <div><strong>API End:</strong> {currentTimeRange.endTime.toISOString()}</div>
+          </div>
+        </div>
+
         {isOpen && (
-          <Card className="absolute top-full right-0 mt-2 w-72 shadow-xl border-0 bg-white/95 backdrop-blur-md z-50 animate-in slide-in-from-top-2 duration-200">
+          <Card className="absolute top-full right-0 mt-16 w-80 shadow-xl border-0 bg-white/95 backdrop-blur-md z-50 animate-in slide-in-from-top-2 duration-200">
             <CardContent className="p-3">
-              <div className="space-y-1">
-                {availableRanges.map((range) => (
-                  <button
-                    key={range.value}
-                    onClick={() => handleTimeRangeSelect(range)}
-                    className={`w-full flex items-center justify-between p-2 rounded-lg transition-all duration-150 ${
-                      currentTimeRange.value === range.value
-                        ? 'bg-blue-500 text-white shadow-sm'
-                        : 'hover:bg-slate-100 text-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-2">
-                      {getRangeIcon(range.value)}
-                      <span className="font-medium">{range.label}</span>
+              {!showCustomPicker ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-slate-900 text-sm">Select Time Range</h3>
+                  </div>
+
+                  <div className="space-y-1">
+                    {availableRanges.map((range) => (
+                      <button
+                        key={range.value}
+                        onClick={() => handleTimeRangeSelect(range)}
+                        className={`w-full flex items-center justify-between p-2 rounded-lg transition-all duration-150 ${
+                          currentTimeRange.value === range.value
+                            ? 'bg-blue-500 text-white shadow-sm'
+                            : 'hover:bg-slate-100 text-slate-700'
+                        }`}
+                        data-testid={`time-range-${range.value}`}
+                      >
+                        <div className="flex items-center space-x-2">
+                          {getRangeIcon(range.value)}
+                          <span className="font-medium text-sm">{range.label}</span>
+                        </div>
+                        {currentTimeRange.value === range.value && (
+                          <CheckCircle className="w-4 h-4" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Custom Range Button */}
+                  <div className="pt-2 border-t border-slate-200">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowCustomPicker(true)}
+                      className="w-full justify-between text-sm hover:bg-slate-50"
+                      data-testid="custom-range-button"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="w-4 h-4" />
+                        <span>Custom Date Range</span>
+                      </div>
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-slate-900 text-sm">Custom Range</h3>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowCustomPicker(false)}
+                      className="text-slate-500 hover:text-slate-700 h-auto py-1"
+                    >
+                      Back
+                    </Button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Start Date & Time</label>
+                      <input
+                        type="datetime-local"
+                        value={customStart}
+                        onChange={(e) => setCustomStart(e.target.value)}
+                        className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        data-testid="custom-start-input"
+                      />
                     </div>
-                    {currentTimeRange.value === range.value && (
-                      <CheckCircle className="w-4 h-4" />
-                    )}
-                  </button>
-                ))}
-              </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">End Date & Time</label>
+                      <input
+                        type="datetime-local"
+                        value={customEnd}
+                        onChange={(e) => setCustomEnd(e.target.value)}
+                        className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        data-testid="custom-end-input"
+                      />
+                    </div>
+
+                    <Button
+                      onClick={handleCustomRangeSubmit}
+                      disabled={!customStart || !customEnd}
+                      className="w-full bg-blue-500 hover:bg-blue-600 text-white text-sm py-2 rounded-lg"
+                      data-testid="apply-custom-range"
+                    >
+                      Apply Custom Range
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
