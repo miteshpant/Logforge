@@ -43,11 +43,12 @@ class ObservabilityEventHandler(EventHandler):
             return True
 
     async def _handle_traces_batch_ingested(self, event: BaseEvent) -> bool:
-        """Handle traces.batch.ingested event with field normalization and ObservabilityService"""
+        """Handle traces.batch.ingested event with field normalization and batch aggregation"""
         try:
             # Import here to avoid circular dependencies
             from services.observability_service import ObservabilityService
             from services.simple_otel_mapper import normalize_otel_service_simple
+            from collections import defaultdict
 
             start_time = datetime.now(timezone.utc)
             customer_id = event.customer_id
@@ -60,7 +61,7 @@ class ObservabilityEventHandler(EventHandler):
                 return True
 
             logger.info(
-                "Processing traces batch ingestion event with field normalization",
+                "Processing traces batch with aggregated service metrics",
                 customer_id=customer_id,
                 span_count=len(spans_data),
                 batch_id=event_data.get("batch_id")
@@ -72,7 +73,31 @@ class ObservabilityEventHandler(EventHandler):
             # Process each span with field normalization
             ingested_spans = []
             errors = []
-            normalization_errors = []
+
+            # Build span index for dependency resolution within batch
+            span_index = {}  # {span_id: {service_name, operation_name}}
+
+            # **NEW: Aggregate service metrics across the batch**
+            service_metrics = defaultdict(lambda: {
+                'request_count': 0,
+                'error_count': 0,
+                'total_duration_ms': 0,
+                'service_name': '',
+                'service_instance_id': '',
+                'customer_id': customer_id,
+                'last_seen': datetime.now(timezone.utc),
+                'resource_attributes': {},
+                # Infrastructure fields from normalization
+                'namespace': None,
+                'cluster': None,
+                'host': None,
+                'container_id': None,
+                'deployment_environment': None,
+                'service_version': None,
+                # Track dependencies (set to avoid duplicates)
+                'dependencies': set(),
+                'endpoints': set()
+            })
 
             for span_data in spans_data:
                 try:
@@ -85,23 +110,74 @@ class ObservabilityEventHandler(EventHandler):
                         logger.error("Received empty span dict from publisher")
                         continue
 
-                    logger.info(f"Processing span dict with {len(span_data)} fields: {list(span_data.keys())}")
-                    logger.info(f"Custom fields check - namespace: {span_data.get('namespace')}, cluster: {span_data.get('cluster')}, stage: {span_data.get('stage')}")
+                    logger.debug(f"Processing span dict with {len(span_data)} fields: {list(span_data.keys())}")
 
                     # Step 1: Apply field normalization using otel_field_mapping.yml
                     normalized_span = normalize_otel_service_simple(span_data)
                     logger.debug(
                         "Applied OTel field normalization",
                         customer_id=customer_id,
-                        original_span_id=span_data.get('span_id') or span_data.get('spanId') or span_data.get('id'),
                         normalized_span_id=normalized_span.get('span_id'),
-                        original_service=span_data.get('service_name') or span_data.get('serviceName') or span_data.get('service', {}).get('name'),
                         normalized_service=normalized_span.get('service_name')
                     )
 
-                    # Step 2: Process the normalized span (includes traces_mt storage and service topology update)
+                    # Step 2: Save span to traces_mt (WITHOUT updating service topology yet)
                     span_id = await observability_service.ingest_trace_span(normalized_span, customer_id)
                     ingested_spans.append(span_id)
+
+                    # **NEW: Aggregate metrics for this service**
+                    service_name = normalized_span.get('service_name', 'unknown')
+                    resource = normalized_span.get('resource', {})
+                    # Use normalized service_instance_id from top level (not from resource)
+                    service_instance_id = normalized_span.get('service_instance_id', '')
+                    operation_name = normalized_span.get('operation_name', '')
+                    current_span_id = normalized_span.get('span_id')
+                    parent_span_id = normalized_span.get('parent_span_id')
+
+                    # Build span index for dependency resolution
+                    if current_span_id:
+                        span_index[current_span_id] = {
+                            'service_name': service_name,
+                            'operation_name': operation_name
+                        }
+
+                    service_key = (service_name, service_instance_id)
+
+                    metrics = service_metrics[service_key]
+                    metrics['service_name'] = service_name
+                    metrics['service_instance_id'] = service_instance_id
+                    metrics['request_count'] += 1
+                    metrics['error_count'] += 1 if normalized_span.get('status') == 'error' else 0
+                    metrics['total_duration_ms'] += normalized_span.get('duration_ms', 0)
+                    metrics['resource_attributes'] = resource  # Keep latest resource attributes
+
+                    # Track endpoints (operation names)
+                    if operation_name:
+                        metrics['endpoints'].add(operation_name)
+
+                    # Track dependencies from parent-child relationships
+                    if parent_span_id and parent_span_id in span_index:
+                        parent_service = span_index[parent_span_id]['service_name']
+                        if parent_service != service_name:  # Don't add self as dependency
+                            metrics['dependencies'].add(parent_service)
+
+                    # **NEW: Capture normalized infrastructure fields**
+                    metrics['namespace'] = normalized_span.get('namespace', metrics['namespace'])
+                    metrics['cluster'] = normalized_span.get('cluster', metrics['cluster'])
+                    metrics['host'] = normalized_span.get('host', metrics['host'])
+                    metrics['container_id'] = normalized_span.get('container_id', metrics['container_id'])
+                    metrics['deployment_environment'] = normalized_span.get('deployment_environment', metrics['deployment_environment'])
+                    metrics['service_version'] = normalized_span.get('service_version', metrics['service_version'])
+
+                    # Update last_seen to latest timestamp
+                    span_start_time = normalized_span.get('start_time')
+                    if span_start_time:
+                        try:
+                            span_timestamp = datetime.fromisoformat(span_start_time.replace('Z', '+00:00'))
+                            if span_timestamp > metrics['last_seen']:
+                                metrics['last_seen'] = span_timestamp
+                        except:
+                            pass
 
                 except Exception as span_error:
                     error_msg = f"Failed to ingest span {span_data.get('span_id', 'unknown')}: {span_error}"
@@ -113,6 +189,41 @@ class ObservabilityEventHandler(EventHandler):
                         error=str(span_error)
                     )
 
+            # **NEW: Update service_topology ONCE per service (not per span)**
+            services_updated = 0
+            for service_key, metrics in service_metrics.items():
+                try:
+                    avg_response_time = (
+                        metrics['total_duration_ms'] / metrics['request_count']
+                        if metrics['request_count'] > 0 else 0
+                    )
+
+                    await observability_service.update_service_metrics_aggregated(
+                        customer_id=customer_id,
+                        service_name=metrics['service_name'],
+                        service_instance_id=metrics['service_instance_id'],
+                        request_count_increment=metrics['request_count'],
+                        error_count_increment=metrics['error_count'],
+                        avg_response_time_ms=avg_response_time,
+                        last_seen=metrics['last_seen'],
+                        resource_attributes=metrics['resource_attributes'],
+                        # Pass normalized infrastructure fields
+                        namespace=metrics['namespace'],
+                        cluster=metrics['cluster'],
+                        host=metrics['host'],
+                        container_id=metrics['container_id'],
+                        deployment_environment=metrics['deployment_environment'],
+                        service_version=metrics['service_version'],
+                        # Pass dependencies and endpoints
+                        dependencies=list(metrics['dependencies']),
+                        endpoints=list(metrics['endpoints'])
+                    )
+
+                    services_updated += 1
+
+                except Exception as e:
+                    logger.error(f"Failed to update service metrics for {service_key}: {e}")
+
             # Calculate processing time
             processing_time = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
 
@@ -121,12 +232,13 @@ class ObservabilityEventHandler(EventHandler):
             error_count = len(errors)
 
             logger.info(
-                "Traces batch ingestion completed",
+                "Traces batch ingestion completed with aggregated metrics",
                 customer_id=customer_id,
                 batch_id=event_data.get("batch_id"),
                 total_spans=len(spans_data),
                 successful_spans=success_count,
                 failed_spans=error_count,
+                services_updated=services_updated,
                 processing_time_ms=processing_time
             )
 

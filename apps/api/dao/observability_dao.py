@@ -366,56 +366,124 @@ class ObservabilityDAO:
     # Service Topology Operations
 
     async def save_service_topology(self, service_data: Dict[str, Any]) -> str:
-        """Save service topology information with Phase 3 schema"""
+        """Save or update service topology information with Phase 3 schema"""
         try:
-            service_id = service_data.get("id", str(uuid.uuid4()))
-
-            query = """
-            INSERT INTO service_topology_mt (
-                id, customer_id, service_name, service_version, service_instance_id,
-                deployment_environment, namespace, cluster, host, container_id,
-                service_type, dependencies, endpoints, health_status, last_seen,
-                request_count, error_count, avg_response_time_ms, metadata,
-                resource_attributes, created_at, updated_at
-            ) VALUES (
-                %(id)s, %(customer_id)s, %(service_name)s, %(service_version)s, %(service_instance_id)s,
-                %(deployment_environment)s, %(namespace)s, %(cluster)s, %(host)s, %(container_id)s,
-                %(service_type)s, %(dependencies)s, %(endpoints)s, %(health_status)s, %(last_seen)s,
-                %(request_count)s, %(error_count)s, %(avg_response_time_ms)s, %(metadata)s,
-                %(resource_attributes)s, %(created_at)s, %(updated_at)s
-            )
-            """
-
-            # Extract OpenTelemetry resource attributes
+            # Extract OpenTelemetry resource attributes first
             resource = service_data.get("resource_attributes", service_data.get("attributes", {}))
 
-            params = {
-                "id": service_id,
-                "customer_id": service_data.get("customer_id", "default"),
-                "service_name": service_data.get("service_name", ""),
-                "service_version": resource.get("service.version", service_data.get("service_version", "unknown")),
-                "service_instance_id": resource.get("service.instance.id", service_data.get("service_instance_id", "")),
-                "deployment_environment": resource.get("deployment.environment", service_data.get("deployment_environment", "production")),
-                "namespace": resource.get("k8s.namespace.name", service_data.get("namespace", "")),
-                "cluster": resource.get("k8s.cluster.name", service_data.get("cluster", "")),
-                "host": resource.get("host.name", service_data.get("host", "")),
-                "container_id": resource.get("container.id", service_data.get("container_id", "")),
-                "service_type": service_data.get("service_type", "application"),
-                "dependencies": service_data.get("dependencies", []),  # Pass as list, not JSON string
-                "endpoints": service_data.get("endpoints", []),        # Pass as list, not JSON string
-                "health_status": service_data.get("health_status", "unknown"),
-                "last_seen": service_data.get("last_seen", datetime.now(timezone.utc)),
-                "request_count": service_data.get("request_count", 0),
-                "error_count": service_data.get("error_count", 0),
-                "avg_response_time_ms": service_data.get("avg_response_time_ms", 0.0),
-                "metadata": json.dumps(service_data.get("metadata", {})),
-                "resource_attributes": json.dumps(resource),
-                "created_at": datetime.now(timezone.utc),
-                "updated_at": datetime.now(timezone.utc)
-            }
+            customer_id = service_data.get("customer_id", "default")
+            service_name = service_data.get("service_name", "")
+            service_instance_id = resource.get("service.instance.id", service_data.get("service_instance_id", ""))
 
-            await self.db.execute_query(query, params)
-            logger.debug(f"Service topology saved: {service_id}")
+            # Check if service already exists based on service_name, customer_id, and instance_id
+            # This creates a unique key for the service
+            existing_query = """
+            SELECT id, request_count, error_count
+            FROM service_topology_mt
+            WHERE customer_id = %(customer_id)s
+              AND service_name = %(service_name)s
+              AND service_instance_id = %(service_instance_id)s
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """
+
+            existing_result = await self.db.execute_query(existing_query, {
+                "customer_id": customer_id,
+                "service_name": service_name,
+                "service_instance_id": service_instance_id
+            })
+
+            # Determine if this is an update or insert
+            if existing_result and len(existing_result) > 0:
+                # Update existing service with new last_seen and metrics
+                service_id = existing_result[0]["id"]
+                existing_request_count = existing_result[0].get("request_count", 0)
+                existing_error_count = existing_result[0].get("error_count", 0)
+
+                # Increment counts (handle None values properly)
+                request_count_increment = service_data.get("request_count")
+                if request_count_increment is None:
+                    request_count_increment = 1
+                error_count_increment = service_data.get("error_count")
+                if error_count_increment is None:
+                    error_count_increment = 0
+
+                new_request_count = existing_request_count + request_count_increment
+                new_error_count = existing_error_count + error_count_increment
+
+                query = """
+                ALTER TABLE service_topology_mt
+                UPDATE
+                    last_seen = %(last_seen)s,
+                    request_count = %(request_count)s,
+                    error_count = %(error_count)s,
+                    avg_response_time_ms = %(avg_response_time_ms)s,
+                    health_status = %(health_status)s,
+                    updated_at = %(updated_at)s
+                WHERE id = %(id)s AND customer_id = %(customer_id)s
+                """
+
+                params = {
+                    "id": service_id,
+                    "customer_id": customer_id,
+                    "last_seen": datetime.now(timezone.utc),
+                    "request_count": new_request_count,
+                    "error_count": new_error_count,
+                    "avg_response_time_ms": service_data.get("avg_response_time_ms", 0.0),
+                    "health_status": service_data.get("health_status", "unknown"),
+                    "updated_at": datetime.now(timezone.utc)
+                }
+
+                await self.db.execute_query(query, params)
+                logger.debug(f"Service topology updated: {service_id} (last_seen, request_count: {new_request_count})")
+
+            else:
+                # Insert new service
+                service_id = service_data.get("id", str(uuid.uuid4()))
+
+                query = """
+                INSERT INTO service_topology_mt (
+                    id, customer_id, service_name, service_version, service_instance_id,
+                    deployment_environment, namespace, cluster, host, container_id,
+                    service_type, dependencies, endpoints, health_status, last_seen,
+                    request_count, error_count, avg_response_time_ms, metadata,
+                    resource_attributes, created_at, updated_at
+                ) VALUES (
+                    %(id)s, %(customer_id)s, %(service_name)s, %(service_version)s, %(service_instance_id)s,
+                    %(deployment_environment)s, %(namespace)s, %(cluster)s, %(host)s, %(container_id)s,
+                    %(service_type)s, %(dependencies)s, %(endpoints)s, %(health_status)s, %(last_seen)s,
+                    %(request_count)s, %(error_count)s, %(avg_response_time_ms)s, %(metadata)s,
+                    %(resource_attributes)s, %(created_at)s, %(updated_at)s
+                )
+                """
+
+                params = {
+                    "id": service_id,
+                    "customer_id": service_data.get("customer_id", "default"),
+                    "service_name": service_data.get("service_name", ""),
+                    "service_version": resource.get("service.version", service_data.get("service_version", "unknown")),
+                    "service_instance_id": resource.get("service.instance.id", service_data.get("service_instance_id", "")),
+                    "deployment_environment": resource.get("deployment.environment", service_data.get("deployment_environment", "production")),
+                    "namespace": resource.get("k8s.namespace.name", service_data.get("namespace", "")),
+                    "cluster": resource.get("k8s.cluster.name", service_data.get("cluster", "")),
+                    "host": resource.get("host.name", service_data.get("host", "")),
+                    "container_id": resource.get("container.id", service_data.get("container_id", "")),
+                    "service_type": service_data.get("service_type", "application"),
+                    "dependencies": service_data.get("dependencies", []),  # Pass as list, not JSON string
+                    "endpoints": service_data.get("endpoints", []),        # Pass as list, not JSON string
+                    "health_status": service_data.get("health_status", "unknown"),
+                    "last_seen": service_data.get("last_seen", datetime.now(timezone.utc)),
+                    "request_count": service_data.get("request_count", 0),
+                    "error_count": service_data.get("error_count", 0),
+                    "avg_response_time_ms": service_data.get("avg_response_time_ms", 0.0),
+                    "metadata": json.dumps(service_data.get("metadata", {})),
+                    "resource_attributes": json.dumps(resource),
+                    "created_at": datetime.now(timezone.utc),
+                    "updated_at": datetime.now(timezone.utc)
+                }
+
+                await self.db.execute_query(query, params)
+                logger.debug(f"Service topology saved: {service_id}")
 
             return service_id
 
@@ -732,17 +800,17 @@ class ObservabilityDAO:
                 "namespace": service_data.get("namespace", None),
                 "cluster": service_data.get("cluster", None),
                 "host": service_data.get("host", None),
-                "last_seen": service_data.get("last_seen", None),
-                "request_count": service_data.get("request_count", None),
-                "error_count": service_data.get("error_count", None),
-                "avg_response_time_ms": service_data.get("avg_response_time_ms", None),
+                "last_seen": service_data.get("last_seen", datetime.now(timezone.utc)),  # Always set to current time
+                "request_count": service_data.get("request_count", 1),  # Default to 1 for this span
+                "error_count": service_data.get("error_count", 0),
+                "avg_response_time_ms": service_data.get("avg_response_time_ms", 0.0),
                 "container_id" : service_data.get("container_id", None)
             }
             existing = await self.db.execute_query(check_query, check_params)
 
             if existing:
                 # For ReplacingMergeTree, INSERT new record with same composite key to replace
-                service_topology_data[id] = existing[0]["id"]
+                service_topology_data["id"] = existing[0]["id"]  # Fixed: added quotes around "id"
 
             return await self.save_service_topology(service_topology_data)
 
