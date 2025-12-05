@@ -242,9 +242,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUserRole(userRole) // Use actual role from JWT token
         setPermissions(['logs:read', 'analytics:read', 'dashboards:read'])
         setIsAuthenticated(true)
-        
-        // Step 8: Redirect to dashboard
-        router.push('/dashboard')
+
+        // Step 8: Redirect to centrum (default landing page)
+        router.push('/centrum')
       } else {
         throw new Error(loginResponse.message || 'Login failed')
       }

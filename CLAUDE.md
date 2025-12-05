@@ -3,18 +3,18 @@
 
 ---
 
-## <¯ Objective
+## <ï¿½ Objective
 
 Implement production-ready OIDC/SSO authentication with subdomain-based tenant routing:
-- `acme.logforge.io` ’ Acme Corp's OIDC configuration
-- `globex.logforge.io` ’ Globex Inc's OIDC configuration
+- `acme.logforge.io` ï¿½ Acme Corp's OIDC configuration
+- `globex.logforge.io` ï¿½ Globex Inc's OIDC configuration
 - Automatic user provisioning from OIDC provider
 - Role mapping from OIDC groups to Logforge roles
 - Enterprise-grade security (PKCE, state validation, token verification)
 
 ---
 
-## =Ë Implementation Phases
+## =ï¿½ Implementation Phases
 
 ### Phase 1: Infrastructure & Subdomain Detection (2 days)
 
@@ -23,7 +23,7 @@ Implement production-ready OIDC/SSO authentication with subdomain-based tenant r
 #### 1.1 DNS Configuration
 ```bash
 # Add wildcard DNS record
-*.logforge.io  ’  A  ’  YOUR_SERVER_IP
+*.logforge.io  ï¿½  A  ï¿½  YOUR_SERVER_IP
 ```
 
 #### 1.2 SSL Certificate
@@ -100,7 +100,7 @@ class TenantDetectionMiddleware(BaseHTTPMiddleware):
             if subdomain in ['www', 'api', 'app']:
                 # Check if there's another subdomain
                 if len(parts) >= 4:
-                    return parts[1]  # e.g., api.acme.logforge.io ’ "acme"
+                    return parts[1]  # e.g., api.acme.logforge.io ï¿½ "acme"
                 return None
 
             return subdomain
@@ -864,7 +864,7 @@ async def validate_id_token_with_jwks(self, id_token: str, provider_config: Dict
 
 ---
 
-## =Ê Database Schema Updates
+## =ï¿½ Database Schema Updates
 
 ### Tenants Table
 ```sql
@@ -888,12 +888,12 @@ TTL: 600 seconds (10 minutes)
 
 ---
 
-## =€ Deployment Steps
+## =ï¿½ Deployment Steps
 
 ### 1. DNS Configuration
 ```bash
 # Add wildcard A record
-*.logforge.io  ’  YOUR_SERVER_IP
+*.logforge.io  ï¿½  YOUR_SERVER_IP
 ```
 
 ### 2. SSL Certificate
@@ -939,7 +939,7 @@ docker-compose up -d --build
 
 ---
 
-## =Ú Customer Setup Guide
+## =ï¿½ Customer Setup Guide
 
 ### For Tenant Admins
 
@@ -957,7 +957,7 @@ docker-compose up -d --build
 
 4. **Map Groups to Roles**
    - Configure group mapping in OIDC provider settings
-   - Example: `logforge-admins` ’ `tenant_admin`
+   - Example: `logforge-admins` ï¿½ `tenant_admin`
 
 5. **Test Login**
    - Visit `https://acme.logforge.io/auth/oidc/login`
@@ -966,7 +966,7 @@ docker-compose up -d --build
 
 ---
 
-## <¯ Success Metrics
+## <ï¿½ Success Metrics
 
 - **Authentication Time**: <3 seconds from login to dashboard
 - **Security**: 100% OIDC flows use PKCE + state + nonce
@@ -976,9 +976,9 @@ docker-compose up -d --build
 
 ---
 
-## =Ë Implementation Checklist
+## =ï¿½ Implementation Checklist
 
-### Phase 1: Infrastructure ó
+### Phase 1: Infrastructure ï¿½
 - [ ] Configure wildcard DNS
 - [ ] Install wildcard SSL certificate
 - [ ] Implement TenantDetectionMiddleware
@@ -986,7 +986,7 @@ docker-compose up -d --build
 - [ ] Update tenant creation to generate/validate subdomains
 - [ ] Test subdomain routing without OIDC
 
-### Phase 2: OIDC Core ó
+### Phase 2: OIDC Core ï¿½
 - [ ] Implement OIDCService (provider discovery, authorization, callback)
 - [ ] Create OIDC authentication endpoints
 - [ ] Implement PKCE flow
@@ -994,14 +994,14 @@ docker-compose up -d --build
 - [ ] Implement ID token validation
 - [ ] Test with Auth0
 
-### Phase 3: Security & Provisioning ó
+### Phase 3: Security & Provisioning ï¿½
 - [ ] Setup Redis for session storage
 - [ ] Implement OIDC group to role mapping
 - [ ] Implement proper JWT signature validation
 - [ ] Auto-provision users on first login
 - [ ] Sync user profiles from OIDC
 
-### Phase 4: Testing & Docs ó
+### Phase 4: Testing & Docs ï¿½
 - [ ] End-to-end testing with Auth0
 - [ ] Test with Okta
 - [ ] Create customer setup documentation
@@ -1021,7 +1021,7 @@ pip install httpx          # Async HTTP client for OIDC calls
 
 ---
 
-## =Þ Support
+## =ï¿½ Support
 
 For questions or issues:
 - Documentation: `/docs/wiki/knowledge_base/M7-enterprise-features/OIDC-SSO-Architecture.md`

@@ -58,7 +58,7 @@ interface DashboardMetrics {
   systemHealth: {
     uptime: number
     queryLatency: number
-    storageUsed: number
+    totalRequests: number
     apiRequests: number
     alertRulesActive: number
     dataSourcesConnected: number
@@ -131,7 +131,7 @@ const defaultDashboardData: DashboardMetrics = {
   systemHealth: {
     uptime: 0,
     queryLatency: 0,
-    storageUsed: 0,
+    totalRequests: 0,
     apiRequests: 0,
     alertRulesActive: 0,
     dataSourcesConnected: 0,
@@ -255,27 +255,20 @@ export default function DashboardPage() {
           }
         }),
 
-        // 4. Service Map for system health and error rates
-        ObservabilityApi.getServiceMap().then(result => ({
-          success: result?.success ?? true,
-          data: result?.data ?? { 
-            services: [],
-            metrics: { 
-              overall_error_rate: 0, 
-              avg_response_time: 0,
-              total_services: 0 
-            } 
+        // 4. Service Metrics Summary (Optimized - uses aggregation in ClickHouse)
+        ObservabilityApi.getServiceMetricsSummary().then(result => ({
+          success: true,
+          data: result?.data || result
+        })).catch(() => ({
+          success: false,
+          data: {
+            total_errors: 0,
+            total_requests: 0,
+            error_rate_percent: 0,
+            avg_response_time_ms: 0,
+            total_services: 0,
+            active_services: 0
           }
-        })).catch(() => ({ 
-          success: false, 
-          data: { 
-            services: [],
-            metrics: { 
-              overall_error_rate: 0, 
-              avg_response_time: 0,
-              total_services: 0 
-            } 
-          } 
         })),
 
         // 5. Recent Alerts
@@ -399,12 +392,8 @@ export default function DashboardPage() {
 
         // 12. Service Map for real service topology data
         ObservabilityApi.getServiceMap().then(result => ({
-          success: result?.success ?? true,
-          data: result?.data ?? {
-            services: [],
-            dependencies: [],
-            health_summary: { healthy: 0, warning: 0, critical: 0 }
-          }
+          success: true,
+          data: result?.data || result  // Handle both wrapped and direct response formats
         })).catch((err) => {
           console.warn('Service map query failed:', err)
           return {
@@ -458,11 +447,15 @@ export default function DashboardPage() {
       const storageUsedPercentage = Math.min((storageUsedGB / estimatedStorageLimit) * 100, 100)
       const storageUsed = Math.round(storageUsedPercentage * 10) / 10
       
-      // System health from service map
-      const serviceMapData = serviceMapResult.success ? serviceMapResult.data : null
-      const errorRate = serviceMapData?.metrics?.overall_error_rate || 0
-      const avgLatency = serviceMapData?.metrics?.avg_response_time || 0
-      const servicesDetected = serviceMapData?.metrics?.total_services || 0
+      // System health from optimized service metrics summary (pre-aggregated in ClickHouse)
+      const metricsSummary = serviceMapResult.success ? serviceMapResult.data : null
+
+      // Extract pre-calculated values from the optimized endpoint
+      const totalRequests = metricsSummary?.total_requests || 0
+      const totalErrors = metricsSummary?.total_errors || 0
+      const errorRate = metricsSummary?.error_rate_percent || 0
+      const servicesDetected = metricsSummary?.active_services || 0
+      const avgLatency = metricsSummary?.avg_response_time_ms || 0
       
       // Calculate uptime (mock calculation - would need real health endpoint)
       const uptime = errorRate < 5 ? 99.9 : errorRate < 10 ? 99.5 : 99.0
@@ -602,7 +595,7 @@ export default function DashboardPage() {
         systemHealth: {
           uptime: Math.round(uptime * 100) / 100, // Round to 2 decimals
           queryLatency: Math.round(avgLatency),
-          storageUsed, // Already rounded in calculation above
+          totalRequests, // Total requests across all services
           apiRequests,
           alertRulesActive,
           dataSourcesConnected,
@@ -787,22 +780,24 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Storage Used */}
-          <Card data-testid="metric-storage-used">
+          {/* Total Requests */}
+          <Card data-testid="metric-total-requests">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Storage Used</CardTitle>
-              <Server className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
+              <Activity className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               {isLoadingData ? (
                 <div className="space-y-2">
                   <div className="h-8 bg-slate-200 rounded animate-pulse"></div>
-                  <div className="h-2 bg-slate-200 rounded animate-pulse"></div>
+                  <div className="h-3 bg-slate-200 rounded w-24 animate-pulse"></div>
                 </div>
               ) : (
                 <>
-                  <div className="text-2xl font-bold" data-testid="storage-percentage">{dashboardData.systemHealth.storageUsed}%</div>
-                  <Progress value={dashboardData.systemHealth.storageUsed} className="mt-2" data-testid="storage-progress" />
+                  <div className="text-2xl font-bold text-blue-600" data-testid="total-requests-count">{dashboardData.systemHealth.totalRequests.toLocaleString()}</div>
+                  <p className="text-xs text-muted-foreground">
+                    Across all services
+                  </p>
                 </>
               )}
             </CardContent>

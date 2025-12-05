@@ -517,6 +517,43 @@ class ObservabilityDAO:
             logger.error(f"Failed to get service topology: {e}")
             raise
 
+    async def get_service_metrics_summary(self, customer_id: str) -> Dict[str, Any]:
+        """
+        Get aggregated service metrics summary - optimized for dashboard widgets.
+        Returns total requests, errors, error rate, and avg response time.
+        Much faster than fetching all services and aggregating in application layer.
+        """
+        try:
+            query = """
+            SELECT
+                sum(error_count) as total_errors,
+                sum(request_count) as total_requests,
+                (sum(error_count) * 100.0) / nullIf(sum(request_count), 0) as error_rate_percent,
+                avg(avg_response_time_ms) as avg_response_time_ms,
+                count() as total_services,
+                countIf(request_count > 0) as active_services
+            FROM service_topology_mt
+            WHERE customer_id = %(customer_id)s
+            """
+
+            results = await self.db.execute_query(query, {"customer_id": customer_id})
+
+            if not results or len(results) == 0:
+                return {
+                    "total_errors": 0,
+                    "total_requests": 0,
+                    "error_rate_percent": 0.0,
+                    "avg_response_time_ms": 0.0,
+                    "total_services": 0,
+                    "active_services": 0
+                }
+
+            return results[0]
+
+        except Exception as e:
+            logger.error(f"Failed to get service metrics summary: {e}")
+            raise
+
     async def save_service_dependency(self, dependency_data: Dict[str, Any]) -> str:
         """Save service dependency mapping"""
         try:

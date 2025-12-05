@@ -415,6 +415,40 @@ async def get_service_map(
         raise HTTPException(status_code=500, detail=f"Failed to get service map: {str(e)}")
 
 
+@router.get("/service-metrics-summary")
+async def get_service_metrics_summary(
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """
+    Get aggregated service metrics summary - optimized endpoint for dashboards.
+
+    Returns pre-calculated totals from ClickHouse aggregation instead of fetching
+    all services and aggregating in the application layer.
+
+    Much faster than /service-map when you only need totals for widgets.
+
+    Response:
+    {
+        "total_errors": 87,
+        "total_requests": 435,
+        "error_rate_percent": 20.0,
+        "avg_response_time_ms": 45.0,
+        "total_services": 5,
+        "active_services": 3
+    }
+    """
+    try:
+        observability_service = ObservabilityService()
+
+        summary = await observability_service.get_service_metrics_summary(customer_id)
+
+        return summary
+
+    except Exception as e:
+        logger.error("Failed to get service metrics summary", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to get service metrics summary: {str(e)}")
+
+
 @router.get("/apm/overview")
 async def get_apm_overview(
     time_range_hours: int = 24,

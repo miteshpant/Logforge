@@ -40,9 +40,15 @@ import PWASupport from '@/components/PWASupport'
 
 const navigation = [
   {
+    name: 'Centrum',
+    href: '/centrum',
+    icon: Home,
+    description: 'Central command center'
+  },
+  {
     name: 'Overview',
     href: '/dashboard',
-    icon: Home,
+    icon: BarChart3,
     description: 'System overview and health metrics'
   },
   {

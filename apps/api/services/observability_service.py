@@ -334,6 +334,13 @@ class ObservabilityService:
         """Get complete service topology map"""
         return await self.dao.get_service_topology(customer_id)
 
+    async def get_service_metrics_summary(self, customer_id: str) -> Dict[str, Any]:
+        """
+        Get aggregated service metrics summary - optimized for dashboard.
+        Returns pre-calculated totals instead of fetching all services.
+        """
+        return await self.dao.get_service_metrics_summary(customer_id)
+
     async def update_service_metrics_aggregated(self, customer_id: str, service_name: str,
                                                service_instance_id: str,
                                                request_count_increment: int,
