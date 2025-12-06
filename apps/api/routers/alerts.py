@@ -198,7 +198,7 @@ async def alert_engine_stats(customer_id: str = MiddlewareTenant):
     """Get detailed alert engine statistics"""
     try:
         stats = await alert_service.get_alert_stats(customer_id)
-        
+
         return {
             "rules": {
                 "total": stats.get("total_rules", 0),
@@ -221,9 +221,40 @@ async def alert_engine_stats(customer_id: str = MiddlewareTenant):
             },
             "customer_id": customer_id
         }
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get alert engine stats: {str(e)}")
+
+@router.get("/stats/overview")
+async def get_alert_overview_stats(
+    start_time: str,
+    end_time: str,
+    customer_id: str = MiddlewareTenant
+):
+    """
+    Get alert statistics grouped by severity and status within a time range
+
+    Returns alert counts grouped by:
+    - Severity (critical, high, medium, low)
+    - Status (active/triggered, acknowledged, resolved)
+
+    Query params:
+    - start_time: ISO format datetime string
+    - end_time: ISO format datetime string
+    """
+    try:
+        # Get alert overview statistics
+        overview = await alert_service.get_alert_overview_stats(
+            customer_id=customer_id,
+            start_time=start_time,
+            end_time=end_time
+        )
+
+        return overview
+
+    except Exception as e:
+        logger.error(f"Failed to get alert overview stats: {e}", customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to get alert overview stats: {str(e)}")
 
 @router.get("/health")
 async def alert_engine_health(customer_id: str = MiddlewareTenant):

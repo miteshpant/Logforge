@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import LogsOverviewWidget from '@/components/centrum/LogsOverviewWidget'
@@ -10,9 +10,18 @@ export default function CentrumPage() {
   const { getApiTimeRange, currentTimeRange } = useTimeRange()
   const [logsData, setLogsData] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   const loadLogsOverview = async () => {
     try {
+      // Cancel any pending request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+
+      // Create new abort controller for this request
+      abortControllerRef.current = new AbortController()
+
       setIsLoading(true)
       const { start_time, end_time } = getApiTimeRange()
 
@@ -46,8 +55,11 @@ export default function CentrumPage() {
       if (data) {
         setLogsData(data)
       }
-    } catch (error) {
-      console.error('Failed to load logs overview:', error)
+    } catch (error: any) {
+      // Don't log aborted requests as errors
+      if (error.name !== 'AbortError' && error.name !== 'CanceledError') {
+        console.error('Failed to load logs overview:', error)
+      }
     } finally {
       setIsLoading(false)
     }
@@ -55,6 +67,14 @@ export default function CentrumPage() {
 
   useEffect(() => {
     loadLogsOverview()
+
+    // Cleanup function to abort request on unmount or dependency change
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTimeRange.value]) // Reload when time range changes
 
   return (

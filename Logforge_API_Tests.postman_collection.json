@@ -2550,6 +2550,47 @@
                 }
               },
               "response": []
+            },
+            {
+              "name": "Get Alert Overview Stats",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{auth_token}}"
+                  },
+                  {
+                    "key": "X-Customer-ID",
+                    "value": "{{tenant_id}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/v1/alerts/stats/overview?start_time={{start_time}}&end_time={{end_time}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "alerts",
+                    "stats",
+                    "overview"
+                  ],
+                  "query": [
+                    {
+                      "key": "start_time",
+                      "value": "{{start_time}}",
+                      "description": "ISO format datetime string (e.g., 2025-12-01T00:00:00Z)"
+                    },
+                    {
+                      "key": "end_time",
+                      "value": "{{end_time}}",
+                      "description": "ISO format datetime string (e.g., 2025-12-05T23:59:59Z)"
+                    }
+                  ]
+                }
+              },
+              "response": []
             }
           ]
         }

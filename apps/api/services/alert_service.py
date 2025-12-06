@@ -557,32 +557,32 @@ class AlertService:
         try:
             # Test database connectivity by performing actual queries
             start_time = datetime.now(timezone.utc)
-            
+
             # Get system-wide statistics to verify health
             try:
                 # Query all customers to get aggregate health metrics
                 total_rules = 0
                 total_active_alerts = 0
-                
+
                 # This is a simplified approach - in a multi-tenant system we'd aggregate across tenants
                 # For now, we'll use a test query to verify database connectivity
                 test_customer_id = "health-check"
                 health_stats = await self.alert_dao.get_alert_stats(test_customer_id)
-                
+
                 # Database is accessible if we can run queries
                 database_connected = True
                 status = "healthy"
-                
+
                 health = {
                     "status": status,
                     "active_rules": health_stats.get("enabled_rules", 0),
-                    "active_alerts": health_stats.get("active_alerts", 0), 
+                    "active_alerts": health_stats.get("active_alerts", 0),
                     "last_evaluation": datetime.now(timezone.utc).isoformat(),
                     "database_connected": database_connected,
                     "notification_channels_available": True,
                     "health_check_duration_ms": int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
                 }
-                
+
             except Exception as db_error:
                 logger.warning(f"Database health check failed: {db_error}")
                 health = {
@@ -594,9 +594,9 @@ class AlertService:
                     "database_error": str(db_error),
                     "notification_channels_available": False
                 }
-            
+
             return health
-            
+
         except Exception as e:
             logger.error(f"Failed to get alert health: {e}")
             return {
@@ -604,6 +604,32 @@ class AlertService:
                 "error": str(e),
                 "checked_at": datetime.now(timezone.utc).isoformat()
             }
+
+    async def get_alert_overview_stats(self, customer_id: str, start_time: str, end_time: str) -> Dict[str, Any]:
+        """
+        Get alert statistics grouped by severity and status within a time range
+
+        Args:
+            customer_id: Customer ID
+            start_time: ISO format datetime string
+            end_time: ISO format datetime string
+
+        Returns:
+            Dict with alert counts grouped by severity and status
+        """
+        try:
+            # Get overview stats from DAO
+            overview = await self.alert_dao.get_alert_overview_stats(
+                customer_id=customer_id,
+                start_time=start_time,
+                end_time=end_time
+            )
+
+            return overview
+
+        except Exception as e:
+            logger.error(f"Failed to get alert overview stats for customer {customer_id}: {e}")
+            raise
     
     # Integration Support
     

@@ -364,27 +364,34 @@ class AlertDAO:
     async def get_alert_instance(self, alert_id: str, customer_id: str) -> Optional[Dict[str, Any]]:
         """Get alert instance by ID"""
         try:
+            # Join with alert_rules table to get severity from the rule, not from trigger_data
             query = f"""
-            SELECT * FROM {ALERT_INSTANCES_TABLE}
-            WHERE id = %(alert_id)s AND customer_id = %(customer_id)s
+            SELECT
+                ai.*,
+                ar.severity as rule_severity,
+                ar.name as rule_name
+            FROM {ALERT_INSTANCES_TABLE} ai
+            LEFT JOIN {ALERT_RULES_TABLE} ar ON ai.rule_id = ar.id
+            WHERE ai.id = %(alert_id)s AND ai.customer_id = %(customer_id)s
             """
-            
+
             result = await self.db.fetch_one(query, {"alert_id": alert_id, "customer_id": customer_id})
-            
+
             if result:
                 # Parse trigger_data JSON and expand it
                 trigger_data = json.loads(result.get("trigger_data", "{}"))
-                
+
                 # Map database fields to API response format
                 result["alert_id"] = result["id"]
                 result["title"] = trigger_data.get("title", "")
                 result["message"] = trigger_data.get("message", "")
-                result["severity"] = trigger_data.get("severity", "medium")
+                # Get severity from alert rule, not from trigger_data
+                result["severity"] = result.get("rule_severity", "medium")
                 result["details"] = trigger_data.get("details", {})
                 result["resolution_notes"] = result.get("resolution_data")
-                
+
             return result
-            
+
         except Exception as e:
             logger.error(f"Failed to get alert instance {alert_id}: {e}")
             raise
@@ -392,89 +399,103 @@ class AlertDAO:
     async def list_alert_instances(self, customer_id: str, status: Optional[str] = None) -> List[Dict[str, Any]]:
         """List alert instances for customer"""
         try:
-            where_clauses = ["customer_id = %(customer_id)s"]
+            where_clauses = ["ai.customer_id = %(customer_id)s"]
             params = {"customer_id": customer_id}
-            
+
             if status:
                 # Map API status to database status
                 if status == "active":
                     status = "triggered"
-                where_clauses.append("status = %(status)s")
+                where_clauses.append("ai.status = %(status)s")
                 params["status"] = status
-            
+
+            # Join with alert_rules table to get severity from the rule, not from trigger_data
             query = f"""
-            SELECT * FROM {ALERT_INSTANCES_TABLE}
+            SELECT
+                ai.*,
+                ar.severity as rule_severity,
+                ar.name as rule_name
+            FROM {ALERT_INSTANCES_TABLE} ai
+            LEFT JOIN {ALERT_RULES_TABLE} ar ON ai.rule_id = ar.id
             WHERE {' AND '.join(where_clauses)}
-            ORDER BY triggered_at DESC
+            ORDER BY ai.triggered_at DESC
             """
-            
+
             results = await self.db.fetch_all(query, params)
-            
+
             # Parse JSON fields and map field names for each alert
             for alert in results:
                 trigger_data = json.loads(alert.get("trigger_data", "{}"))
-                
+
                 # Map database fields to API response format
                 alert["alert_id"] = alert["id"]
                 alert["title"] = trigger_data.get("title", "")
                 alert["message"] = trigger_data.get("message", "")
-                alert["severity"] = trigger_data.get("severity", "medium")
+                # Get severity from alert rule, not from trigger_data
+                alert["severity"] = alert.get("rule_severity", "medium")
                 alert["details"] = trigger_data.get("details", {})
                 alert["resolution_notes"] = alert.get("resolution_data")
-                
+
                 # Map database status to API status
                 if alert["status"] == "triggered":
                     alert["status"] = "active"
-            
+
             return results
-            
+
         except Exception as e:
             logger.error(f"Failed to list alert instances for customer {customer_id}: {e}")
             raise
     
-    async def list_alert_instances_by_rule(self, rule_id: str, customer_id: str, 
+    async def list_alert_instances_by_rule(self, rule_id: str, customer_id: str,
                                           status: Optional[str] = None,
                                           limit: int = 100) -> List[Dict[str, Any]]:
         """List alert instances for a specific rule"""
         try:
-            where_clauses = ["customer_id = %(customer_id)s", "rule_id = %(rule_id)s"]
+            where_clauses = ["ai.customer_id = %(customer_id)s", "ai.rule_id = %(rule_id)s"]
             params = {"customer_id": customer_id, "rule_id": rule_id}
-            
+
             if status:
                 # Map API status to database status
                 if status == "active":
                     status = "triggered"
-                where_clauses.append("status = %(status)s")
+                where_clauses.append("ai.status = %(status)s")
                 params["status"] = status
-            
+
+            # Join with alert_rules table to get severity from the rule, not from trigger_data
             query = f"""
-            SELECT * FROM {ALERT_INSTANCES_TABLE}
+            SELECT
+                ai.*,
+                ar.severity as rule_severity,
+                ar.name as rule_name
+            FROM {ALERT_INSTANCES_TABLE} ai
+            LEFT JOIN {ALERT_RULES_TABLE} ar ON ai.rule_id = ar.id
             WHERE {' AND '.join(where_clauses)}
-            ORDER BY triggered_at DESC
+            ORDER BY ai.triggered_at DESC
             LIMIT %(limit)s
             """
             params["limit"] = limit
-            
+
             results = await self.db.fetch_all(query, params)
-            
+
             # Parse JSON fields and map field names for each alert
             for alert in results:
                 trigger_data = json.loads(alert.get("trigger_data", "{}"))
-                
+
                 # Map database fields to API response format
                 alert["alert_id"] = alert["id"]
                 alert["title"] = trigger_data.get("title", "")
                 alert["message"] = trigger_data.get("message", "")
-                alert["severity"] = trigger_data.get("severity", "medium")
+                # Get severity from alert rule, not from trigger_data
+                alert["severity"] = alert.get("rule_severity", "medium")
                 alert["details"] = trigger_data.get("details", {})
                 alert["resolution_notes"] = alert.get("resolution_data")
-                
+
                 # Map database status to API status
                 if alert["status"] == "triggered":
                     alert["status"] = "active"
-            
+
             return results
-            
+
         except Exception as e:
             logger.error(f"Failed to list alert instances for rule {rule_id}: {e}")
             raise
@@ -886,7 +907,7 @@ class AlertDAO:
         """Get escalation policies configuration from alert rules data"""
         # Query alert rules to understand current escalation configuration
         query = f"""
-        SELECT 
+        SELECT
             COUNT() as total_rules,
             countIf(is_enabled = 1) as enabled_rules,
             arrayReduce('max', groupArray(cooldown_minutes)) as max_cooldown,
@@ -895,12 +916,12 @@ class AlertDAO:
         FROM {ALERT_RULES_TABLE}
         WHERE customer_id = %(customer_id)s
         """
-        
+
         result = await self.db.execute_query(query, {"customer_id": customer_id})
-        
+
         if result:
             rule_stats = result[0]
-            
+
             # Build escalation policy based on existing alert configuration
             return {
                 "enabled": rule_stats.get("enabled_rules", 0) > 0,
@@ -924,3 +945,98 @@ class AlertDAO:
                 },
                 "notification_flow": ["immediate", "escalation", "resolution"]
             }
+
+    async def get_alert_overview_stats(self, customer_id: str, start_time: str, end_time: str) -> Dict[str, Any]:
+        """
+        Get alert statistics grouped by severity and status within a time range
+
+        Args:
+            customer_id: Customer ID to filter alerts
+            start_time: ISO format datetime string
+            end_time: ISO format datetime string
+
+        Returns:
+            Dict with alert counts grouped by severity and status
+        """
+        try:
+            from dateutil import parser
+
+            # Parse time range
+            start_dt = parser.parse(start_time)
+            end_dt = parser.parse(end_time)
+
+            # Query to get alert counts grouped by severity and status
+            # Join with alert_rules to get severity
+            query = f"""
+            SELECT
+                ar.severity as severity,
+                ai.status as status,
+                COUNT(*) as count
+            FROM {ALERT_INSTANCES_TABLE} ai
+            LEFT JOIN {ALERT_RULES_TABLE} ar ON ai.rule_id = ar.id
+            WHERE ai.customer_id = %(customer_id)s
+              AND ai.triggered_at >= %(start_time)s
+              AND ai.triggered_at <= %(end_time)s
+            GROUP BY ar.severity, ai.status
+            """
+
+            results = await self.db.fetch_all(query, {
+                "customer_id": customer_id,
+                "start_time": start_dt,
+                "end_time": end_dt
+            })
+
+            # Initialize response structure
+            overview = {
+                "total_alerts": 0,
+                "alerts_by_severity": {
+                    "critical": 0,
+                    "high": 0,
+                    "medium": 0,
+                    "low": 0
+                },
+                "alerts_by_status": {
+                    "triggered": 0,  # Active alerts
+                    "acknowledged": 0,
+                    "resolved": 0
+                },
+                "severity_status_breakdown": [],
+                "time_range": {
+                    "start_time": start_time,
+                    "end_time": end_time
+                }
+            }
+
+            # Process query results
+            for row in results:
+                severity = row.get("severity", "medium")
+                status = row.get("status", "triggered")
+                count = row.get("count", 0)
+
+                # Update total
+                overview["total_alerts"] += count
+
+                # Update severity counts
+                if severity in overview["alerts_by_severity"]:
+                    overview["alerts_by_severity"][severity] += count
+
+                # Update status counts
+                if status in overview["alerts_by_status"]:
+                    overview["alerts_by_status"][status] += count
+
+                # Add to breakdown
+                overview["severity_status_breakdown"].append({
+                    "severity": severity,
+                    "status": status,
+                    "count": count
+                })
+
+            # Calculate additional metrics
+            overview["open_alerts"] = overview["alerts_by_status"]["triggered"]
+            overview["closed_alerts"] = overview["alerts_by_status"]["resolved"]
+
+            return overview
+
+        except Exception as e:
+            logger.error(f"Failed to get alert overview stats for customer {customer_id}: {e}")
+            raise
