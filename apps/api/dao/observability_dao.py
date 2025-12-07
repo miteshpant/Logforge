@@ -1036,3 +1036,120 @@ class ObservabilityDAO:
         except Exception as e:
             logger.error(f"Failed to get trace analytics: {e}")
             raise
+
+    async def get_observability_overview_stats(self, customer_id: str, start_time: str, end_time: str) -> Dict[str, Any]:
+        """
+        Get observability overview statistics for centrum page widgets
+        Returns traces, performance, reliability, services, and spans metrics
+        """
+        try:
+            from dateutil import parser
+
+            start_dt = parser.parse(start_time)
+            end_dt = parser.parse(end_time)
+
+            # Query 1: Traces and Performance metrics (count unique traces only)
+            traces_query = """
+            SELECT
+                COUNT(DISTINCT trace_id) as total_traces,
+                COUNT(CASE WHEN status = 'error' THEN 1 END) as error_count,
+                AVG(duration_ms) as avg_response_time_ms,
+                quantile(0.95)(duration_ms) as p95_latency_ms,
+                quantile(0.99)(duration_ms) as p99_latency_ms
+            FROM traces_mt
+            WHERE customer_id = %(customer_id)s
+              AND start_time >= %(start_time)s
+              AND start_time <= %(end_time)s
+            """
+
+            traces_result = await self.db.fetch_one(traces_query, {
+                "customer_id": customer_id,
+                "start_time": start_dt,
+                "end_time": end_dt
+            })
+
+            # Query 2: Active services count
+            services_query = """
+            SELECT COUNT(DISTINCT service_name) as active_count
+            FROM traces_mt
+            WHERE customer_id = %(customer_id)s
+              AND start_time >= %(start_time)s
+              AND start_time <= %(end_time)s
+            """
+
+            services_result = await self.db.fetch_one(services_query, {
+                "customer_id": customer_id,
+                "start_time": start_dt,
+                "end_time": end_dt
+            })
+
+            # Query 3: Total spans count
+            spans_query = """
+            SELECT COUNT(*) as total_count
+            FROM traces_mt
+            WHERE customer_id = %(customer_id)s
+              AND start_time >= %(start_time)s
+              AND start_time <= %(end_time)s
+            """
+
+            spans_result = await self.db.fetch_one(spans_query, {
+                "customer_id": customer_id,
+                "start_time": start_dt,
+                "end_time": end_dt
+            })
+
+            # Calculate time range in seconds for rate calculations
+            time_range_seconds = (end_dt - start_dt).total_seconds()
+
+            # Safe float conversion
+            def safe_float(value, default=0.0):
+                if value is None or (isinstance(value, float) and
+                   (value != value or abs(value) == float('inf'))):
+                    return default
+                return float(value)
+
+            # Build response
+            total_traces = traces_result.get("total_traces", 0) if traces_result else 0
+            error_count = traces_result.get("error_count", 0) if traces_result else 0
+            total_spans = spans_result.get("total_count", 0) if spans_result else 0
+            active_services = services_result.get("active_count", 0) if services_result else 0
+
+            # Calculate error rate
+            error_rate_percent = (error_count / total_traces * 100) if total_traces > 0 else 0.0
+
+            # Calculate spans per second
+            spans_per_second = (total_spans / time_range_seconds) if time_range_seconds > 0 else 0.0
+
+            overview = {
+                "traces": {
+                    "total_count": total_traces,
+                    "error_count": error_count
+                },
+                "performance": {
+                    "avg_response_time_ms": safe_float(traces_result.get("avg_response_time_ms")) if traces_result else 0.0,
+                    "p95_latency_ms": safe_float(traces_result.get("p95_latency_ms")) if traces_result else 0.0,
+                    "p99_latency_ms": safe_float(traces_result.get("p99_latency_ms")) if traces_result else 0.0
+                },
+                "reliability": {
+                    "error_rate_percent": round(error_rate_percent, 2),
+                    "total_errors": error_count,
+                    "total_success": total_traces - error_count
+                },
+                "services": {
+                    "active_count": active_services
+                },
+                "spans": {
+                    "total_count": total_spans,
+                    "spans_per_second": round(spans_per_second, 2)
+                },
+                "time_range": {
+                    "start_time": start_time,
+                    "end_time": end_time
+                }
+            }
+
+            return overview
+
+        except Exception as e:
+            logger.error(f"Failed to get observability overview stats for customer {customer_id}: {e}")
+            raise

@@ -69,7 +69,7 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
     if (customStart && customEnd) {
       const start = new Date(customStart)
       const end = new Date(customEnd)
-      
+
       if (start < end) {
         const customRange: TimeRange = {
           label: 'Custom Range',
@@ -96,7 +96,7 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
     const diff = now.getTime() - date.getTime()
     const seconds = Math.floor(diff / 1000)
     const minutes = Math.floor(seconds / 60)
-    
+
     if (seconds < 60) return `${seconds}s ago`
     if (minutes < 60) return `${minutes}m ago`
     return date.toLocaleTimeString()
@@ -115,16 +115,6 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
           <span className="font-medium text-slate-700" data-testid="current-time-range">{currentTimeRange.label}</span>
           <ChevronDown className={`w-4 h-4 ml-2 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
         </Button>
-
-        {/* Debug Display - Show selected time range in local timezone */}
-        <div className="absolute top-full left-0 mt-1 text-xs text-slate-600 bg-yellow-50 border border-yellow-200 rounded px-2 py-1 whitespace-nowrap z-40 font-mono">
-          <div><strong>Start (Local):</strong> {currentTimeRange.startTime.toLocaleString()}</div>
-          <div><strong>End (Local):</strong> {currentTimeRange.endTime.toLocaleString()}</div>
-          <div className="text-xs text-slate-500 mt-1 pt-1 border-t border-yellow-300">
-            <div><strong>API Start:</strong> {currentTimeRange.startTime.toISOString()}</div>
-            <div><strong>API End:</strong> {currentTimeRange.endTime.toISOString()}</div>
-          </div>
-        </div>
 
         {isOpen && (
           <Card className="absolute top-full right-0 mt-16 w-80 shadow-xl border-0 bg-white/95 backdrop-blur-md z-50 animate-in slide-in-from-top-2 duration-200">
@@ -232,7 +222,7 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
       <div className="flex items-center space-x-3 bg-gradient-to-r from-white/90 to-slate-50/90 backdrop-blur-md rounded-xl border border-slate-200/60 shadow-sm p-3">
-        
+
         {/* Time Range Button */}
         <Button
           variant="ghost"
@@ -361,7 +351,7 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">End Date & Time</label>
                     <input

@@ -762,3 +762,28 @@ class ObservabilityService:
             'direction': direction,
             'percentage': round(abs(change), 1)
         }
+
+    async def get_observability_overview_stats(self, customer_id: str, start_time: str, end_time: str) -> Dict[str, Any]:
+        """
+        Get observability overview statistics for centrum page widgets
+
+        Args:
+            customer_id: Customer ID
+            start_time: ISO format datetime string
+            end_time: ISO format datetime string
+
+        Returns:
+            Dict with traces, performance, reliability, services, and spans metrics
+        """
+        try:
+            overview = await self.dao.get_observability_overview_stats(
+                customer_id=customer_id,
+                start_time=start_time,
+                end_time=end_time
+            )
+
+            return overview
+
+        except Exception as e:
+            logger.error(f"Failed to get observability overview stats for customer {customer_id}: {e}")
+            raise

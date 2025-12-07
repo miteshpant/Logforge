@@ -98,7 +98,7 @@ export default function LogsOverviewWidget({ data, isLoading, timeRange }: LogsO
         }
       `}</style>
 
-      <div className="relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 w-full max-w-[520px]">
+      <div className="relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 w-full max-w-[420px]">
         {/* Background glow effects */}
         <div className="absolute top-0 right-0 w-48 h-48 -translate-y-16 translate-x-8 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-40 h-40 translate-y-12 -translate-x-6 bg-purple-500/8 rounded-full blur-3xl pointer-events-none" />

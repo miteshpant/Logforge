@@ -16,6 +16,7 @@ from dataclasses import asdict
 from enum import Enum
 
 from services.observability_service import ObservabilityService
+from tenant_dependencies import MiddlewareTenant
 
 logger = structlog.get_logger(__name__)
 
@@ -776,3 +777,39 @@ async def stream_traces(
     except Exception as e:
         logger.error("Failed to start traces stream", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to start traces stream: {str(e)}")
+
+
+@router.get("/overview/stats")
+async def get_observability_overview_stats(
+    start_time: str,
+    end_time: str,
+    customer_id: str = MiddlewareTenant
+):
+    """
+    Get observability overview statistics for centrum page widgets
+
+    Returns aggregated metrics for:
+    - Traces (total count, error count)
+    - Performance (avg response time, P95/P99 latency)
+    - Reliability (error rate, success/failure counts)
+    - Services (active service count)
+    - Spans (total count, ingestion rate)
+
+    Query params:
+    - start_time: ISO format datetime string
+    - end_time: ISO format datetime string
+    """
+    try:
+        observability_service = ObservabilityService()
+
+        overview = await observability_service.get_observability_overview_stats(
+            customer_id=customer_id,
+            start_time=start_time,
+            end_time=end_time
+        )
+
+        return overview
+
+    except Exception as e:
+        logger.error(f"Failed to get observability overview stats: {e}", customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to get observability overview stats: {str(e)}")
