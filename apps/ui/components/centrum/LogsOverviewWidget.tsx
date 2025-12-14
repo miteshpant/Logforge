@@ -44,8 +44,10 @@ export default function LogsOverviewWidget({ data, isLoading, timeRange }: LogsO
   const debugPercentage = totalLogs > 0 ? (debugLogs / totalLogs) * 100 : 0
 
   // Get unique services and hosts
-  const totalServices = Math.max(...(data?.logs?.map(l => l.affected_services) || [0]))
-  const totalHosts = Math.max(...(data?.logs?.map(l => l.affected_hosts) || [0]))
+  const servicesArray = data?.logs?.map(l => l.affected_services) || []
+  const hostsArray = data?.logs?.map(l => l.affected_hosts) || []
+  const totalServices = servicesArray.length > 0 ? Math.max(...servicesArray) : 0
+  const totalHosts = hostsArray.length > 0 ? Math.max(...hostsArray) : 0
 
   // Chart segments data
   const chartData = [
@@ -56,8 +58,8 @@ export default function LogsOverviewWidget({ data, isLoading, timeRange }: LogsO
   ]
 
   // Donut chart calculations
-  const size = 180
-  const strokeWidth = 24
+  const size = 160
+  const strokeWidth = 20
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
 
@@ -98,7 +100,7 @@ export default function LogsOverviewWidget({ data, isLoading, timeRange }: LogsO
         }
       `}</style>
 
-      <div className="relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 w-full max-w-[420px]">
+      <div className="relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 w-full">
         {/* Background glow effects */}
         <div className="absolute top-0 right-0 w-48 h-48 -translate-y-16 translate-x-8 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-40 h-40 translate-y-12 -translate-x-6 bg-purple-500/8 rounded-full blur-3xl pointer-events-none" />
@@ -143,7 +145,7 @@ export default function LogsOverviewWidget({ data, isLoading, timeRange }: LogsO
         </div>
 
         {/* Main Content - Chart LEFT, Legend RIGHT */}
-        <div className="relative z-10 flex gap-5 items-center">
+        <div className="relative z-10 flex gap-3 items-center">
           {/* Donut Chart - LEFT SIDE */}
           <div className="relative flex-shrink-0">
             <svg width={size} height={size} className="-rotate-90 drop-shadow-lg">
@@ -190,13 +192,13 @@ export default function LogsOverviewWidget({ data, isLoading, timeRange }: LogsO
           </div>
 
           {/* Legend & Stats - RIGHT SIDE */}
-          <div className="flex-1 space-y-3">
+          <div className="flex-1 space-y-2.5">
             {/* Legend - Big Cards */}
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               {chartData.map((item, i) => (
                 <div
                   key={item.label}
-                  className="flex items-center gap-8 px-3 py-2 rounded-lg transition-all duration-200 cursor-pointer"
+                  className="flex items-center justify-between px-2 py-1.5 rounded-lg transition-all duration-200 cursor-pointer"
                   style={{
                     background: hoveredSegment === i
                       ? `linear-gradient(135deg, ${item.color}18 0%, ${item.color}08 100%)`

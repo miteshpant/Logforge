@@ -911,3 +911,147 @@ class UsageDAO:
         except Exception as e:
             logger.error(f"Failed to create invoice record: {e}")
             raise
+
+    async def get_usage_overview_stats(self, customer_id: str, start_time: Optional[str] = None, end_time: Optional[str] = None) -> Dict[str, Any]:
+        """Get usage overview statistics for centrum dashboard widgets"""
+        try:
+            # Parse time range or use defaults
+            if start_time and end_time:
+                # Parse ISO format timestamps
+                from dateutil import parser
+                start_dt = parser.isoparse(start_time)
+                end_dt = parser.isoparse(end_time)
+                # Calculate time window in minutes for rate calculation
+                time_window_minutes = max(1, (end_dt - start_dt).total_seconds() / 60)
+            else:
+                # Default to current month
+                start_dt = None
+                end_dt = None
+                time_window_minutes = 60  # 1 hour default
+
+            # Query 1: API Calls for selected time range
+            if start_dt and end_dt:
+                api_calls_query = """
+                SELECT COUNT(*) as total_calls
+                FROM api_usage_mt
+                WHERE customer_id = %(customer_id)s
+                  AND request_timestamp >= %(start_time)s
+                  AND request_timestamp <= %(end_time)s
+                """
+                params_api = {"customer_id": customer_id, "start_time": start_dt, "end_time": end_dt}
+            else:
+                api_calls_query = """
+                SELECT COUNT(*) as total_calls
+                FROM api_usage_mt
+                WHERE customer_id = %(customer_id)s
+                  AND toYYYYMM(request_timestamp) = toYYYYMM(now())
+                """
+                params_api = {"customer_id": customer_id}
+
+            # Query 2: Storage usage from quotas (not time-dependent)
+            # Note: current_usage is stored in BYTES, quota_limit is in GB
+            storage_query = """
+            SELECT
+                quota_limit as limit_gb,
+                ROUND(current_usage / 1073741824.0, 2) as used_gb,
+                ROUND((current_usage / 1073741824.0 / quota_limit) * 100, 1) as usage_percentage
+            FROM tenant_quotas_mt
+            WHERE customer_id = %(customer_id)s
+              AND quota_type = 'storage_gb'
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """
+
+            # Query 3: Monthly ingestion quota (not time-dependent)
+            ingestion_query = """
+            SELECT
+                quota_limit as limit_records,
+                current_usage as used_records,
+                ROUND((current_usage / quota_limit) * 100, 1) as usage_percentage
+            FROM tenant_quotas_mt
+            WHERE customer_id = %(customer_id)s
+              AND quota_type = 'monthly_ingestion'
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """
+
+            # Query 4: Unique active users for selected time range
+            if start_dt and end_dt:
+                users_query = """
+                SELECT uniq(user_id) as active_users
+                FROM api_usage_mt
+                WHERE customer_id = %(customer_id)s
+                  AND request_timestamp >= %(start_time)s
+                  AND request_timestamp <= %(end_time)s
+                  AND user_id IS NOT NULL
+                """
+                params_users = {"customer_id": customer_id, "start_time": start_dt, "end_time": end_dt}
+            else:
+                users_query = """
+                SELECT uniq(user_id) as active_users
+                FROM api_usage_mt
+                WHERE customer_id = %(customer_id)s
+                  AND toYYYYMM(request_timestamp) = toYYYYMM(now())
+                  AND user_id IS NOT NULL
+                """
+                params_users = {"customer_id": customer_id}
+
+            # Query 5: API rate for selected time range
+            if start_dt and end_dt:
+                rate_query = """
+                SELECT
+                    COUNT(*) as total_requests,
+                    ROUND(COUNT(*) / %(time_window_minutes)s, 1) as requests_per_minute
+                FROM api_usage_mt
+                WHERE customer_id = %(customer_id)s
+                  AND request_timestamp >= %(start_time)s
+                  AND request_timestamp <= %(end_time)s
+                """
+                params_rate = {"customer_id": customer_id, "start_time": start_dt, "end_time": end_dt, "time_window_minutes": time_window_minutes}
+            else:
+                rate_query = """
+                SELECT
+                    COUNT(*) as total_requests,
+                    ROUND(COUNT(*) / 60.0, 1) as requests_per_minute
+                FROM api_usage_mt
+                WHERE customer_id = %(customer_id)s
+                  AND request_timestamp >= now() - INTERVAL 1 HOUR
+                """
+                params_rate = {"customer_id": customer_id}
+
+            params_quota = {"customer_id": customer_id}
+
+            # Execute all queries
+            api_calls_result = await self.db.execute_query(api_calls_query, params_api)
+            storage_result = await self.db.execute_query(storage_query, params_quota)
+            ingestion_result = await self.db.execute_query(ingestion_query, params_quota)
+            users_result = await self.db.execute_query(users_query, params_users)
+            rate_result = await self.db.execute_query(rate_query, params_rate)
+
+            # Build response
+            return {
+                "api_calls": {
+                    "total_this_month": api_calls_result[0].get("total_calls", 0) if api_calls_result else 0
+                },
+                "storage": {
+                    "used_gb": storage_result[0].get("used_gb", 0) if storage_result else 0,
+                    "limit_gb": storage_result[0].get("limit_gb", 0) if storage_result else 0,
+                    "usage_percentage": storage_result[0].get("usage_percentage", 0) if storage_result else 0
+                },
+                "ingestion": {
+                    "used_records": ingestion_result[0].get("used_records", 0) if ingestion_result else 0,
+                    "limit_records": ingestion_result[0].get("limit_records", 0) if ingestion_result else 0,
+                    "usage_percentage": ingestion_result[0].get("usage_percentage", 0) if ingestion_result else 0
+                },
+                "active_users": users_result[0].get("active_users", 0) if users_result else 0,
+                "api_rate": {
+                    "requests_last_hour": rate_result[0].get("requests_last_hour", 0) if rate_result else 0,
+                    "requests_per_minute": rate_result[0].get("requests_per_minute", 0) if rate_result else 0
+                }
+            }
+
+        except Exception as e:
+            logger.error("Failed to get usage overview stats",
+                        error=str(e),
+                        customer_id=customer_id)
+            raise Exception(f"Failed to get usage overview stats: {str(e)}")

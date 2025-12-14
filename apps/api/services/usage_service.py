@@ -452,3 +452,7 @@ class UsageService:
         except Exception as e:
             logger.error(f"Failed to create invoice record: {e}")
             raise
+
+    async def get_usage_overview_stats(self, customer_id: str, start_time: Optional[str] = None, end_time: Optional[str] = None) -> Dict[str, Any]:
+        """Get usage overview statistics for centrum dashboard"""
+        return await self.usage_dao.get_usage_overview_stats(customer_id, start_time, end_time)

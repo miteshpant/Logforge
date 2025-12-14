@@ -21,6 +21,7 @@ from authn_authz_middleware import (
     get_current_user, require_platform_admin,
     usage_buffer
 )
+from tenant_dependencies import MiddlewareTenant
 from services.usage_service import UsageService
 
 logger = structlog.get_logger()
@@ -778,6 +779,30 @@ async def stream_usage_data(
     except Exception as e:
         logger.error("Failed to start usage stream", error=str(e), tenant_id=tenant_id)
         raise HTTPException(status_code=500, detail=f"Failed to start usage stream: {str(e)}")
+
+
+@router.get("/usage/overview/stats")
+async def get_usage_overview_stats(
+    customer_id: str = MiddlewareTenant,
+    start_time: Optional[str] = Query(None, description="Start time in ISO format"),
+    end_time: Optional[str] = Query(None, description="End time in ISO format")
+):
+    """
+    Get usage overview statistics for centrum dashboard widgets
+
+    Returns:
+    - API calls for selected time range
+    - Storage usage (used/limit)
+    - Ingestion quota (used/limit)
+    - Active users count
+    - API rate (requests per minute) for selected time range
+    """
+    try:
+        overview = await usage_service.get_usage_overview_stats(customer_id, start_time, end_time)
+        return overview
+    except Exception as e:
+        logger.error(f"Failed to get usage overview stats: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get usage overview stats: {str(e)}")
 
 
 # =================================================================

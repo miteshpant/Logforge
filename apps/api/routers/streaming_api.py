@@ -797,6 +797,16 @@ async def stream_alerts(
             async def handle(self, event) -> bool:
                 """Handle events and put relevant ones in the queue"""
                 try:
+                    logger.info(
+                        "StreamingAlertHandler received event",
+                        event_type=getattr(event, 'event_type', 'NONE'),
+                        customer_id=getattr(event, 'customer_id', 'NONE'),
+                        target_customer_id=self.target_customer_id,
+                        has_customer_id=hasattr(event, 'customer_id'),
+                        has_event_type=hasattr(event, 'event_type'),
+                        event_data=str(event)[:200]  # Changed from 'event' to 'event_data'
+                    )
+
                     # Only handle events for our target customer and UI alert types
                     if (hasattr(event, 'customer_id') and
                         event.customer_id == self.target_customer_id and
@@ -805,8 +815,14 @@ async def stream_alerts(
 
                         # Put event in queue for streaming
                         await self.event_queue.put(event)
-                        logger.debug(f"UI event queued for streaming: {event.event_type}")
+                        logger.info(f"✅ UI alert event queued for streaming: {event.event_type}, alert_id: {event.data.get('alert_id')}")
                         return True
+                    else:
+                        logger.debug(
+                            "Event filtered out",
+                            customer_match=hasattr(event, 'customer_id') and event.customer_id == self.target_customer_id,
+                            type_match=hasattr(event, 'event_type') and event.event_type in ui_alert_events
+                        )
 
                     return True
 

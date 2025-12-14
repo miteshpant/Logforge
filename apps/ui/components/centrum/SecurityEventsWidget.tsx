@@ -74,8 +74,8 @@ export default function SecurityEventsWidget({ data, isLoading, timeRange }: Sec
   ]
 
   // SVG donut chart parameters
-  const size = 180
-  const strokeWidth = 24
+  const size = 160
+  const strokeWidth = 20
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
 
@@ -138,7 +138,7 @@ export default function SecurityEventsWidget({ data, isLoading, timeRange }: Sec
         }
       `}</style>
 
-      <div className="relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 w-full max-w-[420px]">
+      <div className="relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 w-full">
         {/* Background glow effects */}
         <div className="absolute top-0 right-0 w-48 h-48 -translate-y-16 translate-x-8 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-40 h-40 translate-y-12 -translate-x-6 bg-pink-500/8 rounded-full blur-3xl pointer-events-none" />
@@ -173,7 +173,7 @@ export default function SecurityEventsWidget({ data, isLoading, timeRange }: Sec
         </div>
 
         {/* Main Content - Chart + Stats */}
-        <div className="relative z-10 flex gap-5 items-center">
+        <div className="relative z-10 flex gap-3 items-center">
           {/* Donut Chart - LEFT SIDE */}
           <div className="relative flex-shrink-0">
             <svg width={size} height={size} className="-rotate-90 drop-shadow-lg">
@@ -226,13 +226,13 @@ export default function SecurityEventsWidget({ data, isLoading, timeRange }: Sec
           </div>
 
           {/* Legend & Stats - RIGHT SIDE */}
-          <div className="flex-1 space-y-3">
+          <div className="flex-1 space-y-2.5">
             {/* Legend with hover effects - Show all severity levels */}
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               {segments.map((item, i) => (
                 <div
                   key={item.label}
-                  className="flex items-center gap-8 px-3 py-2 rounded-lg transition-all duration-200 cursor-pointer"
+                  className="flex items-center justify-between px-2 py-1.5 rounded-lg transition-all duration-200 cursor-pointer"
                   style={{
                     background: hoveredSegment === i
                       ? `linear-gradient(135deg, ${item.color}18 0%, ${item.color}08 100%)`

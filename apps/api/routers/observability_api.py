@@ -450,6 +450,62 @@ async def get_service_metrics_summary(
         raise HTTPException(status_code=500, detail=f"Failed to get service metrics summary: {str(e)}")
 
 
+@router.get("/apm/overview/stats")
+async def get_apm_overview_stats(
+    start_time: Optional[str] = Query(None, description="Start time in ISO format"),
+    end_time: Optional[str] = Query(None, description="End time in ISO format"),
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Get APM overview statistics for centrum dashboard widgets"""
+    try:
+        observability_service = ObservabilityService()
+
+        # Calculate hours from time range or default to 24h
+        if start_time and end_time:
+            from dateutil import parser
+            start_dt = parser.isoparse(start_time)
+            end_dt = parser.isoparse(end_time)
+            hours = max(1, (end_dt - start_dt).total_seconds() / 3600)
+        else:
+            hours = 24
+
+        overview = await observability_service.get_apm_overview(customer_id, int(hours))
+
+        # Extract key metrics for widgets
+        return {
+            "avg_response_time": {
+                "value_ms": round(overview.get('avg_response_time', 0), 2),
+                "p95_ms": round(sum(s.get('p95_response_time', 0) for s in overview.get('services', [])) / max(1, len(overview.get('services', []))), 2),
+                "p99_ms": round(sum(s.get('p99_response_time', 0) for s in overview.get('services', [])) / max(1, len(overview.get('services', []))), 2)
+            },
+            "error_rate": {
+                "percentage": round(overview.get('error_rate', 0), 2),
+                "total_errors": overview.get('total_errors', 0),
+                "total_requests": overview.get('total_requests', 0)
+            },
+            "throughput": {
+                "requests_per_second": round(overview.get('total_requests', 0) / (hours * 3600), 2),
+                "requests_per_minute": round(overview.get('total_requests', 0) / (hours * 60), 2),
+                "total_requests": overview.get('total_requests', 0)
+            },
+            "slowest_services": sorted(
+                [
+                    {
+                        "service_name": s.get('service_name', 'unknown'),
+                        "avg_response_time_ms": round(s.get('avg_response_time', 0), 2)
+                    }
+                    for s in overview.get('services', [])
+                ],
+                key=lambda x: x['avg_response_time_ms'],
+                reverse=True
+            )[:3]
+        }
+
+    except Exception as e:
+        logger.error("Failed to get APM overview stats", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to get APM overview stats: {str(e)}")
+
+
 @router.get("/apm/overview")
 async def get_apm_overview(
     time_range_hours: int = 24,
