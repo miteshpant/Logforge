@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, memo, useCallback, lazy, Suspense } from 'react'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import LogsOverviewWidget from '@/components/centrum/LogsOverviewWidget'
@@ -9,8 +9,18 @@ import SecurityEventsWidget from '@/components/centrum/SecurityEventsWidget'
 import ObservabilityStatsWidgets from '@/components/centrum/ObservabilityStatsWidgets'
 import UsageStatsWidgets from '@/components/centrum/UsageStatsWidgets'
 import APMPerformanceWidgets from '@/components/centrum/APMPerformanceWidgets'
-import LiveStreamingPanel from '@/components/centrum/LiveStreamingPanel'
 import { apiClient } from '@/lib/api'
+
+// Lazy load streaming panel to improve initial page load
+const LiveStreamingPanel = lazy(() => import('@/components/centrum/LiveStreamingPanel'))
+
+// Memoized widget components to prevent unnecessary re-renders
+const MemoizedUsageStats = memo(UsageStatsWidgets)
+const MemoizedObservabilityStats = memo(ObservabilityStatsWidgets)
+const MemoizedAPMPerformance = memo(APMPerformanceWidgets)
+const MemoizedLogsOverview = memo(LogsOverviewWidget)
+const MemoizedAlertsOverview = memo(AlertsOverviewWidget)
+const MemoizedSecurityEvents = memo(SecurityEventsWidget)
 
 export default function CentrumPage() {
   const { getApiTimeRange, currentTimeRange } = useTimeRange()
@@ -26,6 +36,15 @@ export default function CentrumPage() {
   const [isLoadingUsage, setIsLoadingUsage] = useState(true)
   const [apmData, setApmData] = useState<any>(null)
   const [isLoadingApm, setIsLoadingApm] = useState(true)
+
+  // Progressive loading flags - enable widgets one by one
+  const [enableUsage, setEnableUsage] = useState(false)
+  const [enableLogs, setEnableLogs] = useState(false)
+  const [enableAlerts, setEnableAlerts] = useState(false)
+  const [enableObservability, setEnableObservability] = useState(false)
+  const [enableSecurity, setEnableSecurity] = useState(false)
+  const [enableAPM, setEnableAPM] = useState(false)
+
   const abortControllerRef = useRef<AbortController | null>(null)
   const alertsAbortControllerRef = useRef<AbortController | null>(null)
   const securityAbortControllerRef = useRef<AbortController | null>(null)
@@ -272,95 +291,183 @@ export default function CentrumPage() {
     }
   }
 
-  // Single useEffect to load all data with staggered timing to prevent overwhelming the API
+  // Progressive loading - Enable widgets one by one for better performance
   useEffect(() => {
-    // Load data in batches with slight delays to prevent request cancellation
-    const loadAllData = async () => {
-      // Batch 1: Critical widgets (load immediately)
-      loadUsageOverview()
-      loadLogsOverview()
+    console.log('🚀 Progressive loading started')
 
-      // Batch 2: Secondary widgets (small delay)
-      setTimeout(() => {
-        loadAlertsOverview()
-        loadObservabilityOverview()
-      }, 50)
+    // Reset all flags
+    setEnableUsage(false)
+    setEnableLogs(false)
+    setEnableAlerts(false)
+    setEnableObservability(false)
+    setEnableSecurity(false)
+    setEnableAPM(false)
 
-      // Batch 3: Additional widgets (slightly longer delay)
-      setTimeout(() => {
-        loadSecurityOverview()
-        loadAPMOverview()
-      }, 100)
-    }
+    // Priority 1: Usage (immediate)
+    setEnableUsage(true)
 
-    loadAllData()
+    // Priority 2: Logs (300ms delay)
+    const timer1 = setTimeout(() => {
+      console.log('✅ Enabling Logs widget')
+      setEnableLogs(true)
+    }, 300)
 
-    // Cleanup function to abort all requests on unmount or dependency change
+    // Priority 3: Alerts (600ms delay)
+    const timer2 = setTimeout(() => {
+      console.log('✅ Enabling Alerts widget')
+      setEnableAlerts(true)
+    }, 600)
+
+    // Priority 4: Observability (900ms delay)
+    const timer3 = setTimeout(() => {
+      console.log('✅ Enabling Observability widget')
+      setEnableObservability(true)
+    }, 900)
+
+    // Priority 5: Security (1200ms delay)
+    const timer4 = setTimeout(() => {
+      console.log('✅ Enabling Security widget')
+      setEnableSecurity(true)
+    }, 1200)
+
+    // Priority 6: APM (1500ms delay)
+    const timer5 = setTimeout(() => {
+      console.log('✅ Enabling APM widget')
+      setEnableAPM(true)
+    }, 1500)
+
+    // Cleanup function
     return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-      }
-      if (alertsAbortControllerRef.current) {
-        alertsAbortControllerRef.current.abort()
-      }
-      if (securityAbortControllerRef.current) {
-        securityAbortControllerRef.current.abort()
-      }
-      if (observabilityAbortControllerRef.current) {
-        observabilityAbortControllerRef.current.abort()
-      }
-      if (usageAbortControllerRef.current) {
-        usageAbortControllerRef.current.abort()
-      }
-      if (apmAbortControllerRef.current) {
-        apmAbortControllerRef.current.abort()
-      }
+      clearTimeout(timer1)
+      clearTimeout(timer2)
+      clearTimeout(timer3)
+      clearTimeout(timer4)
+      clearTimeout(timer5)
+
+      // Abort all pending requests
+      if (abortControllerRef.current) abortControllerRef.current.abort()
+      if (alertsAbortControllerRef.current) alertsAbortControllerRef.current.abort()
+      if (securityAbortControllerRef.current) securityAbortControllerRef.current.abort()
+      if (observabilityAbortControllerRef.current) observabilityAbortControllerRef.current.abort()
+      if (usageAbortControllerRef.current) usageAbortControllerRef.current.abort()
+      if (apmAbortControllerRef.current) apmAbortControllerRef.current.abort()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentTimeRange.value]) // Reload when time range changes
+  }, [currentTimeRange.value])
+
+  // Load Usage when enabled - immediate
+  useEffect(() => {
+    if (enableUsage) {
+      console.log('📊 Loading Usage data...')
+      loadUsageOverview()
+    }
+  }, [enableUsage, currentTimeRange.value])
+
+  // Load Logs when enabled - 100ms delay to stagger API calls
+  useEffect(() => {
+    if (enableLogs) {
+      const timer = setTimeout(() => {
+        console.log('📝 Loading Logs data...')
+        loadLogsOverview()
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [enableLogs, currentTimeRange.value])
+
+  // Load Alerts when enabled - 200ms delay
+  useEffect(() => {
+    if (enableAlerts) {
+      const timer = setTimeout(() => {
+        console.log('🚨 Loading Alerts data...')
+        loadAlertsOverview()
+      }, 200)
+      return () => clearTimeout(timer)
+    }
+  }, [enableAlerts, currentTimeRange.value])
+
+  // Load Observability when enabled - 300ms delay
+  useEffect(() => {
+    if (enableObservability) {
+      const timer = setTimeout(() => {
+        console.log('👁️ Loading Observability data...')
+        loadObservabilityOverview()
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  }, [enableObservability, currentTimeRange.value])
+
+  // Load Security when enabled - 400ms delay
+  useEffect(() => {
+    if (enableSecurity) {
+      const timer = setTimeout(() => {
+        console.log('🔒 Loading Security data...')
+        loadSecurityOverview()
+      }, 400)
+      return () => clearTimeout(timer)
+    }
+  }, [enableSecurity, currentTimeRange.value])
+
+  // Load APM when enabled - 500ms delay
+  useEffect(() => {
+    if (enableAPM) {
+      const timer = setTimeout(() => {
+        console.log('⚡ Loading APM data...')
+        loadAPMOverview()
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [enableAPM, currentTimeRange.value])
 
   return (
     <DashboardLayout>
       <div className="space-y-6 max-w-7xl mx-auto" data-testid="centrum-container">
         {/* Usage Stats - Top Row */}
-        <UsageStatsWidgets
+        <MemoizedUsageStats
           data={usageData}
           isLoading={isLoadingUsage}
         />
 
         {/* Observability Stats - Second Row */}
-        <ObservabilityStatsWidgets
+        <MemoizedObservabilityStats
           data={observabilityData}
           isLoading={isLoadingObservability}
         />
 
         {/* APM Performance Stats - Third Row */}
-        <APMPerformanceWidgets
+        <MemoizedAPMPerformance
           data={apmData}
           isLoading={isLoadingApm}
         />
 
         {/* Main Widgets - Logs, Alerts, and Security Overview */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <LogsOverviewWidget
+          <MemoizedLogsOverview
             data={logsData}
             isLoading={isLoading}
             timeRange={currentTimeRange.label}
           />
-          <AlertsOverviewWidget
+          <MemoizedAlertsOverview
             data={alertsData}
             isLoading={isLoadingAlerts}
             timeRange={currentTimeRange.label}
           />
-          <SecurityEventsWidget
+          <MemoizedSecurityEvents
             data={securityData}
             isLoading={isLoadingSecurity}
             timeRange={currentTimeRange.label}
           />
         </div>
 
-        {/* Live Streaming Panel - Fourth Row */}
-        <LiveStreamingPanel />
+        {/* Live Streaming Panel - Fourth Row (Lazy Loaded) */}
+        <Suspense fallback={
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-6">
+            <div className="animate-pulse">
+              <div className="h-4 bg-slate-700 rounded w-1/4 mb-4"></div>
+              <div className="h-32 bg-slate-700 rounded"></div>
+            </div>
+          </div>
+        }>
+          <LiveStreamingPanel />
+        </Suspense>
       </div>
     </DashboardLayout>
   )
