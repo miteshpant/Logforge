@@ -815,7 +815,7 @@ async def stream_alerts(
 
                         # Put event in queue for streaming
                         await self.event_queue.put(event)
-                        logger.info(f"✅ UI alert event queued for streaming: {event.event_type}, alert_id: {event.data.get('alert_id')}")
+
                         return True
                     else:
                         logger.debug(

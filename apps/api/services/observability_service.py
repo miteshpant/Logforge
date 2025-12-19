@@ -12,6 +12,7 @@ This service provides comprehensive observability capabilities including:
 import json
 import uuid
 import structlog
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Optional, Union
 from dataclasses import dataclass, asdict
@@ -499,8 +500,12 @@ class ObservabilityService:
     # ==========================================
 
     async def get_apm_overview(self, customer_id: str, hours: int = 24) -> Dict[str, Any]:
-        """Get APM overview metrics for all services"""
+        """Get APM overview metrics for all services - optimized with parallel execution"""
         services = await self.dao.get_service_topology(customer_id)
+
+        # Limit to first 10 services to prevent slow queries
+        services = services[:10]
+
         overview = {
             'total_services': len(services),
             'healthy_services': len([s for s in services if s['health_status'] == 'healthy']),
@@ -512,19 +517,35 @@ class ObservabilityService:
             'services': []
         }
 
-        # Calculate metrics for each service
-        for service in services:
-            service_metrics = await self.get_service_apm_metrics(
-                service['service_name'], customer_id, hours
-            )
-            overview['services'].append(service_metrics.to_dict())
-            overview['total_requests'] += service_metrics.total_requests
-            overview['total_errors'] += service_metrics.error_count
+        # If no services in topology, return empty overview with defaults
+        if not services:
+            logger.info("No services found in topology, returning empty APM overview")
+            return overview
+
+        # Calculate metrics for all services in parallel (much faster!)
+        service_metrics_tasks = [
+            self.get_service_apm_metrics(service['service_name'], customer_id, hours)
+            for service in services
+        ]
+
+        # Wait for all service metrics to complete in parallel
+        service_metrics_list = await asyncio.gather(*service_metrics_tasks, return_exceptions=True)
+
+        # Process results
+        for metrics in service_metrics_list:
+            # Skip if there was an exception
+            if isinstance(metrics, Exception):
+                logger.warning("Failed to get service metrics", error=str(metrics))
+                continue
+
+            overview['services'].append(metrics.to_dict())
+            overview['total_requests'] += metrics.total_requests
+            overview['total_errors'] += metrics.error_count
 
         # Calculate overall averages
         if overview['total_requests'] > 0:
             overview['error_rate'] = (overview['total_errors'] / overview['total_requests']) * 100
-            overview['avg_response_time'] = sum(s['avg_response_time'] for s in overview['services']) / len(overview['services'])
+            overview['avg_response_time'] = sum(s['avg_response_time'] for s in overview['services']) / len(overview['services']) if overview['services'] else 0
 
         return overview
 

@@ -45,69 +45,6 @@ const navigation = [
     icon: Home,
     description: 'Central command center'
   },
-  {
-    name: 'Overview',
-    href: '/dashboard',
-    icon: BarChart3,
-    description: 'System overview and health metrics'
-  },
-  {
-    name: 'Log Explorer',
-    href: '/logs',
-    icon: Search,
-    description: 'Search and analyze log data',
-    badge: 'Core'
-  },
-  {
-    name: 'Dashboards',
-    href: '/dashboards',
-    icon: BarChart3,
-    description: 'Real-time monitoring dashboards'
-  },
-  {
-    name: 'Security Center',
-    href: '/security',
-    icon: Shield,
-    description: 'Security analytics and threat detection',
-    badge: 'SIEM'
-  },
-  {
-    name: 'Alerts',
-    href: '/alerts',
-    icon: Bell,
-    description: 'Alert rules and incident management'
-  },
-  {
-    name: 'Observability',
-    href: '/observability',
-    icon: Activity,
-    description: 'APM, traces, and metrics'
-  },
-  {
-    name: 'AI Assistant',
-    href: '/ai',
-    icon: Brain,
-    description: 'AI-powered log analysis and insights',
-    badge: 'New'
-  },
-  {
-    name: 'Data Pipeline',
-    href: '/ingestion',
-    icon: Database,
-    description: 'Log ingestion and data sources'
-  },
-  {
-    name: 'Team',
-    href: '/team',
-    icon: Users,
-    description: 'User management and access control'
-  },
-  {
-    name: 'Compliance',
-    href: '/compliance',
-    icon: FileText,
-    description: 'Compliance monitoring and reporting'
-  },
 ]
 
 interface DashboardLayoutProps {
