@@ -3,7 +3,7 @@ Streaming API - Server-Sent Events for Real-Time Data
 Real-time streaming endpoints for metrics, traces, security events, alerts, usage, and AI insights
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Request, Header
+from fastapi import APIRouter, HTTPException, Depends, Request, Header, Query
 from fastapi.responses import StreamingResponse
 from typing import Optional, Dict, Any, List
 import structlog
@@ -1031,6 +1031,249 @@ async def stream_ai_insights(
         raise HTTPException(status_code=500, detail=f"Failed to start AI insights stream: {str(e)}")
 
 
+@router.get("/anomalies")
+async def stream_anomalies(
+    severity_threshold: Optional[str] = "medium",
+    services: Optional[str] = None,
+    categories: Optional[str] = None,
+    # Support both header and query param authentication for SSE (EventSource doesn't support headers)
+    customer_id: Optional[str] = Query(None),
+    token: Optional[str] = Query(None),
+    x_customer_id: Optional[str] = Header(None, alias="X-Customer-ID")
+):
+    """
+    Stream real-time anomaly detections - Event-driven, no polling
+
+    Query parameters:
+    - severity_threshold: Minimum severity to receive (low, medium, high, critical)
+    - services: Comma-separated list of services to filter
+    - categories: Comma-separated list of anomaly categories
+    - customer_id: Customer ID (for SSE clients that can't send headers)
+    - token: Authentication token (for SSE clients that can't send headers)
+    """
+
+    # Get customer_id from query param or header
+    final_customer_id = customer_id or x_customer_id
+    if not final_customer_id:
+        raise HTTPException(status_code=401, detail="Missing customer_id (provide via query param or X-Customer-ID header)")
+
+    # Use the resolved customer_id for the rest of the function
+    customer_id = final_customer_id
+    try:
+        from events.subscribers import KafkaEventSubscriber
+        from events.constants import TOPIC_UI_REALTIME_EVENTS
+
+        # Define anomaly event types
+        EVENT_ANOMALY_DETECTED = "ai.anomaly.detected"
+        EVENT_ANOMALY_RESOLVED = "ai.anomaly.resolved"
+        EVENT_ANOMALY_UPDATED = "ai.anomaly.updated"
+
+        anomaly_events = [
+            EVENT_ANOMALY_DETECTED,
+            EVENT_ANOMALY_RESOLVED,
+            EVENT_ANOMALY_UPDATED
+        ]
+
+        # Parse filters
+        service_list = [s.strip() for s in services.split(",")] if services else []
+        category_list = [c.strip() for c in categories.split(",")] if categories else []
+        severity_order = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+        min_severity = severity_order.get(severity_threshold, 2)
+
+        # Create event queue
+        event_queue = asyncio.Queue()
+
+        class StreamingAnomalyHandler:
+            """Custom handler for anomaly event streaming with filtering"""
+
+            def __init__(self, target_customer_id: str, event_queue: asyncio.Queue,
+                        min_severity: int, service_list: List[str], category_list: List[str]):
+                self.target_customer_id = target_customer_id
+                self.event_queue = event_queue
+                self.min_severity = min_severity
+                self.service_list = service_list
+                self.category_list = category_list
+
+            async def handle(self, event) -> bool:
+                """Handle anomaly events and apply filters"""
+                try:
+                    if (hasattr(event, 'customer_id') and
+                        event.customer_id == self.target_customer_id and
+                        hasattr(event, 'event_type') and
+                        event.event_type in anomaly_events):
+
+                        # Apply filters
+                        if await self._should_stream_event(event):
+                            await self.event_queue.put(event)
+                            logger.debug(f"Anomaly event queued: {event.event_type}")
+                        return True
+                    return True
+
+                except Exception as e:
+                    logger.error(f"Error in anomaly streaming handler: {e}")
+                    return False
+
+            async def _should_stream_event(self, event) -> bool:
+                """Apply filters to anomaly events"""
+                try:
+                    data = event.data
+
+                    # Severity filter
+                    event_severity = data.get("severity", "medium")
+                    event_severity_num = severity_order.get(event_severity, 0)
+                    if event_severity_num < self.min_severity:
+                        return False
+
+                    # Service filter
+                    if self.service_list:
+                        affected_services = data.get("affected_services", [])
+                        if not any(s in self.service_list for s in affected_services):
+                            return False
+
+                    # Category filter
+                    if self.category_list:
+                        event_category = data.get("category", "")
+                        if event_category not in self.category_list:
+                            return False
+
+                    return True
+
+                except Exception as e:
+                    logger.error(f"Error filtering anomaly event: {e}")
+                    return True  # Default to streaming on error
+
+            def get_handler_name(self) -> str:
+                return f"streaming_anomaly_handler_{self.target_customer_id}"
+
+            def get_supported_event_types(self) -> List[str]:
+                return anomaly_events
+
+        async def generate_real_time_anomalies():
+            """Generate real-time anomaly events"""
+            subscriber = None
+            try:
+                from events.subscribers import SubscriberConfig
+
+                # Create subscriber config
+                config = SubscriberConfig(
+                    name=f"streaming_anomalies_{customer_id}",
+                    consumer_group=f"streaming_anomalies_{customer_id}",
+                    topics=[TOPIC_UI_REALTIME_EVENTS],
+                    event_types=anomaly_events,
+                    enabled=True,
+                    max_batch_size=10,
+                    max_parallel_workers=1
+                )
+
+                subscriber = KafkaEventSubscriber(config)
+                streaming_handler = StreamingAnomalyHandler(
+                    customer_id, event_queue, min_severity, service_list, category_list
+                )
+                subscriber.register_handler(streaming_handler)
+
+                logger.info(f"Starting real-time anomaly stream for customer {customer_id}")
+
+                # Send connection confirmation
+                yield format_sse_message("connected", {
+                    "status": "streaming_started",
+                    "customer_id": customer_id,
+                    "filters": {
+                        "severity_threshold": severity_threshold,
+                        "services": service_list,
+                        "categories": category_list
+                    },
+                    "event_types": anomaly_events,
+                    "timestamp": datetime.now().isoformat()
+                })
+
+                # Start subscriber
+                await subscriber.start()
+
+                # Stream events
+                while True:
+                    try:
+                        event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
+
+                        stream_data = {
+                            "event_type": event.event_type,
+                            "customer_id": event.customer_id,
+                            "timestamp": event.metadata.created_at if hasattr(event, 'metadata') and event.metadata else datetime.now().isoformat(),
+                            "anomaly_id": event.data.get("anomaly_id"),
+                            "title": event.data.get("title"),
+                            "severity": event.data.get("severity"),
+                            "confidence": event.data.get("confidence"),
+                            "category": event.data.get("category"),
+                            "description": event.data.get("description"),
+                            "affected_services": event.data.get("affected_services", []),
+                            "recommended_actions": event.data.get("recommended_actions", [])
+                        }
+
+                        # Add event-specific data
+                        if event.event_type == EVENT_ANOMALY_DETECTED:
+                            stream_data.update({
+                                "baseline_value": event.data.get("baseline_value"),
+                                "current_value": event.data.get("current_value"),
+                                "deviation_score": event.data.get("deviation_score"),
+                                "affected_metrics": event.data.get("affected_metrics", [])
+                            })
+                        elif event.event_type == EVENT_ANOMALY_RESOLVED:
+                            stream_data.update({
+                                "resolution": event.data.get("resolution"),
+                                "resolved_by": event.data.get("resolved_by"),
+                                "resolved_at": event.data.get("resolved_at")
+                            })
+
+                        yield format_sse_message("anomaly_event", stream_data,
+                                                getattr(event.metadata, 'event_id', None) if hasattr(event, 'metadata') else None)
+
+                        logger.debug(
+                            "Anomaly event streamed to UI",
+                            customer_id=customer_id,
+                            anomaly_id=stream_data.get("anomaly_id"),
+                            event_type=event.event_type
+                        )
+
+                    except asyncio.TimeoutError:
+                        # Keepalive
+                        yield format_sse_message("keepalive", {
+                            "timestamp": datetime.now().isoformat(),
+                            "status": "listening"
+                        })
+
+                    except Exception as e:
+                        logger.error(f"Error processing anomaly event: {e}")
+                        yield format_sse_message("error", {"message": f"Event processing error: {str(e)}"})
+
+            except Exception as e:
+                logger.error(f"Error in anomaly stream for customer {customer_id}: {e}")
+                yield format_sse_message("error", {
+                    "message": f"Stream error: {str(e)}",
+                    "timestamp": datetime.now().isoformat()
+                })
+            finally:
+                if subscriber:
+                    try:
+                        await subscriber.stop()
+                        logger.info(f"Stopped anomaly subscriber for customer {customer_id}")
+                    except Exception as e:
+                        logger.error(f"Error stopping anomaly subscriber: {e}")
+
+        return StreamingResponse(
+            generate_real_time_anomalies(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+            }
+        )
+
+    except Exception as e:
+        logger.error("Failed to start anomaly stream", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to start anomaly stream: {str(e)}")
+
+
 @router.get("/health")
 async def streaming_health():
     """Health check for streaming service"""
@@ -1043,6 +1286,7 @@ async def streaming_health():
             "/v1/stream/security",
             "/v1/stream/alerts",
             "/v1/stream/usage",
-            "/v1/stream/ai-insights"
+            "/v1/stream/ai-insights",
+            "/v1/stream/anomalies"
         ]
     }

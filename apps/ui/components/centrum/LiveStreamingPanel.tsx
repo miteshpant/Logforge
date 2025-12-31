@@ -69,23 +69,37 @@ export default function LiveStreamingPanel() {
         url,
         (data) => {
           // Handle incoming stream data
-          console.log('Received stream data:', data)
+          console.log('📥 SSE event received:', {
+            event_type: data.event_type,
+            alert_id: data.alert_id,
+            status: data.status,
+            fullData: data
+          })
+
+          // Filter out background status checks
+          if (data.status === 'listening' || data.status === 'streaming_started') {
+            console.log('⏸️  Background status check, skipping UI update')
+            return
+          }
 
           const newEvent: StreamEvent = {
-            id: data.id || Date.now().toString(),
-            timestamp: data.timestamp || new Date().toISOString(),
+            id: data.id || data.alert_id || Date.now().toString(),
+            timestamp: data.timestamp || data.triggered_at || new Date().toISOString(),
             type: data.event_type || data.type || 'message',
             data: data
           }
 
+          console.log('✅ Adding event to UI:', newEvent)
+
           setEvents(prev => {
             const updated = [newEvent, ...prev]
+            console.log(`📊 Total events in UI: ${updated.length}`)
             return updated.slice(0, 50) // Keep last 50 events
           })
         },
         (error) => {
           // Handle errors
-          console.error('Stream error:', error)
+          console.error('❌ Stream error:', error)
           setIsConnected(false)
         }
       )
@@ -139,6 +153,151 @@ export default function LiveStreamingPanel() {
     if (type.includes('resolved') || type.includes('acknowledged')) return 'text-green-400'
     if (type.includes('trace')) return 'text-blue-400'
     return 'text-cyan-400'
+  }
+
+  const getSeverityBadge = (severity: string) => {
+    const severityColors: Record<string, string> = {
+      critical: 'bg-red-500/20 text-red-400 border-red-500/30',
+      high: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+      medium: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+      low: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+      info: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+    }
+    return severityColors[severity] || severityColors.info
+  }
+
+  const renderAlertCard = (event: StreamEvent) => {
+    const data = event.data
+    const severity = data.severity || 'info'
+    const ruleName = data.rule_name || 'Unknown Alert'
+    const message = data.message || 'No message available'
+    const status = data.status || 'unknown'
+
+    return (
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase border ${getSeverityBadge(severity)}`}>
+              {severity}
+            </span>
+            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+              status === 'triggered' ? 'bg-red-500/20 text-red-400' :
+              status === 'resolved' ? 'bg-green-500/20 text-green-400' :
+              'bg-slate-500/20 text-slate-400'
+            }`}>
+              {status.toUpperCase()}
+            </span>
+          </div>
+          <span className="text-xs text-slate-500 font-mono whitespace-nowrap">
+            {new Date(event.timestamp).toLocaleTimeString()}
+          </span>
+        </div>
+        <h4 className="text-white font-bold text-base mb-1">{ruleName}</h4>
+        <p className="text-slate-300 text-sm leading-relaxed">{message}</p>
+      </div>
+    )
+  }
+
+  const renderSecurityCard = (event: StreamEvent) => {
+    const data = event.data
+    const severity = data.severity || data.level || 'info'
+    const title = data.title || data.detection_name || 'Security Event'
+    const description = data.description || data.message || 'Security event detected'
+
+    return (
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between mb-2">
+          <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase border ${getSeverityBadge(severity)}`}>
+            {severity}
+          </span>
+          <span className="text-xs text-slate-500 font-mono whitespace-nowrap">
+            {new Date(event.timestamp).toLocaleTimeString()}
+          </span>
+        </div>
+        <h4 className="text-white font-bold text-base mb-1">{title}</h4>
+        <p className="text-slate-300 text-sm leading-relaxed">{description}</p>
+        {data.src_ip && (
+          <div className="mt-2 flex items-center gap-4 text-xs text-slate-400">
+            <span>Source IP: <span className="text-purple-400 font-mono">{data.src_ip}</span></span>
+            {data.target_user && <span>User: <span className="text-purple-400 font-mono">{data.target_user}</span></span>}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const renderTraceCard = (event: StreamEvent) => {
+    const data = event.data
+    const serviceName = data.service_name || data.service || 'Unknown Service'
+    const operation = data.operation_name || data.operation || 'Unknown Operation'
+    const duration = data.duration_ms ? `${data.duration_ms}ms` : 'N/A'
+    const status = data.status || 'ok'
+
+    return (
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-blue-500/20 text-blue-400">
+              {serviceName}
+            </span>
+            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+              status === 'error' ? 'bg-red-500/20 text-red-400' :
+              'bg-green-500/20 text-green-400'
+            }`}>
+              {status.toUpperCase()}
+            </span>
+          </div>
+          <span className="text-xs text-slate-500 font-mono whitespace-nowrap">
+            {new Date(event.timestamp).toLocaleTimeString()}
+          </span>
+        </div>
+        <h4 className="text-white font-bold text-base mb-1">{operation}</h4>
+        <div className="flex items-center gap-4 text-xs text-slate-400">
+          <span>Duration: <span className="text-blue-400 font-mono">{duration}</span></span>
+          {data.trace_id && <span>Trace: <span className="text-blue-400 font-mono">{data.trace_id.substring(0, 8)}...</span></span>}
+        </div>
+      </div>
+    )
+  }
+
+  const renderMetricCard = (event: StreamEvent) => {
+    const data = event.data
+    const metricName = data.metric_name || data.name || 'Unknown Metric'
+    const value = data.value !== undefined ? data.value : 'N/A'
+    const unit = data.unit || ''
+
+    return (
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between mb-2">
+          <span className="px-2 py-0.5 rounded text-xs font-semibold bg-cyan-500/20 text-cyan-400">
+            METRIC
+          </span>
+          <span className="text-xs text-slate-500 font-mono whitespace-nowrap">
+            {new Date(event.timestamp).toLocaleTimeString()}
+          </span>
+        </div>
+        <h4 className="text-white font-bold text-base mb-1">{metricName}</h4>
+        <div className="flex items-center gap-2">
+          <span className="text-2xl font-bold text-cyan-400">{value}</span>
+          {unit && <span className="text-sm text-slate-400">{unit}</span>}
+        </div>
+      </div>
+    )
+  }
+
+  const renderEventCard = (event: StreamEvent) => {
+    if (event.type.includes('alert')) {
+      return renderAlertCard(event)
+    } else if (event.type.includes('security')) {
+      return renderSecurityCard(event)
+    } else if (event.type.includes('trace')) {
+      return renderTraceCard(event)
+    } else if (event.type.includes('metric')) {
+      return renderMetricCard(event)
+    } else {
+      // Fallback for unknown event types
+      return renderAlertCard(event)
+    }
   }
 
   const tabs = [
@@ -200,7 +359,7 @@ export default function LiveStreamingPanel() {
 
       {/* Events Stream - Collapsible */}
       {isExpanded && (
-        <div className="overflow-y-auto px-6 py-4 h-96">
+        <div className="overflow-y-auto px-6 py-4 max-h-96" style={{ height: '400px' }}>
           {events.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-slate-500">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-4 opacity-50">
@@ -222,22 +381,10 @@ export default function LiveStreamingPanel() {
                   }}
                 >
                   <div className="flex items-start gap-3">
-                    <div className={`mt-0.5 ${getEventColor(event.type)}`}>
+                    <div className={`mt-1 flex-shrink-0 ${getEventColor(event.type)}`}>
                       {getEventIcon(event.type)}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className={`text-sm font-semibold ${getEventColor(event.type)}`}>
-                          {event.type}
-                        </span>
-                        <span className="text-xs text-slate-500 font-mono">
-                          {new Date(event.timestamp).toLocaleTimeString()}
-                        </span>
-                      </div>
-                      <pre className="text-xs text-slate-300 overflow-x-auto bg-slate-900/50 p-2 rounded max-h-40">
-                        {JSON.stringify(event.data, null, 2)}
-                      </pre>
-                    </div>
+                    {renderEventCard(event)}
                   </div>
                 </div>
               ))}

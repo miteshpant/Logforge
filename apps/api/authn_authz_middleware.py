@@ -1190,8 +1190,13 @@ from fastapi import Depends
 
 security = HTTPBearer()
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
-    """Get current authenticated user"""
+async def get_current_user(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
+    """Get current authenticated user (supports both JWT sessions and API keys)"""
+    # Check if middleware already authenticated the user
+    if hasattr(request.state, "user") and request.state.user:
+        return request.state.user
+
+    # Fallback: validate session directly (for endpoints not going through middleware)
     user = await user_service.validate_session(credentials.credentials)
     if not user:
         raise HTTPException(401, "Invalid or expired session")

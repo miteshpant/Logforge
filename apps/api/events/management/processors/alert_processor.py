@@ -479,6 +479,8 @@ class AlertProcessor:
             customer_id: Customer/tenant ID
         """
         try:
+            logger.info(f"🚀 Starting UI alert event publishing for alert {alert_instance_id}")
+
             # Import here to avoid circular dependency
             from ...publishers.ui_publisher import UIEventPublisher
             import sys
@@ -493,9 +495,10 @@ class AlertProcessor:
 
             # Use global event publisher manager
             if not dependencies.event_publisher_manager:
-                logger.warning("Event publisher manager not available")
+                logger.warning("⚠️ Event publisher manager not available - UI alert will not be streamed")
                 return
 
+            logger.info(f"✅ Event publisher manager available, creating UI publisher")
             ui_publisher = UIEventPublisher(dependencies.event_publisher_manager)
 
             # Prepare alert data for UI event

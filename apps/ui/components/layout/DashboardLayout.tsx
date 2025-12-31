@@ -45,6 +45,12 @@ const navigation = [
     icon: Home,
     description: 'Central command center'
   },
+  {
+    name: 'Anomaly Detection',
+    href: '/anomaly-detection',
+    icon: Brain,
+    description: 'AI-powered anomaly detection'
+  },
 ]
 
 interface DashboardLayoutProps {
