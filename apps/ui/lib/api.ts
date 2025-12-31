@@ -208,6 +208,74 @@ class ApiClient {
   setCustomerId(customerId: string) {
     this.setHeader('X-Customer-ID', customerId)
   }
+
+  /**
+   * Set authentication context (token + tenant + role)
+   */
+  setAuth(token: string, tenantId: string, userRole?: string) {
+    // Store in localStorage for persistence
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('auth_token', token)
+      localStorage.setItem('tenant_id', tenantId)
+      if (userRole) {
+        localStorage.setItem('user_role', userRole)
+      }
+    }
+
+    // Set headers
+    this.setAuthToken(token)
+    this.setCustomerId(tenantId)
+    if (userRole) {
+      this.setHeader('X-User-Role', userRole)
+    }
+  }
+
+  /**
+   * Get current authentication context
+   */
+  getAuthContext(): {
+    isAuthenticated: boolean
+    token: string | null
+    tenantId: string | null
+    userRole: string | null
+  } {
+    if (typeof window === 'undefined') {
+      return {
+        isAuthenticated: false,
+        token: null,
+        tenantId: null,
+        userRole: null,
+      }
+    }
+
+    const token = localStorage.getItem('auth_token')
+    const tenantId = localStorage.getItem('tenant_id')
+    const userRole = localStorage.getItem('user_role')
+
+    return {
+      isAuthenticated: !!token,
+      token,
+      tenantId,
+      userRole,
+    }
+  }
+
+  /**
+   * Logout - clear all authentication state
+   */
+  logout() {
+    // Clear localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('tenant_id')
+      localStorage.removeItem('user_role')
+    }
+
+    // Clear headers
+    this.clearAuthToken()
+    this.removeHeader('X-Customer-ID')
+    this.removeHeader('X-User-Role')
+  }
 }
 
 // Export singleton instance
