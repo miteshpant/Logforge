@@ -58,20 +58,35 @@ export default function ServiceMapPage() {
       setIsLoading(true)
       const { start_time, end_time } = getApiTimeRange()
 
+      // Calculate time range in hours
+      const timeRangeMs = new Date(end_time).getTime() - new Date(start_time).getTime()
+      const timeRangeHours = Math.ceil(timeRangeMs / (1000 * 60 * 60))
+
       const response = await apiClient.get<ServiceMapData>('/v1/observability/service-map', {
-        start_time,
-        end_time
+        time_range_hours: timeRangeHours
       })
 
       const data = response?.data || response
 
-      if (data) {
+      if (data && data.nodes && data.nodes.length > 0) {
         setServiceMapData(data as ServiceMapData)
+      } else {
+        // If no data, show empty state instead of mock data
+        setServiceMapData({ nodes: [], edges: [], timestamp: new Date().toISOString() })
       }
     } catch (error) {
       console.error('Failed to load service map:', error)
-      // Set mock data for development
-      setServiceMapData({
+      // Show empty state on error
+      setServiceMapData({ nodes: [], edges: [], timestamp: new Date().toISOString() })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Keep old mock data generator for reference but commented out
+  /*
+  const generateMockData = () => {
+    setServiceMapData({
         nodes: [
           {
             id: 'frontend',
@@ -197,10 +212,9 @@ export default function ServiceMapPage() {
         ],
         timestamp: new Date().toISOString()
       })
-    } finally {
-      setIsLoading(false)
     }
   }
+  */
 
   // Initial load
   useEffect(() => {
@@ -248,8 +262,8 @@ export default function ServiceMapPage() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-white">Service Map</h1>
-            <p className="text-slate-400 mt-1">
+            <h1 className="text-3xl font-bold text-slate-900">Service Map</h1>
+            <p className="text-slate-600 mt-1">
               Interactive visualization of your service dependencies and health
             </p>
           </div>
@@ -299,36 +313,36 @@ export default function ServiceMapPage() {
         </div>
 
         {/* Legend */}
-        <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-          <h3 className="text-sm font-semibold text-white mb-3">Legend</h3>
+        <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
+          <h3 className="text-sm font-semibold text-slate-900 mb-3">Legend</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-full bg-emerald-500"></div>
-              <span className="text-slate-300">Healthy</span>
+              <span className="text-slate-700">Healthy</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-full bg-yellow-500"></div>
-              <span className="text-slate-300">Degraded</span>
+              <span className="text-slate-700">Degraded</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-full bg-red-500"></div>
-              <span className="text-slate-300">Down</span>
+              <span className="text-slate-700">Down</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-blue-500"></div>
-              <span className="text-slate-300">Service</span>
+              <span className="text-slate-700">Service</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-purple-500"></div>
-              <span className="text-slate-300">Database</span>
+              <span className="text-slate-700">Database</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-orange-500"></div>
-              <span className="text-slate-300">Cache</span>
+              <span className="text-slate-700">Cache</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-slate-500"></div>
-              <span className="text-slate-300">External</span>
+              <span className="text-slate-700">External</span>
             </div>
           </div>
         </div>
