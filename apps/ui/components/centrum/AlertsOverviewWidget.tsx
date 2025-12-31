@@ -286,11 +286,11 @@ export default function AlertsOverviewWidget({ data, isLoading, timeRange }: Ale
             {/* Status Summary - Below Legend */}
             <div className="flex gap-2">
               <div className="flex-1 px-2.5 py-2 rounded-lg bg-gradient-to-br from-red-500/10 to-red-500/5 border border-red-500/15 text-center">
-                <div className="text-xl font-extrabold text-red-400 leading-none">{data.open_alerts.toLocaleString()}</div>
+                <div className="text-xl font-extrabold text-red-400 leading-none">{(data.open_alerts || 0).toLocaleString()}</div>
                 <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mt-1">Open</div>
               </div>
               <div className="flex-1 px-2.5 py-2 rounded-lg bg-gradient-to-br from-green-500/10 to-green-500/5 border border-green-500/15 text-center">
-                <div className="text-xl font-extrabold text-green-400 leading-none">{data.closed_alerts.toLocaleString()}</div>
+                <div className="text-xl font-extrabold text-green-400 leading-none">{(data.closed_alerts || 0).toLocaleString()}</div>
                 <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mt-1">Resolved</div>
               </div>
             </div>
