@@ -219,7 +219,7 @@ export default function ServiceMapPage() {
   }, [autoRefresh, refreshInterval])
 
   // Filter nodes based on search and filters
-  const filteredData = serviceMapData ? {
+  const filteredData = serviceMapData && serviceMapData.nodes ? {
     ...serviceMapData,
     nodes: serviceMapData.nodes.filter(node => {
       // Search filter
@@ -238,7 +238,8 @@ export default function ServiceMapPage() {
       }
 
       return true
-    })
+    }),
+    edges: serviceMapData.edges || []
   } : null
 
   return (

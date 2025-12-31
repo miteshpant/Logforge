@@ -34,6 +34,10 @@ import {
   Building2,
   ChevronDown,
   Home,
+  GitBranch,
+  Clock,
+  Gauge,
+  Radio,
 } from 'lucide-react'
 import { TenantSelector } from '@/components/TenantSelector'
 import PWASupport from '@/components/PWASupport'
@@ -44,6 +48,30 @@ const navigation = [
     href: '/centrum',
     icon: Home,
     description: 'Central command center'
+  },
+  {
+    name: 'Service Map',
+    href: '/observability/service-map',
+    icon: GitBranch,
+    description: 'Interactive service dependencies'
+  },
+  {
+    name: 'Distributed Tracing',
+    href: '/observability/traces',
+    icon: Clock,
+    description: 'Request traces & waterfall'
+  },
+  {
+    name: 'APM Dashboard',
+    href: '/observability/apm',
+    icon: Gauge,
+    description: 'Application performance metrics'
+  },
+  {
+    name: 'Live Metrics',
+    href: '/observability/metrics/live',
+    icon: Radio,
+    description: 'Real-time metrics streaming'
   },
   {
     name: 'Anomaly Detection',
