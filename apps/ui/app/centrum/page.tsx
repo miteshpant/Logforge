@@ -120,10 +120,8 @@ export default function CentrumPage() {
 
       // Call the alerts overview endpoint
       const response = await apiClient.get('/v1/alerts/stats/overview', {
-        params: {
-          start_time: start_time,
-          end_time: end_time
-        }
+        start_time: start_time,
+        end_time: end_time
       })
 
       // Handle both wrapped and unwrapped response formats
@@ -156,9 +154,7 @@ export default function CentrumPage() {
 
       // Call the security dashboard endpoint
       const response = await apiClient.get('/v1/security/dashboard', {
-        params: {
-          time_range: '24h'
-        }
+        time_range: '24h'
       })
 
       // Handle both wrapped and unwrapped response formats
@@ -192,10 +188,8 @@ export default function CentrumPage() {
 
       // Call the observability overview endpoint
       const response = await apiClient.get('/v1/observability/overview/stats', {
-        params: {
-          start_time: start_time,
-          end_time: end_time
-        }
+        start_time: start_time,
+        end_time: end_time
       })
 
       // Handle both wrapped and unwrapped response formats
@@ -229,10 +223,8 @@ export default function CentrumPage() {
 
       // Call the usage overview endpoint with time range
       const response = await apiClient.get('/v1/usage/overview/stats', {
-        params: {
-          start_time: start_time,
-          end_time: end_time
-        }
+        start_time: start_time,
+        end_time: end_time
       })
 
       // Handle both wrapped and unwrapped response formats
@@ -266,13 +258,8 @@ export default function CentrumPage() {
 
       // Call the APM overview stats endpoint
       const response = await apiClient.get('/v1/observability/apm/overview/stats', {
-        params: {
-          start_time: start_time,
-          end_time: end_time
-        },
-        headers: {
-          'X-Customer-ID': 'default' // This will be replaced by middleware
-        }
+        start_time: start_time,
+        end_time: end_time
       })
 
       // Handle both wrapped and unwrapped response formats
