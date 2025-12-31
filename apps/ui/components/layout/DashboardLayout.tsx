@@ -38,6 +38,11 @@ import {
   Clock,
   Gauge,
   Radio,
+  ShieldAlert,
+  Target,
+  Crosshair,
+  Globe,
+  ScrollText,
 } from 'lucide-react'
 import { TenantSelector } from '@/components/TenantSelector'
 import PWASupport from '@/components/PWASupport'
@@ -49,6 +54,7 @@ const navigation = [
     icon: Home,
     description: 'Central command center'
   },
+  // Observability Section
   {
     name: 'Service Map',
     href: '/observability/service-map',
@@ -74,10 +80,48 @@ const navigation = [
     description: 'Real-time metrics streaming'
   },
   {
+    name: 'Log Explorer',
+    href: '/observability/logs',
+    icon: ScrollText,
+    description: 'Search & analyze logs'
+  },
+  {
     name: 'Anomaly Detection',
     href: '/anomaly-detection',
     icon: Brain,
     description: 'AI-powered anomaly detection'
+  },
+  // Security Section
+  {
+    name: 'SIEM Dashboard',
+    href: '/security/siem',
+    icon: ShieldAlert,
+    description: 'Security operations center',
+    badge: 'New'
+  },
+  {
+    name: 'Security Events',
+    href: '/security/events',
+    icon: Shield,
+    description: 'Investigate security incidents'
+  },
+  {
+    name: 'Detection Rules',
+    href: '/security/rules',
+    icon: FileText,
+    description: 'Sigma detection rules'
+  },
+  {
+    name: 'Threat Intel',
+    href: '/security/threat-intel',
+    icon: Globe,
+    description: 'IOC & threat feeds'
+  },
+  {
+    name: 'Threat Hunting',
+    href: '/security/threat-hunting',
+    icon: Crosshair,
+    description: 'Proactive threat hunting'
   },
 ]
 
