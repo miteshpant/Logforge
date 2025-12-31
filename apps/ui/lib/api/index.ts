@@ -9,6 +9,8 @@ export { apiClient, ApiClient } from '../api'
 export type { ApiResponse } from '../api'
 
 // Export all API modules
+export * from './auth'
+export * from './tenants'
 export * from './observability'
 export * from './security'
 export * from './alerts'
@@ -17,6 +19,8 @@ export * from './query'
 export * from './usage'
 
 // Export as namespaces for grouped access
+export { AuthApi } from './auth'
+export { TenantsApi } from './tenants'
 export { ObservabilityApi } from './observability'
 export { SecurityApi } from './security'
 export { AlertsApi } from './alerts'
