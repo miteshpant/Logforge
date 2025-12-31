@@ -66,10 +66,10 @@ export default function AlertsOverviewWidget({ data, isLoading, timeRange }: Ale
 
   // Calculate percentages for each severity
   const total = data.total_alerts || 0
-  const criticalCount = data.alerts_by_severity.critical || 0
-  const highCount = data.alerts_by_severity.high || 0
-  const mediumCount = data.alerts_by_severity.medium || 0
-  const lowCount = data.alerts_by_severity.low || 0
+  const criticalCount = data.alerts_by_severity?.critical || 0
+  const highCount = data.alerts_by_severity?.high || 0
+  const mediumCount = data.alerts_by_severity?.medium || 0
+  const lowCount = data.alerts_by_severity?.low || 0
 
   const criticalPct = total > 0 ? (criticalCount / total) * 100 : 0
   const highPct = total > 0 ? (highCount / total) * 100 : 0
