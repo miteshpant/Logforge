@@ -55,12 +55,12 @@ export default function ObservabilityStatsWidgets({ data, isLoading }: Observabi
   }
 
   // Calculate values
-  const totalTraces = data.traces.total_count || 0
-  const avgResponseTime = Math.round(data.performance.avg_response_time_ms || 0)
-  const errorRate = data.reliability.error_rate_percent || 0
-  const activeServices = data.services.active_count || 0
-  const p95Latency = Math.round(data.performance.p95_latency_ms || 0)
-  const totalSpans = data.spans.total_count || 0
+  const totalTraces = data.traces?.total_count || 0
+  const avgResponseTime = Math.round(data.performance?.avg_response_time_ms || 0)
+  const errorRate = data.reliability?.error_rate_percent || 0
+  const activeServices = data.services?.active_count || 0
+  const p95Latency = Math.round(data.performance?.p95_latency_ms || 0)
+  const totalSpans = data.spans?.total_count || 0
 
   // Determine color for error rate
   const getErrorRateColor = (rate: number) => {
