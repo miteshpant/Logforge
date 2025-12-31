@@ -2,9 +2,9 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { AuthApi, apiClient } from '@/lib/api'
+import { AuthApi, apiClient } from '@/lib/api/index'
 import { TenantsApi } from '@/lib/api/tenants'
-import type { AuthContext as AuthContextType, UserProfile, TenantInfo } from '@/lib/api'
+import type { AuthContext as AuthContextType, UserProfile, TenantInfo } from '@/lib/api/index'
 import type { UserRoleAssignment } from '@/lib/api/auth'
 import type { Tenant } from '@/lib/api/tenants'
 
