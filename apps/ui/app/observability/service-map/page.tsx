@@ -252,7 +252,6 @@ export default function ServiceMapPage() {
   const [rawServices, setRawServices] = useState<ApiService[]>([])
   const [selectedNode, setSelectedNode] = useState<ServiceNode | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
   const [filterType, setFilterType] = useState<string>('all')
   const [filterHealth, setFilterHealth] = useState<string>('all')
   const [selectedService, setSelectedService] = useState<string>('all')
@@ -508,7 +507,7 @@ export default function ServiceMapPage() {
     return () => clearInterval(interval)
   }, [autoRefresh, refreshInterval])
 
-  // Filter nodes based on search and filters
+  // Filter nodes based on selected filters
   const filteredData = useMemo((): ServiceMapData | null => {
     if (!serviceMapData || !serviceMapData.nodes) return null
 
@@ -531,16 +530,6 @@ export default function ServiceMapPage() {
       // Service filter (specific service selected from dropdown by name)
       if (selectedService !== 'all' && node.name !== selectedService) {
         return false
-      }
-
-      // Search filter (search by name or namespace)
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase()
-        const matchesName = node.name.toLowerCase().includes(query)
-        const matchesNamespace = node.metadata?.namespace?.toLowerCase().includes(query)
-        if (!matchesName && !matchesNamespace) {
-          return false
-        }
       }
 
       // Type filter
@@ -567,7 +556,7 @@ export default function ServiceMapPage() {
       nodes: filteredNodes,
       edges: filteredEdges
     }
-  }, [serviceMapData, rawServices, filterEnvironment, selectedService, searchQuery, filterType, filterHealth])
+  }, [serviceMapData, rawServices, filterEnvironment, selectedService, filterType, filterHealth])
 
   return (
     <DashboardLayout>
@@ -592,8 +581,6 @@ export default function ServiceMapPage() {
 
         {/* Controls */}
         <ServiceMapControls
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
           filterType={filterType}
           onFilterTypeChange={setFilterType}
           filterHealth={filterHealth}

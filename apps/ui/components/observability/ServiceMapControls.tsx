@@ -1,15 +1,11 @@
 'use client'
 
-import { Search } from 'lucide-react'
-
 interface ServiceOption {
   name: string
   instanceCount: number
 }
 
 interface ServiceMapControlsProps {
-  searchQuery: string
-  onSearchChange: (query: string) => void
   filterType: string
   onFilterTypeChange: (type: string) => void
   filterHealth: string
@@ -27,8 +23,6 @@ interface ServiceMapControlsProps {
 }
 
 export default function ServiceMapControls({
-  searchQuery,
-  onSearchChange,
   filterType,
   onFilterTypeChange,
   filterHealth,
@@ -46,7 +40,7 @@ export default function ServiceMapControls({
 }: ServiceMapControlsProps) {
   return (
     <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {/* Service Selector - Unique service names */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -83,23 +77,6 @@ export default function ServiceMapControls({
               </option>
             ))}
           </select>
-        </div>
-
-        {/* Search */}
-        <div className="lg:col-span-2">
-          <label className="block text-sm font-medium text-slate-700 mb-2">
-            Search
-          </label>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Search by name, namespace..."
-              className="w-full pl-10 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
-            />
-          </div>
         </div>
 
         {/* Type Filter - Match DB enum */}
@@ -141,7 +118,7 @@ export default function ServiceMapControls({
         </div>
 
         {/* Auto Refresh */}
-        <div>
+        <div className="col-span-2 md:col-span-1 lg:col-span-2">
           <label className="block text-sm font-medium text-slate-700 mb-2">
             Auto Refresh
           </label>
