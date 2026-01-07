@@ -295,7 +295,8 @@ export default function ServiceMapPage() {
         time_range_hours: timeRangeHours
       })
 
-      const data = response?.data || response
+      // Handle various response wrapper formats
+      const data = response?.data?.data || response?.data || response
 
       // Handle API response with 'services' array
       if (data && (data as ApiServiceMapResponse).services && Array.isArray((data as ApiServiceMapResponse).services)) {
