@@ -77,14 +77,14 @@ export default function ServiceMapVisualization({
       target: edge.target
     }))
 
-    // Create force simulation
+    // Create force simulation with tighter spacing
     const simulation = d3.forceSimulation<D3Node>(nodes)
       .force('link', d3.forceLink<D3Node, D3Link>(links)
         .id(d => d.id)
-        .distance(150))
-      .force('charge', d3.forceManyBody().strength(-400))
+        .distance(80))  // Reduced from 150 - brings linked nodes closer
+      .force('charge', d3.forceManyBody().strength(-200))  // Reduced from -400 - less repulsion
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(50))
+      .force('collision', d3.forceCollide().radius(35))  // Reduced from 50 - allows nodes to be closer
 
     // Create arrow markers for directed edges
     const defs = container.append('defs')
