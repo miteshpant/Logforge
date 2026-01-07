@@ -85,11 +85,13 @@ export default function ServiceMapVisualization({
     // Create arrow markers for directed edges
     const defs = container.append('defs')
 
-    // Define arrow markers for each health status
-    const healthColors = {
-      healthy: '#10b981',
-      degraded: '#eab308',
-      down: '#ef4444'
+    // Define arrow markers for each health status (matching DB enum: healthy, degraded, unhealthy, unknown)
+    const healthColors: Record<string, string> = {
+      healthy: '#10b981',   // emerald-500
+      degraded: '#eab308',  // yellow-500
+      unhealthy: '#ef4444', // red-500
+      unknown: '#94a3b8',   // slate-400
+      down: '#ef4444'       // legacy support
     }
 
     Object.entries(healthColors).forEach(([status, color]) => {
@@ -152,16 +154,20 @@ export default function ServiceMapVisualization({
 
     // Add node circles
     const getNodeColor = (node: ServiceNode) => {
-      const typeColors = {
-        service: '#3b82f6',
-        database: '#a855f7',
-        cache: '#f97316',
-        external: '#64748b'
+      // Type colors matching DB enum: api, application, database, cache, queue, external
+      const typeColors: Record<string, string> = {
+        api: '#06b6d4',         // cyan-500
+        application: '#3b82f6', // blue-500
+        service: '#3b82f6',     // blue-500 (legacy)
+        database: '#a855f7',    // purple-500
+        cache: '#f97316',       // orange-500
+        queue: '#ec4899',       // pink-500
+        external: '#64748b'     // slate-500
       }
       return typeColors[node.type] || '#64748b'
     }
 
-    const getHealthColor = (health: string) => healthColors[health as keyof typeof healthColors] || healthColors.healthy
+    const getHealthColor = (health: string) => healthColors[health] || healthColors.unknown
 
     node.append('circle')
       .attr('r', 20)
@@ -189,7 +195,7 @@ export default function ServiceMapVisualization({
       .attr('pointer-events', 'none')
       .text(d => d.name)
 
-    // Add error indicator for degraded/down services
+    // Add error indicator for non-healthy services (degraded, unhealthy, unknown)
     node.filter(d => d.health !== 'healthy')
       .append('circle')
       .attr('r', 6)

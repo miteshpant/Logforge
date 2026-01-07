@@ -41,8 +41,8 @@ interface ApiServiceMapResponse {
 export interface ServiceNode {
   id: string
   name: string
-  type: 'service' | 'database' | 'external' | 'cache' | 'application'
-  health: 'healthy' | 'degraded' | 'down'
+  type: 'api' | 'application' | 'database' | 'cache' | 'queue' | 'external' | 'service'
+  health: 'healthy' | 'degraded' | 'unhealthy' | 'unknown'
   metrics: {
     request_count: number
     error_rate: number
@@ -53,6 +53,7 @@ export interface ServiceNode {
     version?: string
     environment?: string
     namespace?: string
+    instanceCount?: number
   }
 }
 
@@ -72,30 +73,137 @@ export interface ServiceMapData {
   timestamp: string
 }
 
-// Transform API service to internal node format
+// Map service_type DB enum to internal node type
+function mapServiceType(serviceType: string): ServiceNode['type'] {
+  const st = serviceType?.toLowerCase() || ''
+  // Match DB enum values: api, database, cache, queue, external, application
+  if (st === 'api') return 'api'
+  if (st === 'database' || st.includes('postgres') || st.includes('mysql') || st.includes('db')) return 'database'
+  if (st === 'cache' || st.includes('redis') || st.includes('memcached')) return 'cache'
+  if (st === 'queue' || st.includes('kafka') || st.includes('rabbitmq') || st.includes('sqs')) return 'queue'
+  if (st === 'external') return 'external'
+  if (st === 'application' || st === 'service') return 'application'
+  return 'application' // Default
+}
+
+// Map health_status DB enum to internal health
+function mapHealthStatus(healthStatus: string): ServiceNode['health'] {
+  const hs = healthStatus?.toLowerCase() || ''
+  // Match DB enum values: healthy, degraded, unhealthy, unknown
+  if (hs === 'healthy') return 'healthy'
+  if (hs === 'degraded') return 'degraded'
+  if (hs === 'unhealthy' || hs === 'down') return 'unhealthy'
+  if (hs === 'unknown') return 'unknown'
+  return 'unknown' // Default
+}
+
+// Aggregate services by unique service_name
+interface AggregatedService {
+  service_name: string
+  instances: ApiService[]
+  total_request_count: number
+  total_error_count: number
+  avg_response_time_ms: number
+  dominant_type: string
+  dominant_health: string
+  environments: string[]
+}
+
+function aggregateServicesByName(services: ApiService[]): AggregatedService[] {
+  const serviceMap = new Map<string, ApiService[]>()
+
+  // Group by service_name
+  services.forEach(service => {
+    const name = service.service_name
+    if (!serviceMap.has(name)) {
+      serviceMap.set(name, [])
+    }
+    serviceMap.get(name)!.push(service)
+  })
+
+  // Aggregate metrics for each unique service
+  const aggregated: AggregatedService[] = []
+
+  serviceMap.forEach((instances, serviceName) => {
+    const totalRequests = instances.reduce((sum, s) => sum + (s.request_count || 0), 0)
+    const totalErrors = instances.reduce((sum, s) => sum + (s.error_count || 0), 0)
+    const avgLatency = instances.length > 0
+      ? instances.reduce((sum, s) => sum + (s.avg_response_time_ms || 0), 0) / instances.length
+      : 0
+
+    // Get unique environments
+    const environments = Array.from(new Set(instances.map(s => s.deployment_environment).filter(Boolean))) as string[]
+
+    // Determine dominant type (most common)
+    const typeCounts = instances.reduce((acc, s) => {
+      const t = s.service_type || 'application'
+      acc[t] = (acc[t] || 0) + 1
+      return acc
+    }, {} as Record<string, number>)
+    const dominantType = Object.entries(typeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'application'
+
+    // Determine dominant health (worst health wins: unhealthy > degraded > unknown > healthy)
+    const healthPriority: Record<string, number> = { unhealthy: 4, degraded: 3, unknown: 2, healthy: 1 }
+    const dominantHealth = instances.reduce((worst, s) => {
+      const h = s.health_status?.toLowerCase() || 'unknown'
+      return (healthPriority[h] || 0) > (healthPriority[worst] || 0) ? h : worst
+    }, 'healthy')
+
+    aggregated.push({
+      service_name: serviceName,
+      instances,
+      total_request_count: totalRequests,
+      total_error_count: totalErrors,
+      avg_response_time_ms: avgLatency,
+      dominant_type: dominantType,
+      dominant_health: dominantHealth,
+      environments
+    })
+  })
+
+  return aggregated
+}
+
+// Transform aggregated service to internal node format
+function transformAggregatedService(agg: AggregatedService): ServiceNode {
+  const errorRate = agg.total_request_count > 0
+    ? (agg.total_error_count / agg.total_request_count) * 100
+    : 0
+
+  // Use first instance's ID for the aggregated node
+  const primaryInstance = agg.instances[0]
+
+  return {
+    id: primaryInstance.id,
+    name: agg.service_name,
+    type: mapServiceType(agg.dominant_type),
+    health: mapHealthStatus(agg.dominant_health),
+    metrics: {
+      request_count: agg.total_request_count,
+      error_rate: errorRate,
+      avg_latency_ms: agg.avg_response_time_ms,
+      p95_latency_ms: agg.avg_response_time_ms * 2 // Estimate P95
+    },
+    metadata: {
+      version: primaryInstance.service_version || undefined,
+      environment: agg.environments.join(', ') || undefined,
+      namespace: primaryInstance.namespace || undefined,
+      instanceCount: agg.instances.length
+    }
+  }
+}
+
+// Transform API service to internal node format (for single instance)
 function transformApiService(service: ApiService): ServiceNode {
   const errorRate = service.request_count > 0
     ? (service.error_count / service.request_count) * 100
     : 0
 
-  // Map service_type to our internal types
-  let nodeType: ServiceNode['type'] = 'application'
-  const st = service.service_type?.toLowerCase() || ''
-  if (st.includes('database') || st.includes('db') || st.includes('postgres') || st.includes('mysql')) {
-    nodeType = 'database'
-  } else if (st.includes('cache') || st.includes('redis') || st.includes('memcached')) {
-    nodeType = 'cache'
-  } else if (st.includes('external') || st.includes('api')) {
-    nodeType = 'external'
-  } else if (st.includes('service') || st.includes('application')) {
-    nodeType = 'application'
-  }
-
   return {
     id: service.id,
     name: service.service_name,
-    type: nodeType,
-    health: (service.health_status as ServiceNode['health']) || 'healthy',
+    type: mapServiceType(service.service_type),
+    health: mapHealthStatus(service.health_status),
     metrics: {
       request_count: service.request_count || 0,
       error_rate: errorRate,
@@ -105,7 +213,8 @@ function transformApiService(service: ApiService): ServiceNode {
     metadata: {
       version: service.service_version || undefined,
       environment: service.deployment_environment || undefined,
-      namespace: service.namespace || undefined
+      namespace: service.namespace || undefined,
+      instanceCount: 1
     }
   }
 }
@@ -147,15 +256,31 @@ export default function ServiceMapPage() {
   const [filterType, setFilterType] = useState<string>('all')
   const [filterHealth, setFilterHealth] = useState<string>('all')
   const [selectedService, setSelectedService] = useState<string>('all')
+  const [filterEnvironment, setFilterEnvironment] = useState<string>('all')
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [refreshInterval, setRefreshInterval] = useState(30000) // 30 seconds default
 
-  // Create service options for dropdown from raw services
+  // Extract unique environments from raw services
+  const uniqueEnvironments = useMemo((): string[] => {
+    const envs = new Set<string>()
+    rawServices.forEach((s: ApiService) => {
+      if (s.deployment_environment) {
+        envs.add(s.deployment_environment)
+      }
+    })
+    return Array.from(envs).sort()
+  }, [rawServices])
+
+  // Aggregate services by unique name with instance counts for dropdown
   const serviceOptions = useMemo(() => {
-    return rawServices.map(s => ({
-      id: s.id,
-      name: s.service_name
-    }))
+    const serviceMap = new Map<string, number>()
+    rawServices.forEach((s: ApiService) => {
+      const name = s.service_name
+      serviceMap.set(name, (serviceMap.get(name) || 0) + 1)
+    })
+    return Array.from(serviceMap.entries())
+      .map(([name, count]: [string, number]) => ({ name, instanceCount: count }))
+      .sort((a, b) => a.name.localeCompare(b.name))
   }, [rawServices])
 
   const loadServiceMap = async () => {
@@ -177,8 +302,12 @@ export default function ServiceMapPage() {
       if (data && (data as ApiServiceMapResponse).services && Array.isArray((data as ApiServiceMapResponse).services)) {
         const services = (data as ApiServiceMapResponse).services
         setRawServices(services)
-        const nodes = services.map(transformApiService)
+
+        // Aggregate services by unique name for visualization
+        const aggregatedServices = aggregateServicesByName(services)
+        const nodes = aggregatedServices.map(transformAggregatedService)
         const edges = buildEdges(services)
+
         setServiceMapData({
           nodes,
           edges,
@@ -380,17 +509,38 @@ export default function ServiceMapPage() {
   }, [autoRefresh, refreshInterval])
 
   // Filter nodes based on search and filters
-  const filteredData = serviceMapData && serviceMapData.nodes ? {
-    ...serviceMapData,
-    nodes: serviceMapData.nodes.filter(node => {
-      // Service filter (specific service selected from dropdown)
-      if (selectedService !== 'all' && node.id !== selectedService) {
+  const filteredData = useMemo((): ServiceMapData | null => {
+    if (!serviceMapData || !serviceMapData.nodes) return null
+
+    // First, filter rawServices by environment if selected
+    let applicableServiceNames: Set<string> | null = null
+    if (filterEnvironment !== 'all') {
+      applicableServiceNames = new Set(
+        rawServices
+          .filter((s: ApiService) => s.deployment_environment === filterEnvironment)
+          .map((s: ApiService) => s.service_name)
+      )
+    }
+
+    const filteredNodes = serviceMapData.nodes.filter((node: ServiceNode) => {
+      // Environment filter (check if service has any instance in selected environment)
+      if (applicableServiceNames && !applicableServiceNames.has(node.name)) {
         return false
       }
 
-      // Search filter
-      if (searchQuery && !node.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+      // Service filter (specific service selected from dropdown by name)
+      if (selectedService !== 'all' && node.name !== selectedService) {
         return false
+      }
+
+      // Search filter (search by name or namespace)
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase()
+        const matchesName = node.name.toLowerCase().includes(query)
+        const matchesNamespace = node.metadata?.namespace?.toLowerCase().includes(query)
+        if (!matchesName && !matchesNamespace) {
+          return false
+        }
       }
 
       // Type filter
@@ -404,9 +554,20 @@ export default function ServiceMapPage() {
       }
 
       return true
-    }),
-    edges: serviceMapData.edges || []
-  } : null
+    })
+
+    // Filter edges to only include those between visible nodes
+    const visibleNodeIds = new Set(filteredNodes.map((n: ServiceNode) => n.id))
+    const filteredEdges = (serviceMapData.edges || []).filter(
+      (edge: ServiceEdge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)
+    )
+
+    return {
+      ...serviceMapData,
+      nodes: filteredNodes,
+      edges: filteredEdges
+    }
+  }, [serviceMapData, rawServices, filterEnvironment, selectedService, searchQuery, filterType, filterHealth])
 
   return (
     <DashboardLayout>
@@ -437,6 +598,8 @@ export default function ServiceMapPage() {
           onFilterTypeChange={setFilterType}
           filterHealth={filterHealth}
           onFilterHealthChange={setFilterHealth}
+          filterEnvironment={filterEnvironment}
+          onFilterEnvironmentChange={setFilterEnvironment}
           autoRefresh={autoRefresh}
           onAutoRefreshChange={setAutoRefresh}
           refreshInterval={refreshInterval}
@@ -444,6 +607,7 @@ export default function ServiceMapPage() {
           services={serviceOptions}
           selectedService={selectedService}
           onSelectedServiceChange={setSelectedService}
+          environments={uniqueEnvironments}
         />
 
         {/* Service Map Visualization and Details */}
@@ -470,7 +634,8 @@ export default function ServiceMapPage() {
         {/* Legend */}
         <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
           <h3 className="text-sm font-semibold text-slate-900 mb-3">Legend</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 text-sm">
+            {/* Health Status */}
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-full bg-emerald-500"></div>
               <span className="text-slate-700">Healthy</span>
@@ -481,7 +646,16 @@ export default function ServiceMapPage() {
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-full bg-red-500"></div>
-              <span className="text-slate-700">Down</span>
+              <span className="text-slate-700">Unhealthy</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded-full bg-slate-400"></div>
+              <span className="text-slate-700">Unknown</span>
+            </div>
+            {/* Service Types */}
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-cyan-500"></div>
+              <span className="text-slate-700">API</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-blue-500"></div>
@@ -494,6 +668,10 @@ export default function ServiceMapPage() {
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-orange-500"></div>
               <span className="text-slate-700">Cache</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-pink-500"></div>
+              <span className="text-slate-700">Queue</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-slate-500"></div>

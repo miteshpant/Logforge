@@ -3,8 +3,8 @@
 import { Search } from 'lucide-react'
 
 interface ServiceOption {
-  id: string
   name: string
+  instanceCount: number
 }
 
 interface ServiceMapControlsProps {
@@ -14,13 +14,16 @@ interface ServiceMapControlsProps {
   onFilterTypeChange: (type: string) => void
   filterHealth: string
   onFilterHealthChange: (health: string) => void
+  filterEnvironment: string
+  onFilterEnvironmentChange: (env: string) => void
   autoRefresh: boolean
   onAutoRefreshChange: (enabled: boolean) => void
   refreshInterval: number
   onRefreshIntervalChange: (interval: number) => void
   services?: ServiceOption[]
   selectedService: string
-  onSelectedServiceChange: (serviceId: string) => void
+  onSelectedServiceChange: (serviceName: string) => void
+  environments?: string[]
 }
 
 export default function ServiceMapControls({
@@ -30,18 +33,21 @@ export default function ServiceMapControls({
   onFilterTypeChange,
   filterHealth,
   onFilterHealthChange,
+  filterEnvironment,
+  onFilterEnvironmentChange,
   autoRefresh,
   onAutoRefreshChange,
   refreshInterval,
   onRefreshIntervalChange,
   services = [],
   selectedService,
-  onSelectedServiceChange
+  onSelectedServiceChange,
+  environments = []
 }: ServiceMapControlsProps) {
   return (
     <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-        {/* Service Selector */}
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4">
+        {/* Service Selector - Unique service names */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">
             Service
@@ -51,10 +57,29 @@ export default function ServiceMapControls({
             onChange={(e) => onSelectedServiceChange(e.target.value)}
             className="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
           >
-            <option value="all">All Services</option>
+            <option value="all">All Services ({services.length})</option>
             {services.map((service) => (
-              <option key={service.id} value={service.id}>
-                {service.name}
+              <option key={service.name} value={service.name}>
+                {service.name} {service.instanceCount > 1 ? `(${service.instanceCount})` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Environment Filter */}
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">
+            Environment
+          </label>
+          <select
+            value={filterEnvironment}
+            onChange={(e) => onFilterEnvironmentChange(e.target.value)}
+            className="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+          >
+            <option value="all">All Environments</option>
+            {environments.map((env) => (
+              <option key={env} value={env}>
+                {env.charAt(0).toUpperCase() + env.slice(1)}
               </option>
             ))}
           </select>
@@ -63,7 +88,7 @@ export default function ServiceMapControls({
         {/* Search */}
         <div className="lg:col-span-2">
           <label className="block text-sm font-medium text-slate-700 mb-2">
-            Search Services
+            Search
           </label>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
@@ -71,13 +96,13 @@ export default function ServiceMapControls({
               type="text"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Search by service name..."
+              placeholder="Search by name, namespace..."
               className="w-full pl-10 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
             />
           </div>
         </div>
 
-        {/* Type Filter */}
+        {/* Type Filter - Match DB enum */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">
             Type
@@ -88,17 +113,19 @@ export default function ServiceMapControls({
             className="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
           >
             <option value="all">All Types</option>
+            <option value="api">API</option>
             <option value="application">Application</option>
             <option value="database">Database</option>
             <option value="cache">Cache</option>
+            <option value="queue">Queue</option>
             <option value="external">External</option>
           </select>
         </div>
 
-        {/* Health Filter */}
+        {/* Health Filter - Match DB enum */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">
-            Health Status
+            Health
           </label>
           <select
             value={filterHealth}
@@ -108,7 +135,8 @@ export default function ServiceMapControls({
             <option value="all">All Status</option>
             <option value="healthy">Healthy</option>
             <option value="degraded">Degraded</option>
-            <option value="down">Down</option>
+            <option value="unhealthy">Unhealthy</option>
+            <option value="unknown">Unknown</option>
           </select>
         </div>
 
