@@ -170,11 +170,11 @@ function transformAggregatedService(agg: AggregatedService): ServiceNode {
     ? (agg.total_error_count / agg.total_request_count) * 100
     : 0
 
-  // Use first instance's ID for the aggregated node
   const primaryInstance = agg.instances[0]
 
   return {
-    id: primaryInstance.id,
+    // Use service_name as ID for consistent edge matching
+    id: agg.service_name,
     name: agg.service_name,
     type: mapServiceType(agg.dominant_type),
     health: mapHealthStatus(agg.dominant_health),
@@ -200,7 +200,8 @@ function transformApiService(service: ApiService): ServiceNode {
     : 0
 
   return {
-    id: service.id,
+    // Use service_name as ID for consistent edge matching
+    id: service.service_name,
     name: service.service_name,
     type: mapServiceType(service.service_type),
     health: mapHealthStatus(service.health_status),
@@ -219,28 +220,40 @@ function transformApiService(service: ApiService): ServiceNode {
   }
 }
 
-// Build edges from service dependencies
-function buildEdges(services: ApiService[]): ServiceEdge[] {
+// Build edges from service dependencies (using aggregated services)
+function buildEdgesFromAggregated(aggregatedServices: AggregatedService[]): ServiceEdge[] {
   const edges: ServiceEdge[] = []
-  const serviceMap = new Map(services.map(s => [s.service_name, s]))
+  const edgeSet = new Set<string>() // Track unique edges to avoid duplicates
+  const serviceNames = new Set(aggregatedServices.map(s => s.service_name))
 
-  services.forEach(service => {
-    if (service.dependencies && Array.isArray(service.dependencies)) {
-      service.dependencies.forEach(depName => {
-        const depService = serviceMap.get(depName)
-        if (depService) {
+  aggregatedServices.forEach(agg => {
+    // Collect all dependencies from all instances of this service
+    const allDeps = new Set<string>()
+    agg.instances.forEach(instance => {
+      if (instance.dependencies && Array.isArray(instance.dependencies)) {
+        instance.dependencies.forEach(dep => allDeps.add(dep))
+      }
+    })
+
+    // Create edges for each dependency (using service_name as ID)
+    allDeps.forEach(depName => {
+      // Only create edge if the target service exists in our aggregated services
+      if (serviceNames.has(depName)) {
+        const edgeKey = `${agg.service_name}->${depName}`
+        if (!edgeSet.has(edgeKey)) {
+          edgeSet.add(edgeKey)
           edges.push({
-            source: service.id,
-            target: depService.id,
+            source: agg.service_name,  // Use service_name as ID
+            target: depName,           // Use service_name as ID
             metrics: {
-              request_count: service.request_count || 0,
-              error_count: service.error_count || 0,
-              avg_latency_ms: service.avg_response_time_ms || 0
+              request_count: agg.total_request_count,
+              error_count: agg.total_error_count,
+              avg_latency_ms: agg.avg_response_time_ms
             }
           })
         }
-      })
-    }
+      }
+    })
   })
 
   return edges
@@ -306,7 +319,7 @@ export default function ServiceMapPage() {
         // Aggregate services by unique name for visualization
         const aggregatedServices = aggregateServicesByName(services)
         const nodes = aggregatedServices.map(transformAggregatedService)
-        const edges = buildEdges(services)
+        const edges = buildEdgesFromAggregated(aggregatedServices)
 
         setServiceMapData({
           nodes,
