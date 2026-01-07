@@ -2,6 +2,11 @@
 
 import { Search } from 'lucide-react'
 
+interface ServiceOption {
+  id: string
+  name: string
+}
+
 interface ServiceMapControlsProps {
   searchQuery: string
   onSearchChange: (query: string) => void
@@ -13,6 +18,9 @@ interface ServiceMapControlsProps {
   onAutoRefreshChange: (enabled: boolean) => void
   refreshInterval: number
   onRefreshIntervalChange: (interval: number) => void
+  services?: ServiceOption[]
+  selectedService: string
+  onSelectedServiceChange: (serviceId: string) => void
 }
 
 export default function ServiceMapControls({
@@ -25,11 +33,33 @@ export default function ServiceMapControls({
   autoRefresh,
   onAutoRefreshChange,
   refreshInterval,
-  onRefreshIntervalChange
+  onRefreshIntervalChange,
+  services = [],
+  selectedService,
+  onSelectedServiceChange
 }: ServiceMapControlsProps) {
   return (
     <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+        {/* Service Selector */}
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">
+            Service
+          </label>
+          <select
+            value={selectedService}
+            onChange={(e) => onSelectedServiceChange(e.target.value)}
+            className="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+          >
+            <option value="all">All Services</option>
+            {services.map((service) => (
+              <option key={service.id} value={service.id}>
+                {service.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Search */}
         <div className="lg:col-span-2">
           <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -58,10 +88,10 @@ export default function ServiceMapControls({
             className="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
           >
             <option value="all">All Types</option>
-            <option value="service">Services</option>
-            <option value="database">Databases</option>
-            <option value="cache">Caches</option>
-            <option value="external">External APIs</option>
+            <option value="application">Application</option>
+            <option value="database">Database</option>
+            <option value="cache">Cache</option>
+            <option value="external">External</option>
           </select>
         </div>
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import ServiceMapVisualization from '@/components/observability/ServiceMapVisualization'
 import ServiceMapControls from '@/components/observability/ServiceMapControls'
@@ -8,10 +8,40 @@ import ServiceMapDetails from '@/components/observability/ServiceMapDetails'
 import { apiClient } from '@/lib/api'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
 
+// API response types
+interface ApiService {
+  id: string
+  customer_id: string
+  service_name: string
+  service_version: string
+  service_instance_id: string
+  deployment_environment: string
+  namespace: string
+  cluster: string
+  host: string
+  container_id: string
+  service_type: string
+  dependencies: string[]
+  endpoints: string[]
+  health_status: string
+  last_seen: string
+  request_count: number
+  error_count: number
+  avg_response_time_ms: number
+  metadata: Record<string, unknown>
+  resource_attributes: string
+  created_at: string
+  updated_at: string
+}
+
+interface ApiServiceMapResponse {
+  services: ApiService[]
+}
+
 export interface ServiceNode {
   id: string
   name: string
-  type: 'service' | 'database' | 'external' | 'cache'
+  type: 'service' | 'database' | 'external' | 'cache' | 'application'
   health: 'healthy' | 'degraded' | 'down'
   metrics: {
     request_count: number
@@ -42,16 +72,91 @@ export interface ServiceMapData {
   timestamp: string
 }
 
+// Transform API service to internal node format
+function transformApiService(service: ApiService): ServiceNode {
+  const errorRate = service.request_count > 0
+    ? (service.error_count / service.request_count) * 100
+    : 0
+
+  // Map service_type to our internal types
+  let nodeType: ServiceNode['type'] = 'application'
+  const st = service.service_type?.toLowerCase() || ''
+  if (st.includes('database') || st.includes('db') || st.includes('postgres') || st.includes('mysql')) {
+    nodeType = 'database'
+  } else if (st.includes('cache') || st.includes('redis') || st.includes('memcached')) {
+    nodeType = 'cache'
+  } else if (st.includes('external') || st.includes('api')) {
+    nodeType = 'external'
+  } else if (st.includes('service') || st.includes('application')) {
+    nodeType = 'application'
+  }
+
+  return {
+    id: service.id,
+    name: service.service_name,
+    type: nodeType,
+    health: (service.health_status as ServiceNode['health']) || 'healthy',
+    metrics: {
+      request_count: service.request_count || 0,
+      error_rate: errorRate,
+      avg_latency_ms: service.avg_response_time_ms || 0,
+      p95_latency_ms: (service.avg_response_time_ms || 0) * 2 // Estimate P95
+    },
+    metadata: {
+      version: service.service_version || undefined,
+      environment: service.deployment_environment || undefined,
+      namespace: service.namespace || undefined
+    }
+  }
+}
+
+// Build edges from service dependencies
+function buildEdges(services: ApiService[]): ServiceEdge[] {
+  const edges: ServiceEdge[] = []
+  const serviceMap = new Map(services.map(s => [s.service_name, s]))
+
+  services.forEach(service => {
+    if (service.dependencies && Array.isArray(service.dependencies)) {
+      service.dependencies.forEach(depName => {
+        const depService = serviceMap.get(depName)
+        if (depService) {
+          edges.push({
+            source: service.id,
+            target: depService.id,
+            metrics: {
+              request_count: service.request_count || 0,
+              error_count: service.error_count || 0,
+              avg_latency_ms: service.avg_response_time_ms || 0
+            }
+          })
+        }
+      })
+    }
+  })
+
+  return edges
+}
+
 export default function ServiceMapPage() {
   const { getApiTimeRange } = useTimeRange()
   const [serviceMapData, setServiceMapData] = useState<ServiceMapData | null>(null)
+  const [rawServices, setRawServices] = useState<ApiService[]>([])
   const [selectedNode, setSelectedNode] = useState<ServiceNode | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterType, setFilterType] = useState<string>('all')
   const [filterHealth, setFilterHealth] = useState<string>('all')
+  const [selectedService, setSelectedService] = useState<string>('all')
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [refreshInterval, setRefreshInterval] = useState(30000) // 30 seconds default
+
+  // Create service options for dropdown from raw services
+  const serviceOptions = useMemo(() => {
+    return rawServices.map(s => ({
+      id: s.id,
+      name: s.service_name
+    }))
+  }, [rawServices])
 
   const loadServiceMap = async () => {
     try {
@@ -62,22 +167,64 @@ export default function ServiceMapPage() {
       const timeRangeMs = new Date(end_time).getTime() - new Date(start_time).getTime()
       const timeRangeHours = Math.ceil(timeRangeMs / (1000 * 60 * 60))
 
-      const response = await apiClient.get<ServiceMapData>('/v1/observability/service-map', {
+      const response = await apiClient.get<ApiServiceMapResponse>('/v1/observability/service-map', {
         time_range_hours: timeRangeHours
       })
 
       const data = response?.data || response
 
-      if (data && data.nodes && data.nodes.length > 0) {
-        setServiceMapData(data as ServiceMapData)
-      } else {
-        // If no data, show empty state instead of mock data
+      // Handle API response with 'services' array
+      if (data && (data as ApiServiceMapResponse).services && Array.isArray((data as ApiServiceMapResponse).services)) {
+        const services = (data as ApiServiceMapResponse).services
+        setRawServices(services)
+        const nodes = services.map(transformApiService)
+        const edges = buildEdges(services)
+        setServiceMapData({
+          nodes,
+          edges,
+          timestamp: new Date().toISOString()
+        })
+      }
+      // Also handle legacy format with 'nodes' array
+      else if (data && (data as unknown as ServiceMapData).nodes) {
+        const legacyData = data as unknown as ServiceMapData
+        setServiceMapData(legacyData)
+        // Convert nodes to service options for the dropdown
+        setRawServices(legacyData.nodes.map(n => ({
+          id: n.id,
+          customer_id: '',
+          service_name: n.name,
+          service_version: n.metadata?.version || '',
+          service_instance_id: '',
+          deployment_environment: n.metadata?.environment || '',
+          namespace: n.metadata?.namespace || '',
+          cluster: '',
+          host: '',
+          container_id: '',
+          service_type: n.type,
+          dependencies: [],
+          endpoints: [],
+          health_status: n.health,
+          last_seen: '',
+          request_count: n.metrics.request_count,
+          error_count: Math.round(n.metrics.request_count * n.metrics.error_rate / 100),
+          avg_response_time_ms: n.metrics.avg_latency_ms,
+          metadata: {},
+          resource_attributes: '',
+          created_at: '',
+          updated_at: ''
+        })))
+      }
+      else {
+        // If no data, show empty state
         setServiceMapData({ nodes: [], edges: [], timestamp: new Date().toISOString() })
+        setRawServices([])
       }
     } catch (error) {
       console.error('Failed to load service map:', error)
       // Show empty state on error
       setServiceMapData({ nodes: [], edges: [], timestamp: new Date().toISOString() })
+      setRawServices([])
     } finally {
       setIsLoading(false)
     }
@@ -236,6 +383,11 @@ export default function ServiceMapPage() {
   const filteredData = serviceMapData && serviceMapData.nodes ? {
     ...serviceMapData,
     nodes: serviceMapData.nodes.filter(node => {
+      // Service filter (specific service selected from dropdown)
+      if (selectedService !== 'all' && node.id !== selectedService) {
+        return false
+      }
+
       // Search filter
       if (searchQuery && !node.name.toLowerCase().includes(searchQuery.toLowerCase())) {
         return false
@@ -289,6 +441,9 @@ export default function ServiceMapPage() {
           onAutoRefreshChange={setAutoRefresh}
           refreshInterval={refreshInterval}
           onRefreshIntervalChange={setRefreshInterval}
+          services={serviceOptions}
+          selectedService={selectedService}
+          onSelectedServiceChange={setSelectedService}
         />
 
         {/* Service Map Visualization and Details */}
@@ -330,7 +485,7 @@ export default function ServiceMapPage() {
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-blue-500"></div>
-              <span className="text-slate-700">Service</span>
+              <span className="text-slate-700">Application</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-purple-500"></div>
