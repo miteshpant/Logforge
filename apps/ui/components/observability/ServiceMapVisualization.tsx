@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import * as d3 from 'd3'
 import type { ServiceNode, ServiceEdge, ServiceMapData } from '@/app/observability/service-map/page'
 
@@ -23,6 +23,10 @@ export default function ServiceMapVisualization({
   const svgRef = useRef<SVGSVGElement>(null)
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
 
+  // Store onNodeSelect in a ref to avoid re-renders
+  const onNodeSelectRef = useRef(onNodeSelect)
+  onNodeSelectRef.current = onNodeSelect
+
   // Update dimensions on mount and resize
   useEffect(() => {
     const updateDimensions = () => {
@@ -42,7 +46,7 @@ export default function ServiceMapVisualization({
     return () => window.removeEventListener('resize', updateDimensions)
   }, [])
 
-  // Render D3 visualization
+  // Render D3 visualization - only when data or dimensions change
   useEffect(() => {
     if (!data || !svgRef.current || dimensions.width === 0) return
 
@@ -142,6 +146,7 @@ export default function ServiceMapVisualization({
       .data(nodes)
       .join('g')
       .attr('class', 'node')
+      .attr('data-node-id', d => d.id)
       .style('cursor', 'pointer')
       .call(d3.drag<SVGGElement, D3Node>()
         .on('start', dragStarted)
@@ -149,7 +154,7 @@ export default function ServiceMapVisualization({
         .on('end', dragEnded))
       .on('click', (event, d) => {
         event.stopPropagation()
-        onNodeSelect(d)
+        onNodeSelectRef.current(d)
       })
 
     // Add node circles
@@ -205,13 +210,6 @@ export default function ServiceMapVisualization({
       .attr('stroke', '#1e293b')
       .attr('stroke-width', 2)
 
-    // Highlight selected node
-    node.classed('selected', d => selectedNode?.id === d.id)
-    node.filter(d => selectedNode?.id === d.id)
-      .select('.node-circle')
-      .attr('stroke-width', 5)
-      .attr('filter', 'brightness(1.2)')
-
     // Update positions on simulation tick
     simulation.on('tick', () => {
       link
@@ -247,14 +245,33 @@ export default function ServiceMapVisualization({
 
     // Click on background to deselect
     svg.on('click', () => {
-      onNodeSelect(null)
+      onNodeSelectRef.current(null)
     })
 
     // Cleanup
     return () => {
       simulation.stop()
     }
-  }, [data, dimensions, selectedNode, onNodeSelect])
+  }, [data, dimensions]) // Removed selectedNode and onNodeSelect from dependencies
+
+  // Separate effect for handling selection highlighting (doesn't rebuild visualization)
+  useEffect(() => {
+    if (!svgRef.current) return
+
+    const svg = d3.select(svgRef.current)
+
+    // Reset all nodes to default style
+    svg.selectAll('.node .node-circle')
+      .attr('stroke-width', 3)
+      .style('filter', null)
+
+    // Highlight selected node
+    if (selectedNode) {
+      svg.select(`.node[data-node-id="${selectedNode.id}"] .node-circle`)
+        .attr('stroke-width', 5)
+        .style('filter', 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.5))')
+    }
+  }, [selectedNode])
 
   if (isLoading) {
     return (
@@ -282,7 +299,7 @@ export default function ServiceMapVisualization({
     <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5">
       {/* Instructions */}
       <div className="absolute top-4 left-4 z-10 bg-slate-900/80 backdrop-blur-sm rounded-lg px-3 py-2 text-xs text-slate-400">
-        <p>💡 Drag nodes to reposition • Scroll to zoom • Click nodes for details</p>
+        <p>Drag nodes to reposition • Scroll to zoom • Click nodes for details</p>
       </div>
 
       {/* SVG Container */}
