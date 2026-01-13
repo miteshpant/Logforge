@@ -117,7 +117,7 @@ export default function ServiceMapDetails({ node, onClose }: ServiceMapDetailsPr
             <span className="text-sm font-medium text-slate-300">Avg Latency</span>
           </div>
           <div className="text-2xl font-bold text-white">
-            {node.metrics.avg_latency_ms}ms
+            {node.metrics.avg_latency_ms.toFixed(2)}ms
           </div>
           <div className="text-xs text-slate-500 mt-1">average response time</div>
         </div>
@@ -129,7 +129,7 @@ export default function ServiceMapDetails({ node, onClose }: ServiceMapDetailsPr
             <span className="text-sm font-medium text-slate-300">P95 Latency</span>
           </div>
           <div className="text-2xl font-bold text-white">
-            {node.metrics.p95_latency_ms}ms
+            {node.metrics.p95_latency_ms.toFixed(2)}ms
           </div>
           <div className="text-xs text-slate-500 mt-1">95th percentile</div>
         </div>
