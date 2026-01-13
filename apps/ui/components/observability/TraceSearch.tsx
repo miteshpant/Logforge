@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Search, Filter, X } from 'lucide-react'
+import { apiClient } from '@/lib/api'
 import type { TraceSearchFilters } from '@/app/observability/traces/page'
 
 interface TraceSearchProps {
@@ -16,6 +17,31 @@ export default function TraceSearch({ onSearch, isLoading, initialService }: Tra
   const [minDuration, setMinDuration] = useState('')
   const [maxDuration, setMaxDuration] = useState('')
   const [status, setStatus] = useState<'ok' | 'error' | 'all'>('all')
+  const [services, setServices] = useState<string[]>([])
+  const [isLoadingServices, setIsLoadingServices] = useState(false)
+
+  // Fetch available services from service map API
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        setIsLoadingServices(true)
+        const response = await apiClient.get('/v1/observability/service-map')
+        const data = response?.data?.data || response?.data || response
+
+        if (data && data.services && Array.isArray(data.services)) {
+          // Extract unique service names
+          const serviceNames = [...new Set(data.services.map((s: any) => s.service_name))] as string[]
+          setServices(serviceNames.sort())
+        }
+      } catch (error) {
+        console.error('Failed to fetch services:', error)
+      } finally {
+        setIsLoadingServices(false)
+      }
+    }
+
+    fetchServices()
+  }, [])
 
   // Update service when initialService prop changes
   useEffect(() => {
@@ -59,13 +85,19 @@ export default function TraceSearch({ onSearch, isLoading, initialService }: Tra
             <label className="block text-sm font-medium text-slate-300 mb-2">
               Service
             </label>
-            <input
-              type="text"
+            <select
               value={service}
               onChange={(e) => setService(e.target.value)}
-              placeholder="e.g., api-gateway"
-              className="w-full px-3 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors text-sm"
-            />
+              disabled={isLoadingServices}
+              className="w-full px-3 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-blue-500 transition-colors text-sm"
+            >
+              <option value="">All Services</option>
+              {services.map((serviceName) => (
+                <option key={serviceName} value={serviceName}>
+                  {serviceName}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Operation Filter */}
