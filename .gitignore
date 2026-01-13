@@ -133,3 +133,4 @@ config/secrets.yaml
 # Clickhouse data
 clickhouse-data/
 minio-data/*.tsbuildinfo
+*.tsbuildinfo
