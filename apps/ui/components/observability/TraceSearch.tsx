@@ -1,20 +1,28 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Search, Filter, X } from 'lucide-react'
 import type { TraceSearchFilters } from '@/app/observability/traces/page'
 
 interface TraceSearchProps {
   onSearch: (filters: TraceSearchFilters) => void
   isLoading: boolean
+  initialService?: string
 }
 
-export default function TraceSearch({ onSearch, isLoading }: TraceSearchProps) {
-  const [service, setService] = useState('')
+export default function TraceSearch({ onSearch, isLoading, initialService }: TraceSearchProps) {
+  const [service, setService] = useState(initialService || '')
   const [operation, setOperation] = useState('')
   const [minDuration, setMinDuration] = useState('')
   const [maxDuration, setMaxDuration] = useState('')
   const [status, setStatus] = useState<'ok' | 'error' | 'all'>('all')
+
+  // Update service when initialService prop changes
+  useEffect(() => {
+    if (initialService) {
+      setService(initialService)
+    }
+  }, [initialService])
   const [showAdvanced, setShowAdvanced] = useState(false)
 
   const handleSearch = () => {

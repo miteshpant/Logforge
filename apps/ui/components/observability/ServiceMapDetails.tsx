@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { X, Activity, AlertCircle, Clock, TrendingUp, Database, Server, Boxes, Globe } from 'lucide-react'
 import type { ServiceNode } from '@/app/observability/service-map/page'
 
@@ -9,6 +10,20 @@ interface ServiceMapDetailsProps {
 }
 
 export default function ServiceMapDetails({ node, onClose }: ServiceMapDetailsProps) {
+  const router = useRouter()
+
+  const handleViewTraces = () => {
+    if (node) {
+      router.push(`/observability/traces?service=${encodeURIComponent(node.name)}`)
+    }
+  }
+
+  const handleViewLogs = () => {
+    if (node) {
+      router.push(`/log-explorer?service=${encodeURIComponent(node.name)}`)
+    }
+  }
+
   if (!node) {
     return (
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-6 h-[600px] flex items-center justify-center">
@@ -163,10 +178,16 @@ export default function ServiceMapDetails({ node, onClose }: ServiceMapDetailsPr
 
         {/* Actions */}
         <div className="pt-4 border-t border-slate-700">
-          <button className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors text-sm">
+          <button
+            onClick={handleViewTraces}
+            className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors text-sm"
+          >
             View Detailed Traces
           </button>
-          <button className="w-full mt-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors text-sm">
+          <button
+            onClick={handleViewLogs}
+            className="w-full mt-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors text-sm"
+          >
             View Logs
           </button>
         </div>

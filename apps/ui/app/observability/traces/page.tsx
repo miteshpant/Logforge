@@ -7,6 +7,7 @@ import TraceList from '@/components/observability/TraceList'
 import TraceWaterfall from '@/components/observability/TraceWaterfall'
 import { apiClient } from '@/lib/api'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
+import { useSearchParams } from 'next/navigation'
 
 export interface Span {
   span_id: string
@@ -46,13 +47,118 @@ export interface TraceSearchFilters {
   tags?: Record<string, string>
 }
 
+// Raw span data from API (uses duration_ms, different field names)
+interface ApiSpan {
+  id?: string
+  span_id: string
+  trace_id: string
+  parent_span_id: string | null
+  service_name: string
+  operation_name: string
+  start_time: string | number
+  end_time?: string | number
+  duration_ms: number
+  kind?: string
+  status: string
+  attributes?: Record<string, any>
+  events?: Array<any>
+  links?: Array<any>
+  resource?: Record<string, any>
+}
+
+// Transform API span to UI Span format
+function transformSpan(apiSpan: ApiSpan): Span {
+  // Convert start_time to microseconds if it's a string (ISO format)
+  let startTimeMicros: number
+  if (typeof apiSpan.start_time === 'string') {
+    startTimeMicros = new Date(apiSpan.start_time).getTime() * 1000
+  } else {
+    // Assume it's already in microseconds or milliseconds
+    startTimeMicros = apiSpan.start_time > 1e15 ? apiSpan.start_time : apiSpan.start_time * 1000
+  }
+
+  return {
+    span_id: apiSpan.span_id,
+    trace_id: apiSpan.trace_id,
+    parent_span_id: apiSpan.parent_span_id,
+    service_name: apiSpan.service_name,
+    operation_name: apiSpan.operation_name,
+    start_time: startTimeMicros,
+    duration: apiSpan.duration_ms * 1000, // Convert ms to microseconds
+    status: apiSpan.status === 'error' ? 'error' : 'ok',
+    tags: apiSpan.attributes || {}
+  }
+}
+
+// Aggregate spans into trace summaries grouped by trace_id
+function aggregateSpansToTraces(spans: ApiSpan[]): Trace[] {
+  const traceMap = new Map<string, ApiSpan[]>()
+
+  // Group spans by trace_id
+  for (const span of spans) {
+    if (!traceMap.has(span.trace_id)) {
+      traceMap.set(span.trace_id, [])
+    }
+    traceMap.get(span.trace_id)!.push(span)
+  }
+
+  // Convert each group to a Trace summary
+  const traces: Trace[] = []
+
+  for (const [traceId, traceSpans] of traceMap) {
+    // Find root span (no parent_span_id)
+    const rootSpan = traceSpans.find(s => !s.parent_span_id) || traceSpans[0]
+
+    // Calculate aggregates
+    const services = [...new Set(traceSpans.map(s => s.service_name))]
+    const errorCount = traceSpans.filter(s => s.status === 'error').length
+    const hasError = errorCount > 0
+
+    // Get earliest start time and total duration
+    let minStartTime = Infinity
+    let maxDuration = 0
+
+    for (const span of traceSpans) {
+      let startMs: number
+      if (typeof span.start_time === 'string') {
+        startMs = new Date(span.start_time).getTime()
+      } else {
+        startMs = span.start_time > 1e12 ? span.start_time / 1000 : span.start_time
+      }
+
+      if (startMs < minStartTime) minStartTime = startMs
+      if (span.duration_ms > maxDuration) maxDuration = span.duration_ms
+    }
+
+    traces.push({
+      trace_id: traceId,
+      root_service: rootSpan.service_name,
+      root_operation: rootSpan.operation_name,
+      start_time: minStartTime * 1000, // Convert to microseconds
+      duration: maxDuration * 1000, // Convert ms to microseconds
+      span_count: traceSpans.length,
+      error_count: errorCount,
+      status: hasError ? 'error' : 'ok',
+      services
+    })
+  }
+
+  // Sort by start_time descending (most recent first)
+  return traces.sort((a, b) => b.start_time - a.start_time)
+}
+
 export default function TracesPage() {
   const { getApiTimeRange } = useTimeRange()
+  const searchParams = useSearchParams()
   const [traces, setTraces] = useState<Trace[]>([])
   const [selectedTrace, setSelectedTrace] = useState<Trace | null>(null)
   const [isLoadingTraces, setIsLoadingTraces] = useState(false)
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
   const [filters, setFilters] = useState<TraceSearchFilters>({ status: 'all' })
+  const [initialSearchDone, setInitialSearchDone] = useState(false)
+
+  // Get service filter from URL query params (for linking from service map)
+  const serviceFromUrl = searchParams.get('service')
 
   const searchTraces = async (searchFilters: TraceSearchFilters) => {
     try {
@@ -61,25 +167,47 @@ export default function TracesPage() {
 
       const { start_time, end_time } = getApiTimeRange()
 
-      const response = await apiClient.post<{ traces: Trace[] }>('/v1/observability/traces/search', {
+      // Map UI filter names to API field names
+      const apiFilters: Record<string, any> = {
         start_time,
         end_time,
-        ...searchFilters,
         limit: 100
-      })
+      }
 
-      const data = response?.data || response
+      // Map filter fields to API expected names
+      if (searchFilters.service) {
+        apiFilters.service_name = searchFilters.service
+      }
+      if (searchFilters.operation) {
+        apiFilters.operation_name = searchFilters.operation
+      }
+      if (searchFilters.min_duration) {
+        // UI sends microseconds, API expects milliseconds
+        apiFilters.min_duration_ms = Math.floor(searchFilters.min_duration / 1000)
+      }
+      if (searchFilters.max_duration) {
+        apiFilters.max_duration_ms = Math.floor(searchFilters.max_duration / 1000)
+      }
+      if (searchFilters.status && searchFilters.status !== 'all') {
+        apiFilters.status = searchFilters.status
+      }
 
-      if (data && 'traces' in data) {
-        setTraces(data.traces)
+      const response = await apiClient.post('/v1/observability/traces/search', apiFilters)
+
+      // Handle nested response wrapper
+      const data = response?.data?.data || response?.data || response
+
+      if (data && 'traces' in data && Array.isArray(data.traces)) {
+        // API returns raw spans, aggregate them into trace summaries
+        const aggregatedTraces = aggregateSpansToTraces(data.traces)
+        setTraces(aggregatedTraces)
       } else {
-        // Mock data for development
-        setTraces(generateMockTraces())
+        // No data returned
+        setTraces([])
       }
     } catch (error) {
       console.error('Failed to search traces:', error)
-      // Set mock data on error
-      setTraces(generateMockTraces())
+      setTraces([])
     } finally {
       setIsLoadingTraces(false)
     }
@@ -91,44 +219,53 @@ export default function TracesPage() {
       setSelectedTrace(trace)
 
       // If spans already loaded, skip API call
-      if (trace.spans) {
+      if (trace.spans && trace.spans.length > 0) {
+        setIsLoadingDetails(false)
         return
       }
 
-      const response = await apiClient.get<{ spans: Span[] }>(
-        `/v1/observability/traces/${trace.trace_id}/spans`
-      )
+      // Use GET /v1/observability/traces/{trace_id} endpoint
+      const response = await apiClient.get(`/v1/observability/traces/${trace.trace_id}`)
 
-      const data = response?.data || response
+      // Handle nested response wrapper
+      const data = response?.data?.data || response?.data || response
 
-      if (data && 'spans' in data) {
+      if (data && data.trace && data.trace.spans) {
+        // Transform API spans to UI format
+        const uiSpans = data.trace.spans.map(transformSpan)
         setSelectedTrace({
           ...trace,
-          spans: data.spans
+          spans: uiSpans
         })
       } else {
-        // Mock spans data
+        // No spans found
         setSelectedTrace({
           ...trace,
-          spans: generateMockSpans(trace.trace_id)
+          spans: []
         })
       }
     } catch (error) {
       console.error('Failed to load trace details:', error)
-      // Set mock spans on error
       setSelectedTrace({
         ...trace,
-        spans: generateMockSpans(trace.trace_id)
+        spans: []
       })
     } finally {
       setIsLoadingDetails(false)
     }
   }
 
-  // Initial search
+  // Initial search - check for service filter from URL
   useEffect(() => {
-    searchTraces({ status: 'all' })
-  }, [])
+    if (!initialSearchDone) {
+      const initialFilters: TraceSearchFilters = { status: 'all' }
+      if (serviceFromUrl) {
+        initialFilters.service = serviceFromUrl
+      }
+      searchTraces(initialFilters)
+      setInitialSearchDone(true)
+    }
+  }, [serviceFromUrl, initialSearchDone])
 
   return (
     <DashboardLayout>
@@ -142,7 +279,11 @@ export default function TracesPage() {
         </div>
 
         {/* Search Filters */}
-        <TraceSearch onSearch={searchTraces} isLoading={isLoadingTraces} />
+        <TraceSearch
+          onSearch={searchTraces}
+          isLoading={isLoadingTraces}
+          initialService={serviceFromUrl || undefined}
+        />
 
         {/* Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -167,85 +308,4 @@ export default function TracesPage() {
       </div>
     </DashboardLayout>
   )
-}
-
-// Mock data generators
-function generateMockTraces(): Trace[] {
-  const services = ['frontend', 'api-gateway', 'auth-service', 'user-service', 'order-service', 'payment-service']
-  const operations = ['GET /', 'POST /api/users', 'GET /api/orders', 'POST /api/payments', 'GET /health']
-
-  return Array.from({ length: 20 }, (_, i) => {
-    const hasError = Math.random() < 0.15
-    const spanCount = Math.floor(Math.random() * 15) + 3
-    const duration = hasError
-      ? Math.floor(Math.random() * 5000000) + 1000000 // 1-6 seconds for errors
-      : Math.floor(Math.random() * 500000) + 50000 // 50-550ms for success
-
-    return {
-      trace_id: `trace-${Date.now()}-${i}`,
-      root_service: services[Math.floor(Math.random() * services.length)],
-      root_operation: operations[Math.floor(Math.random() * operations.length)],
-      start_time: Date.now() * 1000 - Math.floor(Math.random() * 3600000000), // within last hour
-      duration,
-      span_count: spanCount,
-      error_count: hasError ? Math.floor(Math.random() * 3) + 1 : 0,
-      status: hasError ? 'error' : 'ok',
-      services: services.slice(0, Math.floor(Math.random() * 4) + 2)
-    }
-  }).sort((a, b) => b.start_time - a.start_time)
-}
-
-function generateMockSpans(traceId: string): Span[] {
-  const services = ['frontend', 'api-gateway', 'auth-service', 'user-service', 'order-service', 'payment-service', 'postgres', 'redis']
-  const operations = [
-    'HTTP GET /',
-    'HTTP POST /api/users',
-    'authenticate',
-    'query.users.findById',
-    'cache.get',
-    'db.query',
-    'payment.process',
-    'external.call'
-  ]
-
-  const rootSpan: Span = {
-    span_id: `span-0`,
-    trace_id: traceId,
-    parent_span_id: null,
-    service_name: 'api-gateway',
-    operation_name: 'HTTP GET /api/orders',
-    start_time: Date.now() * 1000,
-    duration: 450000, // 450ms
-    status: 'ok',
-    tags: {
-      'http.method': 'GET',
-      'http.url': '/api/orders',
-      'http.status_code': 200
-    }
-  }
-
-  const childSpans: Span[] = Array.from({ length: 8 }, (_, i) => {
-    const parentIdx = Math.floor(Math.random() * (i + 1))
-    const startOffset = Math.floor(Math.random() * 100000)
-    const duration = Math.floor(Math.random() * 150000) + 10000
-    const hasError = Math.random() < 0.1
-
-    return {
-      span_id: `span-${i + 1}`,
-      trace_id: traceId,
-      parent_span_id: parentIdx === 0 ? rootSpan.span_id : `span-${parentIdx}`,
-      service_name: services[Math.floor(Math.random() * services.length)],
-      operation_name: operations[Math.floor(Math.random() * operations.length)],
-      start_time: rootSpan.start_time + startOffset,
-      duration,
-      status: hasError ? 'error' : 'ok',
-      tags: {
-        'component': 'http',
-        'span.kind': 'client',
-        ...(hasError && { 'error': true, 'error.message': 'Connection timeout' })
-      }
-    }
-  })
-
-  return [rootSpan, ...childSpans].sort((a, b) => a.start_time - b.start_time)
 }
