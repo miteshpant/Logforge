@@ -32,7 +32,7 @@ export default function ServiceMapVisualization({
     const updateDimensions = () => {
       if (svgRef.current) {
         const rect = svgRef.current.parentElement?.getBoundingClientRect()
-        if (rect) {
+        if (rect && rect.width > 0) {
           setDimensions({
             width: rect.width,
             height: Math.max(600, rect.height)
@@ -41,10 +41,39 @@ export default function ServiceMapVisualization({
       }
     }
 
-    updateDimensions()
+    // Initial update with small delay to ensure DOM is ready
+    const timeoutId = setTimeout(updateDimensions, 100)
+
+    // Use ResizeObserver for reliable dimension detection
+    const resizeObserver = new ResizeObserver(() => {
+      updateDimensions()
+    })
+
+    if (svgRef.current?.parentElement) {
+      resizeObserver.observe(svgRef.current.parentElement)
+    }
+
     window.addEventListener('resize', updateDimensions)
-    return () => window.removeEventListener('resize', updateDimensions)
+
+    return () => {
+      clearTimeout(timeoutId)
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', updateDimensions)
+    }
   }, [])
+
+  // Re-check dimensions when data loads (container may resize after loading state changes)
+  useEffect(() => {
+    if (data && svgRef.current) {
+      const rect = svgRef.current.parentElement?.getBoundingClientRect()
+      if (rect && rect.width > 0 && dimensions.width === 0) {
+        setDimensions({
+          width: rect.width,
+          height: Math.max(600, rect.height)
+        })
+      }
+    }
+  }, [data, dimensions.width])
 
   // Render D3 visualization - only when data or dimensions change
   useEffect(() => {
