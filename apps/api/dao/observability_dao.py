@@ -502,14 +502,26 @@ class ObservabilityDAO:
 
             results = await self.db.execute_query(query, {"customer_id": customer_id})
 
-            # Parse JSON fields
+            # Parse JSON fields (metadata and resource_attributes are stored as JSON strings)
+            # Note: dependencies and endpoints are Array(String) in ClickHouse and are already returned as lists
             for result in results:
-                for json_field in ["dependencies", "metadata"]:
+                # Only parse fields that are actually JSON strings
+                for json_field in ["metadata", "resource_attributes"]:
                     if result.get(json_field):
                         try:
-                            result[json_field] = json.loads(result[json_field])
+                            # Only parse if it's a string, otherwise leave as-is
+                            if isinstance(result[json_field], str):
+                                result[json_field] = json.loads(result[json_field])
                         except (json.JSONDecodeError, TypeError):
-                            result[json_field] = [] if json_field == "dependencies" else {}
+                            result[json_field] = {}
+
+                # Ensure array fields are lists (they should already be from ClickHouse)
+                for array_field in ["dependencies", "endpoints"]:
+                    if result.get(array_field) is None:
+                        result[array_field] = []
+                    elif not isinstance(result[array_field], list):
+                        # Convert tuple to list if needed
+                        result[array_field] = list(result[array_field]) if hasattr(result[array_field], '__iter__') else []
 
             return results
 
