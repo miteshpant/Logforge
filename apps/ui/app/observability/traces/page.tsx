@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import TraceSearch from '@/components/observability/TraceSearch'
-import TraceList from '@/components/observability/TraceList'
+import TraceTable from '@/components/observability/TraceTable'
 import TraceWaterfall from '@/components/observability/TraceWaterfall'
 import { apiClient } from '@/lib/api'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
@@ -285,26 +285,21 @@ export default function TracesPage() {
           initialService={serviceFromUrl || undefined}
         />
 
-        {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Trace List */}
-          <div className="lg:col-span-1">
-            <TraceList
-              traces={traces}
-              selectedTrace={selectedTrace}
-              onTraceSelect={loadTraceDetails}
-              isLoading={isLoadingTraces}
-            />
-          </div>
+        {/* Trace Table */}
+        <TraceTable
+          traces={traces}
+          selectedTrace={selectedTrace}
+          onTraceSelect={loadTraceDetails}
+          isLoading={isLoadingTraces}
+        />
 
-          {/* Waterfall Visualization */}
-          <div className="lg:col-span-2">
-            <TraceWaterfall
-              trace={selectedTrace}
-              isLoading={isLoadingDetails}
-            />
-          </div>
-        </div>
+        {/* Waterfall Visualization - shows when trace is selected */}
+        {selectedTrace && (
+          <TraceWaterfall
+            trace={selectedTrace}
+            isLoading={isLoadingDetails}
+          />
+        )}
       </div>
     </DashboardLayout>
   )
