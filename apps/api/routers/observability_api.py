@@ -528,6 +528,141 @@ async def get_apm_overview(
         raise HTTPException(status_code=500, detail=f"Failed to get APM overview: {str(e)}")
 
 
+@router.get("/apm/services")
+async def get_apm_services(
+    start_time: Optional[str] = Query(None, description="Start time in ISO format"),
+    end_time: Optional[str] = Query(None, description="End time in ISO format"),
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Get APM metrics for all services"""
+    try:
+        from dao.observability_dao import ObservabilityDAO
+        from dateutil import parser
+
+        dao = ObservabilityDAO()
+
+        # Parse time range
+        if start_time and end_time:
+            start_dt = parser.isoparse(start_time)
+            end_dt = parser.isoparse(end_time)
+        else:
+            end_dt = datetime.now()
+            start_dt = end_dt - timedelta(hours=24)
+
+        services = await dao.get_service_performance(customer_id, start_dt, end_dt)
+
+        return {
+            "services": services,
+            "customer_id": customer_id
+        }
+
+    except Exception as e:
+        logger.error("Failed to get APM services", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to get APM services: {str(e)}")
+
+
+@router.get("/apm/slowest-endpoints")
+async def get_slowest_endpoints(
+    start_time: Optional[str] = Query(None, description="Start time in ISO format"),
+    end_time: Optional[str] = Query(None, description="End time in ISO format"),
+    limit: int = Query(10, description="Number of endpoints to return"),
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Get slowest endpoints by average latency"""
+    try:
+        from dao.observability_dao import ObservabilityDAO
+        from dateutil import parser
+
+        dao = ObservabilityDAO()
+
+        # Parse time range
+        if start_time and end_time:
+            start_dt = parser.isoparse(start_time)
+            end_dt = parser.isoparse(end_time)
+        else:
+            end_dt = datetime.now()
+            start_dt = end_dt - timedelta(hours=24)
+
+        endpoints = await dao.get_slowest_endpoints(customer_id, start_dt, end_dt, limit)
+
+        return {
+            "endpoints": endpoints,
+            "customer_id": customer_id
+        }
+
+    except Exception as e:
+        logger.error("Failed to get slowest endpoints", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to get slowest endpoints: {str(e)}")
+
+
+@router.get("/apm/error-rates")
+async def get_error_rates(
+    start_time: Optional[str] = Query(None, description="Start time in ISO format"),
+    end_time: Optional[str] = Query(None, description="End time in ISO format"),
+    interval: str = Query("5m", description="Time bucket interval (e.g., 5m, 1h)"),
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Get error rates over time for each service"""
+    try:
+        from dao.observability_dao import ObservabilityDAO
+        from dateutil import parser
+
+        dao = ObservabilityDAO()
+
+        # Parse time range
+        if start_time and end_time:
+            start_dt = parser.isoparse(start_time)
+            end_dt = parser.isoparse(end_time)
+        else:
+            end_dt = datetime.now()
+            start_dt = end_dt - timedelta(hours=24)
+
+        metrics = await dao.get_error_rates_over_time(customer_id, start_dt, end_dt, interval)
+
+        return {
+            "metrics": metrics,
+            "customer_id": customer_id
+        }
+
+    except Exception as e:
+        logger.error("Failed to get error rates", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to get error rates: {str(e)}")
+
+
+@router.get("/apm/transactions")
+async def get_transactions(
+    start_time: Optional[str] = Query(None, description="Start time in ISO format"),
+    end_time: Optional[str] = Query(None, description="End time in ISO format"),
+    limit: int = Query(10, description="Number of transactions to return"),
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Get top transactions by request count"""
+    try:
+        from dao.observability_dao import ObservabilityDAO
+        from dateutil import parser
+
+        dao = ObservabilityDAO()
+
+        # Parse time range
+        if start_time and end_time:
+            start_dt = parser.isoparse(start_time)
+            end_dt = parser.isoparse(end_time)
+        else:
+            end_dt = datetime.now()
+            start_dt = end_dt - timedelta(hours=24)
+
+        transactions = await dao.get_top_transactions(customer_id, start_dt, end_dt, limit)
+
+        return {
+            "transactions": transactions,
+            "customer_id": customer_id
+        }
+
+    except Exception as e:
+        logger.error("Failed to get transactions", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to get transactions: {str(e)}")
+
+
 @router.get("/apm/{service_name}")
 async def get_apm_metrics(
     service_name: str,
@@ -564,7 +699,7 @@ async def get_apm_metrics(
         }
 
     except Exception as e:
-        logger.error("Failed to get APM metrics", error=str(e), customer_id=customer_id, 
+        logger.error("Failed to get APM metrics", error=str(e), customer_id=customer_id,
                     service_name=service_name, deployment_environment=deployment_environment)
         raise HTTPException(status_code=500, detail=f"Failed to get APM metrics: {str(e)}")
 

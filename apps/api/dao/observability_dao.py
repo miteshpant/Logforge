@@ -1229,3 +1229,236 @@ class ObservabilityDAO:
         except Exception as e:
             logger.error(f"Failed to get observability overview stats for customer {customer_id}: {e}")
             raise
+
+    async def get_slowest_endpoints(
+        self,
+        customer_id: str,
+        start_time: datetime,
+        end_time: datetime,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """Get slowest endpoints by average latency"""
+        try:
+            query = """
+            SELECT
+                operation_name as endpoint,
+                service_name as service,
+                count() as request_count,
+                avg(duration_ms) as avg_latency_ms,
+                quantile(0.5)(duration_ms) as p50_latency_ms,
+                quantile(0.95)(duration_ms) as p95_latency_ms,
+                quantile(0.99)(duration_ms) as p99_latency_ms,
+                countIf(status = 'error') * 100.0 / count() as error_rate
+            FROM traces_mt
+            WHERE customer_id = %(customer_id)s
+              AND start_time >= %(start_time)s
+              AND start_time <= %(end_time)s
+            GROUP BY operation_name, service_name
+            ORDER BY avg_latency_ms DESC
+            LIMIT %(limit)s
+            """
+
+            results = await self.db.execute_query(query, {
+                "customer_id": customer_id,
+                "start_time": start_time,
+                "end_time": end_time,
+                "limit": limit
+            })
+
+            return [
+                {
+                    "endpoint": row["endpoint"],
+                    "service": row["service"],
+                    "request_count": row["request_count"],
+                    "avg_latency_ms": float(row["avg_latency_ms"] or 0),
+                    "p50_latency_ms": float(row["p50_latency_ms"] or 0),
+                    "p95_latency_ms": float(row["p95_latency_ms"] or 0),
+                    "p99_latency_ms": float(row["p99_latency_ms"] or 0),
+                    "error_rate": float(row["error_rate"] or 0)
+                }
+                for row in results
+            ] if results else []
+
+        except Exception as e:
+            logger.error(f"Failed to get slowest endpoints: {e}", customer_id=customer_id)
+            return []
+
+    async def get_error_rates_over_time(
+        self,
+        customer_id: str,
+        start_time: datetime,
+        end_time: datetime,
+        interval: str = "5m"
+    ) -> List[Dict[str, Any]]:
+        """Get error rates bucketed by time interval for each service"""
+        try:
+            # Parse interval to seconds
+            interval_seconds = 300  # default 5 minutes
+            if interval.endswith('m'):
+                interval_seconds = int(interval[:-1]) * 60
+            elif interval.endswith('h'):
+                interval_seconds = int(interval[:-1]) * 3600
+
+            query = f"""
+            SELECT
+                toUnixTimestamp(toStartOfInterval(start_time, INTERVAL {interval_seconds} SECOND)) * 1000 as timestamp,
+                service_name as service,
+                count() as total_requests,
+                countIf(status = 'error') as error_count,
+                countIf(status = 'error') * 100.0 / count() as error_rate
+            FROM traces_mt
+            WHERE customer_id = %(customer_id)s
+              AND start_time >= %(start_time)s
+              AND start_time <= %(end_time)s
+            GROUP BY timestamp, service_name
+            ORDER BY timestamp ASC, service_name ASC
+            """
+
+            results = await self.db.execute_query(query, {
+                "customer_id": customer_id,
+                "start_time": start_time,
+                "end_time": end_time
+            })
+
+            return [
+                {
+                    "timestamp": int(row["timestamp"]),
+                    "service": row["service"],
+                    "total_requests": row["total_requests"],
+                    "error_count": row["error_count"],
+                    "error_rate": float(row["error_rate"] or 0)
+                }
+                for row in results
+            ] if results else []
+
+        except Exception as e:
+            logger.error(f"Failed to get error rates over time: {e}", customer_id=customer_id)
+            return []
+
+    async def get_top_transactions(
+        self,
+        customer_id: str,
+        start_time: datetime,
+        end_time: datetime,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """Get top transactions by request count"""
+        try:
+            # First get total count for percentage calculation
+            total_query = """
+            SELECT count() as total
+            FROM traces_mt
+            WHERE customer_id = %(customer_id)s
+              AND start_time >= %(start_time)s
+              AND start_time <= %(end_time)s
+            """
+
+            total_result = await self.db.execute_query(total_query, {
+                "customer_id": customer_id,
+                "start_time": start_time,
+                "end_time": end_time
+            })
+            total_count = total_result[0]["total"] if total_result else 0
+
+            query = """
+            SELECT
+                operation_name as name,
+                service_name as service,
+                count() as count,
+                avg(duration_ms) as avg_duration_ms
+            FROM traces_mt
+            WHERE customer_id = %(customer_id)s
+              AND start_time >= %(start_time)s
+              AND start_time <= %(end_time)s
+            GROUP BY operation_name, service_name
+            ORDER BY count DESC
+            LIMIT %(limit)s
+            """
+
+            results = await self.db.execute_query(query, {
+                "customer_id": customer_id,
+                "start_time": start_time,
+                "end_time": end_time,
+                "limit": limit
+            })
+
+            return [
+                {
+                    "name": row["name"],
+                    "service": row["service"],
+                    "count": row["count"],
+                    "avg_duration_ms": float(row["avg_duration_ms"] or 0),
+                    "percentage": (row["count"] / total_count * 100) if total_count > 0 else 0
+                }
+                for row in results
+            ] if results else []
+
+        except Exception as e:
+            logger.error(f"Failed to get top transactions: {e}", customer_id=customer_id)
+            return []
+
+    async def get_service_performance(
+        self,
+        customer_id: str,
+        start_time: datetime,
+        end_time: datetime
+    ) -> List[Dict[str, Any]]:
+        """Get performance metrics for all services"""
+        try:
+            query = """
+            SELECT
+                service_name,
+                count() as request_count,
+                avg(duration_ms) as avg_latency_ms,
+                quantile(0.5)(duration_ms) as p50_latency_ms,
+                quantile(0.95)(duration_ms) as p95_latency_ms,
+                quantile(0.99)(duration_ms) as p99_latency_ms,
+                countIf(status = 'error') * 100.0 / count() as error_rate,
+                count() / (toUnixTimestamp(%(end_time)s) - toUnixTimestamp(%(start_time)s) + 1) as throughput
+            FROM traces_mt
+            WHERE customer_id = %(customer_id)s
+              AND start_time >= %(start_time)s
+              AND start_time <= %(end_time)s
+            GROUP BY service_name
+            ORDER BY request_count DESC
+            """
+
+            results = await self.db.execute_query(query, {
+                "customer_id": customer_id,
+                "start_time": start_time,
+                "end_time": end_time
+            })
+
+            services = []
+            for row in results or []:
+                # Calculate apdex score (simplified: satisfied < 100ms, tolerating < 400ms)
+                avg_latency = float(row["avg_latency_ms"] or 0)
+                error_rate = float(row["error_rate"] or 0)
+
+                # Simple apdex approximation based on avg latency and error rate
+                if avg_latency < 100 and error_rate < 1:
+                    apdex = 0.95
+                elif avg_latency < 200 and error_rate < 3:
+                    apdex = 0.85
+                elif avg_latency < 400 and error_rate < 5:
+                    apdex = 0.70
+                else:
+                    apdex = max(0.3, 1.0 - (avg_latency / 1000) - (error_rate / 20))
+
+                services.append({
+                    "service_name": row["service_name"],
+                    "request_count": row["request_count"],
+                    "avg_latency_ms": avg_latency,
+                    "p50_latency_ms": float(row["p50_latency_ms"] or 0),
+                    "p95_latency_ms": float(row["p95_latency_ms"] or 0),
+                    "p99_latency_ms": float(row["p99_latency_ms"] or 0),
+                    "error_rate": error_rate,
+                    "throughput": float(row["throughput"] or 0),
+                    "apdex_score": round(apdex, 2)
+                })
+
+            return services
+
+        except Exception as e:
+            logger.error(f"Failed to get service performance: {e}", customer_id=customer_id)
+            return []

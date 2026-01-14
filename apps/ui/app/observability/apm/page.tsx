@@ -94,10 +94,11 @@ export default function APMPage() {
         } else if (Array.isArray(data)) {
           setServices(data)
         } else {
-          setServices(generateMockServices())
+          setServices([])
         }
       } else {
-        setServices(generateMockServices())
+        console.error('Failed to load services:', servicesRes.reason)
+        setServices([])
       }
 
       // Process endpoints
@@ -108,10 +109,11 @@ export default function APMPage() {
         } else if (Array.isArray(data)) {
           setEndpoints(data)
         } else {
-          setEndpoints(generateMockEndpoints())
+          setEndpoints([])
         }
       } else {
-        setEndpoints(generateMockEndpoints())
+        console.error('Failed to load endpoints:', endpointsRes.reason)
+        setEndpoints([])
       }
 
       // Process error rates
@@ -122,10 +124,11 @@ export default function APMPage() {
         } else if (Array.isArray(data)) {
           setErrorRates(data)
         } else {
-          setErrorRates(generateMockErrorRates())
+          setErrorRates([])
         }
       } else {
-        setErrorRates(generateMockErrorRates())
+        console.error('Failed to load error rates:', errorRatesRes.reason)
+        setErrorRates([])
       }
 
       // Process transactions
@@ -136,18 +139,19 @@ export default function APMPage() {
         } else if (Array.isArray(data)) {
           setTransactions(data)
         } else {
-          setTransactions(generateMockTransactions())
+          setTransactions([])
         }
       } else {
-        setTransactions(generateMockTransactions())
+        console.error('Failed to load transactions:', transactionsRes.reason)
+        setTransactions([])
       }
     } catch (error) {
       console.error('Failed to load APM data:', error)
-      // Set mock data
-      setServices(generateMockServices())
-      setEndpoints(generateMockEndpoints())
-      setErrorRates(generateMockErrorRates())
-      setTransactions(generateMockTransactions())
+      // Set empty arrays on error - no mock data
+      setServices([])
+      setEndpoints([])
+      setErrorRates([])
+      setTransactions([])
     } finally {
       setIsLoading(false)
     }
@@ -235,111 +239,4 @@ export default function APMPage() {
       </div>
     </DashboardLayout>
   )
-}
-
-// Mock data generators
-function generateMockServices(): ServicePerformance[] {
-  const services = ['api-gateway', 'auth-service', 'user-service', 'order-service', 'payment-service']
-
-  return services.map(name => {
-    const baseLatency = Math.random() * 150 + 20
-    const errorRate = Math.random() * 3
-
-    return {
-      service_name: name,
-      request_count: Math.floor(Math.random() * 50000) + 10000,
-      avg_latency_ms: baseLatency,
-      p50_latency_ms: baseLatency * 0.8,
-      p95_latency_ms: baseLatency * 2.5,
-      p99_latency_ms: baseLatency * 4,
-      error_rate: errorRate,
-      throughput: Math.floor(Math.random() * 1000) + 100,
-      apdex_score: errorRate < 1 ? 0.95 : errorRate < 2 ? 0.75 : 0.5
-    }
-  })
-}
-
-function generateMockEndpoints(): EndpointPerformance[] {
-  const endpoints = [
-    { endpoint: 'POST /api/orders', service: 'order-service' },
-    { endpoint: 'GET /api/users/:id', service: 'user-service' },
-    { endpoint: 'POST /api/payments', service: 'payment-service' },
-    { endpoint: 'GET /api/products/search', service: 'api-gateway' },
-    { endpoint: 'PUT /api/users/:id', service: 'user-service' },
-    { endpoint: 'GET /api/orders/:id/history', service: 'order-service' },
-    { endpoint: 'POST /api/auth/login', service: 'auth-service' },
-    { endpoint: 'GET /api/recommendations', service: 'api-gateway' },
-    { endpoint: 'DELETE /api/cart/items/:id', service: 'order-service' },
-    { endpoint: 'POST /api/reviews', service: 'user-service' }
-  ]
-
-  return endpoints.map(({ endpoint, service }) => {
-    const baseLatency = Math.random() * 300 + 100
-
-    return {
-      endpoint,
-      service,
-      request_count: Math.floor(Math.random() * 10000) + 1000,
-      avg_latency_ms: baseLatency,
-      p50_latency_ms: baseLatency * 0.8,
-      p95_latency_ms: baseLatency * 2,
-      p99_latency_ms: baseLatency * 3,
-      error_rate: Math.random() * 5
-    }
-  }).sort((a, b) => b.p99_latency_ms - a.p99_latency_ms)
-}
-
-function generateMockErrorRates(): ErrorRateMetric[] {
-  const services = ['api-gateway', 'auth-service', 'user-service', 'order-service', 'payment-service']
-  const now = Date.now()
-  const metrics: ErrorRateMetric[] = []
-
-  // Generate hourly data points for last 24 hours
-  for (let i = 24; i >= 0; i--) {
-    const timestamp = now - (i * 3600000)
-
-    services.forEach(service => {
-      const totalRequests = Math.floor(Math.random() * 5000) + 1000
-      const errorCount = Math.floor(totalRequests * (Math.random() * 0.05))
-
-      metrics.push({
-        timestamp,
-        service,
-        error_rate: (errorCount / totalRequests) * 100,
-        error_count: errorCount,
-        total_requests: totalRequests
-      })
-    })
-  }
-
-  return metrics
-}
-
-function generateMockTransactions(): Transaction[] {
-  const transactions = [
-    { name: 'checkout.process', service: 'order-service' },
-    { name: 'user.registration', service: 'user-service' },
-    { name: 'payment.authorize', service: 'payment-service' },
-    { name: 'search.products', service: 'api-gateway' },
-    { name: 'auth.login', service: 'auth-service' },
-    { name: 'cart.update', service: 'order-service' },
-    { name: 'user.profile.update', service: 'user-service' },
-    { name: 'recommendation.generate', service: 'api-gateway' },
-    { name: 'payment.refund', service: 'payment-service' },
-    { name: 'order.history', service: 'order-service' }
-  ]
-
-  const total = transactions.reduce((sum) => sum + Math.random() * 1000, 0)
-
-  return transactions.map(({ name, service }) => {
-    const count = Math.floor(Math.random() * 10000) + 500
-
-    return {
-      name,
-      service,
-      count,
-      avg_duration_ms: Math.floor(Math.random() * 200) + 50,
-      percentage: (count / total) * 100
-    }
-  }).sort((a, b) => b.count - a.count)
 }
