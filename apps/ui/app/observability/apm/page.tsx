@@ -9,10 +9,13 @@ import APMTransactions from '@/components/observability/APMTransactions'
 import APMApdexScore from '@/components/observability/APMApdexScore'
 import { apiClient } from '@/lib/api'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
-import { GitCompare } from 'lucide-react'
+import { GitCompare, RefreshCw, Pause, Play } from 'lucide-react'
 
 // Comparison period options
 export type ComparisonPeriod = 'none' | 'previous_period' | 'yesterday' | 'last_week'
+
+// Auto-refresh interval options (in milliseconds)
+export type RefreshInterval = 0 | 10000 | 30000 | 60000 | 300000
 
 export interface ServicePerformance {
   service_name: string
@@ -128,6 +131,11 @@ export default function APMPage() {
   const [comparisonPeriod, setComparisonPeriod] = useState<ComparisonPeriod>('none')
   const [comparisonServices, setComparisonServices] = useState<ServicePerformance[]>([])
   const [isLoadingComparison, setIsLoadingComparison] = useState(false)
+
+  // Auto-refresh state
+  const [refreshInterval, setRefreshInterval] = useState<RefreshInterval>(0)
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
+  const autoRefreshRef = useRef<NodeJS.Timeout | null>(null)
 
   // Progressive loading flags
   const [enableServices, setEnableServices] = useState(false)
@@ -384,6 +392,39 @@ export default function APMPage() {
     setTimeout(() => loadEndpoints(), 100)
     setTimeout(() => loadErrorRates(), 200)
     setTimeout(() => loadTransactions(), 300)
+    setLastRefresh(new Date())
+  }
+
+  // Auto-refresh effect
+  useEffect(() => {
+    // Clear existing interval
+    if (autoRefreshRef.current) {
+      clearInterval(autoRefreshRef.current)
+      autoRefreshRef.current = null
+    }
+
+    // Set up new interval if enabled
+    if (refreshInterval > 0) {
+      autoRefreshRef.current = setInterval(() => {
+        handleRefresh()
+      }, refreshInterval)
+    }
+
+    // Cleanup on unmount or interval change
+    return () => {
+      if (autoRefreshRef.current) {
+        clearInterval(autoRefreshRef.current)
+        autoRefreshRef.current = null
+      }
+    }
+  }, [refreshInterval])
+
+  // Format time since last refresh
+  const getTimeSinceRefresh = () => {
+    const seconds = Math.floor((new Date().getTime() - lastRefresh.getTime()) / 1000)
+    if (seconds < 60) return `${seconds}s ago`
+    const minutes = Math.floor(seconds / 60)
+    return `${minutes}m ago`
   }
 
   const isAnyLoading = isLoadingServices || isLoadingEndpoints || isLoadingErrorRates || isLoadingTransactions
@@ -430,11 +471,30 @@ export default function APMPage() {
               ))}
             </select>
 
+            {/* Auto-Refresh Selector */}
+            <div className="flex items-center gap-2">
+              <RefreshCw className={`w-4 h-4 ${refreshInterval > 0 ? 'text-emerald-400 animate-spin' : 'text-slate-400'}`} style={{ animationDuration: '3s' }} />
+              <select
+                value={refreshInterval}
+                onChange={(e) => setRefreshInterval(Number(e.target.value) as RefreshInterval)}
+                className={`px-3 py-2 bg-slate-800 border rounded-lg text-white text-sm focus:outline-none ${
+                  refreshInterval > 0 ? 'border-emerald-500/50' : 'border-slate-600'
+                }`}
+              >
+                <option value={0}>Auto-Refresh: Off</option>
+                <option value={10000}>Every 10s</option>
+                <option value={30000}>Every 30s</option>
+                <option value={60000}>Every 1m</option>
+                <option value={300000}>Every 5m</option>
+              </select>
+            </div>
+
             <button
               onClick={handleRefresh}
               disabled={isAnyLoading}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
             >
+              <RefreshCw className={`w-4 h-4 ${isAnyLoading ? 'animate-spin' : ''}`} />
               {isAnyLoading ? 'Refreshing...' : 'Refresh'}
             </button>
           </div>
