@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, memo } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import APMServiceOverview from '@/components/observability/APMServiceOverview'
 import APMSlowestEndpoints from '@/components/observability/APMSlowestEndpoints'
@@ -49,117 +49,242 @@ export interface Transaction {
   percentage: number
 }
 
+// Memoized components to prevent unnecessary re-renders
+const MemoizedServiceOverview = memo(APMServiceOverview)
+const MemoizedApdexScore = memo(APMApdexScore)
+const MemoizedSlowestEndpoints = memo(APMSlowestEndpoints)
+const MemoizedErrorRates = memo(APMErrorRates)
+const MemoizedTransactions = memo(APMTransactions)
+
 export default function APMPage() {
-  const { getApiTimeRange } = useTimeRange()
+  const { getApiTimeRange, currentTimeRange } = useTimeRange()
+
+  // Separate state for each component
   const [services, setServices] = useState<ServicePerformance[]>([])
+  const [isLoadingServices, setIsLoadingServices] = useState(true)
+
   const [endpoints, setEndpoints] = useState<EndpointPerformance[]>([])
+  const [isLoadingEndpoints, setIsLoadingEndpoints] = useState(true)
+
   const [errorRates, setErrorRates] = useState<ErrorRateMetric[]>([])
+  const [isLoadingErrorRates, setIsLoadingErrorRates] = useState(true)
+
   const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(true)
+
   const [selectedService, setSelectedService] = useState<string>('all')
 
-  const loadAPMData = async () => {
+  // Progressive loading flags
+  const [enableServices, setEnableServices] = useState(false)
+  const [enableEndpoints, setEnableEndpoints] = useState(false)
+  const [enableErrorRates, setEnableErrorRates] = useState(false)
+  const [enableTransactions, setEnableTransactions] = useState(false)
+
+  // Abort controllers for request cancellation
+  const servicesAbortRef = useRef<AbortController | null>(null)
+  const endpointsAbortRef = useRef<AbortController | null>(null)
+  const errorRatesAbortRef = useRef<AbortController | null>(null)
+  const transactionsAbortRef = useRef<AbortController | null>(null)
+
+  // Individual data loaders
+  const loadServices = async () => {
     try {
-      setIsLoading(true)
+      if (servicesAbortRef.current) servicesAbortRef.current.abort()
+      servicesAbortRef.current = new AbortController()
+
+      setIsLoadingServices(true)
       const { start_time, end_time } = getApiTimeRange()
 
-      // Load all APM data in parallel
-      const [servicesRes, endpointsRes, errorRatesRes, transactionsRes] = await Promise.allSettled([
-        apiClient.get<{ services: ServicePerformance[] }>('/v1/observability/apm/services', {
-          start_time,
-          end_time
-        }),
-        apiClient.get<{ endpoints: EndpointPerformance[] }>('/v1/observability/apm/slowest-endpoints', {
-          start_time,
-          end_time,
-          limit: 10
-        }),
-        apiClient.get<{ metrics: ErrorRateMetric[] }>('/v1/observability/apm/error-rates', {
-          start_time,
-          end_time,
-          interval: '5m'
-        }),
-        apiClient.get<{ transactions: Transaction[] }>('/v1/observability/apm/transactions', {
-          start_time,
-          end_time,
-          limit: 10
-        })
-      ])
+      const response = await apiClient.get<{ services: ServicePerformance[] }>('/v1/observability/apm/services', {
+        start_time,
+        end_time
+      })
 
-      // Process services
-      if (servicesRes.status === 'fulfilled') {
-        const data = servicesRes.value?.data?.data || servicesRes.value?.data || servicesRes.value
-        if (data && Array.isArray(data.services)) {
-          setServices(data.services)
-        } else if (Array.isArray(data)) {
-          setServices(data)
-        } else {
-          setServices([])
-        }
+      const data = response?.data?.data || response?.data || response
+      if (data && Array.isArray(data.services)) {
+        setServices(data.services)
+      } else if (Array.isArray(data)) {
+        setServices(data)
       } else {
-        console.error('Failed to load services:', servicesRes.reason)
         setServices([])
       }
-
-      // Process endpoints
-      if (endpointsRes.status === 'fulfilled') {
-        const data = endpointsRes.value?.data?.data || endpointsRes.value?.data || endpointsRes.value
-        if (data && Array.isArray(data.endpoints)) {
-          setEndpoints(data.endpoints)
-        } else if (Array.isArray(data)) {
-          setEndpoints(data)
-        } else {
-          setEndpoints([])
-        }
-      } else {
-        console.error('Failed to load endpoints:', endpointsRes.reason)
-        setEndpoints([])
+    } catch (error: any) {
+      if (error.name !== 'AbortError' && error.name !== 'CanceledError') {
+        console.error('Failed to load services:', error)
       }
-
-      // Process error rates
-      if (errorRatesRes.status === 'fulfilled') {
-        const data = errorRatesRes.value?.data?.data || errorRatesRes.value?.data || errorRatesRes.value
-        if (data && Array.isArray(data.metrics)) {
-          setErrorRates(data.metrics)
-        } else if (Array.isArray(data)) {
-          setErrorRates(data)
-        } else {
-          setErrorRates([])
-        }
-      } else {
-        console.error('Failed to load error rates:', errorRatesRes.reason)
-        setErrorRates([])
-      }
-
-      // Process transactions
-      if (transactionsRes.status === 'fulfilled') {
-        const data = transactionsRes.value?.data?.data || transactionsRes.value?.data || transactionsRes.value
-        if (data && Array.isArray(data.transactions)) {
-          setTransactions(data.transactions)
-        } else if (Array.isArray(data)) {
-          setTransactions(data)
-        } else {
-          setTransactions([])
-        }
-      } else {
-        console.error('Failed to load transactions:', transactionsRes.reason)
-        setTransactions([])
-      }
-    } catch (error) {
-      console.error('Failed to load APM data:', error)
-      // Set empty arrays on error - no mock data
       setServices([])
-      setEndpoints([])
-      setErrorRates([])
-      setTransactions([])
     } finally {
-      setIsLoading(false)
+      setIsLoadingServices(false)
     }
   }
 
+  const loadEndpoints = async () => {
+    try {
+      if (endpointsAbortRef.current) endpointsAbortRef.current.abort()
+      endpointsAbortRef.current = new AbortController()
+
+      setIsLoadingEndpoints(true)
+      const { start_time, end_time } = getApiTimeRange()
+
+      const response = await apiClient.get<{ endpoints: EndpointPerformance[] }>('/v1/observability/apm/slowest-endpoints', {
+        start_time,
+        end_time,
+        limit: 10
+      })
+
+      const data = response?.data?.data || response?.data || response
+      if (data && Array.isArray(data.endpoints)) {
+        setEndpoints(data.endpoints)
+      } else if (Array.isArray(data)) {
+        setEndpoints(data)
+      } else {
+        setEndpoints([])
+      }
+    } catch (error: any) {
+      if (error.name !== 'AbortError' && error.name !== 'CanceledError') {
+        console.error('Failed to load endpoints:', error)
+      }
+      setEndpoints([])
+    } finally {
+      setIsLoadingEndpoints(false)
+    }
+  }
+
+  const loadErrorRates = async () => {
+    try {
+      if (errorRatesAbortRef.current) errorRatesAbortRef.current.abort()
+      errorRatesAbortRef.current = new AbortController()
+
+      setIsLoadingErrorRates(true)
+      const { start_time, end_time } = getApiTimeRange()
+
+      const response = await apiClient.get<{ metrics: ErrorRateMetric[] }>('/v1/observability/apm/error-rates', {
+        start_time,
+        end_time,
+        interval: '5m'
+      })
+
+      const data = response?.data?.data || response?.data || response
+      if (data && Array.isArray(data.metrics)) {
+        setErrorRates(data.metrics)
+      } else if (Array.isArray(data)) {
+        setErrorRates(data)
+      } else {
+        setErrorRates([])
+      }
+    } catch (error: any) {
+      if (error.name !== 'AbortError' && error.name !== 'CanceledError') {
+        console.error('Failed to load error rates:', error)
+      }
+      setErrorRates([])
+    } finally {
+      setIsLoadingErrorRates(false)
+    }
+  }
+
+  const loadTransactions = async () => {
+    try {
+      if (transactionsAbortRef.current) transactionsAbortRef.current.abort()
+      transactionsAbortRef.current = new AbortController()
+
+      setIsLoadingTransactions(true)
+      const { start_time, end_time } = getApiTimeRange()
+
+      const response = await apiClient.get<{ transactions: Transaction[] }>('/v1/observability/apm/transactions', {
+        start_time,
+        end_time,
+        limit: 10
+      })
+
+      const data = response?.data?.data || response?.data || response
+      if (data && Array.isArray(data.transactions)) {
+        setTransactions(data.transactions)
+      } else if (Array.isArray(data)) {
+        setTransactions(data)
+      } else {
+        setTransactions([])
+      }
+    } catch (error: any) {
+      if (error.name !== 'AbortError' && error.name !== 'CanceledError') {
+        console.error('Failed to load transactions:', error)
+      }
+      setTransactions([])
+    } finally {
+      setIsLoadingTransactions(false)
+    }
+  }
+
+  // Progressive loading - Enable components one by one
   useEffect(() => {
-    loadAPMData()
-  }, [])
+    // Reset all flags
+    setEnableServices(false)
+    setEnableEndpoints(false)
+    setEnableErrorRates(false)
+    setEnableTransactions(false)
+
+    // Priority 1: Services (immediate)
+    setEnableServices(true)
+
+    // Priority 2: Endpoints (200ms delay)
+    const timer1 = setTimeout(() => setEnableEndpoints(true), 200)
+
+    // Priority 3: Error Rates (400ms delay)
+    const timer2 = setTimeout(() => setEnableErrorRates(true), 400)
+
+    // Priority 4: Transactions (600ms delay)
+    const timer3 = setTimeout(() => setEnableTransactions(true), 600)
+
+    // Cleanup
+    return () => {
+      clearTimeout(timer1)
+      clearTimeout(timer2)
+      clearTimeout(timer3)
+
+      if (servicesAbortRef.current) servicesAbortRef.current.abort()
+      if (endpointsAbortRef.current) endpointsAbortRef.current.abort()
+      if (errorRatesAbortRef.current) errorRatesAbortRef.current.abort()
+      if (transactionsAbortRef.current) transactionsAbortRef.current.abort()
+    }
+  }, [currentTimeRange.value])
+
+  // Load Services when enabled
+  useEffect(() => {
+    if (enableServices) loadServices()
+  }, [enableServices, currentTimeRange.value])
+
+  // Load Endpoints when enabled
+  useEffect(() => {
+    if (enableEndpoints) {
+      const timer = setTimeout(() => loadEndpoints(), 100)
+      return () => clearTimeout(timer)
+    }
+  }, [enableEndpoints, currentTimeRange.value])
+
+  // Load Error Rates when enabled
+  useEffect(() => {
+    if (enableErrorRates) {
+      const timer = setTimeout(() => loadErrorRates(), 200)
+      return () => clearTimeout(timer)
+    }
+  }, [enableErrorRates, currentTimeRange.value])
+
+  // Load Transactions when enabled
+  useEffect(() => {
+    if (enableTransactions) {
+      const timer = setTimeout(() => loadTransactions(), 300)
+      return () => clearTimeout(timer)
+    }
+  }, [enableTransactions, currentTimeRange.value])
+
+  // Manual refresh
+  const handleRefresh = () => {
+    loadServices()
+    setTimeout(() => loadEndpoints(), 100)
+    setTimeout(() => loadErrorRates(), 200)
+    setTimeout(() => loadTransactions(), 300)
+  }
+
+  const isAnyLoading = isLoadingServices || isLoadingEndpoints || isLoadingErrorRates || isLoadingTransactions
 
   return (
     <DashboardLayout>
@@ -189,52 +314,52 @@ export default function APMPage() {
             </select>
 
             <button
-              onClick={loadAPMData}
-              disabled={isLoading}
+              onClick={handleRefresh}
+              disabled={isAnyLoading}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
             >
-              {isLoading ? 'Refreshing...' : 'Refresh'}
+              {isAnyLoading ? 'Refreshing...' : 'Refresh'}
             </button>
           </div>
         </div>
 
         {/* Service Overview Grid */}
-        <APMServiceOverview services={services} isLoading={isLoading} />
+        <MemoizedServiceOverview services={services} isLoading={isLoadingServices} />
 
         {/* Apdex Score */}
-        <APMApdexScore services={services} isLoading={isLoading} />
+        <MemoizedApdexScore services={services} isLoading={isLoadingServices} />
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Slowest Endpoints */}
-          <APMSlowestEndpoints
+          <MemoizedSlowestEndpoints
             endpoints={
               selectedService === 'all'
                 ? endpoints
                 : endpoints.filter(e => e.service === selectedService)
             }
-            isLoading={isLoading}
+            isLoading={isLoadingEndpoints}
           />
 
           {/* Error Rates */}
-          <APMErrorRates
+          <MemoizedErrorRates
             metrics={
               selectedService === 'all'
                 ? errorRates
                 : errorRates.filter(m => m.service === selectedService)
             }
-            isLoading={isLoading}
+            isLoading={isLoadingErrorRates}
           />
         </div>
 
         {/* Transactions */}
-        <APMTransactions
+        <MemoizedTransactions
           transactions={
             selectedService === 'all'
               ? transactions
               : transactions.filter(t => t.service === selectedService)
           }
-          isLoading={isLoading}
+          isLoading={isLoadingTransactions}
         />
       </div>
     </DashboardLayout>
