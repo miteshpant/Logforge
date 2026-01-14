@@ -811,18 +811,18 @@ class ObservabilityDAO:
             query = f"""
             SELECT
                 trace_id,
-                min(start_time) as start_time,
+                min(start_time) as trace_start_time,
                 max(duration_ms) as duration_ms,
                 count() as span_count,
                 countIf(status = 'error') as error_count,
                 groupArray(DISTINCT service_name) as services,
                 argMin(service_name, if(parent_span_id = '', 0, 1)) as root_service,
                 argMin(operation_name, if(parent_span_id = '', 0, 1)) as root_operation,
-                if(countIf(status = 'error') > 0, 'error', 'ok') as status
+                if(countIf(status = 'error') > 0, 'error', 'ok') as trace_status
             FROM traces_mt
             WHERE {' AND '.join(where_clauses)}
             GROUP BY trace_id
-            ORDER BY start_time DESC
+            ORDER BY trace_start_time DESC
             LIMIT %(limit)s
             """
 

@@ -145,13 +145,17 @@ export default function TracesPage() {
       if (data && 'traces' in data && Array.isArray(data.traces)) {
         // API returns pre-aggregated trace summaries, transform to UI format
         const uiTraces: Trace[] = data.traces.map((t: any) => {
-          // Convert start_time to microseconds
+          // Convert start_time to microseconds (field is trace_start_time from API)
+          const startTimeValue = t.trace_start_time || t.start_time
           let startTimeMicros: number
-          if (typeof t.start_time === 'string') {
-            startTimeMicros = new Date(t.start_time).getTime() * 1000
+          if (typeof startTimeValue === 'string') {
+            startTimeMicros = new Date(startTimeValue).getTime() * 1000
           } else {
-            startTimeMicros = t.start_time > 1e15 ? t.start_time : t.start_time * 1000
+            startTimeMicros = startTimeValue > 1e15 ? startTimeValue : startTimeValue * 1000
           }
+
+          // Status field is trace_status from API
+          const statusValue = t.trace_status || t.status
 
           return {
             trace_id: t.trace_id,
@@ -161,7 +165,7 @@ export default function TracesPage() {
             duration: (t.duration_ms || 0) * 1000, // Convert ms to microseconds
             span_count: t.span_count || 1,
             error_count: t.error_count || 0,
-            status: t.status === 'error' ? 'error' : 'ok',
+            status: statusValue === 'error' ? 'error' : 'ok',
             services: Array.isArray(t.services) ? t.services : [t.root_service || 'unknown']
           }
         })
