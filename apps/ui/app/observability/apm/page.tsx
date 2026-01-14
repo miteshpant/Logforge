@@ -88,9 +88,11 @@ export default function APMPage() {
 
       // Process services
       if (servicesRes.status === 'fulfilled') {
-        const data = servicesRes.value?.data || servicesRes.value
-        if (data && 'services' in data) {
+        const data = servicesRes.value?.data?.data || servicesRes.value?.data || servicesRes.value
+        if (data && Array.isArray(data.services)) {
           setServices(data.services)
+        } else if (Array.isArray(data)) {
+          setServices(data)
         } else {
           setServices(generateMockServices())
         }
@@ -100,9 +102,11 @@ export default function APMPage() {
 
       // Process endpoints
       if (endpointsRes.status === 'fulfilled') {
-        const data = endpointsRes.value?.data || endpointsRes.value
-        if (data && 'endpoints' in data) {
+        const data = endpointsRes.value?.data?.data || endpointsRes.value?.data || endpointsRes.value
+        if (data && Array.isArray(data.endpoints)) {
           setEndpoints(data.endpoints)
+        } else if (Array.isArray(data)) {
+          setEndpoints(data)
         } else {
           setEndpoints(generateMockEndpoints())
         }
@@ -112,9 +116,11 @@ export default function APMPage() {
 
       // Process error rates
       if (errorRatesRes.status === 'fulfilled') {
-        const data = errorRatesRes.value?.data || errorRatesRes.value
-        if (data && 'metrics' in data) {
+        const data = errorRatesRes.value?.data?.data || errorRatesRes.value?.data || errorRatesRes.value
+        if (data && Array.isArray(data.metrics)) {
           setErrorRates(data.metrics)
+        } else if (Array.isArray(data)) {
+          setErrorRates(data)
         } else {
           setErrorRates(generateMockErrorRates())
         }
@@ -124,9 +130,11 @@ export default function APMPage() {
 
       // Process transactions
       if (transactionsRes.status === 'fulfilled') {
-        const data = transactionsRes.value?.data || transactionsRes.value
-        if (data && 'transactions' in data) {
+        const data = transactionsRes.value?.data?.data || transactionsRes.value?.data || transactionsRes.value
+        if (data && Array.isArray(data.transactions)) {
           setTransactions(data.transactions)
+        } else if (Array.isArray(data)) {
+          setTransactions(data)
         } else {
           setTransactions(generateMockTransactions())
         }

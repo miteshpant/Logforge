@@ -10,11 +10,14 @@ interface APMErrorRatesProps {
 }
 
 export default function APMErrorRates({ metrics, isLoading }: APMErrorRatesProps) {
+  // Ensure metrics is always an array
+  const safeMetrics = Array.isArray(metrics) ? metrics : []
+
   // Group by service and calculate average error rate
   const serviceErrorRates = useMemo(() => {
     const grouped = new Map<string, { total: number; count: number; max: number }>()
 
-    metrics.forEach(metric => {
+    safeMetrics.forEach(metric => {
       if (!grouped.has(metric.service)) {
         grouped.set(metric.service, { total: 0, count: 0, max: 0 })
       }
@@ -32,17 +35,17 @@ export default function APMErrorRates({ metrics, isLoading }: APMErrorRatesProps
         maxErrorRate: data.max
       }))
       .sort((a, b) => b.avgErrorRate - a.avgErrorRate)
-  }, [metrics])
+  }, [safeMetrics])
 
   // Get recent trend (last 6 hours)
   const recentMetrics = useMemo(() => {
     const now = Date.now()
     const sixHoursAgo = now - (6 * 3600000)
 
-    return metrics
+    return safeMetrics
       .filter(m => m.timestamp >= sixHoursAgo)
       .sort((a, b) => a.timestamp - b.timestamp)
-  }, [metrics])
+  }, [safeMetrics])
 
   if (isLoading) {
     return (
