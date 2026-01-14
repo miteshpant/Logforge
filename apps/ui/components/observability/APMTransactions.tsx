@@ -3,6 +3,13 @@
 import { Activity, Clock } from 'lucide-react'
 import type { Transaction } from '@/app/observability/apm/page'
 
+// Format latency values for display
+const formatLatency = (ms: number): string => {
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
+  return `${(ms / 60000).toFixed(1)}m`
+}
+
 interface APMTransactionsProps {
   transactions: Transaction[]
   isLoading: boolean
@@ -82,7 +89,7 @@ export default function APMTransactions({ transactions, isLoading }: APMTransact
                   <div className="text-right w-20">
                     <div className="flex items-center gap-1 text-sm text-slate-300">
                       <Clock className="w-4 h-4 text-purple-400" />
-                      <span className="font-mono">{transaction.avg_duration_ms}ms</span>
+                      <span className="font-mono">{formatLatency(transaction.avg_duration_ms)}</span>
                     </div>
                   </div>
                 </div>
@@ -111,7 +118,7 @@ export default function APMTransactions({ transactions, isLoading }: APMTransact
           </div>
           <div>
             <div className="text-2xl font-bold text-white">
-              {(transactions.reduce((sum, t) => sum + t.avg_duration_ms, 0) / transactions.length).toFixed(0)}ms
+              {formatLatency(transactions.reduce((sum, t) => sum + t.avg_duration_ms, 0) / transactions.length)}
             </div>
             <div className="text-xs text-slate-400 mt-1">Avg Duration</div>
           </div>

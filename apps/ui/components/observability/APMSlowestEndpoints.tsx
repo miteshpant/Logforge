@@ -3,6 +3,13 @@
 import { Clock, AlertCircle } from 'lucide-react'
 import type { EndpointPerformance } from '@/app/observability/apm/page'
 
+// Format latency values for display
+const formatLatency = (ms: number): string => {
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
+  return `${(ms / 60000).toFixed(1)}m`
+}
+
 interface APMSlowestEndpointsProps {
   endpoints: EndpointPerformance[]
   isLoading: boolean
@@ -34,8 +41,9 @@ export default function APMSlowestEndpoints({ endpoints, isLoading }: APMSlowest
   }
 
   const getLatencyColor = (latency: number) => {
-    if (latency > 500) return 'text-red-400'
-    if (latency > 200) return 'text-yellow-400'
+    if (latency > 5000) return 'text-red-400'    // > 5s
+    if (latency > 1000) return 'text-orange-400' // > 1s
+    if (latency > 200) return 'text-yellow-400'  // > 200ms
     return 'text-emerald-400'
   }
 
@@ -81,17 +89,17 @@ export default function APMSlowestEndpoints({ endpoints, isLoading }: APMSlowest
 
                 {/* P50 */}
                 <td className={`px-6 py-4 text-right text-sm font-mono ${getLatencyColor(endpoint.p50_latency_ms)}`}>
-                  {endpoint.p50_latency_ms.toFixed(0)}ms
+                  {formatLatency(endpoint.p50_latency_ms)}
                 </td>
 
                 {/* P95 */}
                 <td className={`px-6 py-4 text-right text-sm font-mono ${getLatencyColor(endpoint.p95_latency_ms)}`}>
-                  {endpoint.p95_latency_ms.toFixed(0)}ms
+                  {formatLatency(endpoint.p95_latency_ms)}
                 </td>
 
                 {/* P99 */}
                 <td className={`px-6 py-4 text-right text-sm font-mono font-semibold ${getLatencyColor(endpoint.p99_latency_ms)}`}>
-                  {endpoint.p99_latency_ms.toFixed(0)}ms
+                  {formatLatency(endpoint.p99_latency_ms)}
                 </td>
 
                 {/* Error Rate */}

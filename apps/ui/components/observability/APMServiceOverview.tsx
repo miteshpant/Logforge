@@ -3,6 +3,13 @@
 import { Activity, Clock, AlertCircle, TrendingUp } from 'lucide-react'
 import type { ServicePerformance } from '@/app/observability/apm/page'
 
+// Format latency values for display
+const formatLatency = (ms: number): string => {
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
+  return `${(ms / 60000).toFixed(1)}m`
+}
+
 interface APMServiceOverviewProps {
   services: ServicePerformance[]
   isLoading: boolean
@@ -38,10 +45,10 @@ export default function APMServiceOverview({ services, isLoading }: APMServiceOv
     },
     {
       label: 'Avg Latency',
-      value: `${avgLatency.toFixed(0)}ms`,
+      value: formatLatency(avgLatency),
       icon: Clock,
-      color: avgLatency > 100 ? 'text-yellow-400' : 'text-emerald-400',
-      bgColor: avgLatency > 100 ? 'bg-yellow-500/20' : 'bg-emerald-500/20'
+      color: avgLatency > 1000 ? 'text-red-400' : avgLatency > 100 ? 'text-yellow-400' : 'text-emerald-400',
+      bgColor: avgLatency > 1000 ? 'bg-red-500/20' : avgLatency > 100 ? 'bg-yellow-500/20' : 'bg-emerald-500/20'
     },
     {
       label: 'Error Rate',
