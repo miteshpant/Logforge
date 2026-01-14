@@ -169,9 +169,9 @@ export default function TraceTable({
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
         <table className="w-full">
-          <thead className="bg-slate-900/50 border-b border-slate-700">
+          <thead className="bg-slate-900/50 border-b border-slate-700 sticky top-0 z-10">
             <tr>
               <SortHeader field="root_service">Service</SortHeader>
               <SortHeader field="root_operation">Operation</SortHeader>
