@@ -176,7 +176,6 @@ export default function TraceTable({
               <SortHeader field="root_service">Service</SortHeader>
               <SortHeader field="root_operation">Operation</SortHeader>
               <SortHeader field="duration">Duration</SortHeader>
-              <SortHeader field="span_count">Spans</SortHeader>
               <SortHeader field="status">Status</SortHeader>
               <SortHeader field="start_time">Time</SortHeader>
             </tr>
@@ -222,14 +221,6 @@ export default function TraceTable({
                     <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-sm font-mono ${getDurationColor(trace.duration)}`}>
                       <Clock className="w-3 h-3" />
                       {formatDuration(trace.duration)}
-                    </span>
-                  </td>
-
-                  {/* Spans */}
-                  <td className="px-4 py-3">
-                    <span className="text-sm text-slate-400 flex items-center gap-1">
-                      <Layers className="w-3 h-3" />
-                      {trace.span_count}
                     </span>
                   </td>
 
