@@ -8,6 +8,7 @@ import TraceWaterfall from '@/components/observability/TraceWaterfall'
 import { apiClient } from '@/lib/api'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
 import { useSearchParams } from 'next/navigation'
+import { Filter } from 'lucide-react'
 
 export interface Span {
   span_id: string
@@ -267,23 +268,33 @@ export default function TracesPage() {
     }
   }, [serviceFromUrl, initialSearchDone])
 
+  const [showFilters, setShowFilters] = useState(true)
+
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-white">Distributed Tracing</h1>
-          <p className="text-slate-400 mt-1">
-            Explore distributed traces across your microservices
-          </p>
+      <div className="space-y-4">
+        {/* Compact Header with Filter Toggle */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Distributed Tracing</h1>
+          </div>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition-colors flex items-center gap-2"
+          >
+            <Filter className="w-4 h-4" />
+            {showFilters ? 'Hide Filters' : 'Show Filters'}
+          </button>
         </div>
 
-        {/* Search Filters */}
-        <TraceSearch
-          onSearch={searchTraces}
-          isLoading={isLoadingTraces}
-          initialService={serviceFromUrl || undefined}
-        />
+        {/* Collapsible Search Filters */}
+        {showFilters && (
+          <TraceSearch
+            onSearch={searchTraces}
+            isLoading={isLoadingTraces}
+            initialService={serviceFromUrl || undefined}
+          />
+        )}
 
         {/* Trace Table */}
         <TraceTable
