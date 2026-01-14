@@ -202,7 +202,10 @@ export default function TraceTable({
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-white text-sm">{trace.root_service}</span>
                       {trace.services.length > 1 && (
-                        <span className="text-xs text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">
+                        <span
+                          className="text-xs text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded cursor-help"
+                          title={`This trace spans ${trace.services.length} services: ${trace.services.join(', ')}`}
+                        >
                           +{trace.services.length - 1}
                         </span>
                       )}
