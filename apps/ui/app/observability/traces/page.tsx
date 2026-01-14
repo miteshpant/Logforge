@@ -91,62 +91,6 @@ function transformSpan(apiSpan: ApiSpan): Span {
   }
 }
 
-// Aggregate spans into trace summaries grouped by trace_id
-function aggregateSpansToTraces(spans: ApiSpan[]): Trace[] {
-  const traceMap = new Map<string, ApiSpan[]>()
-
-  // Group spans by trace_id
-  for (const span of spans) {
-    if (!traceMap.has(span.trace_id)) {
-      traceMap.set(span.trace_id, [])
-    }
-    traceMap.get(span.trace_id)!.push(span)
-  }
-
-  // Convert each group to a Trace summary
-  const traces: Trace[] = []
-
-  for (const [traceId, traceSpans] of traceMap) {
-    // Find root span (no parent_span_id)
-    const rootSpan = traceSpans.find(s => !s.parent_span_id) || traceSpans[0]
-
-    // Calculate aggregates
-    const services = [...new Set(traceSpans.map(s => s.service_name))]
-    const errorCount = traceSpans.filter(s => s.status === 'error').length
-    const hasError = errorCount > 0
-
-    // Get earliest start time and total duration
-    let minStartTime = Infinity
-    let maxDuration = 0
-
-    for (const span of traceSpans) {
-      let startMs: number
-      if (typeof span.start_time === 'string') {
-        startMs = new Date(span.start_time).getTime()
-      } else {
-        startMs = span.start_time > 1e12 ? span.start_time / 1000 : span.start_time
-      }
-
-      if (startMs < minStartTime) minStartTime = startMs
-      if (span.duration_ms > maxDuration) maxDuration = span.duration_ms
-    }
-
-    traces.push({
-      trace_id: traceId,
-      root_service: rootSpan.service_name,
-      root_operation: rootSpan.operation_name,
-      start_time: minStartTime * 1000, // Convert to microseconds
-      duration: maxDuration * 1000, // Convert ms to microseconds
-      span_count: traceSpans.length,
-      error_count: errorCount,
-      status: hasError ? 'error' : 'ok',
-      services
-    })
-  }
-
-  // Sort by start_time descending (most recent first)
-  return traces.sort((a, b) => b.start_time - a.start_time)
-}
 
 export default function TracesPage() {
   const { getApiTimeRange } = useTimeRange()
@@ -199,9 +143,29 @@ export default function TracesPage() {
       const data = response?.data?.data || response?.data || response
 
       if (data && 'traces' in data && Array.isArray(data.traces)) {
-        // API returns raw spans, aggregate them into trace summaries
-        const aggregatedTraces = aggregateSpansToTraces(data.traces)
-        setTraces(aggregatedTraces)
+        // API returns pre-aggregated trace summaries, transform to UI format
+        const uiTraces: Trace[] = data.traces.map((t: any) => {
+          // Convert start_time to microseconds
+          let startTimeMicros: number
+          if (typeof t.start_time === 'string') {
+            startTimeMicros = new Date(t.start_time).getTime() * 1000
+          } else {
+            startTimeMicros = t.start_time > 1e15 ? t.start_time : t.start_time * 1000
+          }
+
+          return {
+            trace_id: t.trace_id,
+            root_service: t.root_service || t.services?.[0] || 'unknown',
+            root_operation: t.root_operation || 'unknown',
+            start_time: startTimeMicros,
+            duration: (t.duration_ms || 0) * 1000, // Convert ms to microseconds
+            span_count: t.span_count || 1,
+            error_count: t.error_count || 0,
+            status: t.status === 'error' ? 'error' : 'ok',
+            services: Array.isArray(t.services) ? t.services : [t.root_service || 'unknown']
+          }
+        })
+        setTraces(uiTraces)
       } else {
         // No data returned
         setTraces([])

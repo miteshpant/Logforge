@@ -773,6 +773,70 @@ class ObservabilityDAO:
             logger.error(f"Failed to search traces: {e}")
             raise
 
+    async def search_trace_summaries(self, customer_id: str, filters: Dict[str, Any], limit: int = 100) -> List[Dict[str, Any]]:
+        """Search traces and return aggregated summaries grouped by trace_id"""
+        try:
+            where_clauses = ["customer_id = %(customer_id)s"]
+            params = {"customer_id": customer_id, "limit": limit}
+
+            if filters.get("service_name"):
+                where_clauses.append("service_name = %(service_name)s")
+                params["service_name"] = filters["service_name"]
+
+            if filters.get("operation_name"):
+                where_clauses.append("operation_name LIKE %(operation_name)s")
+                params["operation_name"] = f"%{filters['operation_name']}%"
+
+            if filters.get("start_time"):
+                where_clauses.append("start_time >= %(start_time)s")
+                params["start_time"] = filters["start_time"]
+
+            if filters.get("end_time"):
+                where_clauses.append("start_time <= %(end_time)s")
+                params["end_time"] = filters["end_time"]
+
+            if filters.get("min_duration_ms"):
+                where_clauses.append("duration_ms >= %(min_duration_ms)s")
+                params["min_duration_ms"] = filters["min_duration_ms"]
+
+            if filters.get("max_duration_ms"):
+                where_clauses.append("duration_ms <= %(max_duration_ms)s")
+                params["max_duration_ms"] = filters["max_duration_ms"]
+
+            if filters.get("status"):
+                where_clauses.append("status = %(status)s")
+                params["status"] = filters["status"]
+
+            # Aggregate by trace_id to get trace summaries
+            query = f"""
+            SELECT
+                trace_id,
+                min(start_time) as start_time,
+                max(duration_ms) as duration_ms,
+                count() as span_count,
+                countIf(status = 'error') as error_count,
+                groupArray(DISTINCT service_name) as services,
+                argMin(service_name, if(parent_span_id = '', 0, 1)) as root_service,
+                argMin(operation_name, if(parent_span_id = '', 0, 1)) as root_operation,
+                if(countIf(status = 'error') > 0, 'error', 'ok') as status
+            FROM traces_mt
+            WHERE {' AND '.join(where_clauses)}
+            GROUP BY trace_id
+            ORDER BY start_time DESC
+            LIMIT %(limit)s
+            """
+
+            if filters.get("offset"):
+                query += " OFFSET %(offset)s"
+                params["offset"] = filters["offset"]
+
+            results = await self.db.execute_query(query, params)
+            return results
+
+        except Exception as e:
+            logger.error(f"Failed to search trace summaries: {e}")
+            raise
+
     async def get_span_by_id(self, span_id: str, customer_id: str) -> List[Dict[str, Any]]:
         """Get span by span ID"""
         try:

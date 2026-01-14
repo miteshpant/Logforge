@@ -201,8 +201,8 @@ class ObservabilityService:
 
     async def search_traces(self, customer_id: str, filters: Dict[str, Any],
                           limit: int = 100) -> List[Dict[str, Any]]:
-        """Search traces with filters"""
-        return await self.dao.search_traces(customer_id, filters, limit)
+        """Search traces and return aggregated summaries"""
+        return await self.dao.search_trace_summaries(customer_id, filters, limit)
 
     # ==========================================
     # METRICS MANAGEMENT
