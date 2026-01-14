@@ -9,6 +9,10 @@ import APMTransactions from '@/components/observability/APMTransactions'
 import APMApdexScore from '@/components/observability/APMApdexScore'
 import { apiClient } from '@/lib/api'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
+import { GitCompare } from 'lucide-react'
+
+// Comparison period options
+export type ComparisonPeriod = 'none' | 'previous_period' | 'yesterday' | 'last_week'
 
 export interface ServicePerformance {
   service_name: string
@@ -20,6 +24,14 @@ export interface ServicePerformance {
   error_rate: number
   throughput: number
   apdex_score: number
+}
+
+// Aggregated metrics for comparison
+export interface AggregatedMetrics {
+  total_requests: number
+  avg_latency_ms: number
+  error_rate: number
+  throughput: number
 }
 
 export interface EndpointPerformance {
@@ -56,6 +68,44 @@ const MemoizedSlowestEndpoints = memo(APMSlowestEndpoints)
 const MemoizedErrorRates = memo(APMErrorRates)
 const MemoizedTransactions = memo(APMTransactions)
 
+// Helper to calculate comparison time range
+function getComparisonTimeRange(
+  startTime: string,
+  endTime: string,
+  period: ComparisonPeriod
+): { start_time: string; end_time: string } | null {
+  if (period === 'none') return null
+
+  const start = new Date(startTime)
+  const end = new Date(endTime)
+  const duration = end.getTime() - start.getTime()
+
+  let compStart: Date
+  let compEnd: Date
+
+  switch (period) {
+    case 'previous_period':
+      compEnd = new Date(start.getTime())
+      compStart = new Date(start.getTime() - duration)
+      break
+    case 'yesterday':
+      compStart = new Date(start.getTime() - 24 * 60 * 60 * 1000)
+      compEnd = new Date(end.getTime() - 24 * 60 * 60 * 1000)
+      break
+    case 'last_week':
+      compStart = new Date(start.getTime() - 7 * 24 * 60 * 60 * 1000)
+      compEnd = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000)
+      break
+    default:
+      return null
+  }
+
+  return {
+    start_time: compStart.toISOString(),
+    end_time: compEnd.toISOString()
+  }
+}
+
 export default function APMPage() {
   const { getApiTimeRange, currentTimeRange } = useTimeRange()
 
@@ -73,6 +123,11 @@ export default function APMPage() {
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(true)
 
   const [selectedService, setSelectedService] = useState<string>('all')
+
+  // Comparison mode state
+  const [comparisonPeriod, setComparisonPeriod] = useState<ComparisonPeriod>('none')
+  const [comparisonServices, setComparisonServices] = useState<ServicePerformance[]>([])
+  const [isLoadingComparison, setIsLoadingComparison] = useState(false)
 
   // Progressive loading flags
   const [enableServices, setEnableServices] = useState(false)
@@ -214,6 +269,53 @@ export default function APMPage() {
     }
   }
 
+  // Load comparison data
+  const loadComparisonData = async () => {
+    if (comparisonPeriod === 'none') {
+      setComparisonServices([])
+      return
+    }
+
+    try {
+      setIsLoadingComparison(true)
+      const { start_time, end_time } = getApiTimeRange()
+      const compRange = getComparisonTimeRange(start_time, end_time, comparisonPeriod)
+
+      if (!compRange) {
+        setComparisonServices([])
+        return
+      }
+
+      const response = await apiClient.get<{ services: ServicePerformance[] }>('/v1/observability/apm/services', {
+        start_time: compRange.start_time,
+        end_time: compRange.end_time
+      })
+
+      const data = response?.data?.data || response?.data || response
+      if (data && Array.isArray(data.services)) {
+        setComparisonServices(data.services)
+      } else if (Array.isArray(data)) {
+        setComparisonServices(data)
+      } else {
+        setComparisonServices([])
+      }
+    } catch (error: any) {
+      console.error('Failed to load comparison data:', error)
+      setComparisonServices([])
+    } finally {
+      setIsLoadingComparison(false)
+    }
+  }
+
+  // Load comparison when period changes or time range changes
+  useEffect(() => {
+    if (comparisonPeriod !== 'none') {
+      loadComparisonData()
+    } else {
+      setComparisonServices([])
+    }
+  }, [comparisonPeriod, currentTimeRange.value])
+
   // Progressive loading - Enable components one by one
   useEffect(() => {
     // Reset all flags
@@ -299,6 +401,21 @@ export default function APMPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Comparison Period Selector */}
+            <div className="flex items-center gap-2">
+              <GitCompare className="w-4 h-4 text-slate-400" />
+              <select
+                value={comparisonPeriod}
+                onChange={(e) => setComparisonPeriod(e.target.value as ComparisonPeriod)}
+                className="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500"
+              >
+                <option value="none">No Comparison</option>
+                <option value="previous_period">Previous Period</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="last_week">Last Week</option>
+              </select>
+            </div>
+
             {/* Service Filter */}
             <select
               value={selectedService}
@@ -324,7 +441,13 @@ export default function APMPage() {
         </div>
 
         {/* Service Overview Grid */}
-        <MemoizedServiceOverview services={services} isLoading={isLoadingServices} />
+        <MemoizedServiceOverview
+          services={services}
+          isLoading={isLoadingServices}
+          comparisonServices={comparisonServices}
+          comparisonPeriod={comparisonPeriod}
+          isLoadingComparison={isLoadingComparison}
+        />
 
         {/* Apdex Score */}
         <MemoizedApdexScore services={services} isLoading={isLoadingServices} />
