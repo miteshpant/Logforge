@@ -9,12 +9,14 @@ interface TraceSearchProps {
   onSearch: (filters: TraceSearchFilters) => void
   isLoading: boolean
   initialService?: string
+  initialOperation?: string
+  initialMinDuration?: number // in milliseconds
 }
 
-export default function TraceSearch({ onSearch, isLoading, initialService }: TraceSearchProps) {
+export default function TraceSearch({ onSearch, isLoading, initialService, initialOperation, initialMinDuration }: TraceSearchProps) {
   const [service, setService] = useState(initialService || '')
-  const [operation, setOperation] = useState('')
-  const [minDuration, setMinDuration] = useState('')
+  const [operation, setOperation] = useState(initialOperation || '')
+  const [minDuration, setMinDuration] = useState(initialMinDuration ? String(initialMinDuration) : '')
   const [maxDuration, setMaxDuration] = useState('')
   const [status, setStatus] = useState<'ok' | 'error' | 'all'>('all')
   const [services, setServices] = useState<string[]>([])
@@ -43,12 +45,24 @@ export default function TraceSearch({ onSearch, isLoading, initialService }: Tra
     fetchServices()
   }, [])
 
-  // Update service when initialService prop changes
+  // Update filters when initial props change
   useEffect(() => {
     if (initialService) {
       setService(initialService)
     }
   }, [initialService])
+
+  useEffect(() => {
+    if (initialOperation) {
+      setOperation(initialOperation)
+    }
+  }, [initialOperation])
+
+  useEffect(() => {
+    if (initialMinDuration) {
+      setMinDuration(String(initialMinDuration))
+    }
+  }, [initialMinDuration])
   const [showAdvanced, setShowAdvanced] = useState(false)
 
   const handleSearch = () => {

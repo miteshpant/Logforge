@@ -102,8 +102,10 @@ export default function TracesPage() {
   const [filters, setFilters] = useState<TraceSearchFilters>({ status: 'all' })
   const [initialSearchDone, setInitialSearchDone] = useState(false)
 
-  // Get service filter from URL query params (for linking from service map)
+  // Get filters from URL query params (for linking from service map, APM page, etc.)
   const serviceFromUrl = searchParams.get('service')
+  const operationFromUrl = searchParams.get('operation')
+  const minDurationFromUrl = searchParams.get('min_duration') // in milliseconds
 
   const searchTraces = async (searchFilters: TraceSearchFilters) => {
     try {
@@ -224,17 +226,24 @@ export default function TracesPage() {
     }
   }
 
-  // Initial search - check for service filter from URL
+  // Initial search - apply filters from URL params
   useEffect(() => {
     if (!initialSearchDone) {
       const initialFilters: TraceSearchFilters = { status: 'all' }
       if (serviceFromUrl) {
         initialFilters.service = serviceFromUrl
       }
+      if (operationFromUrl) {
+        initialFilters.operation = operationFromUrl
+      }
+      if (minDurationFromUrl) {
+        // URL param is in milliseconds, convert to microseconds for filter
+        initialFilters.min_duration = parseInt(minDurationFromUrl) * 1000
+      }
       searchTraces(initialFilters)
       setInitialSearchDone(true)
     }
-  }, [serviceFromUrl, initialSearchDone])
+  }, [serviceFromUrl, operationFromUrl, minDurationFromUrl, initialSearchDone])
 
   const [showFilters, setShowFilters] = useState(true)
 
@@ -261,6 +270,8 @@ export default function TracesPage() {
             onSearch={searchTraces}
             isLoading={isLoadingTraces}
             initialService={serviceFromUrl || undefined}
+            initialOperation={operationFromUrl || undefined}
+            initialMinDuration={minDurationFromUrl ? parseInt(minDurationFromUrl) : undefined}
           />
         )}
 

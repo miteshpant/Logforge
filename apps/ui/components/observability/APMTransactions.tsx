@@ -1,6 +1,7 @@
 'use client'
 
-import { Activity, Clock } from 'lucide-react'
+import { Activity, Clock, ExternalLink } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import type { Transaction } from '@/app/observability/apm/page'
 
 // Format latency values for display
@@ -16,6 +17,16 @@ interface APMTransactionsProps {
 }
 
 export default function APMTransactions({ transactions, isLoading }: APMTransactionsProps) {
+  const router = useRouter()
+
+  // Navigate to traces page with filters for this transaction
+  const handleTransactionClick = (transaction: Transaction) => {
+    const params = new URLSearchParams()
+    params.set('service', transaction.service)
+    params.set('operation', transaction.name)
+    router.push(`/observability/traces?${params.toString()}`)
+  }
+
   if (isLoading) {
     return (
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-6">
@@ -47,7 +58,7 @@ export default function APMTransactions({ transactions, isLoading }: APMTransact
       {/* Header */}
       <div className="p-6 border-b border-slate-700">
         <h2 className="text-lg font-semibold text-white">Top Transactions</h2>
-        <p className="text-sm text-slate-400 mt-1">Most frequent operations by volume</p>
+        <p className="text-sm text-slate-400 mt-1">Most frequent operations by volume · Click to view traces</p>
       </div>
 
       {/* Transaction List */}
@@ -56,7 +67,11 @@ export default function APMTransactions({ transactions, isLoading }: APMTransact
           const widthPercentage = (transaction.count / maxCount) * 100
 
           return (
-            <div key={`${transaction.service}-${transaction.name}`} className="space-y-2">
+            <div
+              key={`${transaction.service}-${transaction.name}`}
+              onClick={() => handleTransactionClick(transaction)}
+              className="space-y-2 p-3 -mx-3 rounded-lg hover:bg-slate-700/30 transition-colors cursor-pointer group"
+            >
               {/* Transaction Info */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -64,8 +79,9 @@ export default function APMTransactions({ transactions, isLoading }: APMTransact
                     #{idx + 1}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-white truncate">
+                    <div className="text-sm font-medium text-white truncate group-hover:text-blue-400 transition-colors flex items-center gap-2">
                       {transaction.name}
+                      <ExternalLink className="w-3 h-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                     </div>
                     <div className="text-xs text-slate-400">
                       {transaction.service}

@@ -1,6 +1,7 @@
 'use client'
 
-import { Clock, AlertCircle } from 'lucide-react'
+import { Clock, AlertCircle, ExternalLink } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import type { EndpointPerformance } from '@/app/observability/apm/page'
 
 // Format latency values for display
@@ -16,6 +17,18 @@ interface APMSlowestEndpointsProps {
 }
 
 export default function APMSlowestEndpoints({ endpoints, isLoading }: APMSlowestEndpointsProps) {
+  const router = useRouter()
+
+  // Navigate to traces page with filters for this endpoint
+  const handleEndpointClick = (endpoint: EndpointPerformance) => {
+    const params = new URLSearchParams()
+    params.set('service', endpoint.service)
+    params.set('operation', endpoint.endpoint)
+    // Use P50 latency as minimum to see slower traces
+    params.set('min_duration', String(Math.round(endpoint.p50_latency_ms)))
+    router.push(`/observability/traces?${params.toString()}`)
+  }
+
   if (isLoading) {
     return (
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-6">
@@ -52,7 +65,7 @@ export default function APMSlowestEndpoints({ endpoints, isLoading }: APMSlowest
       {/* Header */}
       <div className="p-6 border-b border-slate-700">
         <h2 className="text-lg font-semibold text-white">Slowest Endpoints</h2>
-        <p className="text-sm text-slate-400 mt-1">Top 10 endpoints by P99 latency</p>
+        <p className="text-sm text-slate-400 mt-1">Top 10 endpoints by P99 latency · Click to view traces</p>
       </div>
 
       {/* Table */}
@@ -72,13 +85,17 @@ export default function APMSlowestEndpoints({ endpoints, isLoading }: APMSlowest
             {endpoints.slice(0, 10).map((endpoint, idx) => (
               <tr
                 key={`${endpoint.service}-${endpoint.endpoint}`}
-                className="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors"
+                onClick={() => handleEndpointClick(endpoint)}
+                className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors cursor-pointer group"
               >
                 {/* Endpoint */}
                 <td className="px-6 py-4">
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium text-white">{endpoint.endpoint}</span>
-                    <span className="text-xs text-slate-400">{endpoint.service}</span>
+                  <div className="flex items-center gap-2">
+                    <div className="flex flex-col flex-1">
+                      <span className="text-sm font-medium text-white group-hover:text-blue-400 transition-colors">{endpoint.endpoint}</span>
+                      <span className="text-xs text-slate-400">{endpoint.service}</span>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
                 </td>
 
