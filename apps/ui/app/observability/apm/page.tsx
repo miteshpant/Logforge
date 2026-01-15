@@ -431,73 +431,64 @@ export default function APMPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-white">Application Performance Monitoring</h1>
-            <p className="text-slate-400 mt-1">
-              Monitor latency, throughput, errors, and service health
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {/* Comparison Period Selector */}
-            <div className="flex items-center gap-2">
-              <GitCompare className="w-4 h-4 text-slate-400" />
-              <select
-                value={comparisonPeriod}
-                onChange={(e) => setComparisonPeriod(e.target.value as ComparisonPeriod)}
-                className="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500"
-              >
-                <option value="none">No Comparison</option>
-                <option value="previous_period">Previous Period</option>
-                <option value="yesterday">Yesterday</option>
-                <option value="last_week">Last Week</option>
-              </select>
-            </div>
-
-            {/* Service Filter */}
+      <div className="space-y-4">
+        {/* Controls Bar */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Comparison Period Selector */}
+          <div className="flex items-center gap-2">
+            <GitCompare className="w-4 h-4 text-slate-400" />
             <select
-              value={selectedService}
-              onChange={(e) => setSelectedService(e.target.value)}
-              className="px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
+              value={comparisonPeriod}
+              onChange={(e) => setComparisonPeriod(e.target.value as ComparisonPeriod)}
+              className="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500"
             >
-              <option value="all">All Services</option>
-              {services.map(s => (
-                <option key={s.service_name} value={s.service_name}>
-                  {s.service_name}
-                </option>
-              ))}
+              <option value="none">No Comparison</option>
+              <option value="previous_period">Previous Period</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="last_week">Last Week</option>
             </select>
-
-            {/* Auto-Refresh Selector */}
-            <div className="flex items-center gap-2">
-              <RefreshCw className={`w-4 h-4 ${refreshInterval > 0 ? 'text-emerald-400 animate-spin' : 'text-slate-400'}`} style={{ animationDuration: '3s' }} />
-              <select
-                value={refreshInterval}
-                onChange={(e) => setRefreshInterval(Number(e.target.value) as RefreshInterval)}
-                className={`px-3 py-2 bg-slate-800 border rounded-lg text-white text-sm focus:outline-none ${
-                  refreshInterval > 0 ? 'border-emerald-500/50' : 'border-slate-600'
-                }`}
-              >
-                <option value={0}>Auto-Refresh: Off</option>
-                <option value={10000}>Every 10s</option>
-                <option value={30000}>Every 30s</option>
-                <option value={60000}>Every 1m</option>
-                <option value={300000}>Every 5m</option>
-              </select>
-            </div>
-
-            <button
-              onClick={handleRefresh}
-              disabled={isAnyLoading}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
-            >
-              <RefreshCw className={`w-4 h-4 ${isAnyLoading ? 'animate-spin' : ''}`} />
-              {isAnyLoading ? 'Refreshing...' : 'Refresh'}
-            </button>
           </div>
+
+          {/* Service Filter */}
+          <select
+            value={selectedService}
+            onChange={(e) => setSelectedService(e.target.value)}
+            className="px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
+          >
+            <option value="all">All Services</option>
+            {services.map(s => (
+              <option key={s.service_name} value={s.service_name}>
+                {s.service_name}
+              </option>
+            ))}
+          </select>
+
+          {/* Auto-Refresh Selector */}
+          <div className="flex items-center gap-2">
+            <RefreshCw className={`w-4 h-4 ${refreshInterval > 0 ? 'text-emerald-400 animate-spin' : 'text-slate-400'}`} style={{ animationDuration: '3s' }} />
+            <select
+              value={refreshInterval}
+              onChange={(e) => setRefreshInterval(Number(e.target.value) as RefreshInterval)}
+              className={`px-3 py-2 bg-slate-800 border rounded-lg text-white text-sm focus:outline-none ${
+                refreshInterval > 0 ? 'border-emerald-500/50' : 'border-slate-600'
+              }`}
+            >
+              <option value={0}>Auto-Refresh: Off</option>
+              <option value={10000}>Every 10s</option>
+              <option value={30000}>Every 30s</option>
+              <option value={60000}>Every 1m</option>
+              <option value={300000}>Every 5m</option>
+            </select>
+          </div>
+
+          <button
+            onClick={handleRefresh}
+            disabled={isAnyLoading}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center gap-2 ml-auto"
+          >
+            <RefreshCw className={`w-4 h-4 ${isAnyLoading ? 'animate-spin' : ''}`} />
+            {isAnyLoading ? 'Refreshing...' : 'Refresh'}
+          </button>
         </div>
 
         {/* Service Overview Grid */}

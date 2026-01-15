@@ -229,44 +229,35 @@ export default function LiveMetricsPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-white">Live Metrics Streaming</h1>
-            <p className="text-slate-400 mt-1">
-              Real-time metrics with sub-second updates via Server-Sent Events
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {isStreaming ? (
-              <button
-                onClick={stopStreaming}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
-              >
-                <Pause className="w-4 h-4" />
-                Stop Streaming
-              </button>
-            ) : (
-              <button
-                onClick={startStreaming}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
-              >
-                <Play className="w-4 h-4" />
-                Start Streaming
-              </button>
-            )}
-
+      <div className="space-y-4">
+        {/* Controls Bar */}
+        <div className="flex items-center gap-3">
+          {isStreaming ? (
             <button
-              onClick={exportData}
-              disabled={dataPoints.length === 0}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              onClick={stopStreaming}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
             >
-              <Download className="w-4 h-4" />
-              Export CSV
+              <Pause className="w-4 h-4" />
+              Stop Streaming
             </button>
-          </div>
+          ) : (
+            <button
+              onClick={startStreaming}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+              <Play className="w-4 h-4" />
+              Start Streaming
+            </button>
+          )}
+
+          <button
+            onClick={exportData}
+            disabled={dataPoints.length === 0}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ml-auto"
+          >
+            <Download className="w-4 h-4" />
+            Export CSV
+          </button>
         </div>
 
         {/* Configuration */}

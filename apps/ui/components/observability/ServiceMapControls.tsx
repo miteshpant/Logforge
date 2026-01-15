@@ -1,5 +1,7 @@
 'use client'
 
+import { RefreshCw } from 'lucide-react'
+
 interface ServiceOption {
   name: string
   instanceCount: number
@@ -20,6 +22,8 @@ interface ServiceMapControlsProps {
   selectedService: string
   onSelectedServiceChange: (serviceName: string) => void
   environments?: string[]
+  onRefresh?: () => void
+  isLoading?: boolean
 }
 
 export default function ServiceMapControls({
@@ -36,11 +40,13 @@ export default function ServiceMapControls({
   services = [],
   selectedService,
   onSelectedServiceChange,
-  environments = []
+  environments = [],
+  onRefresh,
+  isLoading = false
 }: ServiceMapControlsProps) {
   return (
     <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="flex items-end gap-4 flex-wrap">
         {/* Service Selector - Unique service names */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -118,7 +124,7 @@ export default function ServiceMapControls({
         </div>
 
         {/* Auto Refresh */}
-        <div className="col-span-2 md:col-span-1 lg:col-span-2">
+        <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">
             Auto Refresh
           </label>
@@ -146,6 +152,20 @@ export default function ServiceMapControls({
             )}
           </div>
         </div>
+
+        {/* Refresh Button */}
+        {onRefresh && (
+          <div className="ml-auto">
+            <button
+              onClick={onRefresh}
+              disabled={isLoading}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              {isLoading ? 'Refreshing...' : 'Refresh'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

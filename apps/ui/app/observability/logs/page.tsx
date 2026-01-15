@@ -191,42 +191,34 @@ export default function LogExplorerPage() {
   return (
     <DashboardLayout>
       <div className="h-[calc(100vh-120px)] flex flex-col">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-4">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Log Explorer</h1>
-            <p className="text-slate-600 text-sm">
-              Search, filter, and analyze logs across all services
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setIsLiveMode(!isLiveMode)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                isLiveMode
-                  ? 'bg-green-500 text-white'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              <span className={`w-2 h-2 rounded-full ${isLiveMode ? 'bg-white animate-pulse' : 'bg-slate-400'}`} />
-              {isLiveMode ? 'Live' : 'Live Mode'}
-            </button>
-            <button
-              onClick={exportLogs}
-              className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50"
-            >
-              <Download className="w-4 h-4" />
-              Export
-            </button>
-            <button
-              onClick={loadLogs}
-              disabled={isLoading}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
-          </div>
+        {/* Controls Bar */}
+        <div className="flex items-center gap-3 mb-4">
+          <button
+            onClick={() => setIsLiveMode(!isLiveMode)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+              isLiveMode
+                ? 'bg-green-500 text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${isLiveMode ? 'bg-white animate-pulse' : 'bg-slate-400'}`} />
+            {isLiveMode ? 'Live' : 'Live Mode'}
+          </button>
+          <button
+            onClick={exportLogs}
+            className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50"
+          >
+            <Download className="w-4 h-4" />
+            Export
+          </button>
+          <button
+            onClick={loadLogs}
+            disabled={isLoading}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium disabled:opacity-50 ml-auto"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
         </div>
 
         {/* Stats Bar */}

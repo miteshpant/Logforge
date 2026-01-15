@@ -250,21 +250,7 @@ export default function TracesPage() {
   return (
     <DashboardLayout>
       <div className="space-y-4">
-        {/* Compact Header with Filter Toggle */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Distributed Tracing</h1>
-          </div>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition-colors flex items-center gap-2"
-          >
-            <Filter className="w-4 h-4" />
-            {showFilters ? 'Hide Filters' : 'Show Filters'}
-          </button>
-        </div>
-
-        {/* Collapsible Search Filters */}
+        {/* Search Filters */}
         {showFilters && (
           <TraceSearch
             onSearch={searchTraces}
