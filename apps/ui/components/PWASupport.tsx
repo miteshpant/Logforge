@@ -24,10 +24,26 @@ export const PWASupport: React.FC<PWASupportProps> = ({ className = '' }) => {
   const [isOnline, setIsOnline] = useState(true)
   const [showInstallPrompt, setShowInstallPrompt] = useState(false)
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
+  const [isBrowser, setIsBrowser] = useState(false)
+  const [canShare, setCanShare] = useState(false)
+  const [notificationState, setNotificationState] = useState<'unavailable' | 'default' | 'granted' | 'denied'>('unavailable')
 
   useEffect(() => {
+    // Mark that we're in browser environment
+    setIsBrowser(true)
+
+    // Check share capability
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      setCanShare(true)
+    }
+
+    // Check notification state
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setNotificationState(Notification.permission as 'default' | 'granted' | 'denied')
+    }
+
     // Check if app is already installed
-    if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) {
+    if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) {
       setIsInstalled(true)
     }
 
@@ -99,8 +115,9 @@ export const PWASupport: React.FC<PWASupportProps> = ({ className = '' }) => {
   }
 
   const requestNotificationPermission = async () => {
-    if ('Notification' in window) {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
       const permission = await Notification.requestPermission()
+      setNotificationState(permission as 'default' | 'granted' | 'denied')
       if (permission === 'granted') {
         new Notification('Logforge Notifications Enabled', {
           body: 'You\'ll now receive real-time alerts and updates',
@@ -202,7 +219,7 @@ export const PWASupport: React.FC<PWASupportProps> = ({ className = '' }) => {
       {/* PWA Controls (mobile-optimized) */}
       <div className="fixed bottom-4 left-4 flex flex-col space-y-2 md:hidden">
         {/* Notification Permission */}
-        {!isInstalled && 'Notification' in window && Notification.permission === 'default' && (
+        {isBrowser && !isInstalled && notificationState === 'default' && (
           <Button
             onClick={requestNotificationPermission}
             size="sm"
@@ -215,7 +232,7 @@ export const PWASupport: React.FC<PWASupportProps> = ({ className = '' }) => {
         )}
 
         {/* Share Button */}
-        {navigator.share && (
+        {isBrowser && canShare && (
           <Button
             onClick={handleShare}
             size="sm"
