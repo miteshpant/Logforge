@@ -356,7 +356,7 @@ export default function DashboardsPage() {
                 <div className="h-36 bg-gradient-to-br from-slate-700/50 to-slate-800/50 p-4 relative overflow-hidden">
                   {/* Mini widget preview */}
                   <div className="grid grid-cols-3 gap-2 h-full opacity-50">
-                    {dashboard.widgets.slice(0, 6).map((_, i) => (
+                    {(dashboard.widgets || []).slice(0, 6).map((_, i) => (
                       <div
                         key={i}
                         className="bg-slate-600/50 rounded"
@@ -454,7 +454,7 @@ export default function DashboardsPage() {
                     <div className="flex items-center gap-3">
                       <span className="flex items-center gap-1">
                         <LayoutDashboard className="w-3 h-3" />
-                        {dashboard.widgets.length} widgets
+                        {(dashboard.widgets || []).length} widgets
                       </span>
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
