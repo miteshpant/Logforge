@@ -43,6 +43,7 @@ import {
   Crosshair,
   Globe,
   ScrollText,
+  LayoutDashboard,
 } from 'lucide-react'
 import { TenantSelector } from '@/components/TenantSelector'
 import PWASupport from '@/components/PWASupport'
@@ -78,6 +79,12 @@ const navigation = [
     href: '/observability/metrics',
     icon: Radio,
     description: 'Metrics explorer and visualization'
+  },
+  {
+    name: 'Dashboards',
+    href: '/dashboards',
+    icon: LayoutDashboard,
+    description: 'Custom dashboards and visualizations'
   },
   {
     name: 'Log Explorer',
