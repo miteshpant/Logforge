@@ -74,10 +74,10 @@ const navigation = [
     description: 'Application performance metrics'
   },
   {
-    name: 'Live Metrics',
-    href: '/observability/metrics/live',
+    name: 'Metrics',
+    href: '/observability/metrics',
     icon: Radio,
-    description: 'Real-time metrics streaming'
+    description: 'Metrics explorer and visualization'
   },
   {
     name: 'Log Explorer',
