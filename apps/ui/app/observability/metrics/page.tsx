@@ -15,22 +15,17 @@ import {
   Pause,
   TrendingUp,
   TrendingDown,
-  Minus,
-  BarChart3,
-  LineChart,
-  Settings2
+  BarChart3
 } from 'lucide-react'
 import {
-  LineChart as RechartsLineChart,
-  Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   Legend,
-  ResponsiveContainer,
-  Area,
-  AreaChart
+  ResponsiveContainer
 } from 'recharts'
 
 // Metric definitions
@@ -81,26 +76,18 @@ interface MetricDataPoint {
   service?: string
 }
 
-interface MetricQueryResult {
-  metric_name: string
-  data: MetricDataPoint[]
-  aggregation?: AggregationType
-  service?: string
-}
-
 export default function MetricsExplorerPage() {
   const { getApiTimeRange, currentTimeRange } = useTimeRange()
 
   // Selected metrics and options
   const [selectedMetrics, setSelectedMetrics] = useState<MetricType[]>(['latency', 'throughput'])
   const [aggregation, setAggregation] = useState<AggregationType>('avg')
-  const [groupBy, setGroupBy] = useState<string>('none')
   const [selectedService, setSelectedService] = useState<string>('all')
 
   // Data state
   const [metricsData, setMetricsData] = useState<Record<string, MetricDataPoint[]>>({})
   const [services, setServices] = useState<string[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   // Real-time streaming state
@@ -152,22 +139,16 @@ export default function MetricsExplorerPage() {
 
           const data = response.data
 
-          // Handle different response formats
+          // Handle different response formats from API
           if (data?.metrics?.[metric]) {
             results[metric] = data.metrics[metric]
           } else if (data?.data) {
             results[metric] = data.data
           } else if (Array.isArray(data)) {
             results[metric] = data
-          } else {
-            // Generate sample data if API returns empty
-            results[metric] = generateSampleData(metric, start_time, end_time)
           }
         } catch (err) {
           console.error(`Failed to query ${metric}:`, err)
-          // Generate sample data on error for demo
-          const { start_time, end_time } = getApiTimeRange()
-          results[metric] = generateSampleData(metric, start_time, end_time)
         }
       }
 
@@ -179,43 +160,6 @@ export default function MetricsExplorerPage() {
       setIsLoading(false)
     }
   }, [selectedMetrics, aggregation, selectedService, getApiTimeRange])
-
-  // Generate sample data for demo/fallback
-  const generateSampleData = (metric: string, startTime: string, endTime: string): MetricDataPoint[] => {
-    const start = new Date(startTime).getTime()
-    const end = new Date(endTime).getTime()
-    const interval = (end - start) / 60 // 60 data points
-    const data: MetricDataPoint[] = []
-
-    for (let i = 0; i < 60; i++) {
-      const timestamp = new Date(start + i * interval).toISOString()
-      let value: number
-
-      switch (metric) {
-        case 'latency':
-          value = 50 + Math.random() * 150 + Math.sin(i / 10) * 30
-          break
-        case 'throughput':
-          value = 200 + Math.random() * 300 + Math.cos(i / 8) * 50
-          break
-        case 'error_rate':
-          value = Math.random() * 3 + (Math.random() > 0.9 ? 5 : 0)
-          break
-        case 'cpu_usage':
-          value = 30 + Math.random() * 40 + Math.sin(i / 12) * 10
-          break
-        case 'memory_usage':
-          value = 50 + Math.random() * 25 + i * 0.1
-          break
-        default:
-          value = Math.random() * 100
-      }
-
-      data.push({ timestamp, value })
-    }
-
-    return data
-  }
 
   // Initial load and time range change
   useEffect(() => {
@@ -243,7 +187,6 @@ export default function MetricsExplorerPage() {
     setStreamingData([])
     setIsStreaming(true)
 
-    // Try to connect to real SSE endpoint
     try {
       const eventSource = new EventSource(
         `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7080'}/v1/stream/metrics`
@@ -261,42 +204,15 @@ export default function MetricsExplorerPage() {
       }
 
       eventSource.onerror = () => {
-        // Fallback to simulated streaming
         eventSource.close()
-        startSimulatedStreaming()
+        setIsStreaming(false)
+        setError('Streaming connection failed')
       }
 
       eventSourceRef.current = eventSource
     } catch (err) {
-      // Fallback to simulated streaming
-      startSimulatedStreaming()
-    }
-  }
-
-  // Simulated streaming for demo
-  const startSimulatedStreaming = () => {
-    const interval = setInterval(() => {
-      const now = new Date().toISOString()
-      const newPoints: MetricDataPoint[] = selectedMetrics.map(metric => ({
-        timestamp: now,
-        value: generateStreamingValue(metric),
-        service: selectedService !== 'all' ? selectedService : 'all-services'
-      }))
-
-      setStreamingData(prev => [...prev.slice(-100), ...newPoints])
-    }, 1000)
-
-    eventSourceRef.current = { close: () => clearInterval(interval) } as any
-  }
-
-  const generateStreamingValue = (metric: string): number => {
-    switch (metric) {
-      case 'latency': return 50 + Math.random() * 150
-      case 'throughput': return 200 + Math.random() * 300
-      case 'error_rate': return Math.random() * 3
-      case 'cpu_usage': return 30 + Math.random() * 40
-      case 'memory_usage': return 50 + Math.random() * 25
-      default: return Math.random() * 100
+      setIsStreaming(false)
+      setError('Failed to start streaming')
     }
   }
 
@@ -333,15 +249,13 @@ export default function MetricsExplorerPage() {
   // Format chart data for Recharts
   const formatChartData = () => {
     if (isStreaming && streamingData.length > 0) {
-      // Group streaming data by timestamp
       const grouped: Record<string, any> = {}
       streamingData.forEach(point => {
         const time = new Date(point.timestamp).toLocaleTimeString()
         if (!grouped[time]) {
           grouped[time] = { time }
         }
-        // Assign value to metric (simplified - in real app, track by metric name)
-        selectedMetrics.forEach((metric, idx) => {
+        selectedMetrics.forEach((metric) => {
           if (!grouped[time][metric]) {
             grouped[time][metric] = point.value
           }
@@ -350,7 +264,6 @@ export default function MetricsExplorerPage() {
       return Object.values(grouped).slice(-60)
     }
 
-    // Historical data
     const allTimestamps = new Set<string>()
     Object.values(metricsData).forEach(data => {
       data.forEach(point => allTimestamps.add(point.timestamp))
@@ -375,28 +288,28 @@ export default function MetricsExplorerPage() {
   // Calculate current stats
   const calculateStats = (metric: MetricType) => {
     const data = metricsData[metric] || []
-    if (data.length === 0) return { current: 0, avg: 0, trend: 0 }
+    if (data.length === 0) return { current: 0, avg: 0, trend: 0, hasData: false }
 
     const values = data.map(d => d.value)
     const current = values[values.length - 1] || 0
     const avg = values.reduce((a, b) => a + b, 0) / values.length
 
-    // Calculate trend (compare last 10% to first 10%)
     const tenPercent = Math.max(1, Math.floor(values.length * 0.1))
     const recentAvg = values.slice(-tenPercent).reduce((a, b) => a + b, 0) / tenPercent
     const earlyAvg = values.slice(0, tenPercent).reduce((a, b) => a + b, 0) / tenPercent
     const trend = earlyAvg > 0 ? ((recentAvg - earlyAvg) / earlyAvg) * 100 : 0
 
-    return { current, avg, trend }
+    return { current, avg, trend, hasData: true }
   }
 
   const chartData = formatChartData()
+  const hasAnyData = Object.keys(metricsData).length > 0 && Object.values(metricsData).some(d => d.length > 0)
 
   return (
     <DashboardLayout>
-      <div className="space-y-4">
+      <div className="space-y-6 max-w-7xl mx-auto">
         {/* Controls Bar */}
-        <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4">
           <div className="flex flex-wrap items-center gap-4">
             {/* Metric Selector */}
             <div className="flex flex-wrap gap-2">
@@ -407,10 +320,10 @@ export default function MetricsExplorerPage() {
                   <button
                     key={key}
                     onClick={() => toggleMetric(key as MetricType)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                       isSelected
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                        : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600/50 border border-white/5'
                     }`}
                   >
                     <Icon className="w-4 h-4" />
@@ -420,13 +333,13 @@ export default function MetricsExplorerPage() {
               })}
             </div>
 
-            <div className="h-8 w-px bg-slate-600" />
+            <div className="h-8 w-px bg-white/10" />
 
             {/* Aggregation */}
             <select
               value={aggregation}
               onChange={(e) => setAggregation(e.target.value as AggregationType)}
-              className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm"
+              className="px-3 py-2 bg-slate-700/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
             >
               <option value="avg">Average</option>
               <option value="min">Minimum</option>
@@ -441,7 +354,7 @@ export default function MetricsExplorerPage() {
             <select
               value={selectedService}
               onChange={(e) => setSelectedService(e.target.value)}
-              className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm"
+              className="px-3 py-2 bg-slate-700/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
             >
               <option value="all">All Services</option>
               {services.map(service => (
@@ -455,7 +368,7 @@ export default function MetricsExplorerPage() {
             {isStreaming ? (
               <button
                 onClick={stopStreaming}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-lg text-sm font-medium transition-all"
               >
                 <Pause className="w-4 h-4" />
                 Stop Live
@@ -463,7 +376,7 @@ export default function MetricsExplorerPage() {
             ) : (
               <button
                 onClick={startStreaming}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 rounded-lg text-sm font-medium transition-all"
               >
                 <Play className="w-4 h-4" />
                 Live Mode
@@ -474,7 +387,7 @@ export default function MetricsExplorerPage() {
             <button
               onClick={queryMetrics}
               disabled={isLoading || isStreaming}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
               Refresh
@@ -492,19 +405,19 @@ export default function MetricsExplorerPage() {
             return (
               <div
                 key={metric}
-                className="bg-slate-800/50 rounded-lg p-4 border border-slate-700"
+                className="relative overflow-hidden rounded-xl p-4 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5"
               >
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <div
                       className="w-8 h-8 rounded-lg flex items-center justify-center"
-                      style={{ backgroundColor: `${def.color}20` }}
+                      style={{ backgroundColor: `${def.color}15` }}
                     >
                       <Icon className="w-4 h-4" style={{ color: def.color }} />
                     </div>
                     <span className="text-sm text-slate-400">{def.name}</span>
                   </div>
-                  {stats.trend !== 0 && (
+                  {stats.hasData && stats.trend !== 0 && (
                     <div className={`flex items-center gap-1 text-xs ${
                       stats.trend > 0
                         ? metric === 'error_rate' ? 'text-red-400' : 'text-emerald-400'
@@ -519,25 +432,36 @@ export default function MetricsExplorerPage() {
                     </div>
                   )}
                 </div>
-                <div className="text-2xl font-bold text-white">
-                  {stats.current.toFixed(metric === 'error_rate' ? 2 : 0)}
-                  <span className="text-sm font-normal text-slate-400 ml-1">
-                    {def.unit}
-                  </span>
-                </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  Avg: {stats.avg.toFixed(metric === 'error_rate' ? 2 : 0)} {def.unit}
-                </div>
+                {isLoading ? (
+                  <div className="animate-pulse">
+                    <div className="h-8 bg-slate-700 rounded w-3/4 mb-2"></div>
+                    <div className="h-4 bg-slate-700 rounded w-1/2"></div>
+                  </div>
+                ) : stats.hasData ? (
+                  <>
+                    <div className="text-2xl font-bold text-white">
+                      {stats.current.toFixed(metric === 'error_rate' ? 2 : 0)}
+                      <span className="text-sm font-normal text-slate-500 ml-1">
+                        {def.unit}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Avg: {stats.avg.toFixed(metric === 'error_rate' ? 2 : 0)} {def.unit}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-slate-500 text-sm">No data</div>
+                )}
               </div>
             )
           })}
         </div>
 
         {/* Main Chart */}
-        <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700">
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-              <LineChart className="w-5 h-5 text-blue-400" />
+              <BarChart3 className="w-5 h-5 text-blue-400" />
               {isStreaming ? 'Live Metrics' : 'Time Series'}
             </h2>
             {isStreaming && (
@@ -552,9 +476,18 @@ export default function MetricsExplorerPage() {
             <div className="flex items-center justify-center h-80 text-red-400">
               {error}
             </div>
-          ) : chartData.length === 0 ? (
-            <div className="flex items-center justify-center h-80 text-slate-400">
-              {isLoading ? 'Loading metrics...' : 'No data available'}
+          ) : isLoading ? (
+            <div className="flex items-center justify-center h-80">
+              <div className="animate-pulse flex flex-col items-center gap-4">
+                <RefreshCw className="w-8 h-8 text-slate-500 animate-spin" />
+                <span className="text-slate-400">Loading metrics...</span>
+              </div>
+            </div>
+          ) : !hasAnyData && chartData.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-80 text-slate-400">
+              <BarChart3 className="w-12 h-12 text-slate-600 mb-4" />
+              <p className="text-lg font-medium">No metrics data available</p>
+              <p className="text-sm text-slate-500 mt-1">Try adjusting the time range or check your data sources</p>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={400}>
@@ -567,12 +500,13 @@ export default function MetricsExplorerPage() {
                     </linearGradient>
                   ))}
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                 <XAxis
                   dataKey="time"
                   stroke="#64748b"
                   fontSize={12}
                   tickLine={false}
+                  axisLine={false}
                 />
                 <YAxis
                   stroke="#64748b"
@@ -582,10 +516,11 @@ export default function MetricsExplorerPage() {
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#1e293b',
-                    border: '1px solid #334155',
-                    borderRadius: '8px',
-                    color: '#fff'
+                    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '12px',
+                    color: '#fff',
+                    backdropFilter: 'blur(8px)'
                   }}
                 />
                 <Legend />
@@ -607,8 +542,8 @@ export default function MetricsExplorerPage() {
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-            <h3 className="text-sm font-medium text-white mb-2">Auto Refresh</h3>
+          <div className="relative overflow-hidden rounded-xl p-4 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5">
+            <h3 className="text-sm font-medium text-white mb-3">Auto Refresh</h3>
             <div className="flex items-center gap-3">
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
@@ -618,13 +553,13 @@ export default function MetricsExplorerPage() {
                   disabled={isStreaming}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-slate-600 peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
+                <div className="w-11 h-6 bg-slate-600 peer-focus:ring-2 peer-focus:ring-blue-500/50 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
               </label>
               {autoRefresh && (
                 <select
                   value={refreshInterval}
                   onChange={(e) => setRefreshInterval(Number(e.target.value))}
-                  className="px-2 py-1 bg-slate-700 border border-slate-600 rounded text-sm text-white"
+                  className="px-2 py-1 bg-slate-700/50 border border-white/10 rounded text-sm text-white focus:outline-none"
                 >
                   <option value={10000}>10s</option>
                   <option value={30000}>30s</option>
@@ -635,25 +570,26 @@ export default function MetricsExplorerPage() {
             </div>
           </div>
 
-          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-            <h3 className="text-sm font-medium text-white mb-2">Data Points</h3>
+          <div className="relative overflow-hidden rounded-xl p-4 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5">
+            <h3 className="text-sm font-medium text-white mb-3">Data Points</h3>
             <div className="text-2xl font-bold text-white">
               {isStreaming ? streamingData.length : Object.values(metricsData).reduce((acc, d) => acc + d.length, 0)}
             </div>
-            <div className="text-xs text-slate-400">
+            <div className="text-xs text-slate-500 mt-1">
               {isStreaming ? 'Live data points' : 'Historical data points'}
             </div>
           </div>
 
-          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-            <h3 className="text-sm font-medium text-white mb-2">Selected Metrics</h3>
+          <div className="relative overflow-hidden rounded-xl p-4 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5">
+            <h3 className="text-sm font-medium text-white mb-3">Selected Metrics</h3>
             <div className="flex flex-wrap gap-1">
               {selectedMetrics.map(metric => (
                 <span
                   key={metric}
-                  className="px-2 py-1 text-xs rounded"
+                  className="px-2 py-1 text-xs rounded-md border"
                   style={{
-                    backgroundColor: `${METRIC_DEFINITIONS[metric].color}20`,
+                    backgroundColor: `${METRIC_DEFINITIONS[metric].color}15`,
+                    borderColor: `${METRIC_DEFINITIONS[metric].color}30`,
                     color: METRIC_DEFINITIONS[metric].color
                   }}
                 >
