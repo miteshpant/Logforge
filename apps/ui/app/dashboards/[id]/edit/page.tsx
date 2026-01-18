@@ -12,7 +12,7 @@ import {
   Settings,
   Move,
   GripVertical,
-  LineChart,
+  LineChart as LineChartIcon,
   BarChart3,
   PieChart as PieChartIcon,
   Activity,
@@ -71,7 +71,7 @@ interface Dashboard {
 const WIDGET_TYPES = [
   { type: 'stat', name: 'Stat Card', icon: Activity, description: 'Single metric with trend' },
   { type: 'gauge', name: 'Gauge', icon: Gauge, description: 'Percentage or progress' },
-  { type: 'line_chart', name: 'Line Chart', icon: LineChart, description: 'Time series trend' },
+  { type: 'line_chart', name: 'Line Chart', icon: LineChartIcon, description: 'Time series trend' },
   { type: 'area_chart', name: 'Area Chart', icon: Activity, description: 'Filled time series' },
   { type: 'bar_chart', name: 'Bar Chart', icon: BarChart3, description: 'Comparisons' },
   { type: 'pie_chart', name: 'Pie Chart', icon: PieChartIcon, description: 'Distribution' },
