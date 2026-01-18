@@ -341,65 +341,67 @@ export default function DashboardEditPage() {
 
   return (
     <DashboardLayout>
-      <div className="h-[calc(100vh-120px)] flex flex-col">
+      <div className="h-[calc(100vh-120px)] flex flex-col max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-4 flex-shrink-0">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => router.push('/dashboards')}
-              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div>
-              <input
-                type="text"
-                value={dashboard.name}
-                onChange={(e) => {
-                  setDashboard(prev => ({ ...prev, name: e.target.value }))
-                  setHasChanges(true)
-                }}
-                className="text-xl font-semibold text-slate-900 bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 -ml-2"
-              />
-              <input
-                type="text"
-                value={dashboard.description}
-                onChange={(e) => {
-                  setDashboard(prev => ({ ...prev, description: e.target.value }))
-                  setHasChanges(true)
-                }}
-                placeholder="Add description..."
-                className="block text-sm text-slate-500 bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 -ml-2 w-64"
-              />
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4 mb-4 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => router.push('/dashboards')}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div>
+                <input
+                  type="text"
+                  value={dashboard.name}
+                  onChange={(e) => {
+                    setDashboard(prev => ({ ...prev, name: e.target.value }))
+                    setHasChanges(true)
+                  }}
+                  className="text-xl font-semibold text-white bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 -ml-2"
+                />
+                <input
+                  type="text"
+                  value={dashboard.description}
+                  onChange={(e) => {
+                    setDashboard(prev => ({ ...prev, description: e.target.value }))
+                    setHasChanges(true)
+                  }}
+                  placeholder="Add description..."
+                  className="block text-sm text-slate-400 bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 -ml-2 w-64 placeholder-slate-500"
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-3">
-            {hasChanges && (
-              <span className="text-sm text-amber-600">Unsaved changes</span>
-            )}
-            <button
-              onClick={() => router.push(`/dashboards/${params.id}`)}
-              className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors"
-            >
-              <Eye className="w-4 h-4" />
-              Preview
-            </button>
-            <button
-              onClick={saveDashboard}
-              disabled={isSaving || !hasChanges}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
-            >
-              <Save className="w-4 h-4" />
-              {isSaving ? 'Saving...' : 'Save'}
-            </button>
+            <div className="flex items-center gap-3">
+              {hasChanges && (
+                <span className="text-sm text-amber-400">Unsaved changes</span>
+              )}
+              <button
+                onClick={() => router.push(`/dashboards/${params.id}`)}
+                className="flex items-center gap-2 px-3 py-2 bg-slate-700/50 border border-white/10 rounded-lg text-slate-300 hover:bg-slate-600/50 transition-colors"
+              >
+                <Eye className="w-4 h-4" />
+                Preview
+              </button>
+              <button
+                onClick={saveDashboard}
+                disabled={isSaving || !hasChanges}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-lg font-medium hover:bg-blue-500/30 transition-colors disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                {isSaving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Main Editor Area */}
         <div className="flex-1 flex gap-4 min-h-0">
           {/* Canvas */}
-          <div className="flex-1 bg-slate-100 rounded-xl p-4 overflow-auto">
+          <div className="flex-1 relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-xl border border-white/5 p-4 overflow-auto">
             {dashboard.widgets.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-400">
                 <BarChart3 className="w-16 h-16 mb-4 opacity-50" />
@@ -475,16 +477,16 @@ export default function DashboardEditPage() {
           </div>
 
           {/* Right Panel - Widget Settings */}
-          <div className="w-80 bg-white rounded-xl border border-slate-200 flex flex-col flex-shrink-0">
+          <div className="w-80 relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 flex flex-col flex-shrink-0">
             {selectedWidgetData ? (
               <>
                 {/* Widget Settings Header */}
-                <div className="p-4 border-b border-slate-200">
+                <div className="p-4 border-b border-white/5">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-slate-900">Widget Settings</h3>
+                    <h3 className="font-semibold text-white">Widget Settings</h3>
                     <button
                       onClick={() => setSelectedWidget(null)}
-                      className="p-1 text-slate-400 hover:text-slate-600 rounded"
+                      className="p-1 text-slate-400 hover:text-white rounded"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -495,22 +497,22 @@ export default function DashboardEditPage() {
                 <div className="flex-1 overflow-auto p-4 space-y-4">
                   {/* Name */}
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">Name</label>
                     <input
                       type="text"
                       value={selectedWidgetData.name}
                       onChange={(e) => updateWidget(selectedWidget!, { name: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 bg-slate-700/50 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                     />
                   </div>
 
                   {/* Type */}
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">Type</label>
                     <select
                       value={selectedWidgetData.type}
                       onChange={(e) => updateWidget(selectedWidget!, { type: e.target.value as Widget['type'] })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 bg-slate-700/50 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                     >
                       {WIDGET_TYPES.map(type => (
                         <option key={type.type} value={type.type}>{type.name}</option>
@@ -520,13 +522,13 @@ export default function DashboardEditPage() {
 
                   {/* Metric */}
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Metric</label>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">Metric</label>
                     <select
                       value={selectedWidgetData.query_definition.metric || ''}
                       onChange={(e) => updateWidget(selectedWidget!, {
                         query_definition: { ...selectedWidgetData.query_definition, metric: e.target.value }
                       })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 bg-slate-700/50 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                     >
                       {METRICS.map(metric => (
                         <option key={metric.value} value={metric.value}>{metric.label}</option>
@@ -536,13 +538,13 @@ export default function DashboardEditPage() {
 
                   {/* Aggregation */}
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Aggregation</label>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">Aggregation</label>
                     <select
                       value={selectedWidgetData.query_definition.aggregation || 'avg'}
                       onChange={(e) => updateWidget(selectedWidget!, {
                         query_definition: { ...selectedWidgetData.query_definition, aggregation: e.target.value }
                       })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 bg-slate-700/50 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                     >
                       {AGGREGATIONS.map(agg => (
                         <option key={agg.value} value={agg.value}>{agg.label}</option>
@@ -552,16 +554,16 @@ export default function DashboardEditPage() {
 
                   {/* Size */}
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Size</label>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">Size</label>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-xs text-slate-500">Width</label>
+                        <label className="text-xs text-slate-400">Width</label>
                         <select
                           value={selectedWidgetData.size.w}
                           onChange={(e) => updateWidget(selectedWidget!, {
                             size: { ...selectedWidgetData.size, w: parseInt(e.target.value) }
                           })}
-                          className="w-full px-2 py-1 border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-2 py-1 bg-slate-700/50 border border-white/10 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                         >
                           {[1, 2, 3, 4].map(n => (
                             <option key={n} value={n}>{n} col</option>
@@ -569,13 +571,13 @@ export default function DashboardEditPage() {
                         </select>
                       </div>
                       <div>
-                        <label className="text-xs text-slate-500">Height</label>
+                        <label className="text-xs text-slate-400">Height</label>
                         <select
                           value={selectedWidgetData.size.h}
                           onChange={(e) => updateWidget(selectedWidget!, {
                             size: { ...selectedWidgetData.size, h: parseInt(e.target.value) }
                           })}
-                          className="w-full px-2 py-1 border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-2 py-1 bg-slate-700/50 border border-white/10 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                         >
                           {[1, 2, 3, 4].map(n => (
                             <option key={n} value={n}>{n} row</option>
@@ -587,10 +589,10 @@ export default function DashboardEditPage() {
                 </div>
 
                 {/* Delete Button */}
-                <div className="p-4 border-t border-slate-200">
+                <div className="p-4 border-t border-white/5">
                   <button
                     onClick={() => deleteWidget(selectedWidget!)}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
                     Delete Widget
@@ -608,13 +610,13 @@ export default function DashboardEditPage() {
 
         {/* Widget Palette Modal */}
         {showWidgetPalette && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-6 w-full max-w-2xl mx-4">
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 w-full max-w-2xl mx-4 border border-white/10 shadow-2xl">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-slate-900">Add Widget</h2>
+                <h2 className="text-xl font-semibold text-white">Add Widget</h2>
                 <button
                   onClick={() => setShowWidgetPalette(false)}
-                  className="p-1 text-slate-400 hover:text-slate-600 rounded"
+                  className="p-1 text-slate-400 hover:text-white rounded"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -627,13 +629,13 @@ export default function DashboardEditPage() {
                     <button
                       key={widget.type}
                       onClick={() => addWidget(widget.type)}
-                      className="p-4 border border-slate-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors text-left group"
+                      className="p-4 bg-slate-800/50 border border-white/5 rounded-xl hover:border-blue-500/30 hover:bg-slate-700/50 transition-colors text-left group"
                     >
-                      <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-blue-100 transition-colors">
-                        <Icon className="w-5 h-5 text-slate-600 group-hover:text-blue-600" />
+                      <div className="w-10 h-10 bg-slate-700/50 rounded-lg flex items-center justify-center mb-3 group-hover:bg-blue-500/20 transition-colors">
+                        <Icon className="w-5 h-5 text-slate-400 group-hover:text-blue-400" />
                       </div>
-                      <h3 className="font-medium text-slate-900 mb-1">{widget.name}</h3>
-                      <p className="text-xs text-slate-500">{widget.description}</p>
+                      <h3 className="font-medium text-white mb-1">{widget.name}</h3>
+                      <p className="text-xs text-slate-400">{widget.description}</p>
                     </button>
                   )
                 })}
