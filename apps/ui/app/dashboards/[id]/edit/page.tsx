@@ -267,13 +267,13 @@ export default function DashboardEditPage() {
         aggregation: 'avg'
       },
       visualization_config: {},
-      position: { x: 0, y: dashboard.widgets.length },
+      position: { x: 0, y: (dashboard.widgets || []).length },
       size: { w: type === 'stat' || type === 'gauge' ? 1 : 2, h: type === 'stat' || type === 'gauge' ? 1 : 2 }
     }
 
     setDashboard(prev => ({
       ...prev,
-      widgets: [...prev.widgets, newWidget]
+      widgets: [...(prev.widgets || []), newWidget]
     }))
     setSelectedWidget(newWidget.id)
     setShowWidgetPalette(false)
@@ -311,7 +311,7 @@ export default function DashboardEditPage() {
     }
     setDashboard(prev => ({
       ...prev,
-      widgets: [...prev.widgets, newWidget]
+      widgets: [...(prev.widgets || []), newWidget]
     }))
     setHasChanges(true)
   }
@@ -337,7 +337,7 @@ export default function DashboardEditPage() {
   }
 
   // Get selected widget
-  const selectedWidgetData = dashboard.widgets.find(w => w.id === selectedWidget)
+  const selectedWidgetData = (dashboard.widgets || []).find(w => w.id === selectedWidget)
 
   return (
     <DashboardLayout>
@@ -402,7 +402,7 @@ export default function DashboardEditPage() {
         <div className="flex-1 flex gap-4 min-h-0">
           {/* Canvas */}
           <div className="flex-1 relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-xl border border-white/5 p-4 overflow-auto">
-            {dashboard.widgets.length === 0 ? (
+            {(dashboard.widgets || []).length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-400">
                 <BarChart3 className="w-16 h-16 mb-4 opacity-50" />
                 <p className="text-lg font-medium mb-2">No widgets yet</p>
@@ -417,7 +417,7 @@ export default function DashboardEditPage() {
               </div>
             ) : (
               <div className="grid grid-cols-4 gap-4 auto-rows-[150px]">
-                {dashboard.widgets.map(widget => (
+                {(dashboard.widgets || []).map(widget => (
                   <div
                     key={widget.id}
                     onClick={() => setSelectedWidget(widget.id)}
