@@ -531,9 +531,9 @@ export default function DashboardEditPage() {
                   <div>
                     <label className="block text-sm font-medium text-slate-300 mb-1">Metric</label>
                     <select
-                      value={selectedWidgetData.query_definition.metric || ''}
+                      value={selectedWidgetData.query_definition?.metric || ''}
                       onChange={(e) => updateWidget(selectedWidget!, {
-                        query_definition: { ...selectedWidgetData.query_definition, metric: e.target.value }
+                        query_definition: { ...(selectedWidgetData.query_definition || {}), metric: e.target.value }
                       })}
                       className="w-full px-3 py-2 bg-slate-700/50 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                     >
@@ -547,9 +547,9 @@ export default function DashboardEditPage() {
                   <div>
                     <label className="block text-sm font-medium text-slate-300 mb-1">Aggregation</label>
                     <select
-                      value={selectedWidgetData.query_definition.aggregation || 'avg'}
+                      value={selectedWidgetData.query_definition?.aggregation || 'avg'}
                       onChange={(e) => updateWidget(selectedWidget!, {
-                        query_definition: { ...selectedWidgetData.query_definition, aggregation: e.target.value }
+                        query_definition: { ...(selectedWidgetData.query_definition || {}), aggregation: e.target.value }
                       })}
                       className="w-full px-3 py-2 bg-slate-700/50 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                     >
@@ -566,9 +566,9 @@ export default function DashboardEditPage() {
                       <div>
                         <label className="text-xs text-slate-400">Width</label>
                         <select
-                          value={selectedWidgetData.size.w}
+                          value={selectedWidgetData.size?.w || 1}
                           onChange={(e) => updateWidget(selectedWidget!, {
-                            size: { ...selectedWidgetData.size, w: parseInt(e.target.value) }
+                            size: { ...(selectedWidgetData.size || { w: 1, h: 1 }), w: parseInt(e.target.value) }
                           })}
                           className="w-full px-2 py-1 bg-slate-700/50 border border-white/10 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                         >
@@ -580,9 +580,9 @@ export default function DashboardEditPage() {
                       <div>
                         <label className="text-xs text-slate-400">Height</label>
                         <select
-                          value={selectedWidgetData.size.h}
+                          value={selectedWidgetData.size?.h || 1}
                           onChange={(e) => updateWidget(selectedWidget!, {
-                            size: { ...selectedWidgetData.size, h: parseInt(e.target.value) }
+                            size: { ...(selectedWidgetData.size || { w: 1, h: 1 }), h: parseInt(e.target.value) }
                           })}
                           className="w-full px-2 py-1 bg-slate-700/50 border border-white/10 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                         >
