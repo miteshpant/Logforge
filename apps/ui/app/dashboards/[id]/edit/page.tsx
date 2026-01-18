@@ -246,7 +246,14 @@ export default function DashboardEditPage() {
       const fetchDashboard = async () => {
         try {
           const response = await apiClient.get(`/v1/dashboards/${params.id}`)
-          setDashboard(response.data)
+          const data = response.data
+          // Ensure widgets is always an array
+          setDashboard({
+            id: data?.id || params.id as string,
+            name: data?.name || 'Dashboard',
+            description: data?.description || '',
+            widgets: data?.widgets || []
+          })
         } catch (err) {
           console.error('Failed to fetch dashboard:', err)
           // Keep default for demo
