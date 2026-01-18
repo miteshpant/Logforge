@@ -1040,6 +1040,84 @@ class ObservabilityDAO:
             logger.error(f"Failed to get metric aggregation: {e}")
             raise
 
+    async def get_metric_time_series(
+        self,
+        customer_id: str,
+        metric_name: str,
+        start_time: datetime,
+        end_time: datetime,
+        aggregation: str = "avg",
+        granularity: str = "1m"
+    ) -> List[Dict[str, Any]]:
+        """
+        Get time series metric data with aggregation at specified granularity.
+
+        Args:
+            customer_id: Customer ID
+            metric_name: Name of the metric to query
+            start_time: Start of time range
+            end_time: End of time range
+            aggregation: Aggregation function (avg, sum, max, min, count)
+            granularity: Time bucket size (1m, 5m, 15m, 1h, etc.)
+
+        Returns:
+            List of {timestamp, value} dicts
+        """
+        try:
+            # Parse granularity to seconds
+            interval_seconds = 60  # default 1 minute
+            if granularity.endswith('m'):
+                interval_seconds = int(granularity[:-1]) * 60
+            elif granularity.endswith('h'):
+                interval_seconds = int(granularity[:-1]) * 3600
+            elif granularity.endswith('s'):
+                interval_seconds = int(granularity[:-1])
+
+            # Map aggregation function
+            agg_function = {
+                "avg": "AVG",
+                "sum": "SUM",
+                "max": "MAX",
+                "min": "MIN",
+                "count": "COUNT"
+            }.get(aggregation.lower(), "AVG")
+
+            query = f"""
+            SELECT
+                toUnixTimestamp(toStartOfInterval(timestamp, INTERVAL {interval_seconds} SECOND)) * 1000 as bucket_ts,
+                {agg_function}(value) as aggregated_value,
+                COUNT(*) as data_points
+            FROM metrics_mt
+            WHERE customer_id = %(customer_id)s
+              AND metric_name = %(metric_name)s
+              AND timestamp >= %(start_time)s
+              AND timestamp <= %(end_time)s
+            GROUP BY bucket_ts
+            ORDER BY bucket_ts ASC
+            """
+
+            results = await self.db.execute_query(query, {
+                "customer_id": customer_id,
+                "metric_name": metric_name,
+                "start_time": start_time,
+                "end_time": end_time
+            })
+
+            if not results:
+                return []
+
+            return [
+                {
+                    "timestamp": datetime.fromtimestamp(row["bucket_ts"] / 1000).isoformat(),
+                    "value": float(row["aggregated_value"]) if row["aggregated_value"] is not None else 0.0
+                }
+                for row in results
+            ]
+
+        except Exception as e:
+            logger.error(f"Failed to get metric time series: {e}", customer_id=customer_id, metric_name=metric_name)
+            return []
+
     async def get_trace_analytics(self, customer_id: str, hours: int = 24, start_time: Optional[datetime] = None) -> Dict[str, Any]:
         """Get comprehensive trace analytics"""
         try:

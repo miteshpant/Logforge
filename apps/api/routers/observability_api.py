@@ -731,20 +731,22 @@ async def query_metrics(
     query: MetricQueryRequest,
     customer_id: str = Header(..., alias="X-Customer-ID")
 ):
-    """Query time series metrics"""
+    """Query time series metrics with aggregation and granularity support"""
     try:
         observability_service = ObservabilityService()
-        # Get basic metrics data
-        hours = int((query.end_time - query.start_time).total_seconds() / 3600)
-        metrics = await observability_service.get_metrics(customer_id, query.metric_name, hours)
 
-        # If aggregation is requested, get aggregated data
-        if query.aggregation and query.metric_name:
-            aggregated = await observability_service.get_metric_aggregation(
-                customer_id, query.metric_name, query.aggregation, hours
+        # If metric_name and granularity are provided, return time series data
+        if query.metric_name and query.granularity:
+            time_series = await observability_service.get_metric_time_series(
+                customer_id=customer_id,
+                metric_name=query.metric_name,
+                start_time=query.start_time,
+                end_time=query.end_time,
+                aggregation=query.aggregation or "avg",
+                granularity=query.granularity
             )
 
-            if aggregated is None:
+            if not time_series:
                 return {
                     "message": f"No metric data found for '{query.metric_name}' in the specified time range",
                     "metrics": {},
@@ -754,21 +756,25 @@ async def query_metrics(
                 }
 
             return {
-                "metrics": {query.metric_name: [aggregated]},
+                "metrics": {query.metric_name: time_series},
                 "aggregation": query.aggregation,
                 "granularity": query.granularity,
                 "customer_id": customer_id
             }
 
+        # Fallback: Get raw metrics without time bucketing
+        hours = max(1, int((query.end_time - query.start_time).total_seconds() / 3600))
+        metrics = await observability_service.get_metrics(customer_id, query.metric_name, hours)
+
         # Group metrics by name
         metrics_data = {}
         for metric in metrics:
-            name = metric['name']
+            name = metric.get('name', query.metric_name or 'unknown')
             if name not in metrics_data:
                 metrics_data[name] = []
             metrics_data[name].append({
-                "timestamp": metric['timestamp'],
-                "value": metric['value']
+                "timestamp": metric.get('timestamp'),
+                "value": metric.get('value', 0)
             })
 
         return {

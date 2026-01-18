@@ -240,6 +240,20 @@ class ObservabilityService:
         """Get aggregated metric values"""
         return await self.dao.get_metric_aggregation(customer_id, metric_name, aggregation, hours)
 
+    async def get_metric_time_series(
+        self,
+        customer_id: str,
+        metric_name: str,
+        start_time: datetime,
+        end_time: datetime,
+        aggregation: str = "avg",
+        granularity: str = "1m"
+    ) -> List[Dict[str, Any]]:
+        """Get time series metric data with aggregation at specified granularity"""
+        return await self.dao.get_metric_time_series(
+            customer_id, metric_name, start_time, end_time, aggregation, granularity
+        )
+
     # ==========================================
     # SERVICE TOPOLOGY & DEPENDENCIES
     # ==========================================
