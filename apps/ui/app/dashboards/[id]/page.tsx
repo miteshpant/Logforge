@@ -336,29 +336,15 @@ export default function DashboardViewPage() {
       setIsLoading(true)
       try {
         const response = await apiClient.get(`/v1/dashboards/${params.id}`)
-        setDashboard(response.data)
+        const data = response.data
+        // Ensure widgets is always an array
+        setDashboard({
+          ...data,
+          widgets: data?.widgets || []
+        })
       } catch (err) {
         console.error('Failed to fetch dashboard:', err)
-        // Set sample dashboard for demo
-        setDashboard({
-          id: params.id as string,
-          name: 'Sample Dashboard',
-          description: 'A sample dashboard for demonstration',
-          widgets: [
-            { id: 'w1', name: 'Total Requests', type: 'stat', query_definition: { metric: 'throughput' }, visualization_config: {}, position: { x: 0, y: 0 }, size: { w: 1, h: 1 } },
-            { id: 'w2', name: 'Error Rate', type: 'stat', query_definition: { metric: 'error_rate' }, visualization_config: {}, position: { x: 1, y: 0 }, size: { w: 1, h: 1 } },
-            { id: 'w3', name: 'P95 Latency', type: 'stat', query_definition: { metric: 'latency' }, visualization_config: {}, position: { x: 2, y: 0 }, size: { w: 1, h: 1 } },
-            { id: 'w4', name: 'CPU Usage', type: 'gauge', query_definition: { metric: 'cpu' }, visualization_config: {}, position: { x: 3, y: 0 }, size: { w: 1, h: 1 } },
-            { id: 'w5', name: 'Latency Trend', type: 'line_chart', query_definition: { metrics: ['latency'] }, visualization_config: {}, position: { x: 0, y: 1 }, size: { w: 2, h: 2 } },
-            { id: 'w6', name: 'Throughput by Service', type: 'bar_chart', query_definition: { metric: 'throughput', group_by: 'service' }, visualization_config: {}, position: { x: 2, y: 1 }, size: { w: 2, h: 2 } },
-            { id: 'w7', name: 'Request Distribution', type: 'pie_chart', query_definition: { metric: 'requests' }, visualization_config: {}, position: { x: 0, y: 3 }, size: { w: 2, h: 2 } },
-            { id: 'w8', name: 'Top Endpoints', type: 'table', query_definition: { query: 'top_endpoints' }, visualization_config: {}, position: { x: 2, y: 3 }, size: { w: 2, h: 2 } }
-          ],
-          layout: {},
-          created_by: 'admin',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
+        setDashboard(null)
       } finally {
         setIsLoading(false)
       }
@@ -388,10 +374,10 @@ export default function DashboardViewPage() {
     return (
       <DashboardLayout>
         <div className="text-center py-16">
-          <h2 className="text-xl font-semibold text-slate-900">Dashboard not found</h2>
+          <h2 className="text-xl font-semibold text-white">Dashboard not found</h2>
           <button
             onClick={() => router.push('/dashboards')}
-            className="mt-4 text-blue-600 hover:text-blue-700"
+            className="mt-4 text-blue-400 hover:text-blue-300"
           >
             Back to dashboards
           </button>
@@ -402,37 +388,37 @@ export default function DashboardViewPage() {
 
   // Calculate grid layout
   const getWidgetStyle = (widget: Widget) => {
-    const colWidth = 25 // percentage
     const rowHeight = 150 // pixels
+    const size = widget.size || { w: 1, h: 1 }
     return {
-      gridColumn: `span ${widget.size.w}`,
-      gridRow: `span ${widget.size.h}`,
-      minHeight: `${widget.size.h * rowHeight}px`
+      gridColumn: `span ${size.w}`,
+      gridRow: `span ${size.h}`,
+      minHeight: `${size.h * rowHeight}px`
     }
   }
 
   return (
     <DashboardLayout>
-      <div className="space-y-4">
+      <div className="space-y-6 max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
               onClick={() => router.push('/dashboards')}
-              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div>
-              <h1 className="text-xl font-semibold text-slate-900">{dashboard.name}</h1>
-              <p className="text-sm text-slate-500">{dashboard.description}</p>
+              <h1 className="text-xl font-semibold text-white">{dashboard.name}</h1>
+              <p className="text-sm text-slate-400">{dashboard.description}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             {/* Auto Refresh */}
             <div className="flex items-center gap-2">
-              <span className="text-sm text-slate-500">Auto-refresh</span>
+              <span className="text-sm text-slate-400">Auto-refresh</span>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
@@ -440,14 +426,14 @@ export default function DashboardViewPage() {
                   onChange={(e) => setAutoRefresh(e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="w-9 h-5 bg-slate-200 peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600" />
+                <div className="w-9 h-5 bg-slate-700 peer-focus:ring-2 peer-focus:ring-blue-500/50 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600" />
               </label>
             </div>
 
             <button
               onClick={handleRefresh}
               disabled={isRefreshing}
-              className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-3 py-2 border border-white/10 rounded-lg text-slate-300 hover:bg-white/5 transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               Refresh
@@ -465,15 +451,15 @@ export default function DashboardViewPage() {
 
         {/* Widgets Grid */}
         <div className="grid grid-cols-4 gap-4">
-          {dashboard.widgets.map(widget => (
+          {(dashboard.widgets || []).map(widget => (
             <div
               key={widget.id}
               style={getWidgetStyle(widget)}
-              className="bg-slate-800/50 rounded-xl p-4 border border-slate-700"
+              className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4"
             >
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium text-slate-300">{widget.name}</h3>
-                <button className="p-1 text-slate-500 hover:text-slate-400 rounded">
+                <h3 className="text-sm font-medium text-slate-300">{widget.name || 'Widget'}</h3>
+                <button className="p-1 text-slate-500 hover:text-slate-300 rounded transition-colors">
                   <Maximize2 className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -484,15 +470,28 @@ export default function DashboardViewPage() {
           ))}
         </div>
 
+        {/* Empty state when no widgets */}
+        {(dashboard.widgets || []).length === 0 && (
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-12 text-center">
+            <p className="text-slate-400 mb-4">This dashboard has no widgets yet.</p>
+            <button
+              onClick={() => router.push(`/dashboards/${params.id}/edit`)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+            >
+              Add Widgets
+            </button>
+          </div>
+        )}
+
         {/* Footer info */}
-        <div className="flex items-center justify-between text-xs text-slate-400 pt-4 border-t border-slate-200">
+        <div className="flex items-center justify-between text-xs text-slate-500 pt-4 border-t border-white/5">
           <div className="flex items-center gap-4">
-            <span>Last updated: {new Date(dashboard.updated_at).toLocaleString()}</span>
-            <span>Created by: {dashboard.created_by}</span>
+            <span>Last updated: {dashboard.updated_at ? new Date(dashboard.updated_at).toLocaleString() : 'Unknown'}</span>
+            <span>Created by: {dashboard.created_by || 'Unknown'}</span>
           </div>
           <div className="flex items-center gap-2">
             <Clock className="w-3 h-3" />
-            <span>{dashboard.widgets.length} widgets</span>
+            <span>{(dashboard.widgets || []).length} widgets</span>
           </div>
         </div>
       </div>
