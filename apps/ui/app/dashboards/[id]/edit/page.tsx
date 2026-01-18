@@ -434,8 +434,8 @@ export default function DashboardEditPage() {
                         : 'hover:ring-1 hover:ring-slate-600'
                     }`}
                     style={{
-                      gridColumn: `span ${widget.size.w}`,
-                      gridRow: `span ${widget.size.h}`
+                      gridColumn: `span ${widget.size?.w || 1}`,
+                      gridRow: `span ${widget.size?.h || 1}`
                     }}
                   >
                     <div className="flex items-center justify-between mb-2">
