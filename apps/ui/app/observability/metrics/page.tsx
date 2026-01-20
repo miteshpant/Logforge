@@ -28,14 +28,14 @@ import {
   ResponsiveContainer
 } from 'recharts'
 
-// Metric definitions
+// Metric definitions - must match metric_name values in metrics_mt table
 const METRIC_DEFINITIONS = {
-  latency: {
-    name: 'Latency',
+  response_time: {
+    name: 'Response Time',
     icon: Clock,
     unit: 'ms',
     color: '#3b82f6',
-    description: 'Response time'
+    description: 'Response time / latency'
   },
   throughput: {
     name: 'Throughput',
@@ -80,7 +80,7 @@ export default function MetricsExplorerPage() {
   const { getApiTimeRange, currentTimeRange } = useTimeRange()
 
   // Selected metrics and options
-  const [selectedMetrics, setSelectedMetrics] = useState<MetricType[]>(['latency', 'throughput'])
+  const [selectedMetrics, setSelectedMetrics] = useState<MetricType[]>(['response_time', 'throughput'])
   const [aggregation, setAggregation] = useState<AggregationType>('avg')
   const [selectedService, setSelectedService] = useState<string>('all')
 
