@@ -29,41 +29,124 @@ import {
 } from 'recharts'
 
 // Metric definitions - must match metric_name values in metrics_mt table
+// Categories: apm, infrastructure, database, cache, queue
 const METRIC_DEFINITIONS = {
+  // APM Metrics
   response_time: {
     name: 'Response Time',
     icon: Clock,
     unit: 'ms',
     color: '#3b82f6',
-    description: 'Response time / latency'
+    category: 'apm',
+    description: 'HTTP response time / request latency'
   },
   throughput: {
     name: 'Throughput',
     icon: Activity,
     unit: 'req/s',
     color: '#10b981',
-    description: 'Requests per second'
+    category: 'apm',
+    description: 'Request throughput / requests per second'
   },
   error_rate: {
     name: 'Error Rate',
     icon: AlertTriangle,
     unit: '%',
     color: '#ef4444',
-    description: 'Percentage of failed requests'
+    category: 'apm',
+    description: 'Error rate percentage'
   },
+  // Infrastructure Metrics
   cpu_usage: {
     name: 'CPU Usage',
     icon: Cpu,
     unit: '%',
     color: '#f59e0b',
-    description: 'CPU utilization'
+    category: 'infrastructure',
+    description: 'CPU utilization percentage'
   },
   memory_usage: {
     name: 'Memory Usage',
     icon: HardDrive,
     unit: '%',
     color: '#8b5cf6',
-    description: 'Memory utilization'
+    category: 'infrastructure',
+    description: 'Memory utilization percentage'
+  },
+  disk_usage: {
+    name: 'Disk Usage',
+    icon: HardDrive,
+    unit: '%',
+    color: '#6366f1',
+    category: 'infrastructure',
+    description: 'Disk utilization percentage'
+  },
+  network_in: {
+    name: 'Network In',
+    icon: Activity,
+    unit: 'bytes',
+    color: '#14b8a6',
+    category: 'infrastructure',
+    description: 'Network bytes received'
+  },
+  network_out: {
+    name: 'Network Out',
+    icon: Activity,
+    unit: 'bytes',
+    color: '#0ea5e9',
+    category: 'infrastructure',
+    description: 'Network bytes transmitted'
+  },
+  // Database Metrics
+  db_connections: {
+    name: 'DB Connections',
+    icon: Activity,
+    unit: 'count',
+    color: '#a855f7',
+    category: 'database',
+    description: 'Database active connections'
+  },
+  db_query_time: {
+    name: 'DB Query Time',
+    icon: Clock,
+    unit: 'ms',
+    color: '#d946ef',
+    category: 'database',
+    description: 'Database query execution time'
+  },
+  // Cache Metrics
+  cache_hit_rate: {
+    name: 'Cache Hit Rate',
+    icon: TrendingUp,
+    unit: '%',
+    color: '#22c55e',
+    category: 'cache',
+    description: 'Cache hit rate percentage'
+  },
+  cache_miss_rate: {
+    name: 'Cache Miss Rate',
+    icon: TrendingDown,
+    unit: '%',
+    color: '#f97316',
+    category: 'cache',
+    description: 'Cache miss rate percentage'
+  },
+  // Queue Metrics
+  queue_depth: {
+    name: 'Queue Depth',
+    icon: BarChart3,
+    unit: 'count',
+    color: '#ec4899',
+    category: 'queue',
+    description: 'Queue message depth/backlog'
+  },
+  queue_latency: {
+    name: 'Queue Latency',
+    icon: Clock,
+    unit: 'ms',
+    color: '#f43f5e',
+    category: 'queue',
+    description: 'Queue message processing latency'
   }
 }
 
@@ -335,30 +418,52 @@ export default function MetricsExplorerPage() {
       <div className="space-y-6 max-w-7xl mx-auto">
         {/* Controls Bar */}
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4">
-          <div className="flex flex-wrap items-center gap-4">
-            {/* Metric Selector */}
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(METRIC_DEFINITIONS).map(([key, def]) => {
-                const Icon = def.icon
-                const isSelected = selectedMetrics.includes(key as MetricType)
-                return (
-                  <button
-                    key={key}
-                    onClick={() => toggleMetric(key as MetricType)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                      isSelected
-                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                        : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600/50 border border-white/5'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {def.name}
-                  </button>
-                )
-              })}
-            </div>
+          {/* Metric Selector by Category */}
+          <div className="space-y-3 mb-4">
+            {(['apm', 'infrastructure', 'database', 'cache', 'queue'] as const).map(category => {
+              const categoryMetrics = Object.entries(METRIC_DEFINITIONS).filter(([, def]) => def.category === category)
+              if (categoryMetrics.length === 0) return null
+              const categoryLabels: Record<string, string> = {
+                apm: 'APM',
+                infrastructure: 'Infrastructure',
+                database: 'Database',
+                cache: 'Cache',
+                queue: 'Queue'
+              }
+              return (
+                <div key={category} className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-slate-500 uppercase tracking-wider w-24 shrink-0">{categoryLabels[category]}</span>
+                  {categoryMetrics.map(([key, def]) => {
+                    const Icon = def.icon
+                    const isSelected = selectedMetrics.includes(key as MetricType)
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => toggleMetric(key as MetricType)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                          isSelected
+                            ? 'text-white border'
+                            : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600/50 border border-white/5'
+                        }`}
+                        style={isSelected ? {
+                          backgroundColor: `${def.color}20`,
+                          borderColor: `${def.color}50`,
+                          color: def.color
+                        } : undefined}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                        {def.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              )
+            })}
+          </div>
 
-            <div className="h-8 w-px bg-white/10" />
+          <div className="h-px w-full bg-white/10 mb-4" />
+
+          <div className="flex flex-wrap items-center gap-4">
 
             {/* Aggregation */}
             <select
