@@ -261,6 +261,7 @@ class ObservabilityEventHandler(EventHandler):
             # Import here to avoid circular dependencies
             from services.observability_service import ObservabilityService
             from services.simple_otel_mapper import normalize_otel_service_simple
+            from services.metric_normalizer import normalize_metric_data
 
             start_time = datetime.now(timezone.utc)
             customer_id = event.customer_id
@@ -273,7 +274,7 @@ class ObservabilityEventHandler(EventHandler):
                 return True
 
             logger.info(
-                "Processing metrics batch ingestion event with field normalization",
+                "Processing metrics batch ingestion event with field and metric name normalization",
                 customer_id=customer_id,
                 metric_count=len(metrics_data),
                 batch_id=event_data.get("batch_id")
@@ -298,10 +299,15 @@ class ObservabilityEventHandler(EventHandler):
                         continue
 
                     # Step 1: Apply field normalization using otel_field_mapping.yml
+                    # (normalizes field names like metricName -> metric_name)
                     normalized_metric = normalize_otel_service_simple(metric_data)
-                    logger.info(f"normalized_metric {normalized_metric}")
+
+                    # Step 2: Apply metric NAME normalization
+                    # (normalizes metric values like "latency" -> "response_time")
+                    normalized_metric = normalize_metric_data(normalized_metric)
+
                     logger.debug(
-                        "Applied OTel field normalization for metric",
+                        "Applied field and metric name normalization",
                         customer_id=customer_id,
                         original_metric_name=metric_data.get('metric_name') or metric_data.get('metricName') or metric_data.get('name'),
                         normalized_metric_name=normalized_metric.get('metric_name'),
@@ -309,7 +315,7 @@ class ObservabilityEventHandler(EventHandler):
                         normalized_service=normalized_metric.get('service_name')
                     )
 
-                    # Step 2: Process the normalized metric (stores to metrics_mt table)
+                    # Step 3: Process the normalized metric (stores to metrics_mt table)
                     metric_id = await observability_service.ingest_metric(normalized_metric, customer_id)
                     ingested_metrics.append(metric_id)
 

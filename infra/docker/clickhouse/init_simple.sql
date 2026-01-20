@@ -1216,7 +1216,8 @@ SETTINGS index_granularity = 8192;
 -- Metrics data table
 CREATE TABLE IF NOT EXISTS metrics_mt (
     id String,
-    metric_name String,
+    metric_name String,                    -- Normalized metric name (e.g., "response_time")
+    original_metric_name String DEFAULT '', -- Customer's original metric name (e.g., "latency")
     metric_type Enum8('counter' = 1, 'gauge' = 2, 'histogram' = 3, 'summary' = 4),
     value Float64,
     timestamp DateTime64(3) DEFAULT now64(3),

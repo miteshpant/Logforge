@@ -865,6 +865,51 @@ async def observability_health():
         return {"status": "error", "message": f"Health check failed: {str(e)}"}
 
 
+@router.get("/metrics/standard")
+async def get_standard_metrics():
+    """
+    Get list of standard metrics supported by Logforge.
+
+    Returns all standard metric names with their metadata including:
+    - name: The standardized metric name
+    - description: What this metric represents
+    - unit: Expected unit (ms, %, count, etc.)
+    - category: Grouping (apm, infrastructure, database, cache, queue)
+    - variations: All accepted input names that map to this metric
+
+    Custom metrics: Customers can also send custom metrics by prefixing
+    the metric name with "custom." (e.g., "custom.payment_failures")
+    """
+    try:
+        from services.metric_normalizer import get_metric_normalizer
+
+        normalizer = get_metric_normalizer()
+        standard_metrics = normalizer.get_standard_metrics()
+
+        # Group by category
+        by_category = {}
+        for metric in standard_metrics:
+            category = metric.get('category', 'other')
+            if category not in by_category:
+                by_category[category] = []
+            by_category[category].append(metric)
+
+        return {
+            "metrics": standard_metrics,
+            "by_category": by_category,
+            "total_count": len(standard_metrics),
+            "custom_metrics_info": {
+                "prefix": "custom.",
+                "description": "Custom metrics must be prefixed with 'custom.' (e.g., custom.payment_failures)",
+                "example": "custom.checkout_abandonment_rate"
+            }
+        }
+
+    except Exception as e:
+        logger.error("Failed to get standard metrics", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to get standard metrics: {str(e)}")
+
+
 def format_sse_message(event_type: str, data: Any, event_id: Optional[str] = None) -> str:
     """Format data as Server-Sent Events message"""
     message = ""

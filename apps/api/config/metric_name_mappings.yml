@@ -1,0 +1,236 @@
+# Metric Name Mappings Configuration
+# Maps common metric name variations to standardized Logforge metric names
+#
+# Format:
+#   standard_name:
+#     description: What this metric represents
+#     unit: Expected unit (ms, %, count, req/s, etc.)
+#     category: Category for grouping (apm, infrastructure, custom)
+#     variations: List of accepted input names that map to this standard name
+#
+# Custom metrics: Any metric name starting with "custom." passes through unchanged
+
+# ============================================================================
+# APM METRICS - Application Performance Monitoring
+# ============================================================================
+
+response_time:
+  description: "HTTP response time / request latency"
+  unit: "ms"
+  category: "apm"
+  variations:
+    - response_time
+    - latency
+    - request_latency
+    - http_latency
+    - avg_latency
+    - average_latency
+    - request_duration
+    - http_request_duration
+    - http.request.duration
+    - http_response_time
+    - response_latency
+    - api_latency
+    - endpoint_latency
+    - service_latency
+    - round_trip_time
+    - rtt
+
+throughput:
+  description: "Request throughput / requests per second"
+  unit: "req/s"
+  category: "apm"
+  variations:
+    - throughput
+    - requests
+    - request_rate
+    - requests_per_second
+    - rps
+    - qps
+    - queries_per_second
+    - http_requests
+    - http_request_count
+    - http.request.count
+    - request_count
+    - transaction_rate
+    - tps
+    - transactions_per_second
+
+error_rate:
+  description: "Error rate percentage"
+  unit: "%"
+  category: "apm"
+  variations:
+    - error_rate
+    - errors
+    - error_count
+    - error_percentage
+    - failure_rate
+    - failures
+    - http_errors
+    - http_error_rate
+    - http.error.rate
+    - request_errors
+    - 5xx_rate
+    - 4xx_rate
+    - exception_rate
+
+# ============================================================================
+# INFRASTRUCTURE METRICS - System/Container Resources
+# ============================================================================
+
+cpu_usage:
+  description: "CPU utilization percentage"
+  unit: "%"
+  category: "infrastructure"
+  variations:
+    - cpu_usage
+    - cpu
+    - cpu_percent
+    - cpu_utilization
+    - system.cpu
+    - system_cpu
+    - system.cpu.utilization
+    - container_cpu
+    - process_cpu
+    - cpu_load
+    - processor_usage
+
+memory_usage:
+  description: "Memory utilization percentage"
+  unit: "%"
+  category: "infrastructure"
+  variations:
+    - memory_usage
+    - memory
+    - mem_usage
+    - mem_percent
+    - memory_utilization
+    - system.memory
+    - system_memory
+    - system.memory.utilization
+    - container_memory
+    - process_memory
+    - ram_usage
+    - heap_usage
+
+disk_usage:
+  description: "Disk utilization percentage"
+  unit: "%"
+  category: "infrastructure"
+  variations:
+    - disk_usage
+    - disk
+    - disk_percent
+    - disk_utilization
+    - system.disk
+    - system_disk
+    - storage_usage
+    - filesystem_usage
+
+network_in:
+  description: "Network bytes received"
+  unit: "bytes"
+  category: "infrastructure"
+  variations:
+    - network_in
+    - network_receive
+    - bytes_received
+    - rx_bytes
+    - network.in
+    - inbound_bytes
+    - ingress_bytes
+
+network_out:
+  description: "Network bytes transmitted"
+  unit: "bytes"
+  category: "infrastructure"
+  variations:
+    - network_out
+    - network_transmit
+    - bytes_sent
+    - tx_bytes
+    - network.out
+    - outbound_bytes
+    - egress_bytes
+
+# ============================================================================
+# DATABASE METRICS
+# ============================================================================
+
+db_connections:
+  description: "Database active connections"
+  unit: "count"
+  category: "database"
+  variations:
+    - db_connections
+    - database_connections
+    - active_connections
+    - connection_count
+    - pool_connections
+    - db.connections
+
+db_query_time:
+  description: "Database query execution time"
+  unit: "ms"
+  category: "database"
+  variations:
+    - db_query_time
+    - query_duration
+    - query_latency
+    - sql_duration
+    - db.query.duration
+    - database_latency
+
+# ============================================================================
+# CACHE METRICS
+# ============================================================================
+
+cache_hit_rate:
+  description: "Cache hit rate percentage"
+  unit: "%"
+  category: "cache"
+  variations:
+    - cache_hit_rate
+    - cache_hits
+    - hit_rate
+    - cache.hit.rate
+    - cache_hit_ratio
+
+cache_miss_rate:
+  description: "Cache miss rate percentage"
+  unit: "%"
+  category: "cache"
+  variations:
+    - cache_miss_rate
+    - cache_misses
+    - miss_rate
+    - cache.miss.rate
+    - cache_miss_ratio
+
+# ============================================================================
+# QUEUE METRICS
+# ============================================================================
+
+queue_depth:
+  description: "Queue message depth/backlog"
+  unit: "count"
+  category: "queue"
+  variations:
+    - queue_depth
+    - queue_size
+    - queue_length
+    - messages_pending
+    - backlog
+    - queue.depth
+
+queue_latency:
+  description: "Queue message processing latency"
+  unit: "ms"
+  category: "queue"
+  variations:
+    - queue_latency
+    - message_latency
+    - processing_time
+    - queue.latency
+    - consumer_lag

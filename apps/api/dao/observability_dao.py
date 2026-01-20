@@ -252,10 +252,10 @@ class ObservabilityDAO:
             query = """
             INSERT INTO metrics_mt (
                 id, metric_name, metric_type, value, timestamp, labels,
-                service_name, resource, customer_id, ingested_at
+                service_name, resource, customer_id, ingested_at, original_metric_name
             ) VALUES (
                 %(id)s, %(metric_name)s, %(metric_type)s, %(value)s, %(timestamp)s, %(labels)s,
-                %(service_name)s, %(resource)s, %(customer_id)s, %(ingested_at)s
+                %(service_name)s, %(resource)s, %(customer_id)s, %(ingested_at)s, %(original_metric_name)s
             )
             """
             # Ensure proper formatting for ClickHouse DateTime64
@@ -276,7 +276,11 @@ class ObservabilityDAO:
                 metric_data["labels"] = json.dumps(metric_data["labels"])
             if "resource" in metric_data and not isinstance(metric_data["resource"], str):
                 metric_data["resource"] = json.dumps(metric_data["resource"])
-            logger.info(f"metric data {metric_data}")
+
+            # Get original_metric_name (set by metric normalizer, defaults to metric_name)
+            original_metric_name = metric_data.get("original_metric_name", metric_data.get("metric_name", ""))
+
+            logger.debug(f"metric data {metric_data}")
             db_data = {
                         "id": metric_data["id"],
                         "metric_name": metric_data["metric_name"],
@@ -286,10 +290,11 @@ class ObservabilityDAO:
                         "timestamp": metric_data["timestamp"],
                         "service_name": metric_data["service_name"],
                         "resource": metric_data["resource"],
-                        "customer_id":metric_data["customer_id"],
-                        "ingested_at": metric_data["ingested_at"]
+                        "customer_id": metric_data["customer_id"],
+                        "ingested_at": metric_data["ingested_at"],
+                        "original_metric_name": original_metric_name
                       }
-            logger.info(f"DB DATA {db_data}")
+            logger.debug(f"DB DATA {db_data}")
             await self.db.execute_query(query, db_data)
             logger.debug(f"Metric saved: {metric_id}")
 
