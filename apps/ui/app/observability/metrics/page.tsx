@@ -117,6 +117,30 @@ export default function MetricsExplorerPage() {
     fetchServices()
   }, [])
 
+  // Calculate appropriate granularity based on time range
+  // Goal: ~60-100 data points for any time range
+  const calculateGranularity = (startTime: string, endTime: string): string => {
+    const start = new Date(startTime).getTime()
+    const end = new Date(endTime).getTime()
+    const durationMs = end - start
+    const durationSeconds = durationMs / 1000
+
+    // Target ~60-100 data points
+    if (durationSeconds <= 900) {          // <= 15 minutes
+      return '10s'                          // 90 points for 15min
+    } else if (durationSeconds <= 3600) {  // <= 1 hour
+      return '30s'                          // 120 points for 1hr
+    } else if (durationSeconds <= 21600) { // <= 6 hours
+      return '5m'                           // 72 points for 6hr
+    } else if (durationSeconds <= 86400) { // <= 24 hours
+      return '15m'                          // 96 points for 24hr
+    } else if (durationSeconds <= 604800) { // <= 7 days
+      return '1h'                           // 168 points for 7d
+    } else {
+      return '4h'                           // ~180 points for 30d
+    }
+  }
+
   // Query metrics from API
   const queryMetrics = useCallback(async () => {
     setIsLoading(true)
@@ -124,6 +148,7 @@ export default function MetricsExplorerPage() {
 
     try {
       const { start_time, end_time } = getApiTimeRange()
+      const granularity = calculateGranularity(start_time, end_time)
       const results: Record<string, MetricDataPoint[]> = {}
 
       for (const metric of selectedMetrics) {
@@ -134,7 +159,7 @@ export default function MetricsExplorerPage() {
             end_time,
             aggregation,
             service: selectedService !== 'all' ? selectedService : undefined,
-            granularity: '1m'
+            granularity
           })
 
           const data = response.data
