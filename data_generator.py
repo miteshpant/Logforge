@@ -29,6 +29,126 @@ SERVICES = ["web-service", "api-service", "auth-service", "payment-service", "ne
 HOSTS = ["api-server-01", "api-server-02", "web-server-01", "api-test-host"]
 LOG_LEVELS = ["info", "warning", "error", "debug"]
 
+# Standard metrics with their variations (to test normalization)
+# The normalizer will convert variations to standard names
+STANDARD_METRICS = {
+    # APM Metrics
+    "response_time": {
+        "variations": ["response_time", "latency", "request_latency", "http_latency"],
+        "unit": "ms",
+        "type": "gauge",
+        "normal_range": (50, 200),
+        "anomaly_range": (5000, 10000)
+    },
+    "throughput": {
+        "variations": ["throughput", "requests", "request_rate", "rps"],
+        "unit": "req/s",
+        "type": "counter",
+        "normal_range": (500, 1000),
+        "anomaly_range": (10, 50)
+    },
+    "error_rate": {
+        "variations": ["error_rate", "errors", "failure_rate"],
+        "unit": "%",
+        "type": "gauge",
+        "normal_range": (1, 5),
+        "anomaly_range": (40, 60)
+    },
+    # Infrastructure Metrics
+    "cpu_usage": {
+        "variations": ["cpu_usage", "cpu", "cpu_percent", "cpu_utilization"],
+        "unit": "%",
+        "type": "gauge",
+        "normal_range": (20, 40),
+        "anomaly_range": (95, 99.9)
+    },
+    "memory_usage": {
+        "variations": ["memory_usage", "memory", "mem_usage", "ram_usage"],
+        "unit": "%",
+        "type": "gauge",
+        "normal_range": (30, 60),
+        "anomaly_range": (90, 98)
+    },
+    "disk_usage": {
+        "variations": ["disk_usage", "disk", "disk_percent", "storage_usage"],
+        "unit": "%",
+        "type": "gauge",
+        "normal_range": (40, 70),
+        "anomaly_range": (90, 99)
+    },
+    "network_in": {
+        "variations": ["network_in", "bytes_received", "rx_bytes", "ingress_bytes"],
+        "unit": "bytes",
+        "type": "counter",
+        "normal_range": (1000000, 5000000),
+        "anomaly_range": (50000000, 100000000)
+    },
+    "network_out": {
+        "variations": ["network_out", "bytes_sent", "tx_bytes", "egress_bytes"],
+        "unit": "bytes",
+        "type": "counter",
+        "normal_range": (500000, 2000000),
+        "anomaly_range": (30000000, 80000000)
+    },
+    # Database Metrics
+    "db_connections": {
+        "variations": ["db_connections", "database_connections", "active_connections", "pool_connections"],
+        "unit": "count",
+        "type": "gauge",
+        "normal_range": (10, 50),
+        "anomaly_range": (200, 500)
+    },
+    "db_query_time": {
+        "variations": ["db_query_time", "query_duration", "query_latency", "sql_duration"],
+        "unit": "ms",
+        "type": "gauge",
+        "normal_range": (5, 50),
+        "anomaly_range": (500, 2000)
+    },
+    # Cache Metrics
+    "cache_hit_rate": {
+        "variations": ["cache_hit_rate", "cache_hits", "hit_rate"],
+        "unit": "%",
+        "type": "gauge",
+        "normal_range": (85, 98),
+        "anomaly_range": (20, 40)
+    },
+    "cache_miss_rate": {
+        "variations": ["cache_miss_rate", "cache_misses", "miss_rate"],
+        "unit": "%",
+        "type": "gauge",
+        "normal_range": (2, 15),
+        "anomaly_range": (60, 80)
+    },
+    # Queue Metrics
+    "queue_depth": {
+        "variations": ["queue_depth", "queue_size", "queue_length", "messages_pending"],
+        "unit": "count",
+        "type": "gauge",
+        "normal_range": (0, 100),
+        "anomaly_range": (5000, 10000)
+    },
+    "queue_latency": {
+        "variations": ["queue_latency", "message_latency", "processing_time", "consumer_lag"],
+        "unit": "ms",
+        "type": "gauge",
+        "normal_range": (10, 100),
+        "anomaly_range": (1000, 5000)
+    }
+}
+
+# Service-specific metric mappings (which metrics each service should send)
+SERVICE_METRICS = {
+    "web-service": ["response_time", "throughput", "error_rate", "cpu_usage", "memory_usage"],
+    "api-service": ["response_time", "throughput", "error_rate", "cpu_usage", "memory_usage", "db_query_time"],
+    "auth-service": ["response_time", "error_rate", "cpu_usage", "cache_hit_rate", "cache_miss_rate"],
+    "payment-service": ["response_time", "throughput", "error_rate", "cpu_usage", "memory_usage", "db_connections", "db_query_time"],
+    "database": ["db_connections", "db_query_time", "cpu_usage", "memory_usage", "disk_usage"],
+    "cache": ["cache_hit_rate", "cache_miss_rate", "memory_usage", "cpu_usage"],
+    "queue-service": ["queue_depth", "queue_latency", "throughput", "cpu_usage", "memory_usage"],
+    "new-service": ["response_time", "error_rate", "cpu_usage", "network_in", "network_out"]
+}
+
 
 def generate_trace_id():
     """Generate a valid 32-character hexadecimal trace ID"""
@@ -348,202 +468,213 @@ def send_metrics():
         send_normal_metrics()
 
 
-def send_normal_metrics():
-    """Send NORMAL baseline metrics"""
+def send_all_metrics_for_service(service: str, is_anomalous: bool = False, use_variations: bool = False):
+    """
+    Send all relevant metrics for a specific service.
+
+    Args:
+        service: Service name
+        is_anomalous: If True, send anomalous values
+        use_variations: If True, randomly use metric name variations to test normalization
+    """
     endpoint = f"{API_BASE_URL}/v1/observability/metrics/ingest"
 
-    service = "payment-service"
-    host = "payment-server-01"
+    # Get metrics for this service
+    metric_names = SERVICE_METRICS.get(service, ["cpu_usage", "memory_usage", "error_rate"])
+    host = f"{service.replace('-service', '')}-server-01"
 
     metrics = []
 
-    # NORMAL CPU usage (20-40%)
-    cpu_metric = {
-        "metric_name": "cpu_usage",
-        "metric_type": "gauge",
-        "value": random.uniform(20, 40),
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "labels": {
-            "host": host,
-            "env": "production",
-            "core": "0"
-        },
-        "service_name": service,
-        "resource": {
-            "service.name": service
-        }
-    }
-    metrics.append(cpu_metric)
+    for metric_name in metric_names:
+        metric_config = STANDARD_METRICS.get(metric_name)
+        if not metric_config:
+            continue
 
-    # NORMAL Memory usage (2000-3500 MB)
-    memory_metric = {
-        "metric_name": "memory_usage",
-        "metric_type": "gauge",
-        "value": random.uniform(2000, 3500),
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "labels": {
-            "host": host,
-            "env": "production"
-        },
-        "service_name": service,
-        "resource": {
-            "service.name": service
-        }
-    }
-    metrics.append(memory_metric)
+        # Choose metric name (standard or variation)
+        if use_variations and random.random() < 0.3:  # 30% chance to use variation
+            chosen_name = random.choice(metric_config["variations"])
+        else:
+            chosen_name = metric_name  # Use standard name
 
-    # NORMAL Error rate (1-5%)
-    error_metric = {
-        "metric_name": "error_rate",
-        "metric_type": "gauge",
-        "value": random.uniform(1, 5),
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "labels": {
-            "env": "production",
-            "http.status_code": "500"
-        },
-        "service_name": service,
-        "resource": {
-            "service.name": service
-        }
-    }
-    metrics.append(error_metric)
+        # Choose value range
+        if is_anomalous:
+            value_range = metric_config["anomaly_range"]
+        else:
+            value_range = metric_config["normal_range"]
 
-    # NORMAL Response time (50-200ms)
-    response_time_metric = {
-        "metric_name": "response_time",
-        "metric_type": "gauge",
-        "value": random.uniform(50, 200),
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "labels": {
-            "env": "production",
-            "endpoint": "/api/payments"
-        },
-        "service_name": service,
-        "resource": {
-            "service.name": service
+        value = random.uniform(value_range[0], value_range[1])
+
+        metric = {
+            "metric_name": chosen_name,
+            "metric_type": metric_config["type"],
+            "value": value,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "labels": {
+                "host": host,
+                "env": "production",
+                "unit": metric_config["unit"]
+            },
+            "service_name": service,
+            "resource": {
+                "service.name": service
+            }
         }
-    }
-    metrics.append(response_time_metric)
+        metrics.append(metric)
+
+    if not metrics:
+        return
 
     payload = {"metrics": metrics}
 
     try:
         response = requests.post(endpoint, headers=HEADERS, json=payload)
         if response.status_code in [200, 202]:
-            print(f"✓ Sent {len(metrics)} NORMAL metrics (CPU: {cpu_metric['value']:.1f}%, Mem: {memory_metric['value']:.0f}MB, Err: {error_metric['value']:.1f}%)")
+            status = "🚨 ANOMALOUS" if is_anomalous else "✓ NORMAL"
+            variation_note = " (with variations)" if use_variations else ""
+            print(f"{status} Sent {len(metrics)} metrics for {service}{variation_note}")
         else:
-            print(f"✗ Failed to send normal metrics: {response.status_code} - {response.text}")
+            print(f"✗ Failed to send metrics for {service}: {response.status_code} - {response.text}")
     except Exception as e:
-        print(f"✗ Error sending normal metrics: {e}")
+        print(f"✗ Error sending metrics for {service}: {e}")
+
+
+def send_normal_metrics():
+    """Send NORMAL baseline metrics for multiple services"""
+    # Randomly select 2-3 services to send metrics for
+    services_to_send = random.sample(list(SERVICE_METRICS.keys()), random.randint(2, 3))
+
+    for service in services_to_send:
+        # 30% chance to use metric name variations (tests normalization)
+        use_variations = random.random() < 0.3
+        send_all_metrics_for_service(service, is_anomalous=False, use_variations=use_variations)
 
 
 def send_anomalous_metrics():
     """Send anomalous metrics to trigger multi-metric anomaly detection"""
-    endpoint = f"{API_BASE_URL}/v1/observability/metrics/ingest"
+    # Target specific service for anomaly (payment-service is most critical)
+    service = random.choice(["payment-service", "api-service", "database"])
+    send_all_metrics_for_service(service, is_anomalous=True, use_variations=False)
 
-    service = "payment-service"  # Target specific service for anomaly
-    host = "payment-server-01"
+
+def send_comprehensive_metrics():
+    """
+    Send comprehensive metrics for ALL services and ALL metric types.
+    Useful for populating dashboards and testing the metrics explorer.
+    """
+    print("\n📊 Sending comprehensive metrics for all services...")
+
+    all_services = list(SERVICE_METRICS.keys())
+
+    for service in all_services:
+        # 20% chance to use variations to test normalization
+        use_variations = random.random() < 0.2
+        # 10% chance to be anomalous
+        is_anomalous = random.random() < 0.1
+
+        send_all_metrics_for_service(service, is_anomalous=is_anomalous, use_variations=use_variations)
+        time.sleep(0.5)  # Small delay between services
+
+    print(f"✓ Sent metrics for {len(all_services)} services")
+
+
+def send_custom_metrics():
+    """
+    Send custom metrics (with custom. prefix) to test custom metric passthrough.
+    These should NOT be normalized and pass through unchanged.
+    """
+    endpoint = f"{API_BASE_URL}/v1/observability/metrics/ingest"
 
     metrics = []
 
-    # ANOMALY 1: Extreme CPU spike (normally 10-50%, now 95%+)
-    cpu_metric = {
-        "metric_name": "cpu_usage",
-        "metric_type": "gauge",
-        "value": random.uniform(95, 99.9),  # Extreme CPU usage
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "labels": {
-            "host": host,
-            "env": "production",
-            "core": "0"
-        },
-        "service_name": service,
-        "resource": {
-            "service.name": service
-        }
-    }
-    metrics.append(cpu_metric)
+    # Custom business metrics
+    custom_metrics_data = [
+        {"name": "custom.checkout_abandonment_rate", "value": random.uniform(5, 25), "unit": "%"},
+        {"name": "custom.payment_success_rate", "value": random.uniform(95, 99.5), "unit": "%"},
+        {"name": "custom.cart_items_average", "value": random.uniform(2, 8), "unit": "items"},
+        {"name": "custom.user_session_duration", "value": random.uniform(120, 900), "unit": "seconds"},
+        {"name": "custom.api_quota_remaining", "value": random.randint(5000, 10000), "unit": "count"},
+    ]
 
-    # ANOMALY 2: Extreme memory spike (normally 1000-4000MB, now 7500MB+)
-    memory_metric = {
-        "metric_name": "memory_usage",
-        "metric_type": "gauge",
-        "value": random.uniform(7500, 7900),  # Extreme memory usage
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "labels": {
-            "host": host,
-            "env": "production"
-        },
-        "service_name": service,
-        "resource": {
-            "service.name": service
+    for custom in custom_metrics_data:
+        metric = {
+            "metric_name": custom["name"],
+            "metric_type": "gauge",
+            "value": custom["value"],
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "labels": {
+                "env": "production",
+                "unit": custom["unit"]
+            },
+            "service_name": "business-metrics",
+            "resource": {
+                "service.name": "business-metrics"
+            }
         }
-    }
-    metrics.append(memory_metric)
-
-    # ANOMALY 3: High error rate (normally <5%, now 40%+)
-    error_metric = {
-        "metric_name": "error_rate",
-        "metric_type": "gauge",
-        "value": random.uniform(40, 60),  # High error rate
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "labels": {
-            "env": "production",
-            "http.status_code": "500"
-        },
-        "service_name": service,
-        "resource": {
-            "service.name": service
-        }
-    }
-    metrics.append(error_metric)
-
-    # ANOMALY 4: Extreme response time (normally 10-100ms, now 5000ms+)
-    response_time_metric = {
-        "metric_name": "response_time",
-        "metric_type": "gauge",
-        "value": random.uniform(5000, 10000),  # Extreme latency
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "labels": {
-            "env": "production",
-            "endpoint": "/api/payments"
-        },
-        "service_name": service,
-        "resource": {
-            "service.name": service
-        }
-    }
-    metrics.append(response_time_metric)
-
-    # ANOMALY 5: Low throughput (normally 500-1000, now <50)
-    throughput_metric = {
-        "metric_name": "throughput",
-        "metric_type": "counter",
-        "value": random.randint(10, 50),  # Very low request count
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "labels": {
-            "env": "production",
-            "http.status_code": "200"
-        },
-        "service_name": service,
-        "resource": {
-            "service.name": service
-        }
-    }
-    metrics.append(throughput_metric)
+        metrics.append(metric)
 
     payload = {"metrics": metrics}
 
     try:
         response = requests.post(endpoint, headers=HEADERS, json=payload)
         if response.status_code in [200, 202]:
-            print(f"🚨 Sent {len(metrics)} ANOMALOUS metrics for {service}")
-            print(f"   CPU: {cpu_metric['value']:.1f}%, Memory: {memory_metric['value']:.0f}MB, Errors: {error_metric['value']:.1f}%")
+            print(f"✓ Sent {len(metrics)} CUSTOM metrics (custom.* prefix)")
         else:
-            print(f"✗ Failed to send anomalous metrics: {response.status_code} - {response.text}")
+            print(f"✗ Failed to send custom metrics: {response.status_code} - {response.text}")
     except Exception as e:
-        print(f"✗ Error sending anomalous metrics: {e}")
+        print(f"✗ Error sending custom metrics: {e}")
+
+
+def test_metric_normalization():
+    """
+    Explicitly test metric name normalization by sending known variations.
+    Sends metrics with variation names that should be normalized to standard names.
+    """
+    endpoint = f"{API_BASE_URL}/v1/observability/metrics/ingest"
+
+    print("\n🔄 Testing metric name normalization...")
+
+    # Test variations -> expected normalized name
+    test_cases = [
+        ("latency", "response_time", 150),
+        ("request_latency", "response_time", 180),
+        ("rps", "throughput", 750),
+        ("cpu", "cpu_usage", 35),
+        ("mem_usage", "memory_usage", 55),
+        ("errors", "error_rate", 3),
+        ("cache_hits", "cache_hit_rate", 92),
+        ("query_duration", "db_query_time", 25),
+        ("messages_pending", "queue_depth", 50),
+    ]
+
+    metrics = []
+    for variation, expected_standard, value in test_cases:
+        metric = {
+            "metric_name": variation,  # Send the variation
+            "metric_type": "gauge",
+            "value": value,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "labels": {
+                "env": "test",
+                "expected_normalized": expected_standard
+            },
+            "service_name": "normalization-test",
+            "resource": {
+                "service.name": "normalization-test"
+            }
+        }
+        metrics.append(metric)
+        print(f"   Sending '{variation}' -> should normalize to '{expected_standard}'")
+
+    payload = {"metrics": metrics}
+
+    try:
+        response = requests.post(endpoint, headers=HEADERS, json=payload)
+        if response.status_code in [200, 202]:
+            print(f"✓ Normalization test: Sent {len(metrics)} metrics with variations")
+        else:
+            print(f"✗ Normalization test failed: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"✗ Error in normalization test: {e}")
 
 
 def detect_multi_metric_anomalies():
@@ -627,10 +758,17 @@ def run_continuous_generation():
     print("=" * 60)
     print(f"API Base URL: {API_BASE_URL}")
     print(f"Bearer Token: {BEARER_TOKEN[:20]}...")
+    print(f"Standard Metrics: {len(STANDARD_METRICS)} types")
+    print(f"Services: {len(SERVICE_METRICS)} configured")
     print("=" * 60)
     print()
 
     iteration = 0
+
+    # Run initial normalization test
+    print("🚀 Running initial metric normalization test...")
+    test_metric_normalization()
+    time.sleep(2)
 
     while True:
         iteration += 1
@@ -648,9 +786,19 @@ def run_continuous_generation():
                 send_logs(trace_id=trace_id, service=random.choice(SERVICES))
             time.sleep(1)
 
-            # Send metrics
+            # Send metrics (85% normal, 15% anomalous)
             send_metrics()
             time.sleep(1)
+
+            # Every 3 iterations, send comprehensive metrics for all services
+            if iteration % 3 == 0:
+                send_comprehensive_metrics()
+                time.sleep(1)
+
+            # Every 4 iterations, send custom business metrics
+            if iteration % 4 == 0:
+                send_custom_metrics()
+                time.sleep(1)
 
             # Every 5 iterations, trigger alert rules
             if iteration % 5 == 0:
@@ -683,6 +831,11 @@ def run_continuous_generation():
                     print(f"   Step 3: Running deep dive analysis on anomaly {anomaly_id}...")
                     analyze_anomaly(anomaly_id)
 
+                time.sleep(1)
+
+            # Every 10 iterations, test metric normalization
+            if iteration % 10 == 0:
+                test_metric_normalization()
                 time.sleep(1)
 
             # Wait before next iteration
