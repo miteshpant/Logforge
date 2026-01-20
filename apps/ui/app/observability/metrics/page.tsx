@@ -413,6 +413,49 @@ export default function MetricsExplorerPage() {
   const chartData = formatChartData()
   const hasAnyData = Object.keys(metricsData).length > 0 && Object.values(metricsData).some(d => d.length > 0)
 
+  // Get metrics grouped by category
+  const getMetricsByCategory = (category: string) => {
+    return selectedMetrics.filter(m => METRIC_DEFINITIONS[m].category === category)
+  }
+
+  // Get chart data for a specific category
+  const getCategoryChartData = (categoryMetrics: MetricType[]) => {
+    if (categoryMetrics.length === 0) return []
+
+    const allTimestamps = new Set<string>()
+    categoryMetrics.forEach(metric => {
+      const data = metricsData[metric] || []
+      data.forEach(point => allTimestamps.add(point.timestamp))
+    })
+
+    const sortedTimestamps = Array.from(allTimestamps).sort()
+
+    return sortedTimestamps.map(timestamp => {
+      const point: any = { time: new Date(timestamp).toLocaleTimeString() }
+      categoryMetrics.forEach(metric => {
+        const data = metricsData[metric] || []
+        const matchingPoint = data.find(d => d.timestamp === timestamp)
+        if (matchingPoint) {
+          point[metric] = Math.round(matchingPoint.value * 100) / 100
+        }
+      })
+      return point
+    })
+  }
+
+  // Category labels and icons
+  const categoryConfig: Record<string, { label: string; color: string }> = {
+    apm: { label: 'APM Metrics', color: '#3b82f6' },
+    infrastructure: { label: 'Infrastructure Metrics', color: '#f59e0b' },
+    database: { label: 'Database Metrics', color: '#a855f7' },
+    cache: { label: 'Cache Metrics', color: '#22c55e' },
+    queue: { label: 'Queue Metrics', color: '#ec4899' }
+  }
+
+  // Get categories with selected metrics
+  const activeCategories = (['apm', 'infrastructure', 'database', 'cache', 'queue'] as const)
+    .filter(cat => getMetricsByCategory(cat).length > 0)
+
   return (
     <DashboardLayout>
       <div className="space-y-6 max-w-7xl mx-auto">
@@ -587,88 +630,119 @@ export default function MetricsExplorerPage() {
           })}
         </div>
 
-        {/* Main Chart */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-blue-400" />
-              {isStreaming ? 'Live Metrics' : 'Time Series'}
-            </h2>
-            {isStreaming && (
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-                <span className="text-sm text-emerald-400">Streaming</span>
-              </div>
-            )}
-          </div>
-
-          {error ? (
-            <div className="flex items-center justify-center h-80 text-red-400">
+        {/* Category Charts */}
+        {error ? (
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-6">
+            <div className="flex items-center justify-center h-40 text-red-400">
               {error}
             </div>
-          ) : isLoading ? (
-            <div className="flex items-center justify-center h-80">
+          </div>
+        ) : isLoading ? (
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-6">
+            <div className="flex items-center justify-center h-40">
               <div className="animate-pulse flex flex-col items-center gap-4">
                 <RefreshCw className="w-8 h-8 text-slate-500 animate-spin" />
                 <span className="text-slate-400">Loading metrics...</span>
               </div>
             </div>
-          ) : !hasAnyData && chartData.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-80 text-slate-400">
+          </div>
+        ) : activeCategories.length === 0 ? (
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-6">
+            <div className="flex flex-col items-center justify-center h-40 text-slate-400">
               <BarChart3 className="w-12 h-12 text-slate-600 mb-4" />
-              <p className="text-lg font-medium">No metrics data available</p>
-              <p className="text-sm text-slate-500 mt-1">Try adjusting the time range or check your data sources</p>
+              <p className="text-lg font-medium">Select metrics to view charts</p>
+              <p className="text-sm text-slate-500 mt-1">Choose metrics from the categories above</p>
             </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={400}>
-              <AreaChart data={chartData}>
-                <defs>
-                  {selectedMetrics.map(metric => (
-                    <linearGradient key={metric} id={`gradient-${metric}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={METRIC_DEFINITIONS[metric].color} stopOpacity={0.3} />
-                      <stop offset="95%" stopColor={METRIC_DEFINITIONS[metric].color} stopOpacity={0} />
-                    </linearGradient>
-                  ))}
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                <XAxis
-                  dataKey="time"
-                  stroke="#64748b"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                  stroke="#64748b"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '12px',
-                    color: '#fff',
-                    backdropFilter: 'blur(8px)'
-                  }}
-                />
-                <Legend />
-                {selectedMetrics.map(metric => (
-                  <Area
-                    key={metric}
-                    type="monotone"
-                    dataKey={metric}
-                    name={METRIC_DEFINITIONS[metric].name}
-                    stroke={METRIC_DEFINITIONS[metric].color}
-                    fill={`url(#gradient-${metric})`}
-                    strokeWidth={2}
-                  />
-                ))}
-              </AreaChart>
-            </ResponsiveContainer>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {activeCategories.map(category => {
+              const categoryMetrics = getMetricsByCategory(category)
+              const categoryData = getCategoryChartData(categoryMetrics)
+              const config = categoryConfig[category]
+              const hasCategoryData = categoryData.length > 0
+
+              return (
+                <div
+                  key={category}
+                  className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-5"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                      <div
+                        className="w-2 h-2 rounded-full"
+                        style={{ backgroundColor: config.color }}
+                      />
+                      {config.label}
+                    </h3>
+                    {isStreaming && (
+                      <div className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+                        <span className="text-xs text-emerald-400">Live</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {!hasCategoryData ? (
+                    <div className="flex flex-col items-center justify-center h-48 text-slate-500">
+                      <BarChart3 className="w-8 h-8 text-slate-600 mb-2" />
+                      <p className="text-sm">No data available</p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <AreaChart data={categoryData}>
+                        <defs>
+                          {categoryMetrics.map(metric => (
+                            <linearGradient key={metric} id={`gradient-${category}-${metric}`} x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor={METRIC_DEFINITIONS[metric].color} stopOpacity={0.3} />
+                              <stop offset="95%" stopColor={METRIC_DEFINITIONS[metric].color} stopOpacity={0} />
+                            </linearGradient>
+                          ))}
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                        <XAxis
+                          dataKey="time"
+                          stroke="#64748b"
+                          fontSize={10}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <YAxis
+                          stroke="#64748b"
+                          fontSize={10}
+                          tickLine={false}
+                          axisLine={false}
+                          width={40}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            borderRadius: '8px',
+                            color: '#fff',
+                            fontSize: '12px'
+                          }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: '11px' }} />
+                        {categoryMetrics.map(metric => (
+                          <Area
+                            key={metric}
+                            type="monotone"
+                            dataKey={metric}
+                            name={METRIC_DEFINITIONS[metric].name}
+                            stroke={METRIC_DEFINITIONS[metric].color}
+                            fill={`url(#gradient-${category}-${metric})`}
+                            strokeWidth={2}
+                          />
+                        ))}
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
