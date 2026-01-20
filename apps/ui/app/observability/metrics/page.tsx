@@ -224,27 +224,40 @@ export default function MetricsExplorerPage() {
     }
   }
 
-  // Query metrics from API
+  // Query metrics from API - fetch all metrics in parallel for better performance
   const queryMetrics = useCallback(async () => {
+    if (selectedMetrics.length === 0) {
+      setMetricsData({})
+      setIsLoading(false)
+      return
+    }
+
     setIsLoading(true)
     setError(null)
 
     try {
       const { start_time, end_time } = getApiTimeRange()
       const granularity = calculateGranularity(start_time, end_time)
+
+      // Fetch all metrics in parallel using Promise.allSettled
+      const metricPromises = selectedMetrics.map(metric =>
+        apiClient.post('/v1/observability/metrics/query', {
+          metric_name: metric,
+          start_time,
+          end_time,
+          aggregation,
+          service: selectedService !== 'all' ? selectedService : undefined,
+          granularity
+        }).then(response => ({ metric, response }))
+      )
+
+      const settledResults = await Promise.allSettled(metricPromises)
+
       const results: Record<string, MetricDataPoint[]> = {}
 
-      for (const metric of selectedMetrics) {
-        try {
-          const response = await apiClient.post('/v1/observability/metrics/query', {
-            metric_name: metric,
-            start_time,
-            end_time,
-            aggregation,
-            service: selectedService !== 'all' ? selectedService : undefined,
-            granularity
-          })
-
+      settledResults.forEach((result) => {
+        if (result.status === 'fulfilled') {
+          const { metric, response } = result.value
           const data = response.data
 
           // Handle different response formats from API
@@ -255,10 +268,10 @@ export default function MetricsExplorerPage() {
           } else if (Array.isArray(data)) {
             results[metric] = data
           }
-        } catch (err) {
-          console.error(`Failed to query ${metric}:`, err)
+        } else {
+          console.error('Failed to query metric:', result.reason)
         }
-      }
+      })
 
       setMetricsData(results)
     } catch (err) {
