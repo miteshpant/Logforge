@@ -224,9 +224,43 @@ export default function MetricsExplorerPage() {
     }
   }
 
-  // Query metrics from API - fetch all metrics in parallel for better performance
-  const queryMetrics = useCallback(async () => {
-    if (selectedMetrics.length === 0) {
+  // Fetch a single metric - used when toggling individual metrics
+  const fetchSingleMetric = useCallback(async (metric: MetricType) => {
+    try {
+      const { start_time, end_time } = getApiTimeRange()
+      const granularity = calculateGranularity(start_time, end_time)
+
+      const response = await apiClient.post('/v1/observability/metrics/query', {
+        metric_name: metric,
+        start_time,
+        end_time,
+        aggregation,
+        service: selectedService !== 'all' ? selectedService : undefined,
+        granularity
+      })
+
+      const data = response.data
+      let metricData: MetricDataPoint[] = []
+
+      if (data?.metrics?.[metric]) {
+        metricData = data.metrics[metric]
+      } else if (data?.data) {
+        metricData = data.data
+      } else if (Array.isArray(data)) {
+        metricData = data
+      }
+
+      // Add to existing data without replacing everything
+      setMetricsData(prev => ({ ...prev, [metric]: metricData }))
+    } catch (err) {
+      console.error(`Failed to fetch metric ${metric}:`, err)
+    }
+  }, [aggregation, selectedService, getApiTimeRange])
+
+  // Query all selected metrics - used for full refresh
+  const queryMetrics = useCallback(async (metricsToFetch?: MetricType[]) => {
+    const metrics = metricsToFetch || selectedMetrics
+    if (metrics.length === 0) {
       setMetricsData({})
       setIsLoading(false)
       return
@@ -240,7 +274,7 @@ export default function MetricsExplorerPage() {
       const granularity = calculateGranularity(start_time, end_time)
 
       // Fetch all metrics in parallel using Promise.allSettled
-      const metricPromises = selectedMetrics.map(metric =>
+      const metricPromises = metrics.map(metric =>
         apiClient.post('/v1/observability/metrics/query', {
           metric_name: metric,
           start_time,
@@ -282,10 +316,17 @@ export default function MetricsExplorerPage() {
     }
   }, [selectedMetrics, aggregation, selectedService, getApiTimeRange])
 
-  // Fetch data when metrics selection, aggregation, service, or time range changes
+  // Fetch all data when aggregation, service filter, or time range changes (full refresh needed)
+  useEffect(() => {
+    if (selectedMetrics.length > 0) {
+      queryMetrics()
+    }
+  }, [aggregation, selectedService, currentTimeRange.value])
+
+  // Initial load
   useEffect(() => {
     queryMetrics()
-  }, [selectedMetrics, aggregation, selectedService, currentTimeRange.value])
+  }, [])
 
   // Auto-refresh effect
   useEffect(() => {
@@ -358,13 +399,23 @@ export default function MetricsExplorerPage() {
     }
   }, [])
 
-  // Toggle metric selection
+  // Toggle metric selection - only fetch new metric, don't refresh everything
   const toggleMetric = (metric: MetricType) => {
-    setSelectedMetrics(prev =>
-      prev.includes(metric)
-        ? prev.filter(m => m !== metric)
-        : [...prev, metric]
-    )
+    const isCurrentlySelected = selectedMetrics.includes(metric)
+
+    if (isCurrentlySelected) {
+      // Deselecting: remove from selection and data (no API call needed)
+      setSelectedMetrics(prev => prev.filter(m => m !== metric))
+      setMetricsData(prev => {
+        const newData = { ...prev }
+        delete newData[metric]
+        return newData
+      })
+    } else {
+      // Selecting: add to selection and fetch only this metric
+      setSelectedMetrics(prev => [...prev, metric])
+      fetchSingleMetric(metric)
+    }
   }
 
   // Format chart data for Recharts
