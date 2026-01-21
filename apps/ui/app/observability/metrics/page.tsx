@@ -159,6 +159,53 @@ interface MetricDataPoint {
   service?: string
 }
 
+// Format large numbers with K/M/G suffixes
+const formatValue = (value: number, unit: string): { value: string; unit: string } => {
+  // For percentages, just format with appropriate decimals
+  if (unit === '%') {
+    return { value: value.toFixed(value < 10 ? 2 : 1), unit: '%' }
+  }
+
+  // For bytes, convert to KB/MB/GB
+  if (unit === 'bytes') {
+    if (value >= 1e9) {
+      return { value: (value / 1e9).toFixed(2), unit: 'GB' }
+    } else if (value >= 1e6) {
+      return { value: (value / 1e6).toFixed(2), unit: 'MB' }
+    } else if (value >= 1e3) {
+      return { value: (value / 1e3).toFixed(2), unit: 'KB' }
+    }
+    return { value: value.toFixed(0), unit: 'B' }
+  }
+
+  // For counts, convert to K/M
+  if (unit === 'count' || unit === 'req/s') {
+    if (value >= 1e6) {
+      return { value: (value / 1e6).toFixed(2), unit: unit === 'req/s' ? 'M/s' : 'M' }
+    } else if (value >= 1e3) {
+      return { value: (value / 1e3).toFixed(2), unit: unit === 'req/s' ? 'K/s' : 'K' }
+    }
+    return { value: value.toFixed(value < 10 ? 1 : 0), unit }
+  }
+
+  // For ms, convert to seconds if large
+  if (unit === 'ms') {
+    if (value >= 1000) {
+      return { value: (value / 1000).toFixed(2), unit: 's' }
+    }
+    return { value: value.toFixed(value < 10 ? 1 : 0), unit: 'ms' }
+  }
+
+  // Default formatting
+  if (value >= 1e6) {
+    return { value: (value / 1e6).toFixed(2), unit: `M ${unit}` }
+  } else if (value >= 1e3) {
+    return { value: (value / 1e3).toFixed(2), unit: `K ${unit}` }
+  }
+
+  return { value: value.toFixed(value < 10 ? 2 : 0), unit }
+}
+
 export default function MetricsExplorerPage() {
   const { getApiTimeRange, currentTimeRange } = useTimeRange()
 
@@ -739,15 +786,21 @@ export default function MetricsExplorerPage() {
                               <div className="h-3 bg-slate-700 rounded w-1/2"></div>
                             </div>
                           ) : stats.hasData ? (
-                            <>
-                              <div className="text-xl font-bold text-white">
-                                {stats.current.toFixed(metric === 'error_rate' || metric === 'cache_hit_rate' || metric === 'cache_miss_rate' ? 2 : 0)}
-                                <span className="text-xs font-normal text-slate-500 ml-1">{def.unit}</span>
-                              </div>
-                              <div className="text-xs text-slate-500">
-                                Avg: {stats.avg.toFixed(metric === 'error_rate' ? 2 : 0)} {def.unit}
-                              </div>
-                            </>
+                            (() => {
+                              const formatted = formatValue(stats.current, def.unit)
+                              const formattedAvg = formatValue(stats.avg, def.unit)
+                              return (
+                                <>
+                                  <div className="text-xl font-bold text-white">
+                                    {formatted.value}
+                                    <span className="text-xs font-normal text-slate-500 ml-1">{formatted.unit}</span>
+                                  </div>
+                                  <div className="text-xs text-slate-500">
+                                    Avg: {formattedAvg.value} {formattedAvg.unit}
+                                  </div>
+                                </>
+                              )
+                            })()
                           ) : (
                             <div className="text-slate-500 text-sm">No data</div>
                           )}
