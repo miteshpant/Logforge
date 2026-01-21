@@ -183,15 +183,14 @@ export default function MetricsExplorerPage() {
   const [refreshInterval, setRefreshInterval] = useState(30000)
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Fetch available services
+  // Fetch available services that have metrics data
   useEffect(() => {
     const fetchServices = async () => {
       try {
-        const response = await apiClient.get('/v1/observability/service-map')
-        const data = response.data?.data || response.data
-        if (data?.nodes) {
-          const serviceNames = data.nodes.map((n: any) => n.service_name || n.id)
-          setServices([...new Set(serviceNames)] as string[])
+        const response = await apiClient.get('/v1/observability/metrics/services')
+        const data = response.data
+        if (data?.services) {
+          setServices(data.services)
         }
       } catch (err) {
         console.error('Failed to fetch services:', err)

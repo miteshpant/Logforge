@@ -726,6 +726,39 @@ async def get_trace_analytics(
         raise HTTPException(status_code=500, detail=f"Failed to get trace analytics: {str(e)}")
 
 
+@router.get("/metrics/services")
+async def get_metrics_services(
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Get distinct services that have metrics data"""
+    try:
+        from dao.observability_dao import ObservabilityDAO
+        dao = ObservabilityDAO()
+
+        query = """
+        SELECT DISTINCT service_name
+        FROM metrics_mt
+        WHERE customer_id = %(customer_id)s
+          AND service_name != ''
+        ORDER BY service_name
+        LIMIT 100
+        """
+
+        results = await dao.db.execute_query(query, {"customer_id": customer_id})
+
+        services = [row["service_name"] for row in results] if results else []
+
+        return {
+            "services": services,
+            "count": len(services),
+            "customer_id": customer_id
+        }
+
+    except Exception as e:
+        logger.error("Failed to get metrics services", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to get metrics services: {str(e)}")
+
+
 @router.post("/metrics/query")
 async def query_metrics(
     query: MetricQueryRequest,
