@@ -472,54 +472,12 @@ export default function MetricsExplorerPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6 max-w-7xl mx-auto">
-        {/* Controls Bar */}
+        {/* Global Controls Bar */}
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4">
-          {/* Metric Selector by Category */}
-          <div className="space-y-3 mb-4">
-            {(['apm', 'infrastructure', 'database', 'cache', 'queue'] as const).map(category => {
-              const categoryMetrics = Object.entries(METRIC_DEFINITIONS).filter(([, def]) => def.category === category)
-              if (categoryMetrics.length === 0) return null
-              const categoryLabels: Record<string, string> = {
-                apm: 'APM',
-                infrastructure: 'Infrastructure',
-                database: 'Database',
-                cache: 'Cache',
-                queue: 'Queue'
-              }
-              return (
-                <div key={category} className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-slate-500 uppercase tracking-wider w-24 shrink-0">{categoryLabels[category]}</span>
-                  {categoryMetrics.map(([key, def]) => {
-                    const Icon = def.icon
-                    const isSelected = selectedMetrics.includes(key as MetricType)
-                    return (
-                      <button
-                        key={key}
-                        onClick={() => toggleMetric(key as MetricType)}
-                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                          isSelected
-                            ? 'text-white border'
-                            : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600/50 border border-white/5'
-                        }`}
-                        style={isSelected ? {
-                          backgroundColor: `${def.color}20`,
-                          borderColor: `${def.color}50`,
-                          color: def.color
-                        } : undefined}
-                      >
-                        <Icon className="w-3.5 h-3.5" />
-                        {def.name}
-                      </button>
-                    )
-                  })}
-                </div>
-              )
-            })}
-          </div>
-
-          <div className="h-px w-full bg-white/10 mb-4" />
-
           <div className="flex flex-wrap items-center gap-4">
+            <h1 className="text-lg font-semibold text-white">Metrics Explorer</h1>
+
+            <div className="h-6 w-px bg-white/10" />
 
             {/* Aggregation */}
             <select
@@ -548,13 +506,39 @@ export default function MetricsExplorerPage() {
               ))}
             </select>
 
+            {/* Auto Refresh Toggle */}
+            <div className="flex items-center gap-2">
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoRefresh}
+                  onChange={(e) => setAutoRefresh(e.target.checked)}
+                  disabled={isStreaming}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-slate-600 peer-focus:ring-2 peer-focus:ring-blue-500/50 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600" />
+              </label>
+              <span className="text-xs text-slate-400">Auto</span>
+              {autoRefresh && (
+                <select
+                  value={refreshInterval}
+                  onChange={(e) => setRefreshInterval(Number(e.target.value))}
+                  className="px-2 py-1 bg-slate-700/50 border border-white/10 rounded text-xs text-white focus:outline-none"
+                >
+                  <option value={10000}>10s</option>
+                  <option value={30000}>30s</option>
+                  <option value={60000}>1m</option>
+                </select>
+              )}
+            </div>
+
             <div className="flex-1" />
 
             {/* Streaming Toggle */}
             {isStreaming ? (
               <button
                 onClick={stopStreaming}
-                className="flex items-center gap-2 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-lg text-sm font-medium transition-all"
+                className="flex items-center gap-2 px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-lg text-sm font-medium transition-all"
               >
                 <Pause className="w-4 h-4" />
                 Stop Live
@@ -562,7 +546,7 @@ export default function MetricsExplorerPage() {
             ) : (
               <button
                 onClick={startStreaming}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 rounded-lg text-sm font-medium transition-all"
+                className="flex items-center gap-2 px-3 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 rounded-lg text-sm font-medium transition-all"
               >
                 <Play className="w-4 h-4" />
                 Live Mode
@@ -573,7 +557,7 @@ export default function MetricsExplorerPage() {
             <button
               onClick={queryMetrics}
               disabled={isLoading || isStreaming}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+              className="flex items-center gap-2 px-3 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
               Refresh
@@ -581,131 +565,162 @@ export default function MetricsExplorerPage() {
           </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          {selectedMetrics.map(metric => {
-            const def = METRIC_DEFINITIONS[metric]
-            const Icon = def.icon
-            const stats = calculateStats(metric)
+        {/* Error State */}
+        {error && (
+          <div className="relative overflow-hidden rounded-2xl bg-red-500/10 border border-red-500/20 p-4">
+            <div className="flex items-center gap-3 text-red-400">
+              <AlertTriangle className="w-5 h-5" />
+              <span>{error}</span>
+            </div>
+          </div>
+        )}
 
-            return (
-              <div
-                key={metric}
-                className="relative overflow-hidden rounded-xl p-4 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
+        {/* Category Sections */}
+        {(['apm', 'infrastructure', 'database', 'cache', 'queue'] as const).map(category => {
+          const categoryMetrics = Object.entries(METRIC_DEFINITIONS).filter(([, def]) => def.category === category)
+          const selectedCategoryMetrics = getMetricsByCategory(category)
+          const categoryData = getCategoryChartData(selectedCategoryMetrics)
+          const config = categoryConfig[category]
+          const hasCategoryData = categoryData.length > 0
+
+          return (
+            <div
+              key={category}
+              className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5"
+            >
+              {/* Category Header */}
+              <div className="px-5 py-4 border-b border-white/5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
                     <div
-                      className="w-8 h-8 rounded-lg flex items-center justify-center"
-                      style={{ backgroundColor: `${def.color}15` }}
-                    >
-                      <Icon className="w-4 h-4" style={{ color: def.color }} />
-                    </div>
-                    <span className="text-sm text-slate-400">{def.name}</span>
-                  </div>
-                  {stats.hasData && stats.trend !== 0 && (
-                    <div className={`flex items-center gap-1 text-xs ${
-                      stats.trend > 0
-                        ? metric === 'error_rate' ? 'text-red-400' : 'text-emerald-400'
-                        : metric === 'error_rate' ? 'text-emerald-400' : 'text-red-400'
-                    }`}>
-                      {stats.trend > 0 ? (
-                        <TrendingUp className="w-3 h-3" />
-                      ) : (
-                        <TrendingDown className="w-3 h-3" />
-                      )}
-                      {Math.abs(stats.trend).toFixed(1)}%
-                    </div>
-                  )}
-                </div>
-                {isLoading ? (
-                  <div className="animate-pulse">
-                    <div className="h-8 bg-slate-700 rounded w-3/4 mb-2"></div>
-                    <div className="h-4 bg-slate-700 rounded w-1/2"></div>
-                  </div>
-                ) : stats.hasData ? (
-                  <>
-                    <div className="text-2xl font-bold text-white">
-                      {stats.current.toFixed(metric === 'error_rate' ? 2 : 0)}
-                      <span className="text-sm font-normal text-slate-500 ml-1">
-                        {def.unit}
-                      </span>
-                    </div>
-                    <div className="text-xs text-slate-500 mt-1">
-                      Avg: {stats.avg.toFixed(metric === 'error_rate' ? 2 : 0)} {def.unit}
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-slate-500 text-sm">No data</div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Category Charts */}
-        {error ? (
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-6">
-            <div className="flex items-center justify-center h-40 text-red-400">
-              {error}
-            </div>
-          </div>
-        ) : isLoading ? (
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-6">
-            <div className="flex items-center justify-center h-40">
-              <div className="animate-pulse flex flex-col items-center gap-4">
-                <RefreshCw className="w-8 h-8 text-slate-500 animate-spin" />
-                <span className="text-slate-400">Loading metrics...</span>
-              </div>
-            </div>
-          </div>
-        ) : activeCategories.length === 0 ? (
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-6">
-            <div className="flex flex-col items-center justify-center h-40 text-slate-400">
-              <BarChart3 className="w-12 h-12 text-slate-600 mb-4" />
-              <p className="text-lg font-medium">Select metrics to view charts</p>
-              <p className="text-sm text-slate-500 mt-1">Choose metrics from the categories above</p>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {activeCategories.map(category => {
-              const categoryMetrics = getMetricsByCategory(category)
-              const categoryData = getCategoryChartData(categoryMetrics)
-              const config = categoryConfig[category]
-              const hasCategoryData = categoryData.length > 0
-
-              return (
-                <div
-                  key={category}
-                  className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-5"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-base font-semibold text-white flex items-center gap-2">
-                      <div
-                        className="w-2 h-2 rounded-full"
-                        style={{ backgroundColor: config.color }}
-                      />
-                      {config.label}
-                    </h3>
-                    {isStreaming && (
-                      <div className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: config.color }}
+                    />
+                    <h2 className="text-lg font-semibold text-white">{config.label}</h2>
+                    {isStreaming && selectedCategoryMetrics.length > 0 && (
+                      <div className="flex items-center gap-1 ml-2">
+                        <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
                         <span className="text-xs text-emerald-400">Live</span>
                       </div>
                     )}
                   </div>
 
-                  {!hasCategoryData ? (
+                  {/* Metric Toggles */}
+                  <div className="flex flex-wrap gap-2">
+                    {categoryMetrics.map(([key, def]) => {
+                      const Icon = def.icon
+                      const isSelected = selectedMetrics.includes(key as MetricType)
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => toggleMetric(key as MetricType)}
+                          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                            isSelected
+                              ? 'text-white border'
+                              : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600/50 border border-white/5'
+                          }`}
+                          style={isSelected ? {
+                            backgroundColor: `${def.color}20`,
+                            borderColor: `${def.color}50`,
+                            color: def.color
+                          } : undefined}
+                        >
+                          <Icon className="w-3.5 h-3.5" />
+                          {def.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Category Content */}
+              {selectedCategoryMetrics.length === 0 ? (
+                <div className="px-5 py-8 text-center text-slate-500">
+                  <p className="text-sm">Select metrics above to view data</p>
+                </div>
+              ) : (
+                <div className="p-5 space-y-4">
+                  {/* Stats Cards */}
+                  <div className={`grid gap-3 ${
+                    selectedCategoryMetrics.length === 1 ? 'grid-cols-1 max-w-xs' :
+                    selectedCategoryMetrics.length === 2 ? 'grid-cols-2 max-w-lg' :
+                    selectedCategoryMetrics.length <= 4 ? 'grid-cols-2 md:grid-cols-4' :
+                    'grid-cols-2 md:grid-cols-3 lg:grid-cols-5'
+                  }`}>
+                    {selectedCategoryMetrics.map(metric => {
+                      const def = METRIC_DEFINITIONS[metric]
+                      const Icon = def.icon
+                      const stats = calculateStats(metric)
+
+                      return (
+                        <div
+                          key={metric}
+                          className="rounded-xl p-3 bg-slate-800/50 border border-white/5"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-7 h-7 rounded-lg flex items-center justify-center"
+                                style={{ backgroundColor: `${def.color}15` }}
+                              >
+                                <Icon className="w-3.5 h-3.5" style={{ color: def.color }} />
+                              </div>
+                              <span className="text-xs text-slate-400">{def.name}</span>
+                            </div>
+                            {stats.hasData && stats.trend !== 0 && (
+                              <div className={`flex items-center gap-0.5 text-xs ${
+                                stats.trend > 0
+                                  ? metric === 'error_rate' || metric === 'cache_miss_rate' ? 'text-red-400' : 'text-emerald-400'
+                                  : metric === 'error_rate' || metric === 'cache_miss_rate' ? 'text-emerald-400' : 'text-red-400'
+                              }`}>
+                                {stats.trend > 0 ? (
+                                  <TrendingUp className="w-3 h-3" />
+                                ) : (
+                                  <TrendingDown className="w-3 h-3" />
+                                )}
+                                {Math.abs(stats.trend).toFixed(1)}%
+                              </div>
+                            )}
+                          </div>
+                          {isLoading ? (
+                            <div className="animate-pulse">
+                              <div className="h-6 bg-slate-700 rounded w-3/4 mb-1"></div>
+                              <div className="h-3 bg-slate-700 rounded w-1/2"></div>
+                            </div>
+                          ) : stats.hasData ? (
+                            <>
+                              <div className="text-xl font-bold text-white">
+                                {stats.current.toFixed(metric === 'error_rate' || metric === 'cache_hit_rate' || metric === 'cache_miss_rate' ? 2 : 0)}
+                                <span className="text-xs font-normal text-slate-500 ml-1">{def.unit}</span>
+                              </div>
+                              <div className="text-xs text-slate-500">
+                                Avg: {stats.avg.toFixed(metric === 'error_rate' ? 2 : 0)} {def.unit}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-slate-500 text-sm">No data</div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Chart */}
+                  {isLoading ? (
+                    <div className="flex items-center justify-center h-48">
+                      <RefreshCw className="w-6 h-6 text-slate-500 animate-spin" />
+                    </div>
+                  ) : !hasCategoryData ? (
                     <div className="flex flex-col items-center justify-center h-48 text-slate-500">
                       <BarChart3 className="w-8 h-8 text-slate-600 mb-2" />
-                      <p className="text-sm">No data available</p>
+                      <p className="text-sm">No data available for selected time range</p>
                     </div>
                   ) : (
-                    <ResponsiveContainer width="100%" height={220}>
+                    <ResponsiveContainer width="100%" height={200}>
                       <AreaChart data={categoryData}>
                         <defs>
-                          {categoryMetrics.map(metric => (
+                          {selectedCategoryMetrics.map(metric => (
                             <linearGradient key={metric} id={`gradient-${category}-${metric}`} x1="0" y1="0" x2="0" y2="1">
                               <stop offset="5%" stopColor={METRIC_DEFINITIONS[metric].color} stopOpacity={0.3} />
                               <stop offset="95%" stopColor={METRIC_DEFINITIONS[metric].color} stopOpacity={0} />
@@ -725,7 +740,7 @@ export default function MetricsExplorerPage() {
                           fontSize={10}
                           tickLine={false}
                           axisLine={false}
-                          width={40}
+                          width={45}
                         />
                         <Tooltip
                           contentStyle={{
@@ -737,7 +752,7 @@ export default function MetricsExplorerPage() {
                           }}
                         />
                         <Legend wrapperStyle={{ fontSize: '11px' }} />
-                        {categoryMetrics.map(metric => (
+                        {selectedCategoryMetrics.map(metric => (
                           <Area
                             key={metric}
                             type="monotone"
@@ -752,67 +767,31 @@ export default function MetricsExplorerPage() {
                     </ResponsiveContainer>
                   )}
                 </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="relative overflow-hidden rounded-xl p-4 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5">
-            <h3 className="text-sm font-medium text-white mb-3">Auto Refresh</h3>
-            <div className="flex items-center gap-3">
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={autoRefresh}
-                  onChange={(e) => setAutoRefresh(e.target.checked)}
-                  disabled={isStreaming}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-slate-600 peer-focus:ring-2 peer-focus:ring-blue-500/50 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
-              </label>
-              {autoRefresh && (
-                <select
-                  value={refreshInterval}
-                  onChange={(e) => setRefreshInterval(Number(e.target.value))}
-                  className="px-2 py-1 bg-slate-700/50 border border-white/10 rounded text-sm text-white focus:outline-none"
-                >
-                  <option value={10000}>10s</option>
-                  <option value={30000}>30s</option>
-                  <option value={60000}>1m</option>
-                  <option value={300000}>5m</option>
-                </select>
               )}
             </div>
-          </div>
+          )
+        })}
 
-          <div className="relative overflow-hidden rounded-xl p-4 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5">
-            <h3 className="text-sm font-medium text-white mb-3">Data Points</h3>
-            <div className="text-2xl font-bold text-white">
+        {/* Summary Footer */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="rounded-xl p-4 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5">
+            <div className="text-xs text-slate-500 mb-1">Total Data Points</div>
+            <div className="text-xl font-bold text-white">
               {isStreaming ? streamingData.length : Object.values(metricsData).reduce((acc, d) => acc + d.length, 0)}
             </div>
-            <div className="text-xs text-slate-500 mt-1">
-              {isStreaming ? 'Live data points' : 'Historical data points'}
-            </div>
           </div>
-
-          <div className="relative overflow-hidden rounded-xl p-4 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5">
-            <h3 className="text-sm font-medium text-white mb-3">Selected Metrics</h3>
-            <div className="flex flex-wrap gap-1">
-              {selectedMetrics.map(metric => (
-                <span
-                  key={metric}
-                  className="px-2 py-1 text-xs rounded-md border"
-                  style={{
-                    backgroundColor: `${METRIC_DEFINITIONS[metric].color}15`,
-                    borderColor: `${METRIC_DEFINITIONS[metric].color}30`,
-                    color: METRIC_DEFINITIONS[metric].color
-                  }}
-                >
-                  {METRIC_DEFINITIONS[metric].name}
-                </span>
-              ))}
+          <div className="rounded-xl p-4 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5">
+            <div className="text-xs text-slate-500 mb-1">Selected Metrics</div>
+            <div className="text-xl font-bold text-white">{selectedMetrics.length}</div>
+          </div>
+          <div className="rounded-xl p-4 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5">
+            <div className="text-xs text-slate-500 mb-1">Active Categories</div>
+            <div className="text-xl font-bold text-white">{activeCategories.length}</div>
+          </div>
+          <div className="rounded-xl p-4 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5">
+            <div className="text-xs text-slate-500 mb-1">Status</div>
+            <div className={`text-xl font-bold ${isStreaming ? 'text-emerald-400' : isLoading ? 'text-yellow-400' : 'text-white'}`}>
+              {isStreaming ? 'Streaming' : isLoading ? 'Loading' : 'Ready'}
             </div>
           </div>
         </div>
