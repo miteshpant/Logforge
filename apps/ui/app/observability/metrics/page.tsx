@@ -282,10 +282,10 @@ export default function MetricsExplorerPage() {
     }
   }, [selectedMetrics, aggregation, selectedService, getApiTimeRange])
 
-  // Initial load and time range change
+  // Fetch data when metrics selection, aggregation, service, or time range changes
   useEffect(() => {
     queryMetrics()
-  }, [currentTimeRange.value])
+  }, [selectedMetrics, aggregation, selectedService, currentTimeRange.value])
 
   // Auto-refresh effect
   useEffect(() => {
