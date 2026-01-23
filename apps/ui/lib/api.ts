@@ -232,7 +232,8 @@ class ApiClient {
 
     const eventSource = new EventSource(urlWithAuth.toString())
 
-    eventSource.onmessage = (event) => {
+    // Handler for parsing and forwarding events
+    const handleEvent = (event: MessageEvent) => {
       try {
         const data = JSON.parse(event.data)
         onData(data)
@@ -241,6 +242,25 @@ class ApiClient {
         onData(event.data)
       }
     }
+
+    // Listen for generic messages (event: message or no event type)
+    eventSource.onmessage = handleEvent
+
+    // Listen for specific named event types used by the streaming API
+    // The server sends events like "event: alert_event", "event: security_event", etc.
+    const namedEventTypes = [
+      'alert_event',
+      'security_event',
+      'trace_event',
+      'metric_event',
+      'connected',
+      'heartbeat',
+      'error'
+    ]
+
+    namedEventTypes.forEach(eventType => {
+      eventSource.addEventListener(eventType, handleEvent as EventListener)
+    })
 
     eventSource.onerror = (error) => {
       console.error('SSE connection error:', error)
@@ -251,6 +271,10 @@ class ApiClient {
 
     // Return cleanup function
     return () => {
+      // Remove all event listeners before closing
+      namedEventTypes.forEach(eventType => {
+        eventSource.removeEventListener(eventType, handleEvent as EventListener)
+      })
       eventSource.close()
     }
   }
