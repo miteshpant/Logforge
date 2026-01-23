@@ -433,28 +433,35 @@ async def stream_traces(
                             return False
 
                     # Check priority operations (always stream if present)
+                    # Note: traces is a flat list of spans, not nested
                     priority_operations = config.get("priority_operations", [])
-                    for trace in traces:
-                        for span in trace.get("spans", []):
-                            if span.get("operation_name") in priority_operations:
-                                return True
+                    for span in traces:
+                        if span.get("operation_name") in priority_operations:
+                            return True
 
                     # Check error-only filtering
+                    # Note: traces is a flat list of spans, not nested
                     if config.get("include_errors_only", False):
-                        for trace in traces:
-                            for span in trace.get("spans", []):
-                                if span.get("status", {}).get("code") == "ERROR":
-                                    return True
+                        for span in traces:
+                            # Status can be a string ("ok", "error") or dict with "code" key
+                            span_status = span.get("status", "ok")
+                            if isinstance(span_status, dict):
+                                span_status = span_status.get("code", "ok")
+                            if str(span_status).lower() == "error":
+                                return True
                         return False
 
                     # Check status filtering
+                    # Note: traces is a flat list of spans, not nested
                     include_status = config.get("include_status", ["ok", "error"])
                     if include_status:
-                        for trace in traces:
-                            for span in trace.get("spans", []):
-                                span_status = span.get("status", {}).get("code", "ok").lower()
-                                if span_status in [s.lower() for s in include_status]:
-                                    return True
+                        for span in traces:
+                            # Status can be a string ("ok", "error") or dict with "code" key
+                            span_status = span.get("status", "ok")
+                            if isinstance(span_status, dict):
+                                span_status = span_status.get("code", "ok")
+                            if str(span_status).lower() in [s.lower() for s in include_status]:
+                                return True
                         return False
 
                     return True
