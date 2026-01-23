@@ -296,6 +296,46 @@ export async function bulkResolve(
   })
 }
 
+/**
+ * Stream alert events via SSE
+ * Returns a cleanup function to close the connection
+ */
+export async function streamAlertEvents(
+  onAlert: (alert: {
+    id?: string
+    alert_id?: string
+    rule_id?: string
+    rule_name?: string
+    severity?: string
+    status?: string
+    message?: string
+    description?: string
+    triggered_at?: string
+    timestamp?: string
+    condition?: string
+    threshold?: any
+    [key: string]: any
+  }) => void,
+  onError?: (error: Error) => void,
+  options?: {
+    severity?: string[]
+  }
+): Promise<() => void> {
+  return apiClient.getStream(
+    '/v1/stream/alerts',
+    (data) => {
+      // Apply severity filter if specified
+      if (options?.severity && data.severity) {
+        if (!options.severity.includes(data.severity)) {
+          return // Skip alerts that don't match severity filter
+        }
+      }
+      onAlert(data)
+    },
+    onError
+  )
+}
+
 // Export all functions as a namespace
 export const AlertsApi = {
   listAlerts,
@@ -321,6 +361,7 @@ export const AlertsApi = {
   getAlertsOverviewStats,
   bulkAcknowledge,
   bulkResolve,
+  streamAlertEvents,
 }
 
 export default AlertsApi

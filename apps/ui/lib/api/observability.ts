@@ -215,6 +215,58 @@ export async function getServiceDependencies(
   return apiClient.get(`/v1/observability/services/${serviceName}/dependencies`)
 }
 
+/**
+ * Stream metrics via SSE
+ * Returns a cleanup function to close the connection
+ */
+export async function streamMetrics(
+  metricNames: string[],
+  onMetric: (metric: {
+    metric_name?: string
+    value?: number
+    labels?: Record<string, string>
+    timestamp?: string
+    [key: string]: any
+  }) => void,
+  onError?: (error: Error) => void
+): Promise<() => void> {
+  // Note: metric filtering would need to be done server-side
+  // For now, we stream all metrics and filter client-side
+  return apiClient.getStream(
+    '/v1/stream/metrics',
+    (data) => {
+      // Filter by metric names if specified
+      if (metricNames.length > 0 && data.metric_name) {
+        if (!metricNames.includes(data.metric_name)) {
+          return // Skip metrics not in our filter list
+        }
+      }
+      onMetric(data)
+    },
+    onError
+  )
+}
+
+/**
+ * Stream traces via SSE
+ * Returns a cleanup function to close the connection
+ */
+export async function streamTraces(
+  onTrace: (trace: {
+    trace_id?: string
+    span_id?: string
+    operation_name?: string
+    service_name?: string
+    duration_ms?: number
+    status?: string
+    timestamp?: string
+    [key: string]: any
+  }) => void,
+  onError?: (error: Error) => void
+): Promise<() => void> {
+  return apiClient.getStream('/v1/stream/traces', onTrace, onError)
+}
+
 // Export all functions as a namespace
 export const ObservabilityApi = {
   getServiceMap,
@@ -228,6 +280,8 @@ export const ObservabilityApi = {
   getObservabilityStats,
   getSlowestEndpoints,
   getServiceDependencies,
+  streamMetrics,
+  streamTraces,
 }
 
 export default ObservabilityApi

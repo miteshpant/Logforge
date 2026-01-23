@@ -300,6 +300,46 @@ export async function getMitreCoverage(): Promise<
   return apiClient.get('/v1/security/mitre-coverage')
 }
 
+/**
+ * Stream security events via SSE
+ * Returns a cleanup function to close the connection
+ */
+export async function streamSecurityEvents(
+  onEvent: (event: {
+    id?: string
+    event_type?: string
+    rule_id?: string
+    rule_name?: string
+    severity?: string
+    description?: string
+    timestamp?: string
+    matched_fields?: Record<string, any>
+    attack_techniques?: string[]
+    mitre_technique?: string
+    source_ip?: string
+    target_ip?: string
+    [key: string]: any
+  }) => void,
+  onError?: (error: Error) => void,
+  options?: {
+    severity?: string[]
+  }
+): Promise<() => void> {
+  return apiClient.getStream(
+    '/v1/stream/security',
+    (data) => {
+      // Apply severity filter if specified
+      if (options?.severity && data.severity) {
+        if (!options.severity.includes(data.severity)) {
+          return // Skip events that don't match severity filter
+        }
+      }
+      onEvent(data)
+    },
+    onError
+  )
+}
+
 // Export all functions as a namespace
 export const SecurityApi = {
   getSecurityDashboard,
@@ -320,6 +360,7 @@ export const SecurityApi = {
   createThreatHunt,
   executeThreatHunt,
   getMitreCoverage,
+  streamSecurityEvents,
 }
 
 export default SecurityApi
