@@ -400,10 +400,13 @@ class ObservabilityDAO:
 
             # Determine if this is an update or insert
             if existing_result and len(existing_result) > 0:
-                # Update existing service with new last_seen and metrics
+                # For ReplacingMergeTree, we INSERT a new row instead of UPDATE
+                # ClickHouse will deduplicate based on ORDER BY key, keeping row with highest updated_at
                 service_id = existing_result[0]["id"]
-                existing_request_count = existing_result[0].get("request_count", 0)
-                existing_error_count = existing_result[0].get("error_count", 0)
+
+                # Handle None values from database properly
+                existing_request_count = existing_result[0].get("request_count") or 0
+                existing_error_count = existing_result[0].get("error_count") or 0
 
                 # Increment counts (handle None values properly)
                 request_count_increment = service_data.get("request_count")
@@ -416,31 +419,51 @@ class ObservabilityDAO:
                 new_request_count = existing_request_count + request_count_increment
                 new_error_count = existing_error_count + error_count_increment
 
+                # Use INSERT instead of UPDATE for ReplacingMergeTree
+                # The new row with higher updated_at will replace the old one after merge
                 query = """
-                ALTER TABLE service_topology_mt
-                UPDATE
-                    last_seen = %(last_seen)s,
-                    request_count = %(request_count)s,
-                    error_count = %(error_count)s,
-                    avg_response_time_ms = %(avg_response_time_ms)s,
-                    health_status = %(health_status)s,
-                    updated_at = %(updated_at)s
-                WHERE id = %(id)s AND customer_id = %(customer_id)s
+                INSERT INTO service_topology_mt (
+                    id, customer_id, service_name, service_version, service_instance_id,
+                    deployment_environment, namespace, cluster, host, container_id,
+                    service_type, dependencies, endpoints, health_status, last_seen,
+                    request_count, error_count, avg_response_time_ms, metadata,
+                    resource_attributes, created_at, updated_at
+                ) VALUES (
+                    %(id)s, %(customer_id)s, %(service_name)s, %(service_version)s, %(service_instance_id)s,
+                    %(deployment_environment)s, %(namespace)s, %(cluster)s, %(host)s, %(container_id)s,
+                    %(service_type)s, %(dependencies)s, %(endpoints)s, %(health_status)s, %(last_seen)s,
+                    %(request_count)s, %(error_count)s, %(avg_response_time_ms)s, %(metadata)s,
+                    %(resource_attributes)s, %(created_at)s, %(updated_at)s
+                )
                 """
 
                 params = {
                     "id": service_id,
                     "customer_id": customer_id,
+                    "service_name": service_data.get("service_name", ""),
+                    "service_version": resource.get("service.version", service_data.get("service_version", "unknown")),
+                    "service_instance_id": resource.get("service.instance.id", service_data.get("service_instance_id", "")),
+                    "deployment_environment": resource.get("deployment.environment", service_data.get("deployment_environment", "production")),
+                    "namespace": resource.get("k8s.namespace.name", service_data.get("namespace", "")),
+                    "cluster": resource.get("k8s.cluster.name", service_data.get("cluster", "")),
+                    "host": resource.get("host.name", service_data.get("host", "")),
+                    "container_id": resource.get("container.id", service_data.get("container_id", "")),
+                    "service_type": service_data.get("service_type", "application"),
+                    "dependencies": service_data.get("dependencies", []),
+                    "endpoints": service_data.get("endpoints", []),
+                    "health_status": service_data.get("health_status", "unknown"),
                     "last_seen": datetime.now(timezone.utc),
                     "request_count": new_request_count,
                     "error_count": new_error_count,
                     "avg_response_time_ms": service_data.get("avg_response_time_ms", 0.0),
-                    "health_status": service_data.get("health_status", "unknown"),
+                    "metadata": json.dumps(service_data.get("metadata", {})),
+                    "resource_attributes": json.dumps(resource),
+                    "created_at": datetime.now(timezone.utc),
                     "updated_at": datetime.now(timezone.utc)
                 }
 
                 await self.db.execute_query(query, params)
-                logger.debug(f"Service topology updated: {service_id} (last_seen, request_count: {new_request_count})")
+                logger.debug(f"Service topology updated via INSERT: {service_id} (request_count: {new_request_count})")
 
             else:
                 # Insert new service

@@ -148,7 +148,9 @@ class ObservabilityEventHandler(EventHandler):
                     metrics['service_instance_id'] = service_instance_id
                     metrics['request_count'] += 1
                     metrics['error_count'] += 1 if normalized_span.get('status') == 'error' else 0
-                    metrics['total_duration_ms'] += normalized_span.get('duration_ms', 0)
+                    # Handle None values properly - .get() returns None if key exists with None value
+                    duration_ms = normalized_span.get('duration_ms') or 0
+                    metrics['total_duration_ms'] += duration_ms
                     metrics['resource_attributes'] = resource  # Keep latest resource attributes
 
                     # Track endpoints (operation names)
