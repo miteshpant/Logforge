@@ -802,10 +802,16 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
     async def _extract_authentication(self, request: Request) -> Dict[str, Any]:
         """Extract authentication context from request (supports JWT and API keys)"""
         auth_header = request.headers.get("Authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(401, "Missing or invalid Authorization header")
 
-        token = auth_header.split(" ")[1]
+        # For SSE stream endpoints, also check query params (EventSource can't send headers)
+        if (not auth_header or not auth_header.startswith("Bearer ")) and request.url.path.startswith("/v1/stream/"):
+            token = request.query_params.get("token")
+            if not token:
+                raise HTTPException(401, "Missing authentication token")
+        elif not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(401, "Missing or invalid Authorization header")
+        else:
+            token = auth_header.split(" ")[1]
 
         # Detect token type
         if "." in token:

@@ -213,11 +213,21 @@ class ApiClient {
   ): Promise<() => void> {
     const url = endpoint.startsWith('http') ? endpoint : `${this.baseURL}${endpoint}`
 
-    // Build URL with auth headers as query params for SSE (can't send headers with EventSource)
+    // Build URL with auth params for SSE (EventSource can't send headers)
     const urlWithAuth = new URL(url)
+
+    // Add customer_id
     const customerId = this.defaultHeaders['X-Customer-ID']
     if (customerId) {
       urlWithAuth.searchParams.set('customer_id', customerId)
+    }
+
+    // Add auth token for SSE authentication
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('auth_token')
+      if (token) {
+        urlWithAuth.searchParams.set('token', token)
+      }
     }
 
     const eventSource = new EventSource(urlWithAuth.toString())
