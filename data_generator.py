@@ -280,27 +280,38 @@ def send_critical_security_logs():
 
 
 def send_brute_force_logs():
-    """Send logs to trigger Brute Force Detection Sigma rule"""
-    endpoint = f"{API_BASE_URL}/v1/ingest/logs/batch"
+    """Send logs to trigger Brute Force Detection Sigma rules
 
-    # Brute Force Detection Sigma rule looks for:
-    # - Multiple failed login attempts from same source_ip
-    # - event_type: authentication_failed or similar patterns
+    Targets these Sigma rules:
+    - 'stream test': logsource.category=authentication, logsource.product=linux,
+                     event_type=login_failed, status_code=[401,403], count(by=src_ip) > 5
+    - 'Updated Brute Force Detection': same logsource, count() > 10 in 5m
+    """
+    endpoint = f"{API_BASE_URL}/v1/ingest/logs/batch"
 
     logs = []
     source_ip = "203.0.113.42"  # Attacker IP
 
-    for i in range(15):  # Send 15 failed login attempts
+    # Send 15 failed login attempts to trigger both rules:
+    # - 'stream test' requires >5 from same src_ip
+    # - 'Updated Brute Force Detection' requires >10 total
+    for i in range(15):
         log_entry = {
             "ts": datetime.utcnow().isoformat() + "Z",
             "level": "warning",
-            "msg": f"Failed login attempt for user admin",
+            "msg": f"Failed login attempt #{i+1} for user admin from {source_ip}",
             "service": "auth-service",
             "host": "auth-server-01",
-            "event_type": "authentication_failed",
+            # Match the Sigma rule logsource
+            "category": "authentication",
+            "product": "linux",
+            # Match the Sigma rule detection.selection
+            "event_type": "login_failed",
+            "status_code": random.choice([401, 403]),  # 401 Unauthorized or 403 Forbidden
+            # Additional context
             "src_ip": source_ip,
             "target_user": "admin",
-            "user_agent": "Mozilla/5.0"
+            "user_agent": "Mozilla/5.0 (compatible; bot/1.0)"
         }
         logs.append(log_entry)
 
@@ -309,7 +320,7 @@ def send_brute_force_logs():
     try:
         response = requests.post(endpoint, headers=HEADERS, json=payload)
         if response.status_code == 200:
-            print(f"🛡️  Sent {len(logs)} logs to trigger Brute Force Detection Sigma rule")
+            print(f"🛡️  Sent {len(logs)} login_failed logs (status_code 401/403) to trigger Sigma rules")
         else:
             print(f"✗ Failed to send brute force logs: {response.status_code} - {response.text}")
     except Exception as e:
@@ -317,29 +328,48 @@ def send_brute_force_logs():
 
 
 def send_stream_test_sigma_logs():
-    """Send logs to trigger 'stream test' Sigma rule"""
+    """Send logs to trigger 'stream test' Sigma rule
+
+    The 'stream test' rule looks for:
+    - logsource.category: authentication
+    - logsource.product: linux
+    - event_type: login_failed
+    - status_code: [401, 403]
+    - count(by=[src_ip]) > 5
+    """
     endpoint = f"{API_BASE_URL}/v1/ingest/logs/batch"
 
-    # Stream test Sigma rule - likely looking for specific test patterns
     logs = []
+    source_ip = f"192.168.1.{random.randint(100, 200)}"  # Random attacker IP
 
-    log_entry = {
-        "ts": datetime.utcnow().isoformat() + "Z",
-        "level": "info",
-        "msg": "Stream test event for sigma rule validation",
-        "service": "test-service",
-        "host": "test-host",
-        "event_type": "stream_test",
-        "test_id": str(uuid.uuid4())
-    }
-    logs.append(log_entry)
+    # Send 7 failed logins from same IP to trigger count > 5 rule
+    for i in range(7):
+        log_entry = {
+            "ts": datetime.utcnow().isoformat() + "Z",
+            "level": "warning",
+            "msg": f"Stream test: Failed SSH login attempt #{i+1}",
+            "service": "sshd",
+            "host": "linux-server-01",
+            # Match the Sigma rule logsource
+            "category": "authentication",
+            "product": "linux",
+            # Match the Sigma rule detection.selection
+            "event_type": "login_failed",
+            "status_code": 401,
+            # Additional fields
+            "src_ip": source_ip,
+            "target_user": random.choice(["root", "admin", "ubuntu"]),
+            "auth_method": "password",
+            "session_id": str(uuid.uuid4())
+        }
+        logs.append(log_entry)
 
     payload = {"logs": logs}
 
     try:
         response = requests.post(endpoint, headers=HEADERS, json=payload)
         if response.status_code == 200:
-            print(f"📊 Sent stream test log to trigger Sigma rule")
+            print(f"📊 Sent {len(logs)} login_failed logs from {source_ip} to trigger 'stream test' Sigma rule")
         else:
             print(f"✗ Failed to send stream test log: {response.status_code} - {response.text}")
     except Exception as e:

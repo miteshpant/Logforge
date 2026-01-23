@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 import random
 
 from services.observability_service import ObservabilityService
+from services.streaming_connection_manager import get_streaming_connection_manager
 
 
 def get_customer_id_for_sse(
@@ -190,8 +191,15 @@ async def stream_metrics(
         async def generate_real_time_metrics():
             """Generate real-time metrics events as they occur"""
             subscriber = None
+            connection_manager = get_streaming_connection_manager()
+            connection_id = connection_manager.register_connection("metrics", customer_id)
             try:
                 from events.subscribers import SubscriberConfig
+
+                # Check if already shutting down
+                if connection_manager.is_shutting_down:
+                    yield format_sse_message("error", {"message": "Server is shutting down"})
+                    return
 
                 # Create subscriber config for metrics events
                 config = SubscriberConfig(
@@ -225,7 +233,7 @@ async def stream_metrics(
                 await subscriber.start()
 
                 # Listen for events from our queue
-                while True:
+                while not connection_manager.is_shutting_down:
                     try:
                         # Wait for events with a timeout to allow for graceful shutdown
                         event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
@@ -282,6 +290,13 @@ async def stream_metrics(
                     "timestamp": datetime.now().isoformat()
                 })
             finally:
+                # Send shutdown message if shutting down
+                if connection_manager.is_shutting_down:
+                    yield format_sse_message("shutdown", {
+                        "message": "Server is shutting down",
+                        "timestamp": datetime.now().isoformat()
+                    })
+
                 # Clean up subscriber
                 if subscriber:
                     try:
@@ -289,6 +304,9 @@ async def stream_metrics(
                         logger.info(f"Stopped metrics subscriber for customer {customer_id}")
                     except Exception as e:
                         logger.error(f"Error stopping metrics subscriber: {e}")
+
+                # Unregister connection
+                connection_manager.unregister_connection(connection_id)
 
         return StreamingResponse(
             generate_real_time_metrics(),
@@ -474,8 +492,15 @@ async def stream_traces(
         async def generate_real_time_traces():
             """Generate real-time trace events as they occur"""
             subscriber = None
+            connection_manager = get_streaming_connection_manager()
+            connection_id = connection_manager.register_connection("traces", customer_id)
             try:
                 from events.subscribers import SubscriberConfig
+
+                # Check if already shutting down
+                if connection_manager.is_shutting_down:
+                    yield format_sse_message("error", {"message": "Server is shutting down"})
+                    return
 
                 # Create subscriber config for trace events
                 config = SubscriberConfig(
@@ -509,7 +534,7 @@ async def stream_traces(
                 await subscriber.start()
 
                 # Listen for events from our queue
-                while True:
+                while not connection_manager.is_shutting_down:
                     try:
                         # Wait for events with a timeout to allow for graceful shutdown
                         event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
@@ -567,6 +592,13 @@ async def stream_traces(
                     "timestamp": datetime.now().isoformat()
                 })
             finally:
+                # Send shutdown message if shutting down
+                if connection_manager.is_shutting_down:
+                    yield format_sse_message("shutdown", {
+                        "message": "Server is shutting down",
+                        "timestamp": datetime.now().isoformat()
+                    })
+
                 # Clean up subscriber
                 if subscriber:
                     try:
@@ -574,6 +606,9 @@ async def stream_traces(
                         logger.info(f"Stopped traces subscriber for customer {customer_id}")
                     except Exception as e:
                         logger.error(f"Error stopping traces subscriber: {e}")
+
+                # Unregister connection
+                connection_manager.unregister_connection(connection_id)
 
         return StreamingResponse(
             generate_real_time_traces(),
@@ -658,8 +693,15 @@ async def stream_security_events(
         async def generate_real_time_security_events():
             """Generate real-time security events as they occur"""
             subscriber = None
+            connection_manager = get_streaming_connection_manager()
+            connection_id = connection_manager.register_connection("security", customer_id)
             try:
                 from events.subscribers import SubscriberConfig
+
+                # Check if already shutting down
+                if connection_manager.is_shutting_down:
+                    yield format_sse_message("error", {"message": "Server is shutting down"})
+                    return
 
                 # Create subscriber config for security events
                 config = SubscriberConfig(
@@ -693,7 +735,7 @@ async def stream_security_events(
                 await subscriber.start()
 
                 # Listen for events from our queue
-                while True:
+                while not connection_manager.is_shutting_down:
                     try:
                         # Wait for events with a timeout to allow for graceful shutdown
                         event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
@@ -754,6 +796,13 @@ async def stream_security_events(
                     "timestamp": datetime.now().isoformat()
                 })
             finally:
+                # Send shutdown message if shutting down
+                if connection_manager.is_shutting_down:
+                    yield format_sse_message("shutdown", {
+                        "message": "Server is shutting down",
+                        "timestamp": datetime.now().isoformat()
+                    })
+
                 # Clean up subscriber
                 if subscriber:
                     try:
@@ -761,6 +810,9 @@ async def stream_security_events(
                         logger.info(f"Stopped security subscriber for customer {customer_id}")
                     except Exception as e:
                         logger.error(f"Error stopping security subscriber: {e}")
+
+                # Unregister connection
+                connection_manager.unregister_connection(connection_id)
 
         return StreamingResponse(
             generate_real_time_security_events(),
@@ -857,8 +909,15 @@ async def stream_alerts(
         async def generate_real_time_alerts():
             """Generate real-time alert events as they occur"""
             subscriber = None
+            connection_manager = get_streaming_connection_manager()
+            connection_id = connection_manager.register_connection("alerts", customer_id)
             try:
                 from events.subscribers import SubscriberConfig
+
+                # Check if already shutting down
+                if connection_manager.is_shutting_down:
+                    yield format_sse_message("error", {"message": "Server is shutting down"})
+                    return
 
                 # Create subscriber config for UI events
                 config = SubscriberConfig(
@@ -900,7 +959,7 @@ async def stream_alerts(
                 await subscriber.start()
 
                 # Listen for events from our queue
-                while True:
+                while not connection_manager.is_shutting_down:
                     try:
                         # Wait for events with a timeout to allow for graceful shutdown
                         event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
@@ -947,6 +1006,13 @@ async def stream_alerts(
                     "timestamp": datetime.now().isoformat()
                 })
             finally:
+                # Send shutdown message if shutting down
+                if connection_manager.is_shutting_down:
+                    yield format_sse_message("shutdown", {
+                        "message": "Server is shutting down",
+                        "timestamp": datetime.now().isoformat()
+                    })
+
                 # Clean up subscriber
                 if subscriber:
                     try:
@@ -954,6 +1020,9 @@ async def stream_alerts(
                         logger.info(f"Stopped subscriber for customer {customer_id}")
                     except Exception as e:
                         logger.error(f"Error stopping subscriber: {e}")
+
+                # Unregister connection
+                connection_manager.unregister_connection(connection_id)
 
         return StreamingResponse(
             generate_real_time_alerts(),
@@ -980,22 +1049,42 @@ async def stream_usage_data(
         usage_service = UsageService()
 
         async def generate_usage():
-            while True:
-                try:
-                    # Get current usage statistics
-                    usage_data = await usage_service.get_tenant_usage_summary(
-                        tenant_id=customer_id
-                    )
+            connection_manager = get_streaming_connection_manager()
+            connection_id = connection_manager.register_connection("usage", customer_id)
+            try:
+                # Check if already shutting down
+                if connection_manager.is_shutting_down:
+                    yield format_sse_message("error", {"message": "Server is shutting down"})
+                    return
 
-                    if usage_data:
-                        yield format_sse_message("usage", usage_data)
+                while not connection_manager.is_shutting_down:
+                    try:
+                        # Get current usage statistics
+                        usage_data = await usage_service.get_tenant_usage_summary(
+                            tenant_id=customer_id
+                        )
 
-                    await asyncio.sleep(30)  # Update every 30 seconds
+                        if usage_data:
+                            yield format_sse_message("usage", usage_data)
 
-                except Exception as e:
-                    logger.error("Error streaming usage data", error=str(e), customer_id=customer_id)
-                    yield format_sse_message("error", {"message": f"Usage streaming error: {str(e)}"})
-                    break
+                        # Check shutdown more frequently during sleep
+                        for _ in range(6):  # 6 * 5 seconds = 30 seconds total
+                            if connection_manager.is_shutting_down:
+                                break
+                            await asyncio.sleep(5)
+
+                    except Exception as e:
+                        logger.error("Error streaming usage data", error=str(e), customer_id=customer_id)
+                        yield format_sse_message("error", {"message": f"Usage streaming error: {str(e)}"})
+                        break
+            finally:
+                # Send shutdown message if shutting down
+                if connection_manager.is_shutting_down:
+                    yield format_sse_message("shutdown", {
+                        "message": "Server is shutting down",
+                        "timestamp": datetime.now().isoformat()
+                    })
+                connection_manager.unregister_connection(connection_id)
 
         return StreamingResponse(
             generate_usage(),
@@ -1022,24 +1111,44 @@ async def stream_ai_insights(
         ai_service = AIService()
 
         async def generate_ai_insights():
-            while True:
-                try:
-                    # Get recent AI insights
-                    insights = await ai_service.get_anomaly_insights(
-                        customer_id=customer_id,
-                        hours=1,
-                        limit=10
-                    )
+            connection_manager = get_streaming_connection_manager()
+            connection_id = connection_manager.register_connection("ai-insights", customer_id)
+            try:
+                # Check if already shutting down
+                if connection_manager.is_shutting_down:
+                    yield format_sse_message("error", {"message": "Server is shutting down"})
+                    return
 
-                    if insights:
-                        yield format_sse_message("ai_insights", insights)
+                while not connection_manager.is_shutting_down:
+                    try:
+                        # Get recent AI insights
+                        insights = await ai_service.get_anomaly_insights(
+                            customer_id=customer_id,
+                            hours=1,
+                            limit=10
+                        )
 
-                    await asyncio.sleep(45)  # Update every 45 seconds
+                        if insights:
+                            yield format_sse_message("ai_insights", insights)
 
-                except Exception as e:
-                    logger.error("Error streaming AI insights", error=str(e), customer_id=customer_id)
-                    yield format_sse_message("error", {"message": f"AI insights streaming error: {str(e)}"})
-                    break
+                        # Check shutdown more frequently during sleep
+                        for _ in range(9):  # 9 * 5 seconds = 45 seconds total
+                            if connection_manager.is_shutting_down:
+                                break
+                            await asyncio.sleep(5)
+
+                    except Exception as e:
+                        logger.error("Error streaming AI insights", error=str(e), customer_id=customer_id)
+                        yield format_sse_message("error", {"message": f"AI insights streaming error: {str(e)}"})
+                        break
+            finally:
+                # Send shutdown message if shutting down
+                if connection_manager.is_shutting_down:
+                    yield format_sse_message("shutdown", {
+                        "message": "Server is shutting down",
+                        "timestamp": datetime.now().isoformat()
+                    })
+                connection_manager.unregister_connection(connection_id)
 
         return StreamingResponse(
             generate_ai_insights(),
@@ -1177,8 +1286,15 @@ async def stream_anomalies(
         async def generate_real_time_anomalies():
             """Generate real-time anomaly events"""
             subscriber = None
+            connection_manager = get_streaming_connection_manager()
+            connection_id = connection_manager.register_connection("anomalies", customer_id)
             try:
                 from events.subscribers import SubscriberConfig
+
+                # Check if already shutting down
+                if connection_manager.is_shutting_down:
+                    yield format_sse_message("error", {"message": "Server is shutting down"})
+                    return
 
                 # Create subscriber config
                 config = SubscriberConfig(
@@ -1216,7 +1332,7 @@ async def stream_anomalies(
                 await subscriber.start()
 
                 # Stream events
-                while True:
+                while not connection_manager.is_shutting_down:
                     try:
                         event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
 
@@ -1277,12 +1393,22 @@ async def stream_anomalies(
                     "timestamp": datetime.now().isoformat()
                 })
             finally:
+                # Send shutdown message if shutting down
+                if connection_manager.is_shutting_down:
+                    yield format_sse_message("shutdown", {
+                        "message": "Server is shutting down",
+                        "timestamp": datetime.now().isoformat()
+                    })
+
                 if subscriber:
                     try:
                         await subscriber.stop()
                         logger.info(f"Stopped anomaly subscriber for customer {customer_id}")
                     except Exception as e:
                         logger.error(f"Error stopping anomaly subscriber: {e}")
+
+                # Unregister connection
+                connection_manager.unregister_connection(connection_id)
 
         return StreamingResponse(
             generate_real_time_anomalies(),

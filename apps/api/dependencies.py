@@ -388,6 +388,18 @@ async def shutdown_engines():
     logger.info("Shutting down application engines...")
 
     try:
+        # First, gracefully shutdown all streaming connections
+        try:
+            from services.streaming_connection_manager import get_streaming_connection_manager
+            streaming_manager = get_streaming_connection_manager()
+            connection_count = streaming_manager.get_connection_count()
+            if connection_count > 0:
+                logger.info(f"Shutting down {connection_count} active streaming connections...")
+            await streaming_manager.shutdown(timeout=5.0)
+            logger.info("Streaming connections shutdown complete")
+        except Exception as e:
+            logger.warning(f"Error shutting down streaming connections: {e}")
+
         # Shutdown event system first
         if event_subscriber_manager:
             await event_subscriber_manager.stop()
