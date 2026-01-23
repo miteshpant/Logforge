@@ -91,6 +91,7 @@ class ObservabilityEventPublisher:
             event_data = {
                 "batch_id": batch_info.get("batch_id"),
                 "span_count": len(spans_data),
+                "traces_count": len(spans_data),  # Alias for streaming API compatibility
                 "processing_time_ms": processing_time_ms,
                 "bytes_processed": batch_info.get("bytes_processed", 0),
                 "ingestion_endpoint": "/v1/observability/traces/ingest",
@@ -98,6 +99,7 @@ class ObservabilityEventPublisher:
                 "success_count": batch_info.get("success_count", len(spans_data)),
                 "error_count": batch_info.get("error_count", 0),
                 "spans": converted_spans,  # Use converted dictionaries
+                "traces": converted_spans,  # Alias for streaming API compatibility
                 "source_format": "otlp"  # OpenTelemetry Protocol
             }
 
@@ -356,11 +358,13 @@ class ObservabilityEventFactory:
         event_data = {
             "batch_id": batch_info.get("batch_id"),
             "span_count": len(spans_data),
+            "traces_count": len(spans_data),  # Alias for streaming API compatibility
             "processing_time_ms": processing_time_ms,
             "bytes_processed": batch_info.get("bytes_processed", 0),
             "success_count": batch_info.get("success_count", len(spans_data)),
             "error_count": batch_info.get("error_count", 0),
             "spans": spans_data,
+            "traces": spans_data,  # Alias for streaming API compatibility
             "source_format": "otlp",
             **kwargs
         }
