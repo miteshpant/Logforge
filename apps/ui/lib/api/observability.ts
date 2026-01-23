@@ -258,13 +258,40 @@ export async function streamTraces(
     operation_name?: string
     service_name?: string
     duration_ms?: number
+    duration?: number
     status?: string
     timestamp?: string
+    start_time?: string
+    span_count?: number
     [key: string]: any
   }) => void,
-  onError?: (error: Error) => void
+  onError?: (error: Error) => void,
+  options?: {
+    min_duration?: number
+    status?: string[]
+  }
 ): Promise<() => void> {
-  return apiClient.getStream('/v1/stream/traces', onTrace, onError)
+  return apiClient.getStream(
+    '/v1/stream/traces',
+    (data) => {
+      // Apply min_duration filter if specified
+      const duration = data.duration_ms || data.duration || 0
+      if (options?.min_duration && duration < options.min_duration) {
+        return // Skip traces below minimum duration
+      }
+
+      // Apply status filter if specified
+      if (options?.status && options.status.length > 0 && data.status) {
+        const traceStatus = typeof data.status === 'string' ? data.status : data.status?.code
+        if (traceStatus && !options.status.includes(traceStatus.toLowerCase())) {
+          return // Skip traces not matching status filter
+        }
+      }
+
+      onTrace(data)
+    },
+    onError
+  )
 }
 
 // Export all functions as a namespace

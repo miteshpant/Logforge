@@ -251,13 +251,16 @@ class ApiClient {
     const namedEventTypes = [
       'alert_event',
       'security_event',
-      'trace_event',
-      'metric_event',
+      'traces_event',    // Note: backend sends 'traces_event' (plural)
+      'metrics_event',   // Note: backend sends 'metrics_event' (plural)
+      'anomaly_event',
+      'usage',
+      'ai_insights',
       'connected',
       'heartbeat',
       'error',
-      'shutdown',   // Server shutdown notification
-      'keepalive'   // Connection keepalive
+      'shutdown',
+      'keepalive'
     ]
 
     namedEventTypes.forEach(eventType => {
