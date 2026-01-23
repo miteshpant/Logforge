@@ -393,23 +393,40 @@ class SecurityDAO:
             logger.error(f"Failed to save security event: {e}")
             raise
     
-    async def get_security_events(self, customer_id: str, limit: int = 100, severity: str = None, status: str = None) -> List[Dict[str, Any]]:
-        """Get security events from database"""
+    async def get_security_events(
+        self,
+        customer_id: str,
+        limit: int = 100,
+        severity: str = None,
+        status: str = None,
+        start_time: str = None,
+        end_time: str = None
+    ) -> List[Dict[str, Any]]:
+        """Get security events from database with optional time filtering"""
         try:
             # Build query with filters
             where_clauses = ["customer_id = %(customer_id)s"]
             params = {"customer_id": customer_id, "limit": limit}
-            
+
             if severity:
                 where_clauses.append("severity = %(severity)s")
                 params["severity"] = severity
-            
+
             if status:
                 where_clauses.append("status = %(status)s")
                 params["status"] = status
-            
+
+            # Add time filtering
+            if start_time:
+                where_clauses.append("created_at >= %(start_time)s")
+                params["start_time"] = start_time
+
+            if end_time:
+                where_clauses.append("created_at <= %(end_time)s")
+                params["end_time"] = end_time
+
             query = f"""
-            SELECT * FROM security_events_mt 
+            SELECT * FROM security_events_mt
             WHERE {' AND '.join(where_clauses)}
             ORDER BY created_at DESC
             LIMIT %(limit)s

@@ -189,12 +189,18 @@ async def security_health(customer_id: str = Header(..., alias="X-Customer-ID"))
 @router.get("/dashboard")
 async def get_security_dashboard(
     customer_id: str = Header(..., alias="X-Customer-ID"),
-    time_range: str = Query("24h", description="Time range: 1h, 24h, 7d, 30d")
+    time_range: str = Query(None, description="Time range: 1h, 24h, 7d, 30d (deprecated, use start_time/end_time)"),
+    start_time: str = Query(None, description="Start time in ISO format"),
+    end_time: str = Query(None, description="End time in ISO format")
 ) -> SecurityDashboardResponse:
     """Get security dashboard overview"""
     try:
-        # Get dashboard data from SecurityService
-        dashboard_data = await security_service.get_security_dashboard_data(customer_id)
+        # Get dashboard data from SecurityService with time filter
+        dashboard_data = await security_service.get_security_dashboard_data(
+            customer_id,
+            start_time=start_time,
+            end_time=end_time
+        )
         
         return SecurityDashboardResponse(
             total_events=dashboard_data["summary"]["total_events"],

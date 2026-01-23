@@ -423,11 +423,20 @@ class SecurityService:
             logger.error(f"Failed to create security event: {e}")
             raise
 
-    async def get_security_events(self, customer_id: str, limit: int = 100,
-                                severity: str = None, status: str = None) -> List[Dict[str, Any]]:
-        """Get security events"""
+    async def get_security_events(
+        self,
+        customer_id: str,
+        limit: int = 100,
+        severity: str = None,
+        status: str = None,
+        start_time: str = None,
+        end_time: str = None
+    ) -> List[Dict[str, Any]]:
+        """Get security events with optional time filtering"""
         try:
-            return await self.security_dao.get_security_events(customer_id, limit, severity, status)
+            return await self.security_dao.get_security_events(
+                customer_id, limit, severity, status, start_time, end_time
+            )
 
         except Exception as e:
             logger.error(f"Failed to get security events: {e}")
@@ -1041,11 +1050,21 @@ class SecurityService:
             logger.error(f"Failed to get customer campaigns: {e}")
             return []
 
-    async def get_security_dashboard_data(self, customer_id: str) -> Dict[str, Any]:
-        """Get security dashboard analytics data"""
+    async def get_security_dashboard_data(
+        self,
+        customer_id: str,
+        start_time: str = None,
+        end_time: str = None
+    ) -> Dict[str, Any]:
+        """Get security dashboard analytics data with optional time filtering"""
         try:
-            # Get recent security events
-            events = await self.get_security_events(customer_id, limit=50)
+            # Get security events with time filter
+            events = await self.get_security_events(
+                customer_id,
+                limit=100,
+                start_time=start_time,
+                end_time=end_time
+            )
 
             # Get threat indicators
             indicators = await self.get_threat_indicators(customer_id)

@@ -151,10 +151,12 @@ export default function CentrumPage() {
       securityAbortControllerRef.current = new AbortController()
 
       setIsLoadingSecurity(true)
+      const { start_time, end_time } = getApiTimeRange()
 
-      // Call the security dashboard endpoint
+      // Call the security dashboard endpoint with the selected time range
       const response = await apiClient.get('/v1/security/dashboard', {
-        time_range: '24h'
+        start_time: start_time,
+        end_time: end_time
       })
 
       // Handle both wrapped and unwrapped response formats
