@@ -203,6 +203,49 @@ class ApiClient {
   }
 
   /**
+   * Get SSE stream connection
+   * Returns a cleanup function to close the connection
+   */
+  async getStream(
+    endpoint: string,
+    onData: (data: any) => void,
+    onError?: (error: Error) => void
+  ): Promise<() => void> {
+    const url = endpoint.startsWith('http') ? endpoint : `${this.baseURL}${endpoint}`
+
+    // Build URL with auth headers as query params for SSE (can't send headers with EventSource)
+    const urlWithAuth = new URL(url)
+    const customerId = this.defaultHeaders['X-Customer-ID']
+    if (customerId) {
+      urlWithAuth.searchParams.set('customer_id', customerId)
+    }
+
+    const eventSource = new EventSource(urlWithAuth.toString())
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        onData(data)
+      } catch (e) {
+        // If not JSON, pass raw data
+        onData(event.data)
+      }
+    }
+
+    eventSource.onerror = (error) => {
+      console.error('SSE connection error:', error)
+      if (onError) {
+        onError(new Error('Stream connection error'))
+      }
+    }
+
+    // Return cleanup function
+    return () => {
+      eventSource.close()
+    }
+  }
+
+  /**
    * Set customer/tenant ID header
    */
   setCustomerId(customerId: string) {
