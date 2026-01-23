@@ -11,6 +11,30 @@ import uuid
 
 from database_layer import DatabaseLayer
 
+
+def to_clickhouse_datetime(iso_timestamp: str) -> str:
+    """
+    Convert ISO 8601 timestamp to ClickHouse DateTime64 compatible format.
+
+    ClickHouse expects: '2026-01-22 03:28:31.998'
+    ISO 8601 provides:  '2026-01-22T03:28:31.998Z'
+
+    Args:
+        iso_timestamp: ISO 8601 timestamp string
+
+    Returns:
+        ClickHouse compatible datetime string
+    """
+    if not iso_timestamp:
+        return iso_timestamp
+
+    # Replace T with space and remove Z suffix
+    result = iso_timestamp.replace('T', ' ')
+    if result.endswith('Z'):
+        result = result[:-1]
+
+    return result
+
 logger = structlog.get_logger(__name__)
 
 class SecurityDAO:
@@ -416,14 +440,14 @@ class SecurityDAO:
                 where_clauses.append("status = %(status)s")
                 params["status"] = status
 
-            # Add time filtering
+            # Add time filtering (convert ISO timestamps to ClickHouse format)
             if start_time:
                 where_clauses.append("created_at >= %(start_time)s")
-                params["start_time"] = start_time
+                params["start_time"] = to_clickhouse_datetime(start_time)
 
             if end_time:
                 where_clauses.append("created_at <= %(end_time)s")
-                params["end_time"] = end_time
+                params["end_time"] = to_clickhouse_datetime(end_time)
 
             query = f"""
             SELECT * FROM security_events_mt
