@@ -702,12 +702,18 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
             # Step 2: Tenant Context - Extract tenant ID
             # For API keys, tenant_id comes from the key; for JWT, from header
+            # For SSE streams, allow customer_id from query params (EventSource can't send headers)
             if hasattr(request.state, "is_api_key_auth") and request.state.is_api_key_auth:
                 # API key auth - tenant_id from service account's customer_id
                 tenant_id = user.customer_id
             else:
-                # JWT auth - require X-Customer-ID header
+                # JWT auth - require X-Customer-ID header (or query param for SSE streams)
                 tenant_id = request.headers.get("X-Customer-ID")
+
+                # For SSE stream endpoints, also check query params (EventSource limitation)
+                if not tenant_id and request.url.path.startswith("/v1/stream/"):
+                    tenant_id = request.query_params.get("customer_id")
+
                 if not tenant_id and not request.url.path.startswith("/v1/auth/"):
                     raise HTTPException(400, "X-Customer-ID header required")
 
