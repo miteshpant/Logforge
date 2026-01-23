@@ -13,6 +13,17 @@ from datetime import datetime, timedelta
 import random
 
 from services.observability_service import ObservabilityService
+
+
+def get_customer_id_for_sse(
+    header_customer_id: Optional[str] = Header(None, alias="X-Customer-ID"),
+    query_customer_id: Optional[str] = Query(None, alias="customer_id")
+) -> str:
+    """Extract customer_id from header or query param (SSE can't send headers)"""
+    customer_id = header_customer_id or query_customer_id
+    if not customer_id:
+        raise HTTPException(400, "customer_id required (header X-Customer-ID or query param)")
+    return customer_id
 from services.security_service import SecurityService
 from services.alert_service import AlertService
 from services.usage_service import UsageService
@@ -36,7 +47,7 @@ def format_sse_message(event_type: str, data: Any, event_id: Optional[str] = Non
 
 @router.get("/metrics")
 async def stream_metrics(
-    customer_id: str = Header(..., alias="X-Customer-ID")
+    customer_id: str = Depends(get_customer_id_for_sse)
 ):
     """Stream real-time metrics data - Pure event-driven, no polling"""
     try:
@@ -297,7 +308,7 @@ async def stream_metrics(
 
 @router.get("/traces")
 async def stream_traces(
-    customer_id: str = Header(..., alias="X-Customer-ID")
+    customer_id: str = Depends(get_customer_id_for_sse)
 ):
     """Stream real-time trace data - Pure event-driven, no polling"""
     try:
@@ -582,7 +593,7 @@ async def stream_traces(
 
 @router.get("/security")
 async def stream_security_events(
-    customer_id: str = Header(..., alias="X-Customer-ID")
+    customer_id: str = Depends(get_customer_id_for_sse)
 ):
     """Stream real-time security events - Pure event-driven, no polling"""
     try:
@@ -769,7 +780,7 @@ async def stream_security_events(
 
 @router.get("/alerts")
 async def stream_alerts(
-    customer_id: str = Header(..., alias="X-Customer-ID")
+    customer_id: str = Depends(get_customer_id_for_sse)
 ):
     """Stream real-time alert events - Pure event-driven, no polling"""
     try:
@@ -947,7 +958,7 @@ async def stream_alerts(
 
 @router.get("/usage")
 async def stream_usage_data(
-    customer_id: str = Header(..., alias="X-Customer-ID")
+    customer_id: str = Depends(get_customer_id_for_sse)
 ):
     """Stream real-time usage data"""
     try:
@@ -989,7 +1000,7 @@ async def stream_usage_data(
 
 @router.get("/ai-insights")
 async def stream_ai_insights(
-    customer_id: str = Header(..., alias="X-Customer-ID")
+    customer_id: str = Depends(get_customer_id_for_sse)
 ):
     """Stream real-time AI insights and anomaly detections"""
     try:
