@@ -804,41 +804,55 @@ async def stream_alerts(
             def __init__(self, target_customer_id: str, event_queue: asyncio.Queue):
                 self.target_customer_id = target_customer_id
                 self.event_queue = event_queue
+                self.events_received = 0
+                self.events_queued = 0
 
             async def handle(self, event) -> bool:
                 """Handle events and put relevant ones in the queue"""
                 try:
+                    self.events_received += 1
+
+                    event_type = getattr(event, 'event_type', 'NONE')
+                    event_customer = getattr(event, 'customer_id', 'NONE')
+
                     logger.info(
-                        "StreamingAlertHandler received event",
-                        event_type=getattr(event, 'event_type', 'NONE'),
-                        customer_id=getattr(event, 'customer_id', 'NONE'),
+                        "🔔 StreamingAlertHandler received event from Kafka",
+                        event_type=event_type,
+                        event_customer_id=event_customer,
                         target_customer_id=self.target_customer_id,
-                        has_customer_id=hasattr(event, 'customer_id'),
-                        has_event_type=hasattr(event, 'event_type'),
-                        event_data=str(event)[:200]  # Changed from 'event' to 'event_data'
+                        total_received=self.events_received,
+                        alert_id=event.data.get('alert_id') if hasattr(event, 'data') else None
                     )
 
                     # Only handle events for our target customer and UI alert types
-                    if (hasattr(event, 'customer_id') and
-                        event.customer_id == self.target_customer_id and
-                        hasattr(event, 'event_type') and
-                        event.event_type in ui_alert_events):
+                    customer_match = hasattr(event, 'customer_id') and event.customer_id == self.target_customer_id
+                    type_match = hasattr(event, 'event_type') and event.event_type in ui_alert_events
 
+                    if customer_match and type_match:
                         # Put event in queue for streaming
                         await self.event_queue.put(event)
+                        self.events_queued += 1
 
+                        logger.info(
+                            "✅ Alert event queued for SSE streaming",
+                            alert_id=event.data.get('alert_id') if hasattr(event, 'data') else None,
+                            customer_id=self.target_customer_id,
+                            total_queued=self.events_queued
+                        )
                         return True
                     else:
                         logger.debug(
-                            "Event filtered out",
-                            customer_match=hasattr(event, 'customer_id') and event.customer_id == self.target_customer_id,
-                            type_match=hasattr(event, 'event_type') and event.event_type in ui_alert_events
+                            "Event filtered out - not for this customer or wrong type",
+                            customer_match=customer_match,
+                            type_match=type_match,
+                            event_type=event_type,
+                            expected_types=ui_alert_events
                         )
 
                     return True
 
                 except Exception as e:
-                    logger.error(f"Error in streaming handler: {e}")
+                    logger.error(f"Error in streaming alert handler: {e}", exc_info=True)
                     return False
 
             def get_handler_name(self) -> str:
@@ -865,13 +879,25 @@ async def stream_alerts(
                 )
 
                 # Create Kafka subscriber for UI events
+                logger.info(
+                    "🔌 Creating Kafka subscriber for alert streaming",
+                    customer_id=customer_id,
+                    topics=config.topics,
+                    event_types=config.event_types,
+                    consumer_group=config.consumer_group
+                )
+
                 subscriber = KafkaEventSubscriber(config)
 
                 # Create and register our custom streaming handler
                 streaming_handler = StreamingAlertHandler(customer_id, event_queue)
                 subscriber.register_handler(streaming_handler)
 
-                logger.info(f"Starting real-time alert stream for customer {customer_id}")
+                logger.info(
+                    f"📡 Starting real-time alert stream for customer {customer_id}",
+                    topic=TOPIC_UI_REALTIME_EVENTS,
+                    consumer_group=config.consumer_group
+                )
 
                 # Send initial connection confirmation
                 yield format_sse_message("connected", {

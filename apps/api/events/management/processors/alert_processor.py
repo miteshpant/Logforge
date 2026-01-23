@@ -493,13 +493,36 @@ class AlertProcessor:
 
             import dependencies
 
-            # Use global event publisher manager
-            if not dependencies.event_publisher_manager:
-                logger.warning("⚠️ Event publisher manager not available - UI alert will not be streamed")
+            # Use getter function for more reliable access to the publisher manager
+            publisher_manager = dependencies.get_event_publisher_manager()
+
+            if not publisher_manager:
+                # Try direct attribute access as fallback
+                publisher_manager = dependencies.event_publisher_manager
+
+            if not publisher_manager:
+                logger.warning(
+                    "⚠️ Event publisher manager not available - UI alert will not be streamed",
+                    alert_id=alert_instance_id,
+                    customer_id=customer_id
+                )
                 return
 
-            logger.info(f"✅ Event publisher manager available, creating UI publisher")
-            ui_publisher = UIEventPublisher(dependencies.event_publisher_manager)
+            # Check if publisher manager is started
+            if not getattr(publisher_manager, 'is_started', False):
+                logger.warning(
+                    "⚠️ Event publisher manager not started - UI alert will not be streamed",
+                    alert_id=alert_instance_id,
+                    customer_id=customer_id
+                )
+                return
+
+            logger.info(
+                f"✅ Event publisher manager available and started, creating UI publisher",
+                alert_id=alert_instance_id,
+                publisher_started=publisher_manager.is_started
+            )
+            ui_publisher = UIEventPublisher(publisher_manager)
 
             # Prepare alert data for UI event
             alert_data = {
@@ -516,6 +539,15 @@ class AlertProcessor:
             }
 
             # Publish UI alert triggered event
+            logger.info(
+                "📤 Publishing UI alert triggered event to Kafka",
+                alert_id=alert_instance_id,
+                customer_id=customer_id,
+                rule_id=rule.get('id'),
+                rule_name=rule.get('name'),
+                severity=rule.get('severity')
+            )
+
             success = await ui_publisher.publish_alert_triggered(
                 customer_id=customer_id,
                 alert_data=alert_data,
@@ -525,10 +557,25 @@ class AlertProcessor:
             )
 
             if success:
-                logger.info(f"🔔 UI alert event published for alert {alert_instance_id}")
+                logger.info(
+                    f"🔔 UI alert event published successfully for alert {alert_instance_id}",
+                    customer_id=customer_id,
+                    rule_id=rule.get('id'),
+                    topic="ui-realtime-events"
+                )
             else:
-                logger.warning(f"⚠️ Failed to publish UI alert event for alert {alert_instance_id}")
+                logger.warning(
+                    f"⚠️ Failed to publish UI alert event for alert {alert_instance_id}",
+                    customer_id=customer_id,
+                    rule_id=rule.get('id')
+                )
 
         except Exception as e:
-            logger.error(f"Error publishing UI alert event for alert {alert_instance_id}: {e}")
+            logger.error(
+                f"Error publishing UI alert event for alert {alert_instance_id}: {e}",
+                alert_id=alert_instance_id,
+                customer_id=customer_id,
+                error=str(e),
+                exc_info=True
+            )
             # Don't fail the main alert creation flow due to UI event publishing errors

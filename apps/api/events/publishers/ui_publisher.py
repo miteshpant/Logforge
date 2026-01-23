@@ -83,6 +83,15 @@ class UIEventPublisher:
                 metadata=metadata
             )
 
+            self.logger.info(
+                "📤 Publishing UI alert event to Kafka",
+                event_type=EVENT_UI_ALERT_TRIGGERED,
+                customer_id=customer_id,
+                alert_id=alert_data.get("id"),
+                rule_name=rule_data.get("name"),
+                publisher_manager_started=getattr(self.publisher_manager, 'is_started', 'unknown')
+            )
+
             results = await self.publisher_manager.publish(event)
             success = any(results.values())
 

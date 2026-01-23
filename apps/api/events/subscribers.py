@@ -190,12 +190,23 @@ class KafkaEventSubscriber(EventSubscriber):
             if topic_key in topics_config:
                 topic_name = topics_config[topic_key].get("name", topic_key)
                 topic_names.append(topic_name)
+                logger.debug(f"Topic '{topic_key}' resolved to '{topic_name}' from config")
             else:
                 topic_names.append(topic_key)  # Use key as name if not found
+                logger.debug(f"Topic '{topic_key}' used directly (not in topics_config)")
 
         if not topic_names:
             logger.warning("No topics configured for subscriber", subscriber=self.config.name)
             return
+
+        logger.info(
+            "🔌 Starting Kafka consumer",
+            subscriber=self.config.name,
+            topics=topic_names,
+            consumer_group=self.config.consumer_group,
+            bootstrap_servers=kafka_config.get("bootstrap_servers", "localhost:19092"),
+            auto_offset_reset=self.config.auto_offset_reset
+        )
 
         self.consumer = AIOKafkaConsumer(
             *topic_names,
@@ -212,7 +223,13 @@ class KafkaEventSubscriber(EventSubscriber):
         )
 
         await self.consumer.start()
-        logger.info("Kafka consumer started", topics=topic_names, group=self.config.consumer_group)
+        logger.info(
+            "✅ Kafka consumer started successfully",
+            subscriber=self.config.name,
+            topics=topic_names,
+            consumer_group=self.config.consumer_group,
+            event_types=self.config.event_types
+        )
 
     async def _start_workers(self):
         """Start worker tasks for parallel event processing"""
@@ -237,21 +254,47 @@ class KafkaEventSubscriber(EventSubscriber):
         try:
             batch = []
             last_commit_time = asyncio.get_event_loop().time()
+            messages_received = 0
+
+            logger.info(
+                "📥 Kafka consumer loop started",
+                subscriber=self.config.name,
+                topics=self.config.topics,
+                event_types=self.config.event_types
+            )
 
             async for message in self.consumer:
+                messages_received += 1
                 # Add message to queue for worker processing
                 try:
                     event_data = message.value
                     event = BaseEvent.from_dict(event_data)
 
+                    logger.debug(
+                        "📨 Kafka message received",
+                        subscriber=self.config.name,
+                        topic=message.topic,
+                        partition=message.partition,
+                        offset=message.offset,
+                        event_type=event.event_type,
+                        customer_id=event.customer_id,
+                        total_received=messages_received
+                    )
+
                     # Check if we have handlers for this event type
                     if self._should_process_event(event):
                         await self._event_queue.put((message, event))
+                        logger.debug(
+                            "Event queued for processing",
+                            event_type=event.event_type,
+                            event_id=event.metadata.event_id
+                        )
                     else:
                         logger.debug(
                             "No handlers for event type, skipping",
                             event_type=event.event_type,
-                            event_id=event.metadata.event_id
+                            event_id=event.metadata.event_id,
+                            configured_types=self.config.event_types
                         )
 
                     # Batch commit periodically
