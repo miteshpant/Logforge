@@ -228,10 +228,27 @@ export default function LiveStreamingPanel() {
 
   const renderTraceCard = (event: StreamEvent) => {
     const data = event.data
-    const serviceName = data.service_name || data.service || 'Unknown Service'
-    const operation = data.operation_name || data.operation || 'Unknown Operation'
-    const duration = data.duration_ms ? `${data.duration_ms}ms` : 'N/A'
-    const status = data.status || 'ok'
+
+    // Extract trace data from OpenTelemetry structure
+    // traces[] contains trace objects with nested spans
+    const traces = data.traces || []
+    const firstTrace = traces[0] || {}
+
+    // Use OpenTelemetry field names: root_service, root_operation
+    const serviceName = firstTrace.root_service ||
+                       firstTrace.service_name ||
+                       data.service_name ||
+                       'Unknown Service'
+    const operation = firstTrace.root_operation ||
+                     firstTrace.operation_name ||
+                     data.operation_name ||
+                     'Unknown Operation'
+    const duration = firstTrace.duration_ms ? `${firstTrace.duration_ms}ms` :
+                    data.duration_ms ? `${data.duration_ms}ms` : 'N/A'
+    const status = firstTrace.status || data.status || 'ok'
+    const traceId = firstTrace.trace_id || data.trace_id
+    const spanCount = firstTrace.span_count || traces.reduce((acc: number, t: any) => acc + (t.span_count || 0), 0)
+    const serviceCount = firstTrace.service_count || firstTrace.services?.length || 0
 
     return (
       <div className="flex-1 min-w-0">
@@ -246,6 +263,16 @@ export default function LiveStreamingPanel() {
             }`}>
               {status.toUpperCase()}
             </span>
+            {spanCount > 0 && (
+              <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/50 text-slate-300">
+                {spanCount} spans
+              </span>
+            )}
+            {serviceCount > 1 && (
+              <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-500/20 text-purple-400">
+                {serviceCount} services
+              </span>
+            )}
           </div>
           <span className="text-xs text-slate-500 font-mono whitespace-nowrap">
             {new Date(event.timestamp).toLocaleTimeString()}
@@ -254,7 +281,7 @@ export default function LiveStreamingPanel() {
         <h4 className="text-white font-bold text-base mb-1">{operation}</h4>
         <div className="flex items-center gap-4 text-xs text-slate-400">
           <span>Duration: <span className="text-blue-400 font-mono">{duration}</span></span>
-          {data.trace_id && <span>Trace: <span className="text-blue-400 font-mono">{data.trace_id.substring(0, 8)}...</span></span>}
+          {traceId && <span>Trace: <span className="text-blue-400 font-mono">{traceId.substring(0, 8)}...</span></span>}
         </div>
       </div>
     )
