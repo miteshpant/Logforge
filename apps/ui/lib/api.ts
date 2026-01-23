@@ -255,7 +255,9 @@ class ApiClient {
       'metric_event',
       'connected',
       'heartbeat',
-      'error'
+      'error',
+      'shutdown',   // Server shutdown notification
+      'keepalive'   // Connection keepalive
     ]
 
     namedEventTypes.forEach(eventType => {

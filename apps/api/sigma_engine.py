@@ -58,6 +58,76 @@ class SigmaMatch:
         }
 
 
+@dataclass
+class CountCondition:
+    """Parsed count condition from Sigma rule"""
+    threshold: int
+    operator: str  # 'gt', 'gte', 'lt', 'lte', 'eq'
+    group_by: Optional[List[str]] = None  # Fields to group by (e.g., ['src_ip'])
+    timeframe: Optional[str] = None  # e.g., '5m', '1h'
+
+    @staticmethod
+    def parse(condition: str) -> Optional['CountCondition']:
+        """
+        Parse a count condition string.
+
+        Examples:
+            - "selection | count() > 10"
+            - "selection | count(by=['src_ip']) > 5"
+            - "selection | count(by=[\"src_ip\"]) > 5"
+        """
+        import re
+
+        # Pattern for count conditions
+        # Matches: count() > 5, count(by=['field']) > 5, count(by=["field1","field2"]) >= 10
+        count_pattern = r'count\s*\(\s*(?:by\s*=\s*\[([^\]]+)\])?\s*\)\s*(>|>=|<|<=|==|=)\s*(\d+)'
+
+        match = re.search(count_pattern, condition, re.IGNORECASE)
+        if not match:
+            return None
+
+        group_by_str, op_str, threshold_str = match.groups()
+
+        # Parse group_by fields
+        group_by = None
+        if group_by_str:
+            # Remove quotes and split by comma
+            fields = re.findall(r'["\']([^"\']+)["\']', group_by_str)
+            if fields:
+                group_by = fields
+
+        # Map operators
+        op_map = {
+            '>': 'gt',
+            '>=': 'gte',
+            '<': 'lt',
+            '<=': 'lte',
+            '==': 'eq',
+            '=': 'eq'
+        }
+        operator = op_map.get(op_str, 'gt')
+
+        return CountCondition(
+            threshold=int(threshold_str),
+            operator=operator,
+            group_by=group_by
+        )
+
+    def check_threshold(self, count: int) -> bool:
+        """Check if a count meets the threshold condition"""
+        if self.operator == 'gt':
+            return count > self.threshold
+        elif self.operator == 'gte':
+            return count >= self.threshold
+        elif self.operator == 'lt':
+            return count < self.threshold
+        elif self.operator == 'lte':
+            return count <= self.threshold
+        elif self.operator == 'eq':
+            return count == self.threshold
+        return False
+
+
 class SigmaFieldMatcher:
     """Handles field-level matching for Sigma rule conditions"""
 
@@ -294,8 +364,25 @@ class SigmaRuleEngine:
                 logger.debug(f"🔍 Sample original: {json.dumps(sample_original, default=str)}")
                 logger.debug(f"🔄 Sample normalized: {json.dumps(sample_normalized, default=str)}")
 
+            # Separate rules into count-based and simple rules
+            count_rules = []
+            simple_rules = []
+
+            for rule_dict in rules:
+                detection = rule_dict.get('detection', {})
+                condition = detection.get('condition', 'selection')
+
+                # Check if this is a count-based rule
+                count_condition = CountCondition.parse(condition)
+                if count_condition:
+                    count_rules.append((rule_dict, count_condition))
+                    logger.debug(f"📊 Rule {rule_dict.get('id')} has count condition: threshold={count_condition.threshold}, group_by={count_condition.group_by}")
+                else:
+                    simple_rules.append(rule_dict)
+
+            # Process simple rules (per-log evaluation)
             for original_log, normalized_log in normalized_logs:
-                for rule_dict in rules:
+                for rule_dict in simple_rules:
                     try:
                         # Convert rule dict to SigmaRule object if needed
                         if isinstance(rule_dict, dict):
@@ -317,11 +404,160 @@ class SigmaRuleEngine:
                         logger.error(f"Error evaluating rule {rule_dict.get('id', 'unknown')}: {e}")
                         continue
 
+            # Process count-based rules (batch-level aggregation)
+            for rule_dict, count_condition in count_rules:
+                try:
+                    count_matches = await self._evaluate_count_rule(
+                        normalized_logs, rule_dict, count_condition, customer_id
+                    )
+                    matches.extend(count_matches)
+                except Exception as e:
+                    logger.error(f"Error evaluating count rule {rule_dict.get('id', 'unknown')}: {e}")
+                    continue
+
             logger.debug(f"✅ Sigma evaluation complete: {len(matches)} detections found")
             return matches
 
         except Exception as e:
             logger.error(f"Error in Sigma rule evaluation: {e}")
+            return []
+
+    async def _evaluate_count_rule(
+        self,
+        normalized_logs: List[Tuple[Dict[str, Any], Dict[str, Any]]],
+        rule_dict: Dict[str, Any],
+        count_condition: CountCondition,
+        customer_id: str
+    ) -> List[SigmaMatch]:
+        """
+        Evaluate a count-based Sigma rule against a batch of logs.
+
+        This method:
+        1. Finds all logs matching the selection criteria
+        2. Groups them by the specified field(s) if group_by is set
+        3. Checks if any group exceeds the count threshold
+        4. Creates matches for groups that exceed the threshold
+
+        Args:
+            normalized_logs: List of (original_log, normalized_log) tuples
+            rule_dict: The Sigma rule dictionary
+            count_condition: The parsed count condition
+            customer_id: Customer/tenant ID
+
+        Returns:
+            List of SigmaMatch objects for groups that exceeded the threshold
+        """
+        matches = []
+
+        try:
+            rule = self._dict_to_sigma_rule(rule_dict)
+            detection = rule.detection
+            selection = detection.get("selection", {})
+
+            if not selection:
+                return matches
+
+            # Collect all logs that match the selection criteria
+            matching_logs = []
+            for original_log, normalized_log in normalized_logs:
+                selection_match, matched_fields = self.condition_evaluator.evaluate_selection(normalized_log, selection)
+                if selection_match:
+                    matching_logs.append((original_log, normalized_log, matched_fields))
+
+            logger.debug(f"📊 Count rule {rule.id}: {len(matching_logs)}/{len(normalized_logs)} logs match selection")
+
+            if not matching_logs:
+                return matches
+
+            # Group logs by the group_by field(s) if specified
+            if count_condition.group_by:
+                # Group by specified fields
+                groups: Dict[str, List[Tuple]] = {}
+                for original_log, normalized_log, matched_fields in matching_logs:
+                    # Build group key from group_by fields
+                    key_parts = []
+                    for field in count_condition.group_by:
+                        field_value = normalized_log.get(field, 'unknown')
+                        key_parts.append(f"{field}={field_value}")
+                    group_key = "|".join(key_parts)
+
+                    if group_key not in groups:
+                        groups[group_key] = []
+                    groups[group_key].append((original_log, normalized_log, matched_fields))
+
+                logger.debug(f"📊 Count rule {rule.id}: Grouped into {len(groups)} groups by {count_condition.group_by}")
+
+                # Check each group against the threshold
+                for group_key, group_logs in groups.items():
+                    count = len(group_logs)
+                    if count_condition.check_threshold(count):
+                        # Use the last log in the group as the representative log
+                        _, representative_log, matched_fields = group_logs[-1]
+
+                        # Add count info to matched fields
+                        matched_fields['_count'] = {
+                            'value': count,
+                            'threshold': count_condition.threshold,
+                            'operator': count_condition.operator,
+                            'group_by': count_condition.group_by,
+                            'group_key': group_key
+                        }
+
+                        match = SigmaMatch(
+                            rule_id=rule.id,
+                            rule_title=rule.title,
+                            log_entry=representative_log,
+                            matched_fields=matched_fields,
+                            severity=rule.severity,
+                            attack_techniques=[tech.value for tech in rule.attack_techniques],
+                            kill_chain_phases=rule.kill_chain_phases,
+                            timestamp=datetime.now(),
+                            customer_id=customer_id
+                        )
+                        matches.append(match)
+
+                        logger.info(f"🚨 Count rule match: {rule.id} - {rule.title} (group={group_key}, count={count} > {count_condition.threshold})")
+
+                        # Publish security detection event
+                        await self._publish_detection_event(match)
+            else:
+                # No group_by - count all matching logs
+                count = len(matching_logs)
+                if count_condition.check_threshold(count):
+                    # Use the last log as the representative log
+                    _, representative_log, matched_fields = matching_logs[-1]
+
+                    # Add count info to matched fields
+                    matched_fields['_count'] = {
+                        'value': count,
+                        'threshold': count_condition.threshold,
+                        'operator': count_condition.operator
+                    }
+
+                    match = SigmaMatch(
+                        rule_id=rule.id,
+                        rule_title=rule.title,
+                        log_entry=representative_log,
+                        matched_fields=matched_fields,
+                        severity=rule.severity,
+                        attack_techniques=[tech.value for tech in rule.attack_techniques],
+                        kill_chain_phases=rule.kill_chain_phases,
+                        timestamp=datetime.now(),
+                        customer_id=customer_id
+                    )
+                    matches.append(match)
+
+                    logger.info(f"🚨 Count rule match: {rule.id} - {rule.title} (total count={count} > {count_condition.threshold})")
+
+                    # Publish security detection event
+                    await self._publish_detection_event(match)
+                else:
+                    logger.debug(f"📊 Count rule {rule.id}: count={count} does not exceed threshold={count_condition.threshold}")
+
+            return matches
+
+        except Exception as e:
+            logger.error(f"Error in count rule evaluation for {rule_dict.get('id', 'unknown')}: {e}")
             return []
 
     async def _evaluate_rule_against_normalized_log(
@@ -395,7 +631,10 @@ class SigmaRuleEngine:
 
     def _evaluate_condition_logic(self, condition: str, selection_match: bool) -> bool:
         """
-        Evaluate the condition logic (for now, simplified)
+        Evaluate the condition logic for simple (non-count) rules.
+
+        Note: Count-based conditions (e.g., "selection | count() > 5") are handled
+        separately by _evaluate_count_rule() at the batch level.
 
         Args:
             condition: The condition string from the rule
@@ -404,17 +643,19 @@ class SigmaRuleEngine:
         Returns:
             bool: True if the condition is satisfied
         """
-        # For now, we support simple conditions
-        # Future enhancement: parse complex conditions like "count(selection) >= 10"
-
         if condition == "selection":
             return selection_match
         elif "and not filter" in condition:
             return selection_match  # Filter logic handled in _evaluate_rule_against_log
+        elif "count(" in condition.lower():
+            # This shouldn't happen as count rules are processed separately
+            # But if it does, don't match - let count rule handler deal with it
+            logger.debug(f"Count condition found in simple evaluation, skipping: {condition}")
+            return False
         else:
-            # For complex conditions, default to selection match
-            # TODO: Implement full condition parsing
-            logger.debug(f"Complex condition not fully supported yet: {condition}")
+            # For other complex conditions (e.g., "selection1 or selection2")
+            # default to selection match for now
+            logger.debug(f"Complex condition using default evaluation: {condition}")
             return selection_match
 
     def _dict_to_sigma_rule(self, rule_dict: Dict[str, Any]) -> SigmaRule:
