@@ -196,16 +196,13 @@ class KafkaEventSubscriber(EventSubscriber):
                 logger.debug(f"Topic '{topic_key}' used directly (not in topics_config)")
 
         if not topic_names:
-            logger.warning("No topics configured for subscriber", subscriber=self.config.name)
+            logger.warning(f"No topics configured for subscriber {self.config.name}")
             return
 
+        bootstrap = kafka_config.get("bootstrap_servers", "localhost:19092")
         logger.info(
-            "🔌 Starting Kafka consumer",
-            subscriber=self.config.name,
-            topics=topic_names,
-            consumer_group=self.config.consumer_group,
-            bootstrap_servers=kafka_config.get("bootstrap_servers", "localhost:19092"),
-            auto_offset_reset=self.config.auto_offset_reset
+            f"🔌 Starting Kafka consumer (subscriber={self.config.name}, topics={topic_names}, "
+            f"group={self.config.consumer_group}, servers={bootstrap}, offset_reset={self.config.auto_offset_reset})"
         )
 
         self.consumer = AIOKafkaConsumer(
@@ -224,11 +221,8 @@ class KafkaEventSubscriber(EventSubscriber):
 
         await self.consumer.start()
         logger.info(
-            "✅ Kafka consumer started successfully",
-            subscriber=self.config.name,
-            topics=topic_names,
-            consumer_group=self.config.consumer_group,
-            event_types=self.config.event_types
+            f"✅ Kafka consumer started successfully (subscriber={self.config.name}, "
+            f"topics={topic_names}, group={self.config.consumer_group}, event_types={self.config.event_types})"
         )
 
     async def _start_workers(self):
@@ -257,10 +251,8 @@ class KafkaEventSubscriber(EventSubscriber):
             messages_received = 0
 
             logger.info(
-                "📥 Kafka consumer loop started",
-                subscriber=self.config.name,
-                topics=self.config.topics,
-                event_types=self.config.event_types
+                f"📥 Kafka consumer loop started (subscriber={self.config.name}, "
+                f"topics={self.config.topics}, event_types={self.config.event_types})"
             )
 
             async for message in self.consumer:
@@ -271,30 +263,21 @@ class KafkaEventSubscriber(EventSubscriber):
                     event = BaseEvent.from_dict(event_data)
 
                     logger.debug(
-                        "📨 Kafka message received",
-                        subscriber=self.config.name,
-                        topic=message.topic,
-                        partition=message.partition,
-                        offset=message.offset,
-                        event_type=event.event_type,
-                        customer_id=event.customer_id,
-                        total_received=messages_received
+                        f"📨 Kafka message received (subscriber={self.config.name}, topic={message.topic}, "
+                        f"partition={message.partition}, offset={message.offset}, event_type={event.event_type}, "
+                        f"customer_id={event.customer_id}, total={messages_received})"
                     )
 
                     # Check if we have handlers for this event type
                     if self._should_process_event(event):
                         await self._event_queue.put((message, event))
                         logger.debug(
-                            "Event queued for processing",
-                            event_type=event.event_type,
-                            event_id=event.metadata.event_id
+                            f"Event queued for processing (event_type={event.event_type}, event_id={event.metadata.event_id})"
                         )
                     else:
                         logger.debug(
-                            "No handlers for event type, skipping",
-                            event_type=event.event_type,
-                            event_id=event.metadata.event_id,
-                            configured_types=self.config.event_types
+                            f"No handlers for event type, skipping (event_type={event.event_type}, "
+                            f"event_id={event.metadata.event_id}, configured_types={self.config.event_types})"
                         )
 
                     # Batch commit periodically

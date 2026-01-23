@@ -815,13 +815,11 @@ async def stream_alerts(
                     event_type = getattr(event, 'event_type', 'NONE')
                     event_customer = getattr(event, 'customer_id', 'NONE')
 
+                    alert_id = event.data.get('alert_id') if hasattr(event, 'data') else None
                     logger.info(
-                        "🔔 StreamingAlertHandler received event from Kafka",
-                        event_type=event_type,
-                        event_customer_id=event_customer,
-                        target_customer_id=self.target_customer_id,
-                        total_received=self.events_received,
-                        alert_id=event.data.get('alert_id') if hasattr(event, 'data') else None
+                        f"🔔 StreamingAlertHandler received event from Kafka "
+                        f"(event_type={event_type}, customer={event_customer}, "
+                        f"target={self.target_customer_id}, received={self.events_received}, alert_id={alert_id})"
                     )
 
                     # Only handle events for our target customer and UI alert types
@@ -834,19 +832,14 @@ async def stream_alerts(
                         self.events_queued += 1
 
                         logger.info(
-                            "✅ Alert event queued for SSE streaming",
-                            alert_id=event.data.get('alert_id') if hasattr(event, 'data') else None,
-                            customer_id=self.target_customer_id,
-                            total_queued=self.events_queued
+                            f"✅ Alert event queued for SSE streaming "
+                            f"(alert_id={alert_id}, customer_id={self.target_customer_id}, queued={self.events_queued})"
                         )
                         return True
                     else:
                         logger.debug(
-                            "Event filtered out - not for this customer or wrong type",
-                            customer_match=customer_match,
-                            type_match=type_match,
-                            event_type=event_type,
-                            expected_types=ui_alert_events
+                            f"Event filtered out - not for this customer or wrong type "
+                            f"(customer_match={customer_match}, type_match={type_match}, event_type={event_type})"
                         )
 
                     return True
@@ -880,11 +873,8 @@ async def stream_alerts(
 
                 # Create Kafka subscriber for UI events
                 logger.info(
-                    "🔌 Creating Kafka subscriber for alert streaming",
-                    customer_id=customer_id,
-                    topics=config.topics,
-                    event_types=config.event_types,
-                    consumer_group=config.consumer_group
+                    f"🔌 Creating Kafka subscriber for alert streaming "
+                    f"(customer_id={customer_id}, topics={config.topics}, consumer_group={config.consumer_group})"
                 )
 
                 subscriber = KafkaEventSubscriber(config)
@@ -894,9 +884,8 @@ async def stream_alerts(
                 subscriber.register_handler(streaming_handler)
 
                 logger.info(
-                    f"📡 Starting real-time alert stream for customer {customer_id}",
-                    topic=TOPIC_UI_REALTIME_EVENTS,
-                    consumer_group=config.consumer_group
+                    f"📡 Starting real-time alert stream for customer {customer_id} "
+                    f"(topic={TOPIC_UI_REALTIME_EVENTS}, consumer_group={config.consumer_group})"
                 )
 
                 # Send initial connection confirmation
