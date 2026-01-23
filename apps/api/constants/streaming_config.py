@@ -31,13 +31,13 @@ DEFAULT_METRICS_STREAMING_CONFIG = {
 
 DEFAULT_TRACES_STREAMING_CONFIG = {
     "enabled": True,
-    "sample_rate": 0.05,  # 5% sampling by default (traces are higher volume)
+    "sample_rate": 1.0,  # 100% sampling - stream all traces (adjust in production)
     "min_traces_count": 1,  # Stream if batch has 1+ traces
     "include_services": [],  # Empty = all services
     "exclude_services": ["health-check"],
-    "min_duration_ms": 100,  # Only traces longer than 100ms
+    "min_duration_ms": 0,  # Stream all traces regardless of duration
     "include_errors_only": False,  # Stream all traces, not just errors
-    "max_events_per_minute": 50,  # Lower rate limit for traces
+    "max_events_per_minute": 100,  # Rate limit for traces
     "priority_operations": ["payment", "login", "checkout"],  # Always stream these
     "include_status": ["ok", "error"]  # Stream successful and failed traces
 }

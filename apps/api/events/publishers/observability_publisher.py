@@ -11,6 +11,7 @@ Follows OpenTelemetry semantic conventions:
 import asyncio
 from collections import defaultdict
 from datetime import datetime
+from dateutil import parser as dateparser
 from typing import Dict, Any, Optional, List
 import structlog
 
@@ -22,6 +23,49 @@ from ..constants import (
 )
 
 logger = structlog.get_logger(__name__)
+
+
+def calculate_duration_ms(start_time: Any, end_time: Any) -> Optional[float]:
+    """
+    Calculate duration in milliseconds from start and end times.
+
+    Handles various time formats:
+    - datetime objects
+    - ISO format strings (with or without timezone)
+    - Unix timestamps
+
+    Returns None if calculation fails.
+    """
+    if not start_time or not end_time:
+        return None
+
+    try:
+        # Parse start_time
+        if isinstance(start_time, datetime):
+            start_dt = start_time
+        elif isinstance(start_time, str):
+            start_dt = dateparser.parse(start_time)
+        elif isinstance(start_time, (int, float)):
+            start_dt = datetime.fromtimestamp(start_time)
+        else:
+            return None
+
+        # Parse end_time
+        if isinstance(end_time, datetime):
+            end_dt = end_time
+        elif isinstance(end_time, str):
+            end_dt = dateparser.parse(end_time)
+        elif isinstance(end_time, (int, float)):
+            end_dt = datetime.fromtimestamp(end_time)
+        else:
+            return None
+
+        # Calculate duration in milliseconds
+        duration = (end_dt - start_dt).total_seconds() * 1000
+        return max(0, duration)  # Ensure non-negative
+
+    except Exception:
+        return None
 
 
 def group_spans_into_traces(spans: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -109,9 +153,27 @@ def group_spans_into_traces(spans: List[Dict[str, Any]]) -> List[Dict[str, Any]]
             trace["start_time"] = root_span.get("start_time")
             trace["end_time"] = root_span.get("end_time")
 
-            # Calculate trace duration from root span or span range
+            # Calculate trace duration from root span
             if root_span.get("duration_ms"):
                 trace["duration_ms"] = root_span["duration_ms"]
+            else:
+                # Calculate duration from start_time and end_time
+                duration = calculate_duration_ms(
+                    root_span.get("start_time"),
+                    root_span.get("end_time")
+                )
+                if duration is not None:
+                    trace["duration_ms"] = duration
+
+        # Also calculate duration for individual spans that are missing it
+        for span in trace_spans:
+            if not span.get("duration_ms"):
+                duration = calculate_duration_ms(
+                    span.get("start_time"),
+                    span.get("end_time")
+                )
+                if duration is not None:
+                    span["duration_ms"] = duration
 
         traces.append(trace)
 
