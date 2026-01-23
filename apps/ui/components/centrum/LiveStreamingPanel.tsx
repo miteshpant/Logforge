@@ -289,23 +289,56 @@ export default function LiveStreamingPanel() {
 
   const renderMetricCard = (event: StreamEvent) => {
     const data = event.data
-    const metricName = data.metric_name || data.name || 'Unknown Metric'
-    const value = data.value !== undefined ? data.value : 'N/A'
-    const unit = data.unit || ''
+
+    // Extract metrics from OpenTelemetry structure
+    // metrics[] contains individual metric objects
+    const metrics = data.metrics || []
+    const metricsCount = data.metrics_count || metrics.length
+    const firstMetric = metrics[0] || {}
+
+    // Extract metric data - check both metric object and top-level data
+    const metricName = firstMetric.metric_name ||
+                      firstMetric.name ||
+                      data.metric_name ||
+                      data.name ||
+                      'Unknown Metric'
+    const value = firstMetric.value !== undefined ? firstMetric.value :
+                 data.value !== undefined ? data.value : 'N/A'
+    const unit = firstMetric.labels?.unit ||
+                firstMetric.unit ||
+                data.unit || ''
+    const serviceName = firstMetric.service_name ||
+                       firstMetric.resource?.['service.name'] ||
+                       data.service_name
+
+    // Format value for display
+    const displayValue = typeof value === 'number' ? value.toFixed(2) : value
 
     return (
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between mb-2">
-          <span className="px-2 py-0.5 rounded text-xs font-semibold bg-cyan-500/20 text-cyan-400">
-            METRIC
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-cyan-500/20 text-cyan-400">
+              METRIC
+            </span>
+            {serviceName && (
+              <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-500/20 text-blue-400">
+                {serviceName}
+              </span>
+            )}
+            {metricsCount > 1 && (
+              <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/50 text-slate-300">
+                +{metricsCount - 1} more
+              </span>
+            )}
+          </div>
           <span className="text-xs text-slate-500 font-mono whitespace-nowrap">
             {new Date(event.timestamp).toLocaleTimeString()}
           </span>
         </div>
         <h4 className="text-white font-bold text-base mb-1">{metricName}</h4>
         <div className="flex items-center gap-2">
-          <span className="text-2xl font-bold text-cyan-400">{value}</span>
+          <span className="text-2xl font-bold text-cyan-400">{displayValue}</span>
           {unit && <span className="text-sm text-slate-400">{unit}</span>}
         </div>
       </div>
