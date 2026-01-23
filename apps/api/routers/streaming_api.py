@@ -419,49 +419,73 @@ async def stream_traces(
                         return False
 
                     # Check minimum duration
+                    # OpenTelemetry structure: check trace-level duration or span durations
                     min_duration_ms = config.get("min_duration_ms", 0)
                     traces = event.data.get("traces", [])
 
-                    # If duration filtering is enabled, check if any trace meets criteria
+                    # If duration filtering is enabled, check if any trace/span meets criteria
                     if min_duration_ms > 0:
                         has_long_trace = False
                         for trace in traces:
+                            # Check trace-level duration first
                             if trace.get("duration_ms", 0) >= min_duration_ms:
                                 has_long_trace = True
+                                break
+                            # Fallback: check individual span durations
+                            for span in trace.get("spans", []):
+                                if span.get("duration_ms", 0) >= min_duration_ms:
+                                    has_long_trace = True
+                                    break
+                            if has_long_trace:
                                 break
                         if not has_long_trace:
                             return False
 
                     # Check priority operations (always stream if present)
-                    # Note: traces is a flat list of spans, not nested
+                    # OpenTelemetry structure: traces contain nested spans
                     priority_operations = config.get("priority_operations", [])
-                    for span in traces:
-                        if span.get("operation_name") in priority_operations:
+                    for trace in traces:
+                        # Check root operation
+                        if trace.get("root_operation") in priority_operations:
                             return True
+                        # Check all spans within the trace
+                        for span in trace.get("spans", []):
+                            if span.get("operation_name") in priority_operations:
+                                return True
 
                     # Check error-only filtering
-                    # Note: traces is a flat list of spans, not nested
+                    # OpenTelemetry structure: trace has has_error flag and nested spans
                     if config.get("include_errors_only", False):
-                        for span in traces:
-                            # Status can be a string ("ok", "error") or dict with "code" key
-                            span_status = span.get("status", "ok")
-                            if isinstance(span_status, dict):
-                                span_status = span_status.get("code", "ok")
-                            if str(span_status).lower() == "error":
+                        for trace in traces:
+                            # Quick check using trace-level has_error flag
+                            if trace.get("has_error", False):
                                 return True
+                            # Fallback: check individual spans
+                            for span in trace.get("spans", []):
+                                span_status = span.get("status", "ok")
+                                if isinstance(span_status, dict):
+                                    span_status = span_status.get("code", "ok")
+                                if str(span_status).lower() == "error":
+                                    return True
                         return False
 
                     # Check status filtering
-                    # Note: traces is a flat list of spans, not nested
+                    # OpenTelemetry structure: trace has status and nested spans
                     include_status = config.get("include_status", ["ok", "error"])
                     if include_status:
-                        for span in traces:
-                            # Status can be a string ("ok", "error") or dict with "code" key
-                            span_status = span.get("status", "ok")
-                            if isinstance(span_status, dict):
-                                span_status = span_status.get("code", "ok")
-                            if str(span_status).lower() in [s.lower() for s in include_status]:
+                        include_status_lower = [s.lower() for s in include_status]
+                        for trace in traces:
+                            # Check trace-level status
+                            trace_status = str(trace.get("status", "ok")).lower()
+                            if trace_status in include_status_lower:
                                 return True
+                            # Check individual span statuses
+                            for span in trace.get("spans", []):
+                                span_status = span.get("status", "ok")
+                                if isinstance(span_status, dict):
+                                    span_status = span_status.get("code", "ok")
+                                if str(span_status).lower() in include_status_lower:
+                                    return True
                         return False
 
                     return True

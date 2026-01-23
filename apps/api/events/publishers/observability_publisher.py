@@ -1,9 +1,15 @@
 """
 Observability Event Publisher
 Specialized publisher for OpenTelemetry traces, metrics, and APM events
+
+Follows OpenTelemetry semantic conventions:
+- A Trace is a collection of Spans sharing the same trace_id
+- A Span is a single unit of work with span_id, parent_span_id, operation, timing, etc.
+- Spans are grouped by trace_id to form complete distributed traces
 """
 
 import asyncio
+from collections import defaultdict
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 import structlog
@@ -16,6 +22,100 @@ from ..constants import (
 )
 
 logger = structlog.get_logger(__name__)
+
+
+def group_spans_into_traces(spans: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Group flat spans into proper OpenTelemetry trace structures.
+
+    OpenTelemetry Semantics:
+    - A Trace represents a single request flowing through a distributed system
+    - A Trace contains multiple Spans, each representing a unit of work
+    - All Spans in a Trace share the same trace_id
+    - Spans form a tree structure via parent_span_id relationships
+
+    Args:
+        spans: Flat list of span dictionaries
+
+    Returns:
+        List of trace objects, each containing its spans and computed metadata
+    """
+    if not spans:
+        return []
+
+    # Group spans by trace_id
+    traces_map: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+
+    for span in spans:
+        trace_id = span.get("trace_id", "unknown")
+        traces_map[trace_id].append(span)
+
+    # Build proper trace objects with OpenTelemetry semantics
+    traces = []
+    for trace_id, trace_spans in traces_map.items():
+        # Find root span (no parent or empty parent_span_id)
+        root_span = None
+        for span in trace_spans:
+            parent_id = span.get("parent_span_id", "")
+            if not parent_id or parent_id == "":
+                root_span = span
+                break
+
+        # Compute trace-level metadata
+        services = set()
+        operations = []
+        start_times = []
+        end_times = []
+        has_error = False
+
+        for span in trace_spans:
+            # Collect services
+            service_name = span.get("service_name") or span.get("resource", {}).get("service.name")
+            if service_name:
+                services.add(service_name)
+
+            # Collect operations
+            if span.get("operation_name"):
+                operations.append(span["operation_name"])
+
+            # Collect timing
+            if span.get("start_time"):
+                start_times.append(span["start_time"])
+            if span.get("end_time"):
+                end_times.append(span["end_time"])
+
+            # Check for errors
+            status = span.get("status", "ok")
+            if isinstance(status, dict):
+                status = status.get("code", "ok")
+            if str(status).lower() == "error":
+                has_error = True
+
+        # Build trace object following OpenTelemetry conventions
+        trace = {
+            "trace_id": trace_id,
+            "spans": trace_spans,
+            "span_count": len(trace_spans),
+            "services": list(services),
+            "service_count": len(services),
+            "has_error": has_error,
+            "status": "error" if has_error else "ok",
+        }
+
+        # Add root span info if found
+        if root_span:
+            trace["root_service"] = root_span.get("service_name") or root_span.get("resource", {}).get("service.name")
+            trace["root_operation"] = root_span.get("operation_name")
+            trace["start_time"] = root_span.get("start_time")
+            trace["end_time"] = root_span.get("end_time")
+
+            # Calculate trace duration from root span or span range
+            if root_span.get("duration_ms"):
+                trace["duration_ms"] = root_span["duration_ms"]
+
+        traces.append(trace)
+
+    return traces
 
 
 class ObservabilityEventPublisher:
@@ -88,18 +188,25 @@ class ObservabilityEventPublisher:
 
             self.logger.info(f"Converted {len(spans_data)} spans to dictionaries for event publishing")
 
+            # Group spans into proper trace structures following OpenTelemetry semantics
+            traces = group_spans_into_traces(converted_spans)
+
+            self.logger.info(
+                f"Grouped {len(converted_spans)} spans into {len(traces)} traces",
+                trace_ids=[t["trace_id"] for t in traces]
+            )
+
             event_data = {
                 "batch_id": batch_info.get("batch_id"),
-                "span_count": len(spans_data),
-                "traces_count": len(spans_data),  # Alias for streaming API compatibility
+                "span_count": len(converted_spans),
+                "traces_count": len(traces),  # Number of distinct traces
                 "processing_time_ms": processing_time_ms,
                 "bytes_processed": batch_info.get("bytes_processed", 0),
                 "ingestion_endpoint": "/v1/observability/traces/ingest",
                 "timestamp": batch_info.get("timestamp", datetime.utcnow().isoformat()),
-                "success_count": batch_info.get("success_count", len(spans_data)),
+                "success_count": batch_info.get("success_count", len(converted_spans)),
                 "error_count": batch_info.get("error_count", 0),
-                "spans": converted_spans,  # Use converted dictionaries
-                "traces": converted_spans,  # Alias for streaming API compatibility
+                "traces": traces,  # Proper OpenTelemetry trace objects with nested spans
                 "source_format": "otlp"  # OpenTelemetry Protocol
             }
 
@@ -354,17 +461,19 @@ class ObservabilityEventFactory:
         processing_time_ms: float,
         **kwargs
     ) -> BaseEvent:
-        """Create traces batch ingestion event"""
+        """Create traces batch ingestion event with proper OpenTelemetry structure"""
+        # Group spans into proper trace structures
+        traces = group_spans_into_traces(spans_data)
+
         event_data = {
             "batch_id": batch_info.get("batch_id"),
             "span_count": len(spans_data),
-            "traces_count": len(spans_data),  # Alias for streaming API compatibility
+            "traces_count": len(traces),  # Number of distinct traces
             "processing_time_ms": processing_time_ms,
             "bytes_processed": batch_info.get("bytes_processed", 0),
             "success_count": batch_info.get("success_count", len(spans_data)),
             "error_count": batch_info.get("error_count", 0),
-            "spans": spans_data,
-            "traces": spans_data,  # Alias for streaming API compatibility
+            "traces": traces,  # Proper OpenTelemetry trace objects with nested spans
             "source_format": "otlp",
             **kwargs
         }
