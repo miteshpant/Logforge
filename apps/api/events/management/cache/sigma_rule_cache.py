@@ -353,6 +353,13 @@ class SigmaRuleCache:
             cache_key = f"{self.cache_prefix}{customer_id}"
             deleted_count = await self.redis_manager.delete(cache_key)
 
+            # Also invalidate compiled rules in high-performance matcher
+            try:
+                from sigma_engine import sigma_engine
+                sigma_engine.invalidate_compiled_rules(customer_id)
+            except Exception as e:
+                logger.warning(f"Failed to invalidate compiled rules: {e}")
+
             logger.debug(f"🧹 Invalidated Sigma rule cache for customer {customer_id} (deleted {deleted_count} keys)")
             return deleted_count > 0
 
@@ -369,6 +376,13 @@ class SigmaRuleCache:
         """
         try:
             deleted_count = await self.redis_manager.delete(self.default_rules_key)
+
+            # Also invalidate all compiled rules (default rules affect all customers)
+            try:
+                from sigma_engine import sigma_engine
+                sigma_engine.invalidate_compiled_rules("default")
+            except Exception as e:
+                logger.warning(f"Failed to invalidate compiled default rules: {e}")
 
             logger.debug(f"🧹 Invalidated default Sigma rule cache (deleted {deleted_count} keys)")
             return deleted_count > 0

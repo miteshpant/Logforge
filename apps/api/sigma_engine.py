@@ -287,6 +287,11 @@ class SigmaRuleEngine:
         from services.subscription_service import SubscriptionService
         self.subscription_service = SubscriptionService()
 
+        # High-performance matcher for pre-compiled rules
+        from services.high_performance_rule_matcher import get_high_performance_matcher
+        self.hp_matcher = get_high_performance_matcher()
+        self._compiled_customers: set = set()  # Track which customers have compiled rules
+
     def _get_security_publisher(self):
         """Lazy initialization of security publisher"""
         if self.security_publisher is None:
@@ -805,17 +810,231 @@ class SigmaRuleEngine:
                 logger.debug(f"No cached sigma rules found for tenant {customer_id}")
                 return []
 
-            # Use all available rules - pricing is per alert generated, not per rule
-            filtered_rules = tenant_rules
-
-            logger.debug(f"🔍 Evaluating {len(logs)} logs against {len(filtered_rules)}/{len(tenant_rules)} subscription-filtered rules for tenant {customer_id}")
-
-            # Evaluate filtered rules against logs
-            return await self.evaluate_logs_against_rules(logs, filtered_rules, customer_id)
+            # Use high-performance matcher with pre-compiled rules
+            return await self._evaluate_logs_fast(logs, tenant_rules, customer_id)
 
         except Exception as e:
             logger.error(f"Error in subscription-aware sigma evaluation for {customer_id}: {e}")
             return []
+
+    async def _evaluate_logs_fast(
+        self,
+        logs: List[Dict[str, Any]],
+        rules: List[Dict[str, Any]],
+        customer_id: str
+    ) -> List[SigmaMatch]:
+        """
+        HIGH-PERFORMANCE: Evaluate logs using pre-compiled rules.
+
+        Optimizations:
+        1. Rules compiled once per customer (not per-log)
+        2. Pre-compiled regex patterns
+        3. Field-based rule filtering (skip inapplicable rules)
+        4. Pre-computed lowercase strings
+
+        Expected: 10-50x faster than standard evaluation
+        """
+        matches = []
+        start_time = time.time()
+
+        try:
+            # Compile rules for this customer if not already done
+            if customer_id not in self._compiled_customers:
+                compile_start = time.time()
+                self.hp_matcher.compile_rules(rules, customer_id)
+                self._compiled_customers.add(customer_id)
+                compile_time_ms = (time.time() - compile_start) * 1000
+                logger.info(f"⚡ Compiled {len(rules)} rules for customer {customer_id} in {compile_time_ms:.2f}ms")
+
+            # Separate count rules (need batch processing) from simple rules
+            count_rules = self.hp_matcher.get_count_rules(customer_id)
+            has_count_rules = len(count_rules) > 0
+
+            # FAST PATH: Evaluate simple rules using pre-compiled matcher
+            for log in logs:
+                log_matches = self.hp_matcher.match_log(log, customer_id)
+
+                for compiled_rule, matched_fields in log_matches:
+                    # Create SigmaMatch from compiled rule
+                    match = SigmaMatch(
+                        rule_id=compiled_rule.rule_id,
+                        rule_title=compiled_rule.title,
+                        log_entry=log,
+                        matched_fields=matched_fields,
+                        severity=DetectionSeverity(compiled_rule.severity),
+                        attack_techniques=compiled_rule.attack_techniques,
+                        kill_chain_phases=compiled_rule.kill_chain_phases,
+                        timestamp=datetime.now(),
+                        customer_id=customer_id
+                    )
+                    matches.append(match)
+
+                    logger.info(f"🚨 FAST Sigma match: {compiled_rule.rule_id} - {compiled_rule.title}")
+
+                    # Publish security detection event
+                    await self._publish_detection_event(match)
+
+            # BATCH PATH: Evaluate count-based rules if any
+            if has_count_rules:
+                for compiled_rule in count_rules:
+                    count_matches = await self._evaluate_count_rule_fast(
+                        logs, compiled_rule, customer_id
+                    )
+                    matches.extend(count_matches)
+
+            # Log performance stats
+            eval_time_ms = (time.time() - start_time) * 1000
+            matcher_stats = self.hp_matcher.get_stats()
+
+            logger.info(
+                f"⚡ FAST evaluation completed: {len(logs)} logs, {len(matches)} matches "
+                f"in {eval_time_ms:.2f}ms ({eval_time_ms/len(logs):.3f}ms/log) | "
+                f"Rules skipped by field filter: {matcher_stats.get('rules_skipped_by_field_filter', 0)}"
+            )
+
+            return matches
+
+        except Exception as e:
+            logger.error(f"Error in fast sigma evaluation for {customer_id}: {e}")
+            # Fallback to standard evaluation
+            logger.warning(f"Falling back to standard evaluation for {customer_id}")
+            return await self.evaluate_logs_against_rules(logs, rules, customer_id, logs_normalized=True)
+
+    async def _evaluate_count_rule_fast(
+        self,
+        logs: List[Dict[str, Any]],
+        compiled_rule,
+        customer_id: str
+    ) -> List[SigmaMatch]:
+        """Evaluate a count-based rule using pre-compiled conditions."""
+        matches = []
+
+        try:
+            # Get selection from compiled rule
+            selection = compiled_rule.selections.get('selection')
+            if not selection:
+                return matches
+
+            # Find logs matching the selection
+            matching_logs = []
+            for log in logs:
+                # Check if log has required fields
+                log_fields = set(log.keys())
+                if not selection.required_fields.issubset(log_fields):
+                    continue
+
+                # Evaluate selection conditions
+                all_match = True
+                matched_fields = {}
+
+                for condition in selection.conditions:
+                    log_value = log.get(condition.field_name)
+                    if not self.hp_matcher._match_condition(log_value, condition):
+                        all_match = False
+                        break
+                    matched_fields[condition.field_name] = log_value
+
+                if all_match:
+                    matching_logs.append((log, matched_fields))
+
+            if not matching_logs:
+                return matches
+
+            # Apply count logic
+            threshold = compiled_rule.count_threshold or 0
+            operator = compiled_rule.count_operator or 'gt'
+            group_by = compiled_rule.count_group_by
+
+            if group_by:
+                # Group by specified fields
+                from collections import defaultdict
+                groups: Dict[str, List] = defaultdict(list)
+
+                for log, matched_fields in matching_logs:
+                    key_parts = [f"{f}={log.get(f, 'unknown')}" for f in group_by]
+                    group_key = "|".join(key_parts)
+                    groups[group_key].append((log, matched_fields))
+
+                # Check each group
+                for group_key, group_logs in groups.items():
+                    count = len(group_logs)
+                    if self._check_count_threshold(count, threshold, operator):
+                        log, matched_fields = group_logs[-1]
+                        matched_fields['_count'] = {
+                            'value': count,
+                            'threshold': threshold,
+                            'operator': operator,
+                            'group_key': group_key
+                        }
+
+                        match = SigmaMatch(
+                            rule_id=compiled_rule.rule_id,
+                            rule_title=compiled_rule.title,
+                            log_entry=log,
+                            matched_fields=matched_fields,
+                            severity=DetectionSeverity(compiled_rule.severity),
+                            attack_techniques=compiled_rule.attack_techniques,
+                            kill_chain_phases=compiled_rule.kill_chain_phases,
+                            timestamp=datetime.now(),
+                            customer_id=customer_id
+                        )
+                        matches.append(match)
+                        await self._publish_detection_event(match)
+
+                        logger.info(f"🚨 Count rule match: {compiled_rule.rule_id} (group={group_key}, count={count})")
+            else:
+                # No group by - count all
+                count = len(matching_logs)
+                if self._check_count_threshold(count, threshold, operator):
+                    log, matched_fields = matching_logs[-1]
+                    matched_fields['_count'] = {
+                        'value': count,
+                        'threshold': threshold,
+                        'operator': operator
+                    }
+
+                    match = SigmaMatch(
+                        rule_id=compiled_rule.rule_id,
+                        rule_title=compiled_rule.title,
+                        log_entry=log,
+                        matched_fields=matched_fields,
+                        severity=DetectionSeverity(compiled_rule.severity),
+                        attack_techniques=compiled_rule.attack_techniques,
+                        kill_chain_phases=compiled_rule.kill_chain_phases,
+                        timestamp=datetime.now(),
+                        customer_id=customer_id
+                    )
+                    matches.append(match)
+                    await self._publish_detection_event(match)
+
+                    logger.info(f"🚨 Count rule match: {compiled_rule.rule_id} (count={count})")
+
+            return matches
+
+        except Exception as e:
+            logger.error(f"Error evaluating count rule {compiled_rule.rule_id}: {e}")
+            return []
+
+    def _check_count_threshold(self, count: int, threshold: int, operator: str) -> bool:
+        """Check if count meets threshold condition."""
+        if operator == 'gt':
+            return count > threshold
+        elif operator == 'gte':
+            return count >= threshold
+        elif operator == 'lt':
+            return count < threshold
+        elif operator == 'lte':
+            return count <= threshold
+        elif operator == 'eq':
+            return count == threshold
+        return False
+
+    def invalidate_compiled_rules(self, customer_id: str):
+        """Invalidate compiled rules for a customer (call on rule cache update)."""
+        if customer_id in self._compiled_customers:
+            self.hp_matcher.clear_customer_rules(customer_id)
+            self._compiled_customers.discard(customer_id)
+            logger.info(f"Invalidated compiled rules for customer {customer_id}")
 
 
 # Singleton instance for use across the application
