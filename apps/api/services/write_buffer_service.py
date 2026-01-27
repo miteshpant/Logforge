@@ -250,22 +250,29 @@ class WriteBufferService:
         """Default flush implementation using log_processor"""
         try:
             from events.management.processors.log_processor import (
-                process_dual_write_batch,
-                process_normalized_write_only
+                process_dual_write_optimized,
+                process_normalized_write_only,
+                process_log_batch_with_client
             )
 
             if raw_logs and normalized_logs:
-                # Dual write
-                return await process_dual_write_batch(raw_logs, normalized_logs, customer_id)
+                # Dual write - both functions take List[Dict], not LogEntry
+                return await process_dual_write_optimized(raw_logs, normalized_logs, customer_id)
             elif normalized_logs:
                 # Normalized only
                 return await process_normalized_write_only(normalized_logs, customer_id)
             elif raw_logs:
-                # Raw only (less common)
-                from events.management.processors.log_processor import process_log_batch_with_client
+                # Raw only - need to convert to LogEntry for this function
                 from models import LogEntry
-                log_entries = [LogEntry(**log) for log in raw_logs]
-                return await process_log_batch_with_client(log_entries, customer_id)
+                log_entries = []
+                for log in raw_logs:
+                    try:
+                        log_entries.append(LogEntry(**log))
+                    except Exception as e:
+                        logger.warning(f"Failed to create LogEntry: {e}")
+                        continue
+                if log_entries:
+                    return await process_log_batch_with_client(log_entries, customer_id)
 
             return True
 
