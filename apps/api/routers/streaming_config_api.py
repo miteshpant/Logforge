@@ -72,27 +72,16 @@ async def get_all_streaming_configs(
     """Get all streaming configurations for a customer"""
     try:
         service = get_streaming_config_service()
-        configs = await service.get_all_customer_configs(customer_id)
-        
-        # Check which configs are using defaults
-        using_defaults = {}
-        for event_type in configs.keys():
-            config_key = None
-            if event_type == "metrics.batch.ingested":
-                config_key = STREAMING_CONFIG_METRICS_KEY
-            elif event_type == "traces.batch.ingested":
-                config_key = STREAMING_CONFIG_TRACES_KEY
-            
-            if config_key:
-                db_config = await service.get_customer_streaming_config_from_db(customer_id, config_key)
-                using_defaults[event_type] = db_config is None
-        
+
+        # Optimized: single batch query instead of N+1 queries
+        result = await service.get_all_customer_configs_with_defaults_info(customer_id)
+
         return AllConfigsResponse(
             customer_id=customer_id,
-            configs=configs,
-            using_defaults=using_defaults
+            configs=result["configs"],
+            using_defaults=result["using_defaults"]
         )
-        
+
     except Exception as e:
         logger.error(f"Failed to get streaming configs for {customer_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get configurations: {str(e)}")

@@ -196,7 +196,7 @@ class UserService:
             db_user = await self.user_dao.get_user_by_email(email)
             if not db_user:
                 return None
-            
+
             return User(
                 id=db_user['id'],
                 email=db_user['email'],
@@ -208,10 +208,27 @@ class UserService:
                 last_login_at=db_user.get('last_login_at'),
                 email_verified_at=db_user.get('email_verified_at')
             )
-            
+
         except Exception as e:
             logger.error("Failed to get user by email", error=str(e), email=email)
             return None
+
+    async def get_existing_emails_batch(self, emails: List[str]) -> set:
+        """
+        Check which emails already exist in a single query.
+        Returns a set of existing emails (lowercase).
+        Performance: O(1) query instead of O(n) queries.
+        """
+        try:
+            if not emails:
+                return set()
+
+            email_to_user = await self.user_dao.get_users_by_emails_batch(emails)
+            return set(email_to_user.keys())
+
+        except Exception as e:
+            logger.error("Failed to get existing emails batch", error=str(e), email_count=len(emails))
+            return set()
     
     async def update_user(self, user_id: str, update_data: Dict[str, Any]) -> Optional[User]:
         """Update user information"""

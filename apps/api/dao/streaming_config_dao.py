@@ -186,16 +186,23 @@ class StreamingConfigDAO:
         """Check if streaming configuration exists"""
         query = """
         SELECT 1
-        FROM tenant_configs_mt 
+        FROM tenant_configs_mt
         WHERE customer_id = %(customer_id)s
         AND config_key = %(config_key)s
         AND config_type = 'json'
         LIMIT 1
         """
-        
+
         result = await self.db.execute_query(query, {
             "customer_id": customer_id,
             "config_key": config_key
         })
-        
+
         return len(result) > 0
+
+    async def get_all_customer_configs_batch(self, customer_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all streaming configs for a customer in a single query.
+        Alias for get_customer_all_streaming_configs for clarity.
+        """
+        return await self.get_customer_all_streaming_configs(customer_id)

@@ -632,36 +632,42 @@ async def bulk_create_users(
 ):
     """Bulk create multiple users (platform admins only)"""
     try:
-        if len(users) > 100:
-            raise HTTPException(400, "Bulk creation limited to 100 users")
-        
+        if len(users) > 500:
+            raise HTTPException(400, "Bulk creation limited to 500 users")
+
         created_users = []
         errors = []
-        
+
+        # Batch check for existing emails (O(1) query instead of O(n))
+        all_emails = [u.email.lower() for u in users]
+        existing_emails = await user_service.get_existing_emails_batch(all_emails)
+
         for user_request in users:
             try:
-                # Check if user exists
-                existing = await user_service.get_user_by_email(user_request.email)
-                if existing:
+                # Check if user exists using batch result
+                if user_request.email.lower() in existing_emails:
                     errors.append(f"User {user_request.email} already exists")
                     continue
-                
+
                 # Create user
                 user_data = user_request.dict()
                 new_user = await user_service.create_user(user_data)
                 created_users.append(new_user)
-                
+
+                # Add to existing set to prevent duplicates within same batch
+                existing_emails.add(user_request.email.lower())
+
             except Exception as e:
                 errors.append(f"Failed to create {user_request.email}: {str(e)}")
-        
+
         logger.info("Bulk user creation completed",
                    created_count=len(created_users),
                    error_count=len(errors),
                    created_by=current_admin.id)
-        
+
         if errors:
             logger.warning("Bulk creation errors", errors=errors)
-        
+
         # Return successfully created users
         return [
             UserResponse(
@@ -675,7 +681,7 @@ async def bulk_create_users(
                 email_verified_at=u.email_verified_at
             ) for u in created_users
         ]
-        
+
     except HTTPException:
         raise
     except Exception as e:

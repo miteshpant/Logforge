@@ -396,8 +396,20 @@ class AlertDAO:
             logger.error(f"Failed to get alert instance {alert_id}: {e}")
             raise
     
-    async def list_alert_instances(self, customer_id: str, status: Optional[str] = None) -> List[Dict[str, Any]]:
-        """List alert instances for customer"""
+    async def list_alert_instances(
+        self,
+        customer_id: str,
+        status: Optional[str] = None,
+        severity: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0
+    ) -> Dict[str, Any]:
+        """
+        List alert instances for customer with server-side pagination.
+
+        Returns:
+            Dict with 'alerts' list and 'total' count
+        """
         try:
             where_clauses = ["ai.customer_id = %(customer_id)s"]
             params = {"customer_id": customer_id}
@@ -409,6 +421,26 @@ class AlertDAO:
                 where_clauses.append("ai.status = %(status)s")
                 params["status"] = status
 
+            if severity:
+                where_clauses.append("ar.severity = %(severity)s")
+                params["severity"] = severity
+
+            where_clause = ' AND '.join(where_clauses)
+
+            # Count total for pagination
+            count_query = f"""
+            SELECT COUNT(*) as total
+            FROM {ALERT_INSTANCES_TABLE} ai
+            LEFT JOIN {ALERT_RULES_TABLE} ar ON ai.rule_id = ar.id
+            WHERE {where_clause}
+            """
+            count_result = await self.db.fetch_one(count_query, params)
+            total = count_result.get("total", 0) if count_result else 0
+
+            # Add pagination params
+            params["limit"] = limit
+            params["offset"] = offset
+
             # Join with alert_rules table to get severity from the rule, not from trigger_data
             query = f"""
             SELECT
@@ -417,8 +449,9 @@ class AlertDAO:
                 ar.name as rule_name
             FROM {ALERT_INSTANCES_TABLE} ai
             LEFT JOIN {ALERT_RULES_TABLE} ar ON ai.rule_id = ar.id
-            WHERE {' AND '.join(where_clauses)}
+            WHERE {where_clause}
             ORDER BY ai.triggered_at DESC
+            LIMIT %(limit)s OFFSET %(offset)s
             """
 
             results = await self.db.fetch_all(query, params)
@@ -440,12 +473,79 @@ class AlertDAO:
                 if alert["status"] == "triggered":
                     alert["status"] = "active"
 
-            return results
+            return {"alerts": results, "total": total}
 
         except Exception as e:
             logger.error(f"Failed to list alert instances for customer {customer_id}: {e}")
             raise
-    
+
+    async def list_alert_rules_paginated(
+        self,
+        customer_id: str,
+        enabled: Optional[bool] = None,
+        severity: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0
+    ) -> Dict[str, Any]:
+        """
+        List alert rules with server-side pagination.
+
+        Returns:
+            Dict with 'rules' list and 'total' count
+        """
+        try:
+            where_clauses = ["customer_id = %(customer_id)s"]
+            params = {"customer_id": customer_id}
+
+            if enabled is not None:
+                where_clauses.append("is_enabled = %(enabled)s")
+                params["enabled"] = 1 if enabled else 0
+
+            if severity:
+                where_clauses.append("severity = %(severity)s")
+                params["severity"] = severity
+
+            where_clause = ' AND '.join(where_clauses)
+
+            # Count total
+            count_query = f"""
+            SELECT COUNT(*) as total FROM {ALERT_RULES_TABLE}
+            WHERE {where_clause}
+            """
+            count_result = await self.db.fetch_one(count_query, params)
+            total = count_result.get("total", 0) if count_result else 0
+
+            # Add pagination
+            params["limit"] = limit
+            params["offset"] = offset
+
+            query = f"""
+            SELECT * FROM {ALERT_RULES_TABLE}
+            WHERE {where_clause}
+            ORDER BY created_at DESC
+            LIMIT %(limit)s OFFSET %(offset)s
+            """
+
+            results = await self.db.fetch_all(query, params)
+
+            # Parse JSON fields for each rule
+            for rule in results:
+                condition_config = json.loads(rule.get("condition_config", "{}"))
+                rule["rule_id"] = rule["id"]
+                rule["conditions"] = condition_config.get("conditions", [])
+                rule["filters"] = condition_config.get("filters", [])
+                rule["tags"] = condition_config.get("tags", [])
+                rule["evaluation_interval"] = condition_config.get("evaluation_interval", 300)
+                rule["max_alerts_per_hour"] = condition_config.get("max_alerts_per_hour", 10)
+                rule["enabled"] = bool(rule.get("is_enabled", 0))
+                rule["cooldown_period"] = rule.get("cooldown_minutes", 5) * 60
+
+            return {"rules": results, "total": total}
+
+        except Exception as e:
+            logger.error(f"Failed to list alert rules paginated for {customer_id}: {e}")
+            raise
+
     async def list_alert_instances_by_rule(self, rule_id: str, customer_id: str,
                                           status: Optional[str] = None,
                                           limit: int = 100) -> List[Dict[str, Any]]:

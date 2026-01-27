@@ -73,10 +73,43 @@ class UserDAO:
             # Use DatabaseLayer's get_user_by_email method
             result = await self.db.get_user_by_email(email)
             return result
-            
+
         except Exception as e:
             logger.error("Failed to get user by email", error=str(e), email=email)
             return None
+
+    async def get_users_by_emails_batch(self, emails: List[str]) -> Dict[str, Dict[str, Any]]:
+        """
+        Get multiple users by email in a single query.
+        Returns a dict mapping email -> user_data for existing users.
+        Performance: O(1) query instead of O(n) queries.
+        """
+        try:
+            if not emails:
+                return {}
+
+            # Normalize emails to lowercase
+            normalized_emails = [e.lower() for e in emails]
+
+            query = f"""
+                SELECT * FROM {USERS_TABLE}
+                WHERE lower(email) IN %(emails)s
+            """
+
+            result = await self.db.execute_query(query, {"emails": normalized_emails})
+
+            # Build lookup dict by email
+            email_to_user = {}
+            if result:
+                for row in result:
+                    user_dict = dict(row)
+                    email_to_user[user_dict['email'].lower()] = user_dict
+
+            return email_to_user
+
+        except Exception as e:
+            logger.error("Failed to get users by emails batch", error=str(e), email_count=len(emails))
+            return {}
     
     async def update_user(self, user_id: str, update_data: Dict[str, Any]) -> bool:
         """Update user in database using DatabaseLayer method"""

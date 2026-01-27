@@ -68,21 +68,19 @@ async def list_alert_rules(
 ):
     """List alert rules for the customer"""
     try:
-        # Get rules with filters using AlertService
-        rules = await alert_service.list_alert_rules(customer_id, enabled, severity)
-        
-        # Apply pagination
-        total = len(rules)
-        paginated_rules = rules[offset:offset+limit]
-        
+        # Server-side pagination: query only the needed records from DB
+        result = await alert_service.list_alert_rules_paginated(
+            customer_id, enabled, severity, limit, offset
+        )
+
         return {
-            "rules": paginated_rules,
-            "total": total,
+            "rules": result["rules"],
+            "total": result["total"],
             "limit": limit,
             "offset": offset,
             "customer_id": customer_id
         }
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list alert rules: {str(e)}")
 
@@ -175,21 +173,19 @@ async def list_alerts(
 ):
     """List active alerts for the customer"""
     try:
-        # Get alerts with filters using AlertService
-        alerts = await alert_service.list_alert_instances(customer_id, status, severity)
-        
-        # Apply pagination
-        total = len(alerts)
-        paginated_alerts = alerts[offset:offset+limit]
-        
+        # Server-side pagination: query only the needed records from DB
+        result = await alert_service.list_alert_instances(
+            customer_id, status, severity, limit, offset
+        )
+
         return {
-            "alerts": paginated_alerts,
-            "total": total,
+            "alerts": result["alerts"],
+            "total": result["total"],
             "limit": limit,
             "offset": offset,
             "customer_id": customer_id
         }
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list alerts: {str(e)}")
 

@@ -310,20 +310,51 @@ class AlertService:
             logger.error(f"Failed to get alert instance {alert_id}: {e}")
             raise
     
-    async def list_alert_instances(self, customer_id: str, status: Optional[str] = None, 
-                                  severity: Optional[str] = None) -> List[Dict[str, Any]]:
-        """List alert instances with filters"""
+    async def list_alert_instances(
+        self,
+        customer_id: str,
+        status: Optional[str] = None,
+        severity: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0
+    ) -> Dict[str, Any]:
+        """
+        List alert instances with server-side pagination.
+
+        Returns:
+            Dict with 'alerts' list and 'total' count
+        """
         try:
-            alerts = await self.alert_dao.list_alert_instances(customer_id, status)
-            
-            # Apply severity filter if specified
-            if severity:
-                alerts = [alert for alert in alerts if alert.get("severity") == severity]
-            
-            return alerts
-            
+            result = await self.alert_dao.list_alert_instances(
+                customer_id, status, severity, limit, offset
+            )
+            return result
+
         except Exception as e:
             logger.error(f"Failed to list alert instances for customer {customer_id}: {e}")
+            raise
+
+    async def list_alert_rules_paginated(
+        self,
+        customer_id: str,
+        enabled: Optional[bool] = None,
+        severity: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0
+    ) -> Dict[str, Any]:
+        """
+        List alert rules with server-side pagination.
+
+        Returns:
+            Dict with 'rules' list and 'total' count
+        """
+        try:
+            return await self.alert_dao.list_alert_rules_paginated(
+                customer_id, enabled, severity, limit, offset
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to list alert rules paginated for {customer_id}: {e}")
             raise
     
     async def list_alert_instances_by_rule(self, rule_id: str, customer_id: str, 

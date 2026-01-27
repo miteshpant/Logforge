@@ -494,8 +494,8 @@ async def bulk_insert_audit_records(
     try:
         entries = audit_data.get("entries", [])
 
-        if len(entries) > 1000:
-            raise HTTPException(400, "Bulk insert limited to 1000 records")
+        if len(entries) > 5000:
+            raise HTTPException(400, "Bulk insert limited to 5000 records")
 
         # Process and validate entries
         processed_entries = []

@@ -184,16 +184,70 @@ class StreamingConfigService:
         """Get all streaming configurations for a customer"""
         try:
             configs = {}
-            
+
             for event_type in STREAMING_CONFIG_MAP.keys():
                 config = await self.get_streaming_config(customer_id, event_type)
                 configs[event_type] = config
-            
+
             return configs
-            
+
         except Exception as e:
             logger.error(f"Failed to get all configs for customer {customer_id}: {e}")
             return {}
+
+    async def get_all_customer_configs_with_defaults_info(
+        self,
+        customer_id: str
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Get all streaming configurations with info about which use defaults.
+
+        Performance optimized: single batch query to DB instead of N+1 queries.
+
+        Returns:
+            {
+                "configs": {event_type: config_dict, ...},
+                "using_defaults": {event_type: bool, ...}
+            }
+        """
+        try:
+            configs = {}
+            using_defaults = {}
+
+            # Single batch query to get all custom configs for this customer
+            custom_configs = await self.dao.get_all_customer_configs_batch(customer_id)
+
+            # Build a lookup of config_key -> config_data
+            custom_config_lookup = {}
+            for config in custom_configs:
+                custom_config_lookup[config['config_key']] = config
+
+            # Process each event type
+            for event_type, mapping in STREAMING_CONFIG_MAP.items():
+                config_key = mapping["config_key"]
+
+                # Check if customer has custom config
+                if config_key in custom_config_lookup:
+                    # Customer has custom config
+                    custom = custom_config_lookup[config_key]
+                    configs[event_type] = json.loads(custom['config_value'])
+                    using_defaults[event_type] = False
+                else:
+                    # Use defaults
+                    configs[event_type] = mapping["defaults"]
+                    using_defaults[event_type] = True
+
+            return {
+                "configs": configs,
+                "using_defaults": using_defaults
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get all configs with defaults info for {customer_id}: {e}")
+            # Fall back to returning defaults for all
+            configs = {et: m["defaults"] for et, m in STREAMING_CONFIG_MAP.items()}
+            using_defaults = {et: True for et in STREAMING_CONFIG_MAP.keys()}
+            return {"configs": configs, "using_defaults": using_defaults}
     
     # Private methods
     
