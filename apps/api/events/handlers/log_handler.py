@@ -40,10 +40,11 @@ class LogEventHandler(EventHandler):
             return True
 
     async def _handle_logs_batch_ingested(self, event: BaseEvent) -> bool:
-        """Handle logs.batch.ingested event using SmartIngestionService + dual-write"""
+        """Handle logs.batch.ingested event using SmartIngestionService + buffered writes"""
         try:
             # Import here to avoid circular dependencies
             from services.smart_ingestion_service import get_smart_ingestion_service
+            from services.write_buffer_service import get_write_buffer
             from events.management.processors.log_processor import track_ingestion_metrics
             from events.publishers.log_publisher import LogEventPublisher
             from datetime import datetime
@@ -89,16 +90,36 @@ class LogEventHandler(EventHandler):
                 field_mapping_applied=ingestion_result.field_mapping_applied
             )
 
-            # Step 2: Write to logs_raw_mt (raw logs for customer alerts/compliance)
-            from events.management.processors.log_processor import process_log_batch_with_client
+            # Step 2: Buffer raw logs for batched write to logs_raw_mt
+            # Convert LogEntry objects to dicts for buffering
+            raw_logs_dicts = [
+                {
+                    "ts": log.ts,
+                    "host": log.host,
+                    "service": log.service,
+                    "level": log.level,
+                    "msg": log.msg,
+                    "trace_id": log.trace_id,
+                    "span_id": log.span_id,
+                    "attrs": log.attrs,
+                    "status": log.status,
+                    "src_ip": log.src_ip,
+                    "user_id": log.user_id,
+                    "ingested_at": log.ingested_at,
+                    "customer_id": customer_id
+                }
+                for log in ingestion_result.log_entries
+            ]
 
-            raw_write_success = await process_log_batch_with_client(
-                ingestion_result.log_entries, customer_id
+            write_buffer = get_write_buffer()
+            raw_buffer_success = await write_buffer.add_logs(
+                customer_id=customer_id,
+                raw_logs=raw_logs_dicts
             )
 
-            if not raw_write_success:
+            if not raw_buffer_success:
                 logger.error(
-                    "Raw log write failed",
+                    "Raw log buffering failed",
                     event_id=event.metadata.event_id,
                     customer_id=customer_id
                 )

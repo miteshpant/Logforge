@@ -478,6 +478,19 @@ async def lifespan(app):
     except Exception as e:
         logger.warning(f"Failed to start storage quota sync service: {str(e)}")
 
+    # Initialize write buffer service for batched ClickHouse writes
+    try:
+        from services.write_buffer_service import init_write_buffer, BufferConfig
+        # Configure buffer: flush every 100 logs or 100ms, whichever comes first
+        buffer_config = BufferConfig(
+            max_buffer_size=100,
+            flush_interval_ms=100
+        )
+        await init_write_buffer(buffer_config)
+        logger.info("Write buffer service started (batch size: 100, interval: 100ms)")
+    except Exception as e:
+        logger.warning(f"Failed to start write buffer service: {str(e)}")
+
     logger.info("Logforge API server started successfully")
 
     yield
@@ -492,6 +505,14 @@ async def lifespan(app):
         logger.info("Storage quota sync service stopped")
     except Exception as e:
         logger.warning(f"Failed to stop storage quota sync service: {str(e)}")
+
+    # Shutdown write buffer service (flushes remaining logs)
+    try:
+        from services.write_buffer_service import shutdown_write_buffer
+        await shutdown_write_buffer()
+        logger.info("Write buffer service stopped (remaining logs flushed)")
+    except Exception as e:
+        logger.warning(f"Failed to stop write buffer service: {str(e)}")
 
     await shutdown_engines()
     logger.info("Logforge API server shutdown complete")
