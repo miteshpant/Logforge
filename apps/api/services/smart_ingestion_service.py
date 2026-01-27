@@ -10,7 +10,7 @@ from typing import List, Dict, Any
 from dataclasses import dataclass
 
 from models import LogEntry, BaseLogEntry
-from field_mapper import normalize_log_for_sigma
+from services.high_performance_normalizer import normalize_batch_fast, get_high_performance_normalizer
 
 logger = logging.getLogger(__name__)
 
@@ -70,47 +70,35 @@ class SmartIngestionService:
         field_mapping_success = 0
         
         logger.debug(f"Processing {len(raw_logs)} logs for customer {customer_id}")
-        
-        for i, raw_log in enumerate(raw_logs):
+
+        # Step 1: Enrich all logs with metadata (vectorized)
+        enriched_logs = []
+        for raw_log in raw_logs:
+            enriched_logs.append(self._enrich_log_metadata(raw_log, customer_id, source_format))
+
+        # Step 2: Batch normalize using high-performance normalizer
+        # This uses schema registry + bloom filters for O(1) lookups on repeated schemas
+        normalized_data = normalize_batch_fast(enriched_logs, customer_id, source_format)
+
+        logger.debug(f"High-performance batch normalization complete: {len(normalized_data)} logs")
+
+        # Step 3: Create LogEntry objects (for backward compatibility)
+        for i, (enriched_log, normalized_log) in enumerate(zip(enriched_logs, normalized_data)):
             try:
-                # Step 1: Apply metadata enrichment
-                enriched_log = self._enrich_log_metadata(raw_log, customer_id, source_format)
-                
-                # Step 2: Apply field normalization BEFORE creating Pydantic model
-                # This ensures we capture ALL normalized fields, not just model-defined ones
-                normalized_log = normalize_log_for_sigma(enriched_log)
-                
-                # DEBUG: Print field mapping results
-                logger.info(f"🔍 DEBUG Field Mapping Results for log {i}:")
-                logger.info(f"  📥 Original enriched_log: {enriched_log}")
-                logger.info(f"  📤 Normalized log: {normalized_log}")
-                logger.info(f"  🔄 Field mapping diff:")
-                for key, value in normalized_log.items():
-                    if key not in enriched_log:
-                        logger.info(f"    ➕ Added field: {key} = {value}")
-                    elif enriched_log.get(key) != value:
-                        logger.info(f"    🔄 Changed field: {key} = {enriched_log.get(key)} → {value}")
-                
-                # Step 3: Create LogEntry (for backward compatibility and validation)
                 log_entry = LogEntry(**enriched_log)
                 log_entries.append(log_entry)
-                
-                # Step 4: Store the fully normalized data (includes all standard Sigma fields)
-                # This is what goes to logs_normalized_mt table for Sigma rule evaluation
-                normalized_data.append(normalized_log)
-                
                 field_mapping_success += 1
-                
-                # Performance tracking
-                if i % 100 == 0 and i > 0:
-                    elapsed_ms = (datetime.now() - start_time).total_seconds() * 1000
-                    logger.debug(f"Processed {i}/{len(raw_logs)} logs in {elapsed_ms:.2f}ms")
-                
+
+                # Debug logging (only first log of batch)
+                if i == 0:
+                    added_fields = [k for k in normalized_log.keys() if k not in enriched_log]
+                    if added_fields:
+                        logger.debug(f"Normalized fields added: {added_fields[:5]}...")
+
             except Exception as e:
-                error_msg = f"Failed to process log {i}: {str(e)}"
+                error_msg = f"Failed to create LogEntry for log {i}: {str(e)}"
                 errors.append(error_msg)
                 logger.warning(error_msg)
-                continue
         
         # Calculate performance metrics
         processing_time_ms = (datetime.now() - start_time).total_seconds() * 1000

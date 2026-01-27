@@ -18,7 +18,7 @@ import structlog
 from security_analytics import SigmaRule, DetectionSeverity, SecurityDetection
 from events.publishers.security_publisher import SecurityEventPublisher
 from events.constants import EVENT_SECURITY_DETECTION_TRIGGERED
-from field_mapper import normalize_log_for_sigma
+from services.high_performance_normalizer import normalize_log_fast
 
 logger = structlog.get_logger(__name__)
 
@@ -350,11 +350,11 @@ class SigmaRuleEngine:
                 logger.debug(f"✅ Using already normalized logs (no re-normalization needed)")
                 normalized_logs = [(log_entry, log_entry) for log_entry in logs]
             else:
-                # Legacy path: normalize logs here (for backward compatibility)
-                logger.debug(f"🔄 Normalizing logs for rule evaluation (legacy path)")
+                # Legacy path: normalize logs using high-performance normalizer
+                logger.debug(f"🔄 Normalizing logs for rule evaluation (legacy path with fast normalizer)")
                 normalized_logs = []
                 for log_entry in logs:
-                    normalized_log = normalize_log_for_sigma(log_entry)
+                    normalized_log = normalize_log_fast(log_entry, customer_id)
                     normalized_logs.append((log_entry, normalized_log))
 
             logger.debug(f"🔄 Processing {len(normalized_logs)} logs for rule evaluation")

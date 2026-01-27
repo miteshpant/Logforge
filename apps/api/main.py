@@ -26,6 +26,7 @@ from routers.tenant_api import router as tenant_router
 from routers.subscription_api import router as subscription_router
 from routers.streaming_api import router as streaming_router
 from routers.streaming_config_api import router as streaming_config_router
+from routers.schema_registry_api import router as schema_registry_router
 
 # Import M8 User Service routers
 from routers.user_api import router as user_router
@@ -86,6 +87,7 @@ app.include_router(tenant_router)
 app.include_router(subscription_router)
 app.include_router(streaming_router)
 app.include_router(streaming_config_router)
+app.include_router(schema_registry_router)
 
 
 if __name__ == "__main__":
