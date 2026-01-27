@@ -8,12 +8,12 @@ This is the "index-time extraction" approach used by Elasticsearch and Splunk
 for high-performance log processing.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Dict, List, Any, Optional
 import structlog
 
-from middleware.auth_middleware import get_current_customer_id
+from tenant_dependencies import MiddlewareTenant
 from services.high_performance_normalizer import (
     get_high_performance_normalizer,
     HighPerformanceNormalizer
@@ -109,7 +109,7 @@ class StandardFieldsResponse(BaseModel):
 @router.post("/register", response_model=SchemaRegistrationResponse)
 async def register_schema(
     request: SchemaRegistrationRequest,
-    customer_id: str = Depends(get_current_customer_id)
+    customer_id: str = MiddlewareTenant
 ):
     """
     Register a log schema for instant normalization.
@@ -177,7 +177,7 @@ async def register_schema(
 
 @router.get("/list", response_model=List[SchemaInfo])
 async def list_schemas(
-    customer_id: str = Depends(get_current_customer_id)
+    customer_id: str = MiddlewareTenant
 ):
     """
     List all registered schemas for the customer.
@@ -220,7 +220,7 @@ async def list_schemas(
 @router.delete("/{schema_id}")
 async def delete_schema(
     schema_id: str,
-    customer_id: str = Depends(get_current_customer_id)
+    customer_id: str = MiddlewareTenant
 ):
     """
     Delete a registered schema.
@@ -255,7 +255,7 @@ async def delete_schema(
 
 @router.get("/stats", response_model=NormalizerStatsResponse)
 async def get_normalizer_stats(
-    customer_id: str = Depends(get_current_customer_id)
+    customer_id: str = MiddlewareTenant
 ):
     """
     Get normalizer performance statistics.
@@ -308,7 +308,7 @@ async def get_standard_fields():
 @router.post("/test-normalization")
 async def test_normalization(
     log_entry: Dict[str, Any],
-    customer_id: str = Depends(get_current_customer_id)
+    customer_id: str = MiddlewareTenant
 ):
     """
     Test normalization of a sample log.
