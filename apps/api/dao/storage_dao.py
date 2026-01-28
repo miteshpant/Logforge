@@ -538,28 +538,29 @@ class StorageDAO:
     
     async def get_storage_metrics(self, customer_id: str) -> Dict[str, Any]:
         """Get storage metrics including compression ratios for a customer"""
-        # Get storage operations to calculate compression metrics
-        operations_result = await self.db.execute_query(
-            f"""SELECT 
-                COUNT(*) as total_operations,
-                SUM(CASE WHEN operation_status = 'completed' THEN 1 ELSE 0 END) as successful_operations,
-                if(count(*) > 0 AND count(data_size_gb) > 0, AVG(data_size_gb), 0) as avg_file_size_gb,
-                SUM(data_size_gb) as total_storage_gb
-            FROM {STORAGE_OPERATIONS_TABLE}
-            WHERE customer_id = %(customer_id)s
-            AND operation_type IN ('archive', 'compression')
-            AND started_at >= now() - INTERVAL 30 DAY""",
-            {"customer_id": customer_id}
-        )
-        
-        # Get retention policy efficiency
-        retention_result = await self.db.execute_query(
-            f"""SELECT 
-                COUNT(*) as total_policies,
-                if(count(*) > 0, AVG(CASE WHEN compression_enabled = 1 THEN 1 ELSE 0 END), 0) as compression_enabled_ratio
-            FROM {RETENTION_POLICIES_TABLE}
-            WHERE customer_id = %(customer_id)s""",
-            {"customer_id": customer_id}
+        import asyncio
+
+        # Define both queries
+        operations_query = f"""SELECT
+            COUNT(*) as total_operations,
+            SUM(CASE WHEN operation_status = 'completed' THEN 1 ELSE 0 END) as successful_operations,
+            if(count(*) > 0 AND count(data_size_gb) > 0, AVG(data_size_gb), 0) as avg_file_size_gb,
+            SUM(data_size_gb) as total_storage_gb
+        FROM {STORAGE_OPERATIONS_TABLE}
+        WHERE customer_id = %(customer_id)s
+        AND operation_type IN ('archive', 'compression')
+        AND started_at >= now() - INTERVAL 30 DAY"""
+
+        retention_query = f"""SELECT
+            COUNT(*) as total_policies,
+            if(count(*) > 0, AVG(CASE WHEN compression_enabled = 1 THEN 1 ELSE 0 END), 0) as compression_enabled_ratio
+        FROM {RETENTION_POLICIES_TABLE}
+        WHERE customer_id = %(customer_id)s"""
+
+        # Execute both queries in PARALLEL for 50% latency reduction
+        operations_result, retention_result = await asyncio.gather(
+            self.db.execute_query(operations_query, {"customer_id": customer_id}),
+            self.db.execute_query(retention_query, {"customer_id": customer_id})
         )
         
         # Extract data from results with proper null handling
