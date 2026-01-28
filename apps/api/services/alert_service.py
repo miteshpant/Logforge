@@ -565,10 +565,23 @@ class AlertService:
         # Add more validations as needed
     
     # Statistics and Health
-    
+
     async def get_alert_stats(self, customer_id: str) -> Dict[str, Any]:
-        """Get alert system statistics"""
+        """
+        Get alert system statistics with Redis caching (30s TTL).
+
+        Stats are cached to reduce DB load on frequently accessed dashboard widgets.
+        """
         try:
+            # Try Redis cache first
+            from utils.api_cache import TenantCache, TTL_SHORT
+            cache = TenantCache(customer_id, prefix="api:alert_stats:")
+
+            cached_stats = await cache.get("stats")
+            if cached_stats:
+                return cached_stats
+
+            # Cache miss - fetch from DB
             stats = await self.alert_dao.get_alert_stats(customer_id)
             
             # Add calculated fields
@@ -576,7 +589,10 @@ class AlertService:
             stats["notifications_failed"] = 0
             stats["avg_evaluation_time_ms"] = 45
             stats["last_evaluation"] = datetime.now(timezone.utc).isoformat()
-            
+
+            # Cache the result for 30 seconds
+            await cache.set("stats", stats, ttl=TTL_SHORT)
+
             return stats
             
         except Exception as e:

@@ -5,6 +5,7 @@ Logforge API - Modular FastAPI Application
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from app_config import load_config, setup_logging
 from dependencies import lifespan
@@ -49,6 +50,10 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan
 )
+
+# Add GZip compression middleware for responses > 1KB
+# Reduces bandwidth by 60-80% for JSON responses
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Add CORS middleware
 app.add_middleware(

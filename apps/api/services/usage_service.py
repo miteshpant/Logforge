@@ -109,27 +109,41 @@ class UsageService:
     # Usage Analytics Operations
 
     async def get_tenant_usage_summary(self, tenant_id: str) -> Dict[str, Any]:
-        """Get comprehensive usage summary for tenant"""
+        """
+        Get comprehensive usage summary for tenant with Redis caching (30s TTL).
+
+        Caches usage summary to reduce DB load on dashboard widgets.
+        """
         try:
+            # Try Redis cache first (30s TTL for real-time data freshness)
+            from utils.api_cache import TenantCache, TTL_SHORT
+            cache = TenantCache(tenant_id, prefix="api:usage_summary:")
+
+            cached_summary = await cache.get("summary")
+            if cached_summary:
+                return cached_summary
+
+            # Cache miss - fetch from DB
             # Get current month usage
             current_usage = await self.usage_dao.get_tenant_usage_current_month(tenant_id)
             # Get real-time metrics
-            logger.info("🔍 STEP 6: Calling usage_dao.get_realtime_usage", tenant_id=tenant_id)
             realtime_usage = await self.usage_dao.get_realtime_usage(tenant_id, 60)  # Last hour
-            logger.info("🔍 STEP 6 SUCCESS: Realtime usage retrieved", tenant_id=tenant_id, realtime_usage=realtime_usage)
 
             # Calculate cost estimate
-            logger.info("🔍 STEP 7: Calling usage_dao.calculate_tenant_cost", tenant_id=tenant_id)
             cost_data = await self.usage_dao.calculate_tenant_cost(tenant_id)
-            logger.info("🔍 STEP 7 SUCCESS: Cost data calculated", tenant_id=tenant_id, cost_data=cost_data)
 
-            return {
+            result = {
                 "tenant_id": tenant_id,
                 "current_month": current_usage,
                 "realtime": realtime_usage,
                 "billing": cost_data,
                 "summary_generated_at": datetime.now(timezone.utc).isoformat()
             }
+
+            # Cache the result for 30 seconds
+            await cache.set("summary", result, ttl=TTL_SHORT)
+
+            return result
 
         except Exception as e:
             logger.error(f"Failed to get usage summary for tenant {tenant_id}: {e}")
