@@ -1,4 +1,4 @@
--- Migration: Add Performance Indexes for High-Traffic Tables
+-- Migration 009: Add Performance Indexes for High-Traffic Tables
 -- Date: 2026-01-28
 -- Purpose: Improve query performance by 30-50% on hot paths
 --
