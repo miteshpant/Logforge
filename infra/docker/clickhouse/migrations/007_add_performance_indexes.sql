@@ -22,17 +22,29 @@ ALTER TABLE traces_mt
 ADD INDEX IF NOT EXISTS idx_traces_operation (customer_id, operation_name)
 TYPE bloom_filter(0.01) GRANULARITY 4;
 
--- traces_mt: Status filtering with time range (error analysis)
+-- traces_mt: Status filtering (error analysis)
 -- Query pattern: search_traces() with status filter
+-- NOTE: Excluding start_time from bloom_filter as it's DateTime64
 ALTER TABLE traces_mt
-ADD INDEX IF NOT EXISTS idx_traces_status_time (customer_id, status, start_time)
+ADD INDEX IF NOT EXISTS idx_traces_status (customer_id, status)
 TYPE set(100) GRANULARITY 4;
 
--- alert_instances_mt: Status and time filtering (alert list pagination)
+-- traces_mt: Time-based filtering with minmax (optimal for DateTime)
+ALTER TABLE traces_mt
+ADD INDEX IF NOT EXISTS idx_traces_start_time (start_time)
+TYPE minmax GRANULARITY 4;
+
+-- alert_instances_mt: Status filtering (alert list pagination)
 -- Query pattern: list_alert_instances(customer_id, status, severity)
+-- NOTE: Using set index instead of bloom_filter because triggered_at is DateTime64
 ALTER TABLE alert_instances_mt
-ADD INDEX IF NOT EXISTS idx_alerts_status_time (customer_id, status, triggered_at)
-TYPE bloom_filter(0.01) GRANULARITY 4;
+ADD INDEX IF NOT EXISTS idx_alerts_customer_status (customer_id, status)
+TYPE set(100) GRANULARITY 4;
+
+-- alert_instances_mt: Time-based filtering with minmax (optimal for DateTime)
+ALTER TABLE alert_instances_mt
+ADD INDEX IF NOT EXISTS idx_alerts_triggered_time (triggered_at)
+TYPE minmax GRANULARITY 4;
 
 -- alert_instances_mt: Rule-based bulk operations
 -- Query pattern: bulk_update_alert_instances_by_rule()
@@ -42,21 +54,33 @@ TYPE set(100) GRANULARITY 4;
 
 -- api_usage_audit_mt: Tenant usage aggregation (billing)
 -- Query pattern: get_tenant_usage_current_month()
+-- NOTE: Excluding request_timestamp from bloom_filter as it's DateTime
 ALTER TABLE api_usage_audit_mt
-ADD INDEX IF NOT EXISTS idx_usage_tenant_time_feature (tenant_id, request_timestamp, feature_type)
+ADD INDEX IF NOT EXISTS idx_usage_tenant_feature (tenant_id, feature_type)
 TYPE bloom_filter(0.01) GRANULARITY 4;
 
 -- api_usage_audit_mt: Customer usage for billing
 -- Query pattern: get_monthly_usage_stats()
 ALTER TABLE api_usage_audit_mt
-ADD INDEX IF NOT EXISTS idx_usage_customer_time_feature (customer_id, request_timestamp, feature_type)
+ADD INDEX IF NOT EXISTS idx_usage_customer_feature (customer_id, feature_type)
 TYPE bloom_filter(0.01) GRANULARITY 4;
 
--- metrics_mt: Metric lookup by name and time
+-- api_usage_audit_mt: Time-based filtering with minmax
+ALTER TABLE api_usage_audit_mt
+ADD INDEX IF NOT EXISTS idx_usage_request_time (request_timestamp)
+TYPE minmax GRANULARITY 4;
+
+-- metrics_mt: Metric lookup by name
 -- Query pattern: get_metrics_by_name(), get_metric_time_series()
+-- NOTE: Excluding timestamp from bloom_filter as it's DateTime
 ALTER TABLE metrics_mt
-ADD INDEX IF NOT EXISTS idx_metrics_name_time (customer_id, metric_name, timestamp)
+ADD INDEX IF NOT EXISTS idx_metrics_name (customer_id, metric_name)
 TYPE bloom_filter(0.01) GRANULARITY 4;
+
+-- metrics_mt: Time-based filtering with minmax
+ALTER TABLE metrics_mt
+ADD INDEX IF NOT EXISTS idx_metrics_timestamp (timestamp)
+TYPE minmax GRANULARITY 4;
 
 
 -- ============================================================================
@@ -84,15 +108,22 @@ TYPE bloom_filter(0.01) GRANULARITY 4;
 
 -- api_usage_audit_mt: Per-user quota enforcement
 -- Query pattern: get_realtime_usage(), active user counting
+-- NOTE: Excluding request_timestamp from bloom_filter as it's DateTime
 ALTER TABLE api_usage_audit_mt
-ADD INDEX IF NOT EXISTS idx_usage_user (customer_id, user_id, request_timestamp)
+ADD INDEX IF NOT EXISTS idx_usage_user (customer_id, user_id)
 TYPE bloom_filter(0.01) GRANULARITY 4;
 
 -- service_topology_mt: Service lookup
 -- Query pattern: get_service_topology(), get_service_dependencies()
+-- NOTE: Excluding last_seen from bloom_filter as it's DateTime
 ALTER TABLE service_topology_mt
-ADD INDEX IF NOT EXISTS idx_topology_service (customer_id, service_name, last_seen)
+ADD INDEX IF NOT EXISTS idx_topology_service (customer_id, service_name)
 TYPE bloom_filter(0.01) GRANULARITY 4;
+
+-- service_topology_mt: Time-based filtering with minmax
+ALTER TABLE service_topology_mt
+ADD INDEX IF NOT EXISTS idx_topology_last_seen (last_seen)
+TYPE minmax GRANULARITY 4;
 
 
 -- ============================================================================
