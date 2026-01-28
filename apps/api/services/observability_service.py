@@ -408,6 +408,8 @@ class ObservabilityService:
 
             if existing_result and len(existing_result) > 0:
                 # UPDATE existing service with incremented counts
+                # NOTE: updated_at is a key column in ClickHouse and cannot be updated
+                # We only update non-key columns here
                 service_id = existing_result[0]["id"]
                 new_request_count = existing_result[0].get("request_count", 0) + request_count_increment
                 new_error_count = existing_result[0].get("error_count", 0) + error_count_increment
@@ -419,8 +421,7 @@ class ObservabilityService:
                     request_count = %(request_count)s,
                     error_count = %(error_count)s,
                     avg_response_time_ms = %(avg_response_time_ms)s,
-                    health_status = %(health_status)s,
-                    updated_at = %(updated_at)s
+                    health_status = %(health_status)s
                 WHERE id = %(id)s AND customer_id = %(customer_id)s
                 """
 
@@ -435,8 +436,7 @@ class ObservabilityService:
                     "request_count": new_request_count,
                     "error_count": new_error_count,
                     "avg_response_time_ms": avg_response_time_ms,
-                    "health_status": health_status,
-                    "updated_at": datetime.now(timezone.utc)
+                    "health_status": health_status
                 })
 
                 logger.debug(
