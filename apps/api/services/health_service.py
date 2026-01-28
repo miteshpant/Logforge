@@ -3,9 +3,12 @@ Health Service - Real service health checks and monitoring
 
 Performs actual connectivity tests for all platform dependencies:
 - ClickHouse database connectivity
-- Storage system health  
+- Storage system health
 - API service availability
 - Message queue status
+- Connection pool status
+- Circuit breaker status
+- Redis cache status
 """
 
 import os
@@ -17,6 +20,34 @@ import structlog
 from database_layer import DatabaseLayer, DatabaseError, SecurityError
 
 logger = structlog.get_logger()
+
+# Import resilience utilities (lazy to avoid circular imports)
+_query_resilience = None
+_connection_pool = None
+
+
+def _get_query_resilience():
+    """Lazy import for query resilience module"""
+    global _query_resilience
+    if _query_resilience is None:
+        try:
+            from utils import query_resilience
+            _query_resilience = query_resilience
+        except ImportError:
+            pass
+    return _query_resilience
+
+
+def _get_connection_pool():
+    """Lazy import for connection pool module"""
+    global _connection_pool
+    if _connection_pool is None:
+        try:
+            from utils import connection_pool
+            _connection_pool = connection_pool
+        except ImportError:
+            pass
+    return _connection_pool
 
 class HealthService:
     """Service health monitoring with real connectivity checks"""
@@ -179,7 +210,16 @@ class HealthService:
     async def get_detailed_health(self) -> Dict[str, Any]:
         """Get detailed health information including metrics"""
         basic_health = await self.get_overall_health()
-        
+
+        # Add circuit breaker status
+        circuit_breaker_status = await self._check_circuit_breakers()
+
+        # Add connection pool status
+        pool_status = await self._check_connection_pools()
+
+        # Add Redis status
+        redis_status = await self._check_redis_health()
+
         # Add additional system metrics
         basic_health.update({
             "version": "1.0.0",
@@ -188,7 +228,114 @@ class HealthService:
             "deployment": {
                 "container": bool(os.getenv('CONTAINER_MODE')),
                 "kubernetes": bool(os.getenv('KUBERNETES_SERVICE_HOST'))
+            },
+            "resilience": {
+                "circuit_breakers": circuit_breaker_status,
+                "connection_pools": pool_status,
+                "redis": redis_status
             }
         })
-        
+
         return basic_health
+
+    async def _check_circuit_breakers(self) -> Dict[str, Any]:
+        """Check status of all circuit breakers"""
+        try:
+            resilience = _get_query_resilience()
+            if resilience is None:
+                return {"status": "unavailable", "reason": "Module not loaded"}
+
+            breaker_status = resilience.get_all_circuit_breaker_status()
+
+            # Determine overall health
+            open_breakers = [
+                name for name, status in breaker_status.items()
+                if status.get("state") == "open"
+            ]
+
+            if open_breakers:
+                overall = "degraded"
+            else:
+                overall = "healthy"
+
+            return {
+                "status": overall,
+                "breakers": breaker_status,
+                "open_count": len(open_breakers),
+                "open_breakers": open_breakers
+            }
+        except Exception as e:
+            logger.warning("Failed to check circuit breakers", error=str(e))
+            return {"status": "unknown", "error": str(e)}
+
+    async def _check_connection_pools(self) -> Dict[str, Any]:
+        """Check status of connection pools"""
+        try:
+            pool_module = _get_connection_pool()
+            if pool_module is None:
+                return {"status": "unavailable", "reason": "Module not loaded"}
+
+            result = {
+                "status": "healthy",
+                "pools": {}
+            }
+
+            # Check ClickHouse pool
+            try:
+                ch_pool = await pool_module.get_clickhouse_pool()
+                ch_health = await ch_pool.health_check()
+                result["pools"]["clickhouse"] = ch_health
+                if ch_health.get("status") != "healthy":
+                    result["status"] = "degraded"
+            except Exception as e:
+                result["pools"]["clickhouse"] = {"status": "unhealthy", "error": str(e)}
+                result["status"] = "degraded"
+
+            # Check HTTP pool
+            try:
+                http_pool = await pool_module.get_http_pool()
+                result["pools"]["http"] = {
+                    "status": "healthy",
+                    "initialized": http_pool._initialized
+                }
+            except Exception as e:
+                result["pools"]["http"] = {"status": "unhealthy", "error": str(e)}
+                result["status"] = "degraded"
+
+            return result
+        except Exception as e:
+            logger.warning("Failed to check connection pools", error=str(e))
+            return {"status": "unknown", "error": str(e)}
+
+    async def _check_redis_health(self) -> Dict[str, Any]:
+        """Check Redis cache health"""
+        try:
+            from events.management.cache.redis_manager import redis_manager
+
+            # Test Redis connectivity with a simple operation
+            start_time = datetime.now()
+            test_key = "health:check:ping"
+            await redis_manager.set(test_key, "pong", ttl=10)
+            result = await redis_manager.get(test_key)
+            response_time = (datetime.now() - start_time).total_seconds() * 1000
+
+            if result == "pong":
+                status = "healthy" if response_time < 100 else "degraded"
+                return {
+                    "status": status,
+                    "response_time_ms": round(response_time, 2),
+                    "connected": True
+                }
+            else:
+                return {
+                    "status": "degraded",
+                    "response_time_ms": round(response_time, 2),
+                    "error": "Unexpected response"
+                }
+        except Exception as e:
+            logger.warning("Redis health check failed", error=str(e))
+            return {
+                "status": "unhealthy",
+                "connected": False,
+                "error": str(e)
+            }
