@@ -55,7 +55,26 @@ class ObservabilityEventHandler(EventHandler):
             event_data = event.data
 
             # Extract span data from event
-            spans_data = event_data.get("spans", [])
+            # The publisher sends "traces" (grouped trace objects with nested "spans")
+            # We need to flatten all spans from all traces for processing
+            spans_data = []
+            traces_data = event_data.get("traces", [])
+
+            if traces_data:
+                # New format: traces array with nested spans
+                for trace in traces_data:
+                    trace_spans = trace.get("spans", [])
+                    spans_data.extend(trace_spans)
+                logger.info(
+                    "Extracted spans from traces structure",
+                    customer_id=customer_id,
+                    trace_count=len(traces_data),
+                    total_span_count=len(spans_data)
+                )
+            else:
+                # Fallback: legacy format with direct spans array
+                spans_data = event_data.get("spans", [])
+
             if not spans_data:
                 logger.warning("No spans data found in trace ingestion event", customer_id=customer_id)
                 return True
