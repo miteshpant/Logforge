@@ -491,6 +491,14 @@ async def lifespan(app):
     except Exception as e:
         logger.warning(f"Failed to start write buffer service: {str(e)}")
 
+    # Initialize connection pools for improved performance
+    try:
+        from utils.connection_pool import initialize_pools
+        await initialize_pools()
+        logger.info("Connection pools initialized (ClickHouse + HTTP)")
+    except Exception as e:
+        logger.warning(f"Failed to initialize connection pools: {str(e)}")
+
     logger.info("Logforge API server started successfully")
 
     yield
@@ -513,6 +521,14 @@ async def lifespan(app):
         logger.info("Write buffer service stopped (remaining logs flushed)")
     except Exception as e:
         logger.warning(f"Failed to stop write buffer service: {str(e)}")
+
+    # Close connection pools
+    try:
+        from utils.connection_pool import close_pools
+        await close_pools()
+        logger.info("Connection pools closed")
+    except Exception as e:
+        logger.warning(f"Failed to close connection pools: {str(e)}")
 
     await shutdown_engines()
     logger.info("Logforge API server shutdown complete")
