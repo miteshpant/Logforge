@@ -44,6 +44,12 @@ import {
   Globe,
   ScrollText,
   LayoutDashboard,
+  AlertTriangle,
+  BellRing,
+  Puzzle,
+  UserCog,
+  DollarSign,
+  ClipboardCheck,
 } from 'lucide-react'
 import { TenantSelector } from '@/components/TenantSelector'
 import PWASupport from '@/components/PWASupport'
@@ -98,13 +104,32 @@ const navigation = [
     icon: Brain,
     description: 'AI-powered anomaly detection'
   },
+  // Alert Management Section
+  {
+    name: 'Alert Rules',
+    href: '/alerts/rules',
+    icon: AlertTriangle,
+    description: 'Configure alerting rules',
+    badge: 'New'
+  },
+  {
+    name: 'Alert Instances',
+    href: '/alerts/instances',
+    icon: BellRing,
+    description: 'Active & historical alerts'
+  },
+  {
+    name: 'Notification Channels',
+    href: '/alerts/channels',
+    icon: Bell,
+    description: 'Slack, PagerDuty, email, webhooks'
+  },
   // Security Section
   {
     name: 'SIEM Dashboard',
     href: '/security/siem',
     icon: ShieldAlert,
-    description: 'Security operations center',
-    badge: 'New'
+    description: 'Security operations center'
   },
   {
     name: 'Security Events',
@@ -129,6 +154,13 @@ const navigation = [
     href: '/security/threat-hunting',
     icon: Crosshair,
     description: 'Proactive threat hunting'
+  },
+  // Settings & Admin
+  {
+    name: 'Integrations',
+    href: '/settings/integrations',
+    icon: Puzzle,
+    description: 'Connect external tools'
   },
 ]
 

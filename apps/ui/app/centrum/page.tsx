@@ -9,6 +9,8 @@ import SecurityEventsWidget from '@/components/centrum/SecurityEventsWidget'
 import ObservabilityStatsWidgets from '@/components/centrum/ObservabilityStatsWidgets'
 import UsageStatsWidgets from '@/components/centrum/UsageStatsWidgets'
 import APMPerformanceWidgets from '@/components/centrum/APMPerformanceWidgets'
+import IncidentCommandCenter from '@/components/centrum/IncidentCommandCenter'
+import ServiceHealthMap from '@/components/centrum/ServiceHealthMap'
 import { apiClient } from '@/lib/api'
 
 // Lazy load streaming panel to improve initial page load
@@ -415,13 +417,26 @@ export default function CentrumPage() {
           isLoading={isLoadingUsage}
         />
 
-        {/* Observability Stats - Second Row */}
+        {/* Two-Column Layout: Incident Command Center + Service Health */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          {/* Incident Command Center - Takes 2 columns (main focus) */}
+          <div className="xl:col-span-2">
+            <IncidentCommandCenter timeRange={currentTimeRange.label} />
+          </div>
+
+          {/* Service Health Map - Takes 1 column */}
+          <div className="xl:col-span-1">
+            <ServiceHealthMap />
+          </div>
+        </div>
+
+        {/* Observability Stats - Third Row */}
         <MemoizedObservabilityStats
           data={observabilityData}
           isLoading={isLoadingObservability}
         />
 
-        {/* APM Performance Stats - Third Row */}
+        {/* APM Performance Stats - Fourth Row */}
         <MemoizedAPMPerformance
           data={apmData}
           isLoading={isLoadingApm}
@@ -446,7 +461,7 @@ export default function CentrumPage() {
           />
         </div>
 
-        {/* Live Streaming Panel - Fourth Row (Lazy Loaded) */}
+        {/* Live Streaming Panel - Bottom Row (Lazy Loaded) */}
         <Suspense fallback={
           <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-6">
             <div className="animate-pulse">
