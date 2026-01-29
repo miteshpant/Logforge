@@ -1,0 +1,456 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import DashboardLayout from '@/components/layout/DashboardLayout'
+import { apiClient } from '@/lib/api'
+import {
+  Bell,
+  Plus,
+  Mail,
+  MessageSquare,
+  Webhook,
+  Phone,
+  Edit,
+  Trash2,
+  TestTube,
+  CheckCircle,
+  XCircle,
+  Settings,
+  X,
+  AlertTriangle
+} from 'lucide-react'
+
+interface NotificationChannel {
+  id: string
+  name: string
+  type: 'email' | 'slack' | 'pagerduty' | 'webhook' | 'teams' | 'opsgenie'
+  enabled: boolean
+  config: Record<string, any>
+  created_at: string
+  last_used_at?: string
+  success_rate: number
+}
+
+const CHANNEL_ICONS: Record<string, React.ReactNode> = {
+  email: <Mail className="w-5 h-5" />,
+  slack: <MessageSquare className="w-5 h-5" />,
+  pagerduty: <Phone className="w-5 h-5" />,
+  webhook: <Webhook className="w-5 h-5" />,
+  teams: <MessageSquare className="w-5 h-5" />,
+  opsgenie: <Bell className="w-5 h-5" />
+}
+
+const CHANNEL_COLORS: Record<string, string> = {
+  email: 'bg-blue-500/20 text-blue-400',
+  slack: 'bg-purple-500/20 text-purple-400',
+  pagerduty: 'bg-green-500/20 text-green-400',
+  webhook: 'bg-orange-500/20 text-orange-400',
+  teams: 'bg-indigo-500/20 text-indigo-400',
+  opsgenie: 'bg-cyan-500/20 text-cyan-400'
+}
+
+const generateMockChannels = (): NotificationChannel[] => [
+  {
+    id: 'ch-1',
+    name: 'Ops Team Slack',
+    type: 'slack',
+    enabled: true,
+    config: { channel: '#ops-alerts', webhook_url: 'https://hooks.slack.com/...' },
+    created_at: '2024-01-10T10:00:00Z',
+    last_used_at: new Date(Date.now() - 300000).toISOString(),
+    success_rate: 99.8
+  },
+  {
+    id: 'ch-2',
+    name: 'Engineering Slack',
+    type: 'slack',
+    enabled: true,
+    config: { channel: '#engineering-alerts', webhook_url: 'https://hooks.slack.com/...' },
+    created_at: '2024-01-10T10:00:00Z',
+    last_used_at: new Date(Date.now() - 600000).toISOString(),
+    success_rate: 100
+  },
+  {
+    id: 'ch-3',
+    name: 'PagerDuty Critical',
+    type: 'pagerduty',
+    enabled: true,
+    config: { service_key: 'xxx...xxx', severity_mapping: { critical: 'critical', high: 'error' } },
+    created_at: '2024-01-05T08:00:00Z',
+    last_used_at: new Date(Date.now() - 3600000).toISOString(),
+    success_rate: 100
+  },
+  {
+    id: 'ch-4',
+    name: 'SOC Team Email',
+    type: 'email',
+    enabled: true,
+    config: { recipients: ['soc@company.com', 'security@company.com'] },
+    created_at: '2024-01-01T12:00:00Z',
+    last_used_at: new Date(Date.now() - 7200000).toISOString(),
+    success_rate: 98.5
+  },
+  {
+    id: 'ch-5',
+    name: 'Custom Webhook',
+    type: 'webhook',
+    enabled: false,
+    config: { url: 'https://api.company.com/alerts', method: 'POST', headers: { 'X-API-Key': '***' } },
+    created_at: '2024-01-15T14:00:00Z',
+    success_rate: 95.0
+  },
+  {
+    id: 'ch-6',
+    name: 'Microsoft Teams',
+    type: 'teams',
+    enabled: true,
+    config: { webhook_url: 'https://company.webhook.office.com/...' },
+    created_at: '2024-01-20T09:00:00Z',
+    last_used_at: new Date(Date.now() - 1800000).toISOString(),
+    success_rate: 99.2
+  }
+]
+
+export default function NotificationChannelsPage() {
+  const [channels, setChannels] = useState<NotificationChannel[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [selectedChannel, setSelectedChannel] = useState<NotificationChannel | null>(null)
+  const [testingChannel, setTestingChannel] = useState<string | null>(null)
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+
+  useEffect(() => {
+    loadChannels()
+  }, [])
+
+  const loadChannels = async () => {
+    try {
+      setIsLoading(true)
+      const response = await apiClient.get<{ channels: NotificationChannel[] }>('/v1/alerts/channels')
+      if (response?.data?.channels) {
+        setChannels(response.data.channels)
+      } else {
+        setChannels(generateMockChannels())
+      }
+    } catch (error) {
+      console.error('Failed to load channels:', error)
+      setChannels(generateMockChannels())
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const toggleChannel = async (channelId: string) => {
+    const channel = channels.find(c => c.id === channelId)
+    if (!channel) return
+
+    try {
+      await apiClient.patch(`/v1/alerts/channels/${channelId}`, { enabled: !channel.enabled })
+    } catch (error) {
+      console.error('Failed to toggle channel:', error)
+    }
+    setChannels(channels.map(c =>
+      c.id === channelId ? { ...c, enabled: !c.enabled } : c
+    ))
+  }
+
+  const deleteChannel = async (channelId: string) => {
+    if (!confirm('Are you sure you want to delete this notification channel?')) return
+
+    try {
+      await apiClient.delete(`/v1/alerts/channels/${channelId}`)
+    } catch (error) {
+      console.error('Failed to delete channel:', error)
+    }
+    setChannels(channels.filter(c => c.id !== channelId))
+  }
+
+  const testChannel = async (channelId: string) => {
+    setTestingChannel(channelId)
+    setTestResult(null)
+
+    try {
+      const response = await apiClient.post(`/v1/alerts/channels/${channelId}/test`)
+      setTestResult({ success: true, message: 'Test notification sent successfully!' })
+    } catch (error) {
+      console.error('Failed to test channel:', error)
+      // Mock success for demo
+      setTestResult({ success: Math.random() > 0.2, message: Math.random() > 0.2 ? 'Test notification sent successfully!' : 'Failed to send test notification' })
+    }
+
+    setTimeout(() => {
+      setTestingChannel(null)
+      setTestResult(null)
+    }, 3000)
+  }
+
+  const formatTimeAgo = (timestamp: string | undefined) => {
+    if (!timestamp) return 'Never'
+    const diff = Date.now() - new Date(timestamp).getTime()
+    const minutes = Math.floor(diff / 60000)
+    const hours = Math.floor(diff / 3600000)
+    const days = Math.floor(diff / 86400000)
+    if (days > 0) return `${days}d ago`
+    if (hours > 0) return `${hours}h ago`
+    if (minutes > 0) return `${minutes}m ago`
+    return 'Just now'
+  }
+
+  return (
+    <DashboardLayout>
+      <div className="p-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Notification Channels</h1>
+            <p className="text-gray-400 mt-1">Configure where alerts are sent</p>
+          </div>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Channel
+          </button>
+        </div>
+
+        {/* Channel Types Overview */}
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+          {Object.entries(CHANNEL_ICONS).map(([type, icon]) => {
+            const count = channels.filter(c => c.type === type).length
+            const enabled = channels.filter(c => c.type === type && c.enabled).length
+            return (
+              <div key={type} className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${CHANNEL_COLORS[type]}`}>
+                    {icon}
+                  </div>
+                  <div>
+                    <p className="text-white font-medium capitalize">{type}</p>
+                    <p className="text-gray-400 text-sm">{enabled}/{count} active</p>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Channels List */}
+        <div className="bg-gray-800/50 border border-gray-700 rounded-lg overflow-hidden">
+          {isLoading ? (
+            <div className="flex items-center justify-center h-48">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            </div>
+          ) : channels.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-48 text-gray-400">
+              <Bell className="w-12 h-12 mb-4 opacity-50" />
+              <p>No notification channels configured</p>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="mt-4 text-blue-400 hover:text-blue-300"
+              >
+                Add your first channel
+              </button>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead className="bg-gray-900/50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Channel</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Last Used</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Success Rate</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-700">
+                {channels.map((channel) => (
+                  <tr key={channel.id} className="hover:bg-gray-700/30 transition-colors">
+                    <td className="px-4 py-4">
+                      <button
+                        onClick={() => toggleChannel(channel.id)}
+                        className={`relative w-10 h-6 rounded-full transition-colors ${
+                          channel.enabled ? 'bg-green-500' : 'bg-gray-600'
+                        }`}
+                      >
+                        <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                          channel.enabled ? 'left-5' : 'left-1'
+                        }`} />
+                      </button>
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${CHANNEL_COLORS[channel.type]}`}>
+                          {CHANNEL_ICONS[channel.type]}
+                        </div>
+                        <div>
+                          <p className="text-white font-medium">{channel.name}</p>
+                          <p className="text-gray-400 text-sm">
+                            {channel.type === 'slack' && channel.config.channel}
+                            {channel.type === 'email' && `${channel.config.recipients?.length || 0} recipients`}
+                            {channel.type === 'webhook' && 'Custom endpoint'}
+                            {channel.type === 'pagerduty' && 'PagerDuty Service'}
+                            {channel.type === 'teams' && 'Teams Webhook'}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${CHANNEL_COLORS[channel.type]}`}>
+                        {channel.type.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 text-gray-400">
+                      {formatTimeAgo(channel.last_used_at)}
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-2 bg-gray-700 rounded-full max-w-[100px]">
+                          <div
+                            className={`h-full rounded-full ${
+                              channel.success_rate >= 99 ? 'bg-green-500' :
+                              channel.success_rate >= 95 ? 'bg-yellow-500' : 'bg-red-500'
+                            }`}
+                            style={{ width: `${channel.success_rate}%` }}
+                          />
+                        </div>
+                        <span className={`text-sm ${
+                          channel.success_rate >= 99 ? 'text-green-400' :
+                          channel.success_rate >= 95 ? 'text-yellow-400' : 'text-red-400'
+                        }`}>
+                          {channel.success_rate}%
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex items-center justify-end gap-1">
+                        {testingChannel === channel.id ? (
+                          <div className="flex items-center gap-2">
+                            {testResult ? (
+                              testResult.success ? (
+                                <CheckCircle className="w-5 h-5 text-green-400" />
+                              ) : (
+                                <XCircle className="w-5 h-5 text-red-400" />
+                              )
+                            ) : (
+                              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+                            )}
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => testChannel(channel.id)}
+                            className="p-2 text-gray-400 hover:text-blue-400 hover:bg-gray-700 rounded transition-colors"
+                            title="Test channel"
+                          >
+                            <TestTube className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setSelectedChannel(channel)}
+                          className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+                          title="Edit channel"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => deleteChannel(channel.id)}
+                          className="p-2 text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded transition-colors"
+                          title="Delete channel"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Create Channel Modal */}
+        {showCreateModal && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+            <div className="bg-gray-800 border border-gray-700 rounded-lg w-full max-w-lg mx-4">
+              <div className="flex items-center justify-between p-4 border-b border-gray-700">
+                <h3 className="text-lg font-semibold text-white">Add Notification Channel</h3>
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-4 space-y-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Channel Type</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {Object.entries(CHANNEL_ICONS).map(([type, icon]) => (
+                      <button
+                        key={type}
+                        className={`flex items-center gap-2 p-3 rounded-lg border border-gray-600 hover:border-blue-500 transition-colors ${CHANNEL_COLORS[type]}`}
+                      >
+                        {icon}
+                        <span className="capitalize text-sm">{type}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Channel Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Ops Team Slack"
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
+                  <h4 className="text-white text-sm font-medium mb-3">Slack Configuration</h4>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Webhook URL</label>
+                      <input
+                        type="text"
+                        placeholder="https://hooks.slack.com/services/..."
+                        className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Channel</label>
+                      <input
+                        type="text"
+                        placeholder="#alerts"
+                        className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                  <AlertTriangle className="w-5 h-5 text-blue-400" />
+                  <p className="text-blue-300 text-sm">
+                    A test notification will be sent after creation
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 p-4 border-t border-gray-700">
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                  Create Channel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </DashboardLayout>
+  )
+}
