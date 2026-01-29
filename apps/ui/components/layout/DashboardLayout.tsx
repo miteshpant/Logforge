@@ -162,6 +162,18 @@ const navigation = [
     icon: Puzzle,
     description: 'Connect external tools'
   },
+  {
+    name: 'Role Management',
+    href: '/settings/roles',
+    icon: UserCog,
+    description: 'RBAC and permissions'
+  },
+  {
+    name: 'Cost Analytics',
+    href: '/settings/costs',
+    icon: DollarSign,
+    description: 'Usage and billing insights'
+  },
 ]
 
 interface DashboardLayoutProps {
