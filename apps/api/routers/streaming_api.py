@@ -1473,3 +1473,80 @@ async def streaming_health():
             "/v1/stream/anomalies"
         ]
     }
+
+
+@router.get("/test-alert")
+async def test_alert_stream(
+    customer_id: str = Depends(get_customer_id_for_sse)
+):
+    """
+    Test endpoint to manually publish a test alert to the streaming system.
+    This helps diagnose if the streaming pipeline is working.
+    """
+    try:
+        import dependencies
+        from events.publishers.ui_publisher import UIEventPublisher
+        from datetime import datetime
+        import uuid
+
+        # Check publisher manager
+        publisher_manager = dependencies.get_event_publisher_manager()
+
+        if not publisher_manager:
+            return {
+                "status": "error",
+                "error": "Event publisher manager not available",
+                "diagnosis": "The publisher_manager global is None. Check if the API started correctly."
+            }
+
+        if not getattr(publisher_manager, 'is_started', False):
+            return {
+                "status": "error",
+                "error": "Event publisher manager not started",
+                "diagnosis": "The publisher_manager exists but is_started=False. Check startup logs."
+            }
+
+        # Create test alert
+        test_alert_id = f"test-{uuid.uuid4()}"
+        ui_publisher = UIEventPublisher(publisher_manager)
+
+        alert_data = {
+            "id": test_alert_id,
+            "severity": "info"
+        }
+
+        rule_data = {
+            "id": "test-rule",
+            "name": "Streaming Test Alert",
+            "severity": "info"
+        }
+
+        trigger_context = {
+            "matched_logs_count": 1,
+            "time_window": {"start": datetime.now().isoformat()},
+            "test": True
+        }
+
+        # Publish test alert
+        success = await ui_publisher.publish_alert_triggered(
+            customer_id=customer_id,
+            alert_data=alert_data,
+            rule_data=rule_data,
+            trigger_context=trigger_context
+        )
+
+        return {
+            "status": "success" if success else "failed",
+            "test_alert_id": test_alert_id,
+            "customer_id": customer_id,
+            "published": success,
+            "message": "Test alert published. Open /v1/stream/alerts in another tab to see if it arrives."
+        }
+
+    except Exception as e:
+        logger.error(f"Test alert failed: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "diagnosis": "Exception occurred while trying to publish test alert"
+        }
