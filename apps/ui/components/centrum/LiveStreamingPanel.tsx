@@ -68,6 +68,12 @@ export default function LiveStreamingPanel() {
       const cleanup = await apiClient.getStream(
         url,
         (data) => {
+          // Guard against undefined or null data
+          if (!data) {
+            console.log('⏸️  Empty SSE event received, skipping')
+            return
+          }
+
           // Handle incoming stream data
           console.log('📥 SSE event received:', {
             event_type: data.event_type,
