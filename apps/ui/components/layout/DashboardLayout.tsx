@@ -174,6 +174,12 @@ const navigation = [
     icon: DollarSign,
     description: 'Usage and billing insights'
   },
+  {
+    name: 'Compliance',
+    href: '/settings/compliance',
+    icon: ClipboardCheck,
+    description: 'SOC2, HIPAA, PCI compliance'
+  },
 ]
 
 interface DashboardLayoutProps {
