@@ -316,7 +316,9 @@ class AlertService:
         status: Optional[str] = None,
         severity: Optional[str] = None,
         limit: int = 100,
-        offset: int = 0
+        offset: int = 0,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         List alert instances with server-side pagination.
@@ -326,7 +328,8 @@ class AlertService:
         """
         try:
             result = await self.alert_dao.list_alert_instances(
-                customer_id, status, severity, limit, offset
+                customer_id, status, severity, limit, offset,
+                start_time, end_time
             )
             return result
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTimeRange } from '@/contexts/TimeRangeContext'
 import { apiClient } from '@/lib/api'
 import {
   AlertTriangle,
@@ -178,6 +179,7 @@ const generateMockIncidents = (): Incident[] => [
 
 export default function IncidentCommandCenter({ isLoading: externalLoading, timeRange }: IncidentCommandCenterProps) {
   const router = useRouter()
+  const { getApiTimeRange, currentTimeRange } = useTimeRange()
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null)
@@ -185,15 +187,18 @@ export default function IncidentCommandCenter({ isLoading: externalLoading, time
 
   useEffect(() => {
     loadIncidents()
-  }, [])
+  }, [currentTimeRange.value])
 
   const loadIncidents = async () => {
     try {
       setIsLoading(true)
-      // Load real incidents from alerts API
+      // Load real incidents from alerts API with time range from global selector
+      const { start_time, end_time } = getApiTimeRange()
       const response = await apiClient.get('/v1/alerts', {
         status: 'triggered',
-        limit: 20
+        limit: 20,
+        start_time,
+        end_time
       })
 
       if (response?.data?.alerts && response.data.alerts.length > 0) {

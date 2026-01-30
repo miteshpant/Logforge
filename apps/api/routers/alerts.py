@@ -169,13 +169,16 @@ async def list_alerts(
     severity: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
     customer_id: str = MiddlewareTenant
 ):
-    """List active alerts for the customer"""
+    """List alerts for the customer, optionally filtered by time range"""
     try:
         # Server-side pagination: query only the needed records from DB
         result = await alert_service.list_alert_instances(
-            customer_id, status, severity, limit, offset
+            customer_id, status, severity, limit, offset,
+            start_time, end_time
         )
 
         return {

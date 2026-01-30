@@ -418,7 +418,9 @@ class AlertDAO:
         status: Optional[str] = None,
         severity: Optional[str] = None,
         limit: int = 100,
-        offset: int = 0
+        offset: int = 0,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         List alert instances for customer with server-side pagination.
@@ -440,6 +442,14 @@ class AlertDAO:
             if severity:
                 where_clauses.append("ar.severity = %(severity)s")
                 params["severity"] = severity
+
+            if start_time:
+                where_clauses.append("ai.triggered_at >= %(start_time)s")
+                params["start_time"] = start_time
+
+            if end_time:
+                where_clauses.append("ai.triggered_at <= %(end_time)s")
+                params["end_time"] = end_time
 
             where_clause = ' AND '.join(where_clauses)
 
