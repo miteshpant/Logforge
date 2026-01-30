@@ -190,35 +190,35 @@ export default function IncidentCommandCenter({ isLoading: externalLoading, time
   const loadIncidents = async () => {
     try {
       setIsLoading(true)
-      // Try to load real incidents from API
-      const response = await apiClient.get('/v1/alerts/instances', {
-        status: 'triggered,acknowledged,investigating',
+      // Load real incidents from alerts API
+      const response = await apiClient.get('/v1/alerts', {
+        status: 'triggered',
         limit: 20
       })
 
       if (response?.data?.alerts && response.data.alerts.length > 0) {
         // Transform API data to incident format
         setIncidents(response.data.alerts.map((alert: any) => ({
-          id: alert.id,
-          title: alert.rule_name || alert.name,
-          description: alert.description || alert.message,
+          id: alert.alert_id || alert.id,
+          title: alert.rule_name || alert.title || alert.name || 'Unnamed Alert',
+          description: alert.message || alert.description || '',
           severity: alert.severity || 'medium',
-          status: alert.status || 'triggered',
-          service: alert.service || 'unknown',
+          status: alert.status === 'active' ? 'triggered' : (alert.status || 'triggered'),
+          service: alert.details?.service || alert.service || 'unknown',
           triggered_at: alert.triggered_at || alert.created_at,
           acknowledged_at: alert.acknowledged_at,
           resolved_at: alert.resolved_at,
-          related_logs: alert.related_logs || Math.floor(Math.random() * 500),
-          related_traces: alert.related_traces || Math.floor(Math.random() * 100),
-          related_alerts: alert.related_alerts || Math.floor(Math.random() * 5),
-          ai_root_cause: alert.ai_analysis?.root_cause,
-          ai_confidence: alert.ai_analysis?.confidence,
-          estimated_cost_impact: alert.cost_impact,
-          assignee: alert.assignee,
-          tags: alert.tags || []
+          related_logs: alert.details?.related_logs || 0,
+          related_traces: alert.details?.related_traces || 0,
+          related_alerts: alert.details?.related_alerts || 0,
+          ai_root_cause: alert.details?.ai_root_cause,
+          ai_confidence: alert.details?.ai_confidence,
+          estimated_cost_impact: alert.details?.cost_impact,
+          assignee: alert.details?.assignee || alert.assignee,
+          tags: alert.details?.tags || alert.tags || []
         })))
       } else {
-        // Use mock data for demo
+        // Use mock data for demo when no real alerts exist
         setIncidents(generateMockIncidents())
       }
     } catch (error) {
