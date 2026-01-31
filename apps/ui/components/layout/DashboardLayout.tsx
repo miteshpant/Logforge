@@ -53,6 +53,10 @@ import {
   ClipboardCheck,
   Eye,
   Siren,
+  Sparkles,
+  Link2,
+  TrendingUp,
+  MessageSquare,
 } from 'lucide-react'
 import { TenantSelector } from '@/components/TenantSelector'
 import PWASupport from '@/components/PWASupport'
@@ -106,6 +110,17 @@ const navSections: NavSection[] = [
       { name: 'Detection Rules', href: '/security/rules', icon: FileText },
       { name: 'Threat Intel', href: '/security/threat-intel', icon: Globe },
       { name: 'Threat Hunting', href: '/security/threat-hunting', icon: Crosshair },
+    ],
+  },
+  {
+    id: 'ai',
+    label: 'AI & Analytics',
+    icon: Sparkles,
+    items: [
+      { name: 'Alert Correlation', href: '/ai/alert-correlation', icon: Link2 },
+      { name: 'Predictive Analytics', href: '/ai/predictive-analytics', icon: TrendingUp },
+      { name: 'Investigations', href: '/ai/investigations', icon: MessageSquare },
+      { name: 'ML Models', href: '/ai/ml-models', icon: Brain },
     ],
   },
   {
