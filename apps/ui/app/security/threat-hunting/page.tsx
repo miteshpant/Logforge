@@ -511,7 +511,7 @@ export default function ThreatHuntingPage() {
                       <div className="mt-3">
                         <div className="flex justify-between text-xs text-slate-500 mb-1">
                           <span>{campaign.rules_tested} rules tested</span>
-                          <span>{campaign.logs_scanned.toLocaleString()} logs scanned</span>
+                          <span>{(campaign.logs_scanned ?? 0).toLocaleString()} logs scanned</span>
                         </div>
                         <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                           <div
@@ -530,7 +530,7 @@ export default function ThreatHuntingPage() {
                           <p className="text-xs text-slate-500">Rules Tested</p>
                         </div>
                         <div>
-                          <p className="text-lg font-bold text-slate-900">{campaign.logs_scanned.toLocaleString()}</p>
+                          <p className="text-lg font-bold text-slate-900">{(campaign.logs_scanned ?? 0).toLocaleString()}</p>
                           <p className="text-xs text-slate-500">Logs Scanned</p>
                         </div>
                         <div>
