@@ -81,22 +81,28 @@ export default function LogExplorerPage() {
       const data = response?.data || response
       if (data?.logs) {
         setLogs(data.logs)
-        if (data.stats) setStats(data.stats)
+        if (data.stats) {
+          setStats(data.stats)
+        } else {
+          setStats(calculateStats(data.logs))
+        }
+        const uniqueServices = new Set<string>()
+        data.logs.forEach((log: LogEntry) => uniqueServices.add(log.service))
+        setServices(Array.from(uniqueServices))
+      } else if (Array.isArray(data)) {
+        setLogs(data)
+        setStats(calculateStats(data))
+        const uniqueServices = new Set<string>()
+        data.forEach((log: LogEntry) => uniqueServices.add(log.service))
+        setServices(Array.from(uniqueServices))
       } else {
-        const mockLogs = generateMockLogs()
-        setLogs(mockLogs)
-        setStats(calculateStats(mockLogs))
+        setLogs([])
+        setStats({ total: 0, by_level: {}, by_service: {} })
       }
-
-      // Extract unique services
-      const uniqueServices = new Set<string>()
-      logs.forEach(log => uniqueServices.add(log.service))
-      setServices(Array.from(uniqueServices))
     } catch (error) {
       console.error('Failed to load logs:', error)
-      const mockLogs = generateMockLogs()
-      setLogs(mockLogs)
-      setStats(calculateStats(mockLogs))
+      setLogs([])
+      setStats({ total: 0, by_level: {}, by_service: {} })
     } finally {
       setIsLoading(false)
     }
@@ -470,49 +476,6 @@ export default function LogExplorerPage() {
 }
 
 // Mock data generators
-function generateMockLogs(): LogEntry[] {
-  const services = ['api-gateway', 'auth-service', 'user-service', 'order-service', 'payment-service', 'notification-service']
-  const levels: LogEntry['level'][] = ['debug', 'info', 'warning', 'error', 'critical']
-  const messages = {
-    debug: ['Cache hit for key user_123', 'Database query executed in 45ms', 'Request context initialized'],
-    info: ['User login successful', 'Order created successfully', 'Payment processed', 'Email notification sent', 'API request completed'],
-    warning: ['Rate limit approaching for IP 192.168.1.100', 'Slow database query detected', 'Cache miss, fetching from database', 'Retry attempt 2/3 for external API'],
-    error: ['Failed to connect to database', 'Invalid authentication token', 'Payment gateway timeout', 'Failed to send email notification'],
-    critical: ['Database connection pool exhausted', 'Payment service unavailable', 'Memory usage critical', 'Disk space low on primary volume']
-  }
-
-  const logs: LogEntry[] = []
-
-  for (let i = 0; i < 200; i++) {
-    const level = levels[Math.random() < 0.6 ? 1 : Math.floor(Math.random() * levels.length)]
-    const service = services[Math.floor(Math.random() * services.length)]
-    const messageList = messages[level]
-    const message = messageList[Math.floor(Math.random() * messageList.length)]
-
-    logs.push({
-      id: `log-${i}`,
-      timestamp: new Date(Date.now() - Math.random() * 3600000).toISOString(),
-      level,
-      service,
-      message,
-      trace_id: Math.random() > 0.3 ? `trace-${Math.random().toString(36).slice(2, 18)}` : undefined,
-      span_id: Math.random() > 0.5 ? `span-${Math.random().toString(36).slice(2, 10)}` : undefined,
-      metadata: level !== 'debug' ? {
-        request_id: `req-${Math.random().toString(36).slice(2, 10)}`,
-        user_id: Math.random() > 0.5 ? `user-${Math.floor(Math.random() * 1000)}` : undefined,
-        duration_ms: Math.floor(Math.random() * 500),
-        status_code: level === 'error' ? [400, 401, 403, 404, 500, 502, 503][Math.floor(Math.random() * 7)] : 200,
-        ...(level === 'error' && {
-          error_type: ['ValidationError', 'AuthenticationError', 'TimeoutError', 'DatabaseError'][Math.floor(Math.random() * 4)],
-          stack_trace: 'Error: Something went wrong\n    at handleRequest (/app/src/handlers.ts:42)\n    at processRequest (/app/src/server.ts:128)'
-        })
-      } : {}
-    })
-  }
-
-  return logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-}
-
 function calculateStats(logs: LogEntry[]): LogStats {
   const stats: LogStats = {
     total: logs.length,

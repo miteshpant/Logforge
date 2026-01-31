@@ -81,11 +81,11 @@ export default function ThreatIntelPage() {
       if (Array.isArray(data)) {
         setIndicators(data)
       } else {
-        setIndicators(generateMockIndicators())
+        setIndicators([])
       }
     } catch (error) {
       console.error('Failed to load threat intel:', error)
-      setIndicators(generateMockIndicators())
+      setIndicators([])
     } finally {
       setIsLoading(false)
     }
@@ -561,21 +561,4 @@ export default function ThreatIntelPage() {
       </div>
     </DashboardLayout>
   )
-}
-
-// Mock data generator
-function generateMockIndicators(): ThreatIndicator[] {
-  const indicators: ThreatIndicator[] = [
-    { id: 'ioc-1', indicator_type: 'ip', value: '185.220.101.42', threat_type: ['c2', 'malware'], severity: 'critical', confidence: 95, source: 'AlienVault OTX', description: 'Known C2 server for APT29', tags: ['apt', 'russia'], first_seen: '2024-01-10', last_seen: '2024-01-18' },
-    { id: 'ioc-2', indicator_type: 'domain', value: 'malware-download.xyz', threat_type: ['malware'], severity: 'high', confidence: 88, source: 'VirusTotal', description: 'Malware distribution domain', tags: ['dropper'], first_seen: '2024-01-05', last_seen: '2024-01-17' },
-    { id: 'ioc-3', indicator_type: 'hash', value: 'd41d8cd98f00b204e9800998ecf8427e', threat_type: ['ransomware'], severity: 'critical', confidence: 99, source: 'MalwareBazaar', description: 'LockBit ransomware sample', tags: ['lockbit', 'ransomware'], first_seen: '2024-01-01', last_seen: '2024-01-15' },
-    { id: 'ioc-4', indicator_type: 'ip', value: '91.214.124.56', threat_type: ['scanning', 'brute-force'], severity: 'medium', confidence: 72, source: 'AbuseIPDB', description: 'SSH brute force source', tags: ['scanner'], first_seen: '2024-01-12', last_seen: '2024-01-18' },
-    { id: 'ioc-5', indicator_type: 'url', value: 'http://phishing-site.com/login', threat_type: ['phishing'], severity: 'high', confidence: 91, source: 'PhishTank', description: 'Credential phishing page', tags: ['credentials', 'banking'], first_seen: '2024-01-14', last_seen: '2024-01-18' },
-    { id: 'ioc-6', indicator_type: 'domain', value: 'c2-beacon.net', threat_type: ['c2', 'apt'], severity: 'critical', confidence: 93, source: 'MISP', description: 'APT group C2 infrastructure', tags: ['apt', 'targeted'], first_seen: '2023-12-20', last_seen: '2024-01-16' },
-    { id: 'ioc-7', indicator_type: 'ip', value: '203.0.113.50', threat_type: ['spam', 'botnet'], severity: 'low', confidence: 65, source: 'SpamHaus', description: 'Spam botnet node', tags: ['spam'], first_seen: '2024-01-08', last_seen: '2024-01-17' },
-    { id: 'ioc-8', indicator_type: 'hash', value: '5d41402abc4b2a76b9719d911017c592', threat_type: ['trojan'], severity: 'high', confidence: 87, source: 'Hybrid Analysis', description: 'Banking trojan payload', tags: ['banking', 'infostealer'], first_seen: '2024-01-02', last_seen: '2024-01-14' },
-    { id: 'ioc-9', indicator_type: 'email', value: 'attacker@malicious-domain.com', threat_type: ['phishing'], severity: 'medium', confidence: 78, source: 'Internal Report', description: 'Phishing campaign sender', tags: ['spear-phishing'], first_seen: '2024-01-11', last_seen: '2024-01-18' },
-    { id: 'ioc-10', indicator_type: 'ip', value: '45.33.32.156', threat_type: ['exploit', 'scanning'], severity: 'high', confidence: 82, source: 'GreyNoise', description: 'Known exploit scanner', tags: ['scanner', 'vuln-scan'], first_seen: '2024-01-06', last_seen: '2024-01-18' }
-  ]
-  return indicators
 }

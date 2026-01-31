@@ -76,16 +76,16 @@ export default function SigmaRulesPage() {
   const loadRules = async () => {
     try {
       setIsLoading(true)
-      const response = await apiClient.get<SigmaRule[]>('/v1/security/sigma-rules')
+      const response = await apiClient.get<SigmaRule[]>('/v1/security/rules')
       const data = response?.data || response
       if (Array.isArray(data)) {
         setRules(data)
       } else {
-        setRules(generateMockRules())
+        setRules([])
       }
     } catch (error) {
       console.error('Failed to load rules:', error)
-      setRules(generateMockRules())
+      setRules([])
     } finally {
       setIsLoading(false)
     }
@@ -692,22 +692,4 @@ export default function SigmaRulesPage() {
       </div>
     </DashboardLayout>
   )
-}
-
-// Mock data generator
-function generateMockRules(): SigmaRule[] {
-  return [
-    { id: 'rule-1', title: 'Brute Force Login Attempt', description: 'Detects multiple failed login attempts from a single IP address within a short time window', severity: 'high', status: 'active', author: 'Logforge', date: '2024-01-15', enabled: true, attack_techniques: ['T1110'], tags: ['authentication', 'brute-force'] },
-    { id: 'rule-2', title: 'Suspicious PowerShell Execution', description: 'Detects encoded or obfuscated PowerShell commands that may indicate malicious activity', severity: 'critical', status: 'active', author: 'Logforge', date: '2024-01-10', enabled: true, attack_techniques: ['T1059.001'], tags: ['execution', 'powershell', 'obfuscation'] },
-    { id: 'rule-3', title: 'Unauthorized Admin Access', description: 'Detects access to admin endpoints without proper authorization headers', severity: 'high', status: 'active', author: 'Logforge', date: '2024-01-08', enabled: true, attack_techniques: ['T1078'], tags: ['access', 'privilege'] },
-    { id: 'rule-4', title: 'Malware Hash Detection', description: 'Detects known malware file hashes from threat intelligence feeds', severity: 'critical', status: 'active', author: 'Logforge', date: '2024-01-05', enabled: true, attack_techniques: ['T1204'], tags: ['malware', 'threat-intel'] },
-    { id: 'rule-5', title: 'Data Exfiltration Pattern', description: 'Detects large outbound data transfers to external destinations', severity: 'high', status: 'active', author: 'Logforge', date: '2024-01-03', enabled: true, attack_techniques: ['T1048'], tags: ['exfiltration', 'data-loss'] },
-    { id: 'rule-6', title: 'Privilege Escalation Attempt', description: 'Detects attempts to elevate privileges through known techniques', severity: 'high', status: 'active', author: 'Logforge', date: '2024-01-01', enabled: true, attack_techniques: ['T1548'], tags: ['privilege-escalation'] },
-    { id: 'rule-7', title: 'SQL Injection Detection', description: 'Detects SQL injection patterns in HTTP requests', severity: 'high', status: 'active', author: 'Logforge', date: '2023-12-28', enabled: true, attack_techniques: ['T1190'], tags: ['web-attack', 'sql-injection'] },
-    { id: 'rule-8', title: 'XSS Attack Detection', description: 'Detects cross-site scripting attack patterns in web requests', severity: 'medium', status: 'active', author: 'Logforge', date: '2023-12-25', enabled: true, attack_techniques: ['T1189'], tags: ['web-attack', 'xss'] },
-    { id: 'rule-9', title: 'Lateral Movement Detection', description: 'Detects internal network reconnaissance and lateral movement attempts', severity: 'high', status: 'active', author: 'Logforge', date: '2023-12-20', enabled: true, attack_techniques: ['T1021'], tags: ['lateral-movement', 'internal'] },
-    { id: 'rule-10', title: 'C2 Communication Detection', description: 'Detects command and control traffic patterns based on known C2 frameworks', severity: 'critical', status: 'active', author: 'Logforge', date: '2023-12-15', enabled: true, attack_techniques: ['T1071'], tags: ['c2', 'command-control'] },
-    { id: 'rule-11', title: 'Suspicious DNS Query', description: 'Detects DNS queries to known malicious domains or suspicious patterns', severity: 'medium', status: 'active', author: 'Logforge', date: '2023-12-10', enabled: false, attack_techniques: ['T1071.004'], tags: ['dns', 'exfiltration'] },
-    { id: 'rule-12', title: 'Ransomware Behavior', description: 'Detects file encryption patterns associated with ransomware', severity: 'critical', status: 'active', author: 'Logforge', date: '2023-12-05', enabled: true, attack_techniques: ['T1486'], tags: ['ransomware', 'encryption'] }
-  ]
 }

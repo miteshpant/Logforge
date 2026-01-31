@@ -49,67 +49,6 @@ const CHANNEL_COLORS: Record<string, string> = {
   opsgenie: 'bg-cyan-500/20 text-cyan-400'
 }
 
-const generateMockChannels = (): NotificationChannel[] => [
-  {
-    id: 'ch-1',
-    name: 'Ops Team Slack',
-    type: 'slack',
-    enabled: true,
-    config: { channel: '#ops-alerts', webhook_url: 'https://hooks.slack.com/...' },
-    created_at: '2024-01-10T10:00:00Z',
-    last_used_at: new Date(Date.now() - 300000).toISOString(),
-    success_rate: 99.8
-  },
-  {
-    id: 'ch-2',
-    name: 'Engineering Slack',
-    type: 'slack',
-    enabled: true,
-    config: { channel: '#engineering-alerts', webhook_url: 'https://hooks.slack.com/...' },
-    created_at: '2024-01-10T10:00:00Z',
-    last_used_at: new Date(Date.now() - 600000).toISOString(),
-    success_rate: 100
-  },
-  {
-    id: 'ch-3',
-    name: 'PagerDuty Critical',
-    type: 'pagerduty',
-    enabled: true,
-    config: { service_key: 'xxx...xxx', severity_mapping: { critical: 'critical', high: 'error' } },
-    created_at: '2024-01-05T08:00:00Z',
-    last_used_at: new Date(Date.now() - 3600000).toISOString(),
-    success_rate: 100
-  },
-  {
-    id: 'ch-4',
-    name: 'SOC Team Email',
-    type: 'email',
-    enabled: true,
-    config: { recipients: ['soc@company.com', 'security@company.com'] },
-    created_at: '2024-01-01T12:00:00Z',
-    last_used_at: new Date(Date.now() - 7200000).toISOString(),
-    success_rate: 98.5
-  },
-  {
-    id: 'ch-5',
-    name: 'Custom Webhook',
-    type: 'webhook',
-    enabled: false,
-    config: { url: 'https://api.company.com/alerts', method: 'POST', headers: { 'X-API-Key': '***' } },
-    created_at: '2024-01-15T14:00:00Z',
-    success_rate: 95.0
-  },
-  {
-    id: 'ch-6',
-    name: 'Microsoft Teams',
-    type: 'teams',
-    enabled: true,
-    config: { webhook_url: 'https://company.webhook.office.com/...' },
-    created_at: '2024-01-20T09:00:00Z',
-    last_used_at: new Date(Date.now() - 1800000).toISOString(),
-    success_rate: 99.2
-  }
-]
 
 export default function NotificationChannelsPage() {
   const [channels, setChannels] = useState<NotificationChannel[]>([])
@@ -126,15 +65,17 @@ export default function NotificationChannelsPage() {
   const loadChannels = async () => {
     try {
       setIsLoading(true)
-      const response = await apiClient.get<{ channels: NotificationChannel[] }>('/v1/alerts/channels')
+      const response = await apiClient.get<{ channels: NotificationChannel[] }>('/v1/alerts/notifications/channels')
       if (response?.data?.channels) {
         setChannels(response.data.channels)
+      } else if (Array.isArray(response?.data)) {
+        setChannels(response.data)
       } else {
-        setChannels(generateMockChannels())
+        setChannels([])
       }
     } catch (error) {
       console.error('Failed to load channels:', error)
-      setChannels(generateMockChannels())
+      setChannels([])
     } finally {
       setIsLoading(false)
     }
@@ -145,7 +86,7 @@ export default function NotificationChannelsPage() {
     if (!channel) return
 
     try {
-      await apiClient.patch(`/v1/alerts/channels/${channelId}`, { enabled: !channel.enabled })
+      await apiClient.patch(`/v1/alerts/notifications/channels/${channelId}`, { enabled: !channel.enabled })
     } catch (error) {
       console.error('Failed to toggle channel:', error)
     }
@@ -158,7 +99,7 @@ export default function NotificationChannelsPage() {
     if (!confirm('Are you sure you want to delete this notification channel?')) return
 
     try {
-      await apiClient.delete(`/v1/alerts/channels/${channelId}`)
+      await apiClient.delete(`/v1/alerts/notifications/channels/${channelId}`)
     } catch (error) {
       console.error('Failed to delete channel:', error)
     }
@@ -170,12 +111,11 @@ export default function NotificationChannelsPage() {
     setTestResult(null)
 
     try {
-      const response = await apiClient.post(`/v1/alerts/channels/${channelId}/test`)
+      const response = await apiClient.post(`/v1/alerts/notifications/channels/${channelId}/test`)
       setTestResult({ success: true, message: 'Test notification sent successfully!' })
     } catch (error) {
       console.error('Failed to test channel:', error)
-      // Mock success for demo
-      setTestResult({ success: Math.random() > 0.2, message: Math.random() > 0.2 ? 'Test notification sent successfully!' : 'Failed to send test notification' })
+      setTestResult({ success: false, message: 'Failed to send test notification. Check channel configuration.' })
     }
 
     setTimeout(() => {

@@ -74,10 +74,10 @@ export default function ThreatHuntingPage() {
         if (data?.campaigns) {
           setCampaigns(data.campaigns)
         } else {
-          setCampaigns(generateMockCampaigns())
+          setCampaigns([])
         }
       } else {
-        setCampaigns(generateMockCampaigns())
+        setCampaigns([])
       }
 
       if (rulesRes.status === 'fulfilled') {
@@ -85,15 +85,15 @@ export default function ThreatHuntingPage() {
         if (data?.rules) {
           setRules(data.rules)
         } else {
-          setRules(generateMockRules())
+          setRules([])
         }
       } else {
-        setRules(generateMockRules())
+        setRules([])
       }
     } catch (error) {
       console.error('Failed to load threat hunting data:', error)
-      setCampaigns(generateMockCampaigns())
-      setRules(generateMockRules())
+      setCampaigns([])
+      setRules([])
     } finally {
       setIsLoading(false)
     }
@@ -597,66 +597,3 @@ export default function ThreatHuntingPage() {
   )
 }
 
-// Mock data generators
-function generateMockCampaigns(): ThreatHuntCampaign[] {
-  return [
-    {
-      campaign_id: 'hunt-001',
-      description: 'Weekly proactive threat hunt - credential access',
-      status: 'completed',
-      started_at: new Date(Date.now() - 86400000).toISOString(),
-      completed_at: new Date(Date.now() - 82800000).toISOString(),
-      findings_count: 7,
-      rules_tested: 45,
-      logs_scanned: 523847,
-      time_range: '7d'
-    },
-    {
-      campaign_id: 'hunt-002',
-      description: 'Lateral movement investigation',
-      status: 'completed',
-      started_at: new Date(Date.now() - 172800000).toISOString(),
-      completed_at: new Date(Date.now() - 169200000).toISOString(),
-      findings_count: 3,
-      rules_tested: 32,
-      logs_scanned: 312456,
-      time_range: '24h'
-    },
-    {
-      campaign_id: 'hunt-003',
-      description: 'C2 beacon detection campaign',
-      status: 'completed',
-      started_at: new Date(Date.now() - 259200000).toISOString(),
-      completed_at: new Date(Date.now() - 255600000).toISOString(),
-      findings_count: 0,
-      rules_tested: 28,
-      logs_scanned: 198234,
-      time_range: '24h'
-    },
-    {
-      campaign_id: 'hunt-004',
-      description: 'Ransomware behavior analysis',
-      status: 'completed',
-      started_at: new Date(Date.now() - 432000000).toISOString(),
-      completed_at: new Date(Date.now() - 428400000).toISOString(),
-      findings_count: 2,
-      rules_tested: 15,
-      logs_scanned: 156789,
-      time_range: '30d',
-      severity_filter: ['critical', 'high']
-    }
-  ]
-}
-
-function generateMockRules(): HuntingRule[] {
-  return [
-    { id: 'hr-1', name: 'Credential Dumping Detection', description: 'Detect credential access attempts', category: 'Credential Access', severity: 'critical', enabled: true, attack_techniques: ['T1003'] },
-    { id: 'hr-2', name: 'Lateral Movement via RDP', description: 'Detect RDP lateral movement', category: 'Lateral Movement', severity: 'high', enabled: true, attack_techniques: ['T1021.001'] },
-    { id: 'hr-3', name: 'C2 Beacon Detection', description: 'Detect command and control beacons', category: 'Command and Control', severity: 'critical', enabled: true, attack_techniques: ['T1071'] },
-    { id: 'hr-4', name: 'Data Staging Detection', description: 'Detect data staging for exfiltration', category: 'Collection', severity: 'high', enabled: true, attack_techniques: ['T1560'] },
-    { id: 'hr-5', name: 'Persistence via Registry', description: 'Detect registry persistence mechanisms', category: 'Persistence', severity: 'medium', enabled: true, attack_techniques: ['T1547'] },
-    { id: 'hr-6', name: 'Suspicious Process Injection', description: 'Detect process injection techniques', category: 'Defense Evasion', severity: 'high', enabled: true, attack_techniques: ['T1055'] },
-    { id: 'hr-7', name: 'Anomalous DNS Queries', description: 'Detect suspicious DNS traffic', category: 'Command and Control', severity: 'medium', enabled: true, attack_techniques: ['T1071.004'] },
-    { id: 'hr-8', name: 'Ransomware Encryption Behavior', description: 'Detect ransomware encryption patterns', category: 'Impact', severity: 'critical', enabled: true, attack_techniques: ['T1486'] }
-  ]
-}

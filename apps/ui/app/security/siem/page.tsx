@@ -105,10 +105,10 @@ export default function SIEMDashboardPage() {
         if (data) {
           setDashboard(data as SecurityDashboard)
         } else {
-          setDashboard(generateMockDashboard())
+          setDashboard(null)
         }
       } else {
-        setDashboard(generateMockDashboard())
+        setDashboard(null)
       }
 
       if (rulesRes.status === 'fulfilled') {
@@ -116,15 +116,15 @@ export default function SIEMDashboardPage() {
         if (Array.isArray(data)) {
           setRules(data)
         } else {
-          setRules(generateMockRules())
+          setRules([])
         }
       } else {
-        setRules(generateMockRules())
+        setRules([])
       }
     } catch (error) {
       console.error('Failed to load security data:', error)
-      setDashboard(generateMockDashboard())
-      setRules(generateMockRules())
+      setDashboard(null)
+      setRules([])
     } finally {
       setIsLoading(false)
     }
@@ -348,9 +348,15 @@ export default function SIEMDashboardPage() {
                   <div key={i} className="h-16 bg-slate-100 rounded-lg animate-pulse" />
                 ))}
               </div>
+            ) : !dashboard?.recent_events?.length ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <ShieldAlert className="w-10 h-10 text-slate-300 mb-3" />
+                <p className="text-sm font-medium text-slate-500">No security events found</p>
+                <p className="text-xs text-slate-400 mt-1">Events will appear here when detected by your rules</p>
+              </div>
             ) : (
               <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                {dashboard?.recent_events?.slice(0, 10).map((event) => (
+                {dashboard.recent_events.slice(0, 10).map((event) => (
                   <div
                     key={event.id}
                     className="p-4 border border-slate-200 rounded-lg hover:border-blue-400 transition-colors cursor-pointer"
@@ -403,9 +409,15 @@ export default function SIEMDashboardPage() {
                   <div key={i} className="h-12 bg-slate-100 rounded-lg animate-pulse" />
                 ))}
               </div>
+            ) : !dashboard?.top_rules?.length ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <Zap className="w-10 h-10 text-slate-300 mb-3" />
+                <p className="text-sm font-medium text-slate-500">No triggered rules</p>
+                <p className="text-xs text-slate-400 mt-1">Rule triggers will appear here once detection rules match incoming events</p>
+              </div>
             ) : (
               <div className="space-y-3">
-                {dashboard?.top_rules?.slice(0, 8).map((rule, idx) => {
+                {dashboard.top_rules.slice(0, 8).map((rule, idx) => {
                   const maxCount = dashboard.top_rules[0]?.event_count || 1
                   const percentage = (rule.event_count / maxCount) * 100
 
@@ -555,86 +567,3 @@ function ThreatTimeline({ events }: { events: SecurityEvent[] }) {
   )
 }
 
-// Mock data generators
-function generateMockDashboard(): SecurityDashboard {
-  const severities = ['critical', 'high', 'medium', 'low']
-  const techniques = ['T1190', 'T1078', 'T1059', 'T1003', 'T1021', 'T1071', 'T1486']
-
-  const events: SecurityEvent[] = []
-  for (let i = 0; i < 50; i++) {
-    const severity = severities[Math.floor(Math.random() * severities.length)] as SecurityEvent['severity']
-    events.push({
-      id: `evt-${i}`,
-      rule_id: `rule-${Math.floor(Math.random() * 10)}`,
-      rule_title: [
-        'Brute Force Attack Detected',
-        'Suspicious PowerShell Execution',
-        'Unauthorized Access Attempt',
-        'Malware Download Detected',
-        'Data Exfiltration Attempt',
-        'Privilege Escalation Detected',
-        'Lateral Movement Detected',
-        'SQL Injection Attempt',
-        'XSS Attack Blocked',
-        'DDoS Traffic Pattern'
-      ][Math.floor(Math.random() * 10)],
-      severity,
-      status: ['triggered', 'investigating', 'resolved'][Math.floor(Math.random() * 3)],
-      timestamp: new Date(Date.now() - Math.random() * 86400000).toISOString(),
-      event_data: { src_ip: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}` },
-      matched_fields: {},
-      attack_techniques: [techniques[Math.floor(Math.random() * techniques.length)]],
-      investigation_notes: [],
-      artifacts: []
-    })
-  }
-
-  const eventsBySeverity: Record<string, number> = { critical: 0, high: 0, medium: 0, low: 0 }
-  events.forEach(e => eventsBySeverity[e.severity]++)
-
-  const eventsByTechnique: Record<string, number> = {}
-  events.forEach(e => {
-    e.attack_techniques.forEach(t => {
-      eventsByTechnique[t] = (eventsByTechnique[t] || 0) + 1
-    })
-  })
-
-  return {
-    total_events: events.length,
-    events_by_severity: eventsBySeverity,
-    events_by_technique: eventsByTechnique,
-    top_rules: [
-      { rule_id: 'rule-1', rule_title: 'Brute Force Attack', event_count: 45, severity: 'high' },
-      { rule_id: 'rule-2', rule_title: 'Suspicious PowerShell', event_count: 32, severity: 'critical' },
-      { rule_id: 'rule-3', rule_title: 'Unauthorized Access', event_count: 28, severity: 'high' },
-      { rule_id: 'rule-4', rule_title: 'Malware Detection', event_count: 21, severity: 'critical' },
-      { rule_id: 'rule-5', rule_title: 'Data Exfiltration', event_count: 15, severity: 'high' },
-      { rule_id: 'rule-6', rule_title: 'Privilege Escalation', event_count: 12, severity: 'medium' },
-      { rule_id: 'rule-7', rule_title: 'SQL Injection', event_count: 9, severity: 'high' },
-      { rule_id: 'rule-8', rule_title: 'XSS Attack', event_count: 7, severity: 'medium' }
-    ],
-    recent_events: events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
-    threat_intel_stats: {
-      total_indicators: 1247,
-      by_type: { ip: 523, domain: 312, hash: 245, url: 167 },
-      by_severity: { critical: 89, high: 234, medium: 456, low: 468 }
-    }
-  }
-}
-
-function generateMockRules(): SigmaRule[] {
-  const rules: SigmaRule[] = [
-    { id: 'rule-1', title: 'Brute Force Login Attempt', description: 'Detects multiple failed login attempts', severity: 'high', status: 'active', author: 'Logforge', date: '2024-01-15', enabled: true, attack_techniques: ['T1110'], tags: ['authentication'] },
-    { id: 'rule-2', title: 'Suspicious PowerShell Execution', description: 'Detects encoded or obfuscated PowerShell commands', severity: 'critical', status: 'active', author: 'Logforge', date: '2024-01-10', enabled: true, attack_techniques: ['T1059'], tags: ['execution', 'powershell'] },
-    { id: 'rule-3', title: 'Unauthorized Admin Access', description: 'Detects access to admin endpoints without proper authorization', severity: 'high', status: 'active', author: 'Logforge', date: '2024-01-08', enabled: true, attack_techniques: ['T1078'], tags: ['access'] },
-    { id: 'rule-4', title: 'Malware Hash Detection', description: 'Detects known malware file hashes', severity: 'critical', status: 'active', author: 'Logforge', date: '2024-01-05', enabled: true, attack_techniques: ['T1204'], tags: ['malware'] },
-    { id: 'rule-5', title: 'Data Exfiltration Pattern', description: 'Detects large outbound data transfers', severity: 'high', status: 'active', author: 'Logforge', date: '2024-01-03', enabled: true, attack_techniques: ['T1048'], tags: ['exfiltration'] },
-    { id: 'rule-6', title: 'Privilege Escalation Attempt', description: 'Detects attempts to elevate privileges', severity: 'high', status: 'active', author: 'Logforge', date: '2024-01-01', enabled: true, attack_techniques: ['T1548'], tags: ['privilege-escalation'] },
-    { id: 'rule-7', title: 'SQL Injection Detection', description: 'Detects SQL injection patterns in requests', severity: 'high', status: 'active', author: 'Logforge', date: '2023-12-28', enabled: true, attack_techniques: ['T1190'], tags: ['web-attack'] },
-    { id: 'rule-8', title: 'XSS Attack Detection', description: 'Detects cross-site scripting attack patterns', severity: 'medium', status: 'active', author: 'Logforge', date: '2023-12-25', enabled: true, attack_techniques: ['T1189'], tags: ['web-attack'] },
-    { id: 'rule-9', title: 'Lateral Movement Detection', description: 'Detects internal network reconnaissance', severity: 'high', status: 'active', author: 'Logforge', date: '2023-12-20', enabled: true, attack_techniques: ['T1021'], tags: ['lateral-movement'] },
-    { id: 'rule-10', title: 'C2 Communication Detection', description: 'Detects command and control traffic patterns', severity: 'critical', status: 'active', author: 'Logforge', date: '2023-12-15', enabled: true, attack_techniques: ['T1071'], tags: ['c2'] }
-  ]
-
-  return rules
-}

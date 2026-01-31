@@ -63,12 +63,14 @@ export default function SecurityEventsPage() {
       const data = response?.data || response
       if (Array.isArray(data)) {
         setEvents(data)
+      } else if (data?.events && Array.isArray(data.events)) {
+        setEvents(data.events)
       } else {
-        setEvents(generateMockEvents())
+        setEvents([])
       }
     } catch (error) {
       console.error('Failed to load security events:', error)
-      setEvents(generateMockEvents())
+      setEvents([])
     } finally {
       setIsLoading(false)
     }
@@ -532,61 +534,3 @@ export default function SecurityEventsPage() {
   )
 }
 
-// Mock data generator
-function generateMockEvents(): SecurityEvent[] {
-  const rules = [
-    { id: 'rule-1', title: 'Brute Force Attack Detected' },
-    { id: 'rule-2', title: 'Suspicious PowerShell Execution' },
-    { id: 'rule-3', title: 'Unauthorized Access Attempt' },
-    { id: 'rule-4', title: 'Malware Download Detected' },
-    { id: 'rule-5', title: 'Data Exfiltration Attempt' },
-    { id: 'rule-6', title: 'Privilege Escalation Detected' },
-    { id: 'rule-7', title: 'Lateral Movement Detected' },
-    { id: 'rule-8', title: 'SQL Injection Attempt' }
-  ]
-
-  const severities: SecurityEvent['severity'][] = ['critical', 'high', 'medium', 'low']
-  const statuses: SecurityEvent['status'][] = ['triggered', 'investigating', 'resolved', 'false_positive']
-  const techniques = ['T1110', 'T1059', 'T1078', 'T1003', 'T1021', 'T1048', 'T1071', 'T1190']
-
-  const events: SecurityEvent[] = []
-
-  for (let i = 0; i < 50; i++) {
-    const rule = rules[Math.floor(Math.random() * rules.length)]
-    const statusWeight = Math.random()
-    let status: SecurityEvent['status']
-
-    if (statusWeight < 0.4) status = 'triggered'
-    else if (statusWeight < 0.6) status = 'investigating'
-    else if (statusWeight < 0.9) status = 'resolved'
-    else status = 'false_positive'
-
-    events.push({
-      id: `sec-evt-${Date.now()}-${i}`,
-      rule_id: rule.id,
-      rule_title: rule.title,
-      severity: severities[Math.floor(Math.random() * severities.length)],
-      status,
-      timestamp: new Date(Date.now() - Math.random() * 86400000 * 7).toISOString(),
-      event_data: {
-        src_ip: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
-        dst_ip: `10.0.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
-        user: ['admin', 'root', 'system', 'guest'][Math.floor(Math.random() * 4)],
-        action: ['login_failed', 'file_access', 'process_start', 'network_connection'][Math.floor(Math.random() * 4)]
-      },
-      matched_fields: {
-        field1: 'value1',
-        field2: 'value2'
-      },
-      attack_techniques: [techniques[Math.floor(Math.random() * techniques.length)]],
-      kill_chain_phase: ['reconnaissance', 'initial-access', 'execution', 'persistence'][Math.floor(Math.random() * 4)],
-      assigned_to: status !== 'triggered' ? ['analyst1', 'analyst2', 'security-team'][Math.floor(Math.random() * 3)] : undefined,
-      investigation_notes: status === 'resolved'
-        ? ['Initial investigation completed', 'Confirmed malicious activity', 'Remediation steps taken']
-        : [],
-      artifacts: []
-    })
-  }
-
-  return events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-}

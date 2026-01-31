@@ -88,165 +88,6 @@ interface LegalHold {
   reason: string
 }
 
-const generateMockFrameworks = (): ComplianceFramework[] => [
-  {
-    id: 'soc2',
-    name: 'SOC 2 Type II',
-    shortName: 'SOC2',
-    description: 'Service Organization Control 2 - Security, Availability, Confidentiality',
-    enabled: true,
-    status: 'compliant',
-    lastAssessment: '2024-01-15T00:00:00Z',
-    nextAssessment: '2024-07-15T00:00:00Z',
-    overallScore: 94,
-    controls: [
-      {
-        id: 'cc6',
-        name: 'Logical and Physical Access',
-        controls: [
-          { id: 'cc6.1', name: 'Access Control Policy', description: 'Access control policies are established', status: 'pass', lastChecked: '2024-01-15T00:00:00Z' },
-          { id: 'cc6.2', name: 'User Authentication', description: 'Users are authenticated before access', status: 'pass', lastChecked: '2024-01-15T00:00:00Z' },
-          { id: 'cc6.3', name: 'Access Removal', description: 'Access is removed upon termination', status: 'pass', lastChecked: '2024-01-15T00:00:00Z' },
-          { id: 'cc6.6', name: 'Encryption', description: 'Data is encrypted in transit and at rest', status: 'pass', lastChecked: '2024-01-15T00:00:00Z' },
-        ]
-      },
-      {
-        id: 'cc7',
-        name: 'System Operations',
-        controls: [
-          { id: 'cc7.1', name: 'Security Monitoring', description: 'Security events are monitored', status: 'pass', lastChecked: '2024-01-15T00:00:00Z' },
-          { id: 'cc7.2', name: 'Anomaly Detection', description: 'Anomalies are detected and reported', status: 'pass', lastChecked: '2024-01-15T00:00:00Z' },
-          { id: 'cc7.3', name: 'Incident Response', description: 'Incidents are responded to timely', status: 'warning', lastChecked: '2024-01-15T00:00:00Z', remediation: 'Update incident response runbook' },
-        ]
-      },
-      {
-        id: 'cc8',
-        name: 'Change Management',
-        controls: [
-          { id: 'cc8.1', name: 'Change Authorization', description: 'Changes are authorized before implementation', status: 'pass', lastChecked: '2024-01-15T00:00:00Z' },
-        ]
-      }
-    ]
-  },
-  {
-    id: 'hipaa',
-    name: 'HIPAA',
-    shortName: 'HIPAA',
-    description: 'Health Insurance Portability and Accountability Act',
-    enabled: true,
-    status: 'partial',
-    lastAssessment: '2024-01-10T00:00:00Z',
-    nextAssessment: '2024-04-10T00:00:00Z',
-    overallScore: 78,
-    controls: [
-      {
-        id: 'admin',
-        name: 'Administrative Safeguards',
-        controls: [
-          { id: '164.308.a1', name: 'Security Management', description: 'Policies and procedures to prevent security violations', status: 'pass', lastChecked: '2024-01-10T00:00:00Z' },
-          { id: '164.308.a3', name: 'Workforce Security', description: 'Access management for workforce members', status: 'pass', lastChecked: '2024-01-10T00:00:00Z' },
-          { id: '164.308.a5', name: 'Security Awareness', description: 'Security awareness and training program', status: 'warning', lastChecked: '2024-01-10T00:00:00Z', remediation: 'Schedule annual security training' },
-        ]
-      },
-      {
-        id: 'technical',
-        name: 'Technical Safeguards',
-        controls: [
-          { id: '164.312.a1', name: 'Access Control', description: 'Unique user identification and access controls', status: 'pass', lastChecked: '2024-01-10T00:00:00Z' },
-          { id: '164.312.b', name: 'Audit Controls', description: 'Hardware, software, and procedural audit mechanisms', status: 'pass', lastChecked: '2024-01-10T00:00:00Z' },
-          { id: '164.312.d', name: 'Authentication', description: 'Person or entity authentication', status: 'fail', lastChecked: '2024-01-10T00:00:00Z', remediation: 'Implement MFA for all users accessing PHI' },
-          { id: '164.312.e', name: 'Transmission Security', description: 'Encryption of ePHI in transit', status: 'pass', lastChecked: '2024-01-10T00:00:00Z' },
-        ]
-      }
-    ]
-  },
-  {
-    id: 'pci',
-    name: 'PCI DSS 4.0',
-    shortName: 'PCI',
-    description: 'Payment Card Industry Data Security Standard',
-    enabled: true,
-    status: 'compliant',
-    lastAssessment: '2024-01-20T00:00:00Z',
-    nextAssessment: '2025-01-20T00:00:00Z',
-    overallScore: 96,
-    controls: [
-      {
-        id: 'req1',
-        name: 'Network Security Controls',
-        controls: [
-          { id: '1.1', name: 'Network Segmentation', description: 'Install and maintain network security controls', status: 'pass', lastChecked: '2024-01-20T00:00:00Z' },
-          { id: '1.2', name: 'Firewall Configuration', description: 'Apply secure configurations', status: 'pass', lastChecked: '2024-01-20T00:00:00Z' },
-        ]
-      },
-      {
-        id: 'req3',
-        name: 'Protect Stored Account Data',
-        controls: [
-          { id: '3.1', name: 'Data Retention', description: 'Keep cardholder data storage to a minimum', status: 'pass', lastChecked: '2024-01-20T00:00:00Z' },
-          { id: '3.5', name: 'Key Management', description: 'Protect stored cardholder data with strong encryption', status: 'pass', lastChecked: '2024-01-20T00:00:00Z' },
-        ]
-      },
-      {
-        id: 'req10',
-        name: 'Log and Monitor Access',
-        controls: [
-          { id: '10.1', name: 'Audit Logging', description: 'Implement audit trails for all access', status: 'pass', lastChecked: '2024-01-20T00:00:00Z' },
-          { id: '10.2', name: 'Log Monitoring', description: 'Review logs daily', status: 'pass', lastChecked: '2024-01-20T00:00:00Z' },
-        ]
-      }
-    ]
-  },
-  {
-    id: 'gdpr',
-    name: 'GDPR',
-    shortName: 'GDPR',
-    description: 'General Data Protection Regulation',
-    enabled: false,
-    status: 'not_assessed',
-    overallScore: 0,
-    controls: []
-  }
-]
-
-const generateMockAuditLogs = (): AuditLogEntry[] => [
-  { id: '1', timestamp: new Date(Date.now() - 300000).toISOString(), user: 'admin@company.com', action: 'LOGIN', resource: 'System', details: 'Successful login', ip_address: '10.0.1.100', result: 'success' },
-  { id: '2', timestamp: new Date(Date.now() - 600000).toISOString(), user: 'alice@company.com', action: 'EXPORT', resource: 'Logs', details: 'Exported 1500 log entries', ip_address: '10.0.1.101', result: 'success' },
-  { id: '3', timestamp: new Date(Date.now() - 900000).toISOString(), user: 'bob@company.com', action: 'ROLE_CHANGE', resource: 'User: carol', details: 'Changed role from Viewer to Developer', ip_address: '10.0.1.102', result: 'success' },
-  { id: '4', timestamp: new Date(Date.now() - 1200000).toISOString(), user: 'unknown', action: 'LOGIN', resource: 'System', details: 'Failed login attempt', ip_address: '185.220.101.33', result: 'failure' },
-  { id: '5', timestamp: new Date(Date.now() - 1500000).toISOString(), user: 'admin@company.com', action: 'CONFIG_CHANGE', resource: 'Alert Rules', details: 'Created new alert rule: High Error Rate', ip_address: '10.0.1.100', result: 'success' },
-]
-
-const generateMockRetentionPolicies = (): RetentionPolicy[] => [
-  { id: '1', name: 'Application Logs', dataType: 'logs', retentionDays: 90, archiveAfterDays: 30, deleteAfterDays: 365, enabled: true },
-  { id: '2', name: 'Security Events', dataType: 'security', retentionDays: 365, archiveAfterDays: 90, deleteAfterDays: 730, enabled: true },
-  { id: '3', name: 'Traces', dataType: 'traces', retentionDays: 30, archiveAfterDays: 14, deleteAfterDays: 90, enabled: true },
-  { id: '4', name: 'Metrics', dataType: 'metrics', retentionDays: 180, archiveAfterDays: 60, deleteAfterDays: 365, enabled: true },
-  { id: '5', name: 'Audit Logs', dataType: 'audit', retentionDays: 730, deleteAfterDays: 2555, enabled: true },
-]
-
-const generateMockLegalHolds = (): LegalHold[] => [
-  {
-    id: '1',
-    name: 'Investigation Case #2024-001',
-    description: 'Data preservation for ongoing investigation',
-    createdBy: 'legal@company.com',
-    createdAt: '2024-01-05T00:00:00Z',
-    status: 'active',
-    affectedData: ['logs', 'security', 'audit'],
-    reason: 'Legal investigation - preserve all data from 2023-12-01 to 2024-01-15'
-  },
-  {
-    id: '2',
-    name: 'Audit Preparation 2024',
-    description: 'SOC 2 audit preparation',
-    createdBy: 'compliance@company.com',
-    createdAt: '2024-01-10T00:00:00Z',
-    status: 'active',
-    affectedData: ['audit', 'security'],
-    reason: 'Preserve audit-related data for upcoming SOC 2 assessment'
-  }
-]
 
 export default function CompliancePage() {
   const [frameworks, setFrameworks] = useState<ComplianceFramework[]>([])
@@ -266,23 +107,34 @@ export default function CompliancePage() {
   const loadData = async () => {
     try {
       setIsLoading(true)
-      const [fwRes, auditRes, retRes, holdRes] = await Promise.all([
-        apiClient.get('/v1/compliance/frameworks').catch(() => null),
-        apiClient.get('/v1/compliance/audit-logs').catch(() => null),
-        apiClient.get('/v1/compliance/retention-policies').catch(() => null),
-        apiClient.get('/v1/compliance/legal-holds').catch(() => null)
+      const [fwRes, auditRes, retRes, holdRes] = await Promise.allSettled([
+        apiClient.get('/v1/enterprise/compliance/reports'),
+        apiClient.get('/v1/enterprise/compliance/audit-logs'),
+        apiClient.get('/v1/enterprise/compliance/retention-policies'),
+        apiClient.get('/v1/enterprise/compliance/legal-holds')
       ])
 
-      setFrameworks(fwRes?.data?.frameworks || generateMockFrameworks())
-      setAuditLogs(auditRes?.data?.logs || generateMockAuditLogs())
-      setRetentionPolicies(retRes?.data?.policies || generateMockRetentionPolicies())
-      setLegalHolds(holdRes?.data?.holds || generateMockLegalHolds())
+      if (fwRes.status === 'fulfilled' && fwRes.value?.data) {
+        const data = fwRes.value.data
+        setFrameworks(data.frameworks || data.reports || (Array.isArray(data) ? data : []))
+      }
+
+      if (auditRes.status === 'fulfilled' && auditRes.value?.data) {
+        const data = auditRes.value.data
+        setAuditLogs(data.logs || data.entries || (Array.isArray(data) ? data : []))
+      }
+
+      if (retRes.status === 'fulfilled' && retRes.value?.data) {
+        const data = retRes.value.data
+        setRetentionPolicies(data.policies || (Array.isArray(data) ? data : []))
+      }
+
+      if (holdRes.status === 'fulfilled' && holdRes.value?.data) {
+        const data = holdRes.value.data
+        setLegalHolds(data.holds || (Array.isArray(data) ? data : []))
+      }
     } catch (error) {
       console.error('Failed to load compliance data:', error)
-      setFrameworks(generateMockFrameworks())
-      setAuditLogs(generateMockAuditLogs())
-      setRetentionPolicies(generateMockRetentionPolicies())
-      setLegalHolds(generateMockLegalHolds())
     } finally {
       setIsLoading(false)
     }
@@ -455,6 +307,15 @@ export default function CompliancePage() {
             {/* Frameworks Tab */}
             {activeTab === 'frameworks' && (
               <div className="space-y-4">
+                {frameworks.length === 0 && (
+                  <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-12 text-center">
+                    <Shield className="w-12 h-12 mx-auto mb-4 text-gray-600" />
+                    <h3 className="text-lg font-semibold text-white mb-2">No Compliance Frameworks Configured</h3>
+                    <p className="text-gray-400 text-sm max-w-md mx-auto">
+                      Configure compliance frameworks (SOC2, HIPAA, PCI DSS, GDPR) to track your security posture and audit readiness.
+                    </p>
+                  </div>
+                )}
                 {frameworks.map((framework) => (
                   <div
                     key={framework.id}
@@ -586,6 +447,13 @@ export default function CompliancePage() {
                     Filters
                   </button>
                 </div>
+                {auditLogs.length === 0 ? (
+                  <div className="p-12 text-center">
+                    <FileText className="w-12 h-12 mx-auto mb-4 text-gray-600" />
+                    <h3 className="text-lg font-semibold text-white mb-2">No Audit Logs</h3>
+                    <p className="text-gray-400 text-sm">Audit log entries will appear as users interact with the system.</p>
+                  </div>
+                ) : (
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-700">
@@ -624,6 +492,7 @@ export default function CompliancePage() {
                     ))}
                   </tbody>
                 </table>
+                )}
               </div>
             )}
 
@@ -636,6 +505,13 @@ export default function CompliancePage() {
                     Configure Policies
                   </button>
                 </div>
+                {retentionPolicies.length === 0 ? (
+                  <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-12 text-center">
+                    <Archive className="w-12 h-12 mx-auto mb-4 text-gray-600" />
+                    <h3 className="text-lg font-semibold text-white mb-2">No Retention Policies</h3>
+                    <p className="text-gray-400 text-sm">Configure data retention policies to manage storage and compliance requirements.</p>
+                  </div>
+                ) : (
                 <div className="grid gap-4">
                   {retentionPolicies.map((policy) => (
                     <div
@@ -683,6 +559,7 @@ export default function CompliancePage() {
                     </div>
                   ))}
                 </div>
+                )}
               </div>
             )}
 

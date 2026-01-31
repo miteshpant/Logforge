@@ -106,117 +106,6 @@ const ALL_PERMISSIONS: Permission[] = [
   { id: 'roles:write', name: 'Manage Roles', description: 'Create and edit roles', category: 'users' }
 ]
 
-const generateMockRoles = (): Role[] => [
-  {
-    id: 'admin',
-    name: 'Administrator',
-    description: 'Full access to all features and settings',
-    is_system: true,
-    is_default: false,
-    permissions: ALL_PERMISSIONS.map(p => p.id),
-    user_count: 3,
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-15T10:30:00Z'
-  },
-  {
-    id: 'security_analyst',
-    name: 'Security Analyst',
-    description: 'Full access to security features, read access to observability',
-    is_system: true,
-    is_default: false,
-    permissions: [
-      'logs:read', 'logs:query', 'logs:export',
-      'traces:read', 'traces:analyze',
-      'metrics:read',
-      'alerts:read', 'alerts:acknowledge', 'alerts:resolve', 'alerts:rules:read',
-      'security:read', 'security:investigate', 'security:rules:write', 'security:threat_intel',
-      'dashboards:read', 'dashboards:write'
-    ],
-    user_count: 8,
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-02-10T14:20:00Z'
-  },
-  {
-    id: 'sre',
-    name: 'Site Reliability Engineer',
-    description: 'Full observability access with alert management',
-    is_system: true,
-    is_default: false,
-    permissions: [
-      'logs:read', 'logs:query', 'logs:export',
-      'traces:read', 'traces:analyze',
-      'metrics:read', 'metrics:create',
-      'alerts:read', 'alerts:acknowledge', 'alerts:resolve', 'alerts:rules:read', 'alerts:rules:write', 'alerts:channels:write',
-      'security:read',
-      'dashboards:read', 'dashboards:write', 'dashboards:share'
-    ],
-    user_count: 12,
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-20T09:15:00Z'
-  },
-  {
-    id: 'developer',
-    name: 'Developer',
-    description: 'Read access to logs, traces, and metrics',
-    is_system: true,
-    is_default: true,
-    permissions: [
-      'logs:read', 'logs:query',
-      'traces:read', 'traces:analyze',
-      'metrics:read',
-      'alerts:read',
-      'dashboards:read'
-    ],
-    user_count: 45,
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z'
-  },
-  {
-    id: 'viewer',
-    name: 'Viewer',
-    description: 'Read-only access to dashboards and basic data',
-    is_system: true,
-    is_default: false,
-    permissions: [
-      'logs:read',
-      'traces:read',
-      'metrics:read',
-      'alerts:read',
-      'dashboards:read'
-    ],
-    user_count: 28,
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z'
-  },
-  {
-    id: 'custom_1',
-    name: 'L2 Support',
-    description: 'Custom role for L2 support team with investigation access',
-    is_system: false,
-    is_default: false,
-    permissions: [
-      'logs:read', 'logs:query',
-      'traces:read', 'traces:analyze',
-      'metrics:read',
-      'alerts:read', 'alerts:acknowledge',
-      'security:read',
-      'dashboards:read'
-    ],
-    user_count: 15,
-    created_at: '2024-03-01T00:00:00Z',
-    updated_at: '2024-03-15T11:00:00Z'
-  }
-]
-
-const generateMockUsers = (): User[] => [
-  { id: '1', email: 'admin@company.com', name: 'John Admin', role_id: 'admin', role_name: 'Administrator', status: 'active', last_login: new Date(Date.now() - 300000).toISOString() },
-  { id: '2', email: 'alice@company.com', name: 'Alice Security', role_id: 'security_analyst', role_name: 'Security Analyst', status: 'active', last_login: new Date(Date.now() - 3600000).toISOString() },
-  { id: '3', email: 'bob@company.com', name: 'Bob SRE', role_id: 'sre', role_name: 'Site Reliability Engineer', status: 'active', last_login: new Date(Date.now() - 7200000).toISOString() },
-  { id: '4', email: 'carol@company.com', name: 'Carol Dev', role_id: 'developer', role_name: 'Developer', status: 'active', last_login: new Date(Date.now() - 86400000).toISOString() },
-  { id: '5', email: 'dave@company.com', name: 'Dave Viewer', role_id: 'viewer', role_name: 'Viewer', status: 'inactive' },
-  { id: '6', email: 'eve@company.com', name: 'Eve Support', role_id: 'custom_1', role_name: 'L2 Support', status: 'active', last_login: new Date(Date.now() - 1800000).toISOString() },
-  { id: '7', email: 'frank@company.com', name: 'Frank Pending', role_id: 'developer', role_name: 'Developer', status: 'pending' },
-]
 
 export default function RolesPage() {
   const [roles, setRoles] = useState<Role[]>([])
@@ -237,26 +126,22 @@ export default function RolesPage() {
   const loadData = async () => {
     try {
       setIsLoading(true)
-      const [rolesRes, usersRes] = await Promise.all([
-        apiClient.get('/v1/enterprise/rbac/roles').catch(() => null),
-        apiClient.get('/v1/enterprise/users').catch(() => null)
+      const [rolesRes, usersRes] = await Promise.allSettled([
+        apiClient.get('/v1/enterprise/rbac/roles'),
+        apiClient.get('/v1/users')
       ])
 
-      if (rolesRes?.data?.roles) {
-        setRoles(rolesRes.data.roles)
-      } else {
-        setRoles(generateMockRoles())
+      if (rolesRes.status === 'fulfilled' && rolesRes.value?.data) {
+        const data = rolesRes.value.data
+        setRoles(data.roles || (Array.isArray(data) ? data : []))
       }
 
-      if (usersRes?.data?.users) {
-        setUsers(usersRes.data.users)
-      } else {
-        setUsers(generateMockUsers())
+      if (usersRes.status === 'fulfilled' && usersRes.value?.data) {
+        const data = usersRes.value.data
+        setUsers(data.users || (Array.isArray(data) ? data : []))
       }
     } catch (error) {
       console.error('Failed to load data:', error)
-      setRoles(generateMockRoles())
-      setUsers(generateMockUsers())
     } finally {
       setIsLoading(false)
     }

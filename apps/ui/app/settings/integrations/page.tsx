@@ -57,172 +57,6 @@ const CATEGORY_COLORS: Record<string, string> = {
   data: 'bg-green-500/20 text-green-400 border-green-500/30'
 }
 
-const generateMockIntegrations = (): Integration[] => [
-  // Connected
-  {
-    id: 'slack',
-    name: 'Slack',
-    description: 'Send alerts and notifications to Slack channels',
-    category: 'communication',
-    icon: '/integrations/slack.svg',
-    status: 'connected',
-    config: { workspace: 'company-workspace', channels: 3 },
-    lastSync: new Date(Date.now() - 300000).toISOString(),
-    features: ['Alert notifications', 'Interactive actions', 'Thread replies', 'Channel routing'],
-    docsUrl: 'https://docs.logforge.io/integrations/slack'
-  },
-  {
-    id: 'pagerduty',
-    name: 'PagerDuty',
-    description: 'Trigger incidents and manage on-call schedules',
-    category: 'alerting',
-    icon: '/integrations/pagerduty.svg',
-    status: 'connected',
-    config: { services: 2, escalationPolicies: 3 },
-    lastSync: new Date(Date.now() - 600000).toISOString(),
-    features: ['Incident creation', 'Severity mapping', 'Auto-resolve', 'Escalation policies'],
-    docsUrl: 'https://docs.logforge.io/integrations/pagerduty'
-  },
-  {
-    id: 'jira',
-    name: 'Jira',
-    description: 'Create and track issues from alerts',
-    category: 'ticketing',
-    icon: '/integrations/jira.svg',
-    status: 'connected',
-    config: { projects: ['OPS', 'SEC'], issueTypes: ['Bug', 'Incident'] },
-    lastSync: new Date(Date.now() - 1800000).toISOString(),
-    features: ['Issue creation', 'Custom fields', 'Two-way sync', 'Workflow automation'],
-    docsUrl: 'https://docs.logforge.io/integrations/jira'
-  },
-  // Error state
-  {
-    id: 'aws',
-    name: 'AWS CloudWatch',
-    description: 'Import logs and metrics from AWS services',
-    category: 'cloud',
-    icon: '/integrations/aws.svg',
-    status: 'error',
-    config: { regions: ['us-east-1', 'us-west-2'] },
-    lastSync: new Date(Date.now() - 7200000).toISOString(),
-    features: ['Log import', 'Metric sync', 'Lambda integration', 'S3 buckets'],
-    docsUrl: 'https://docs.logforge.io/integrations/aws'
-  },
-  // Available (not connected)
-  {
-    id: 'opsgenie',
-    name: 'Opsgenie',
-    description: 'Alert management and on-call scheduling',
-    category: 'alerting',
-    icon: '/integrations/opsgenie.svg',
-    status: 'available',
-    features: ['Alert routing', 'Scheduling', 'Escalations', 'Reporting'],
-    docsUrl: 'https://docs.logforge.io/integrations/opsgenie'
-  },
-  {
-    id: 'teams',
-    name: 'Microsoft Teams',
-    description: 'Send notifications to Teams channels',
-    category: 'communication',
-    icon: '/integrations/teams.svg',
-    status: 'available',
-    features: ['Channel notifications', 'Adaptive cards', 'Bot interactions'],
-    docsUrl: 'https://docs.logforge.io/integrations/teams'
-  },
-  {
-    id: 'github',
-    name: 'GitHub',
-    description: 'Create issues and track deployments',
-    category: 'ticketing',
-    icon: '/integrations/github.svg',
-    status: 'available',
-    features: ['Issue creation', 'Deployment tracking', 'PR annotations', 'Actions integration'],
-    docsUrl: 'https://docs.logforge.io/integrations/github'
-  },
-  {
-    id: 'datadog',
-    name: 'Datadog',
-    description: 'Import metrics and APM data',
-    category: 'data',
-    icon: '/integrations/datadog.svg',
-    status: 'available',
-    features: ['Metric import', 'APM correlation', 'Log forwarding'],
-    docsUrl: 'https://docs.logforge.io/integrations/datadog'
-  },
-  {
-    id: 'gcp',
-    name: 'Google Cloud',
-    description: 'Import logs from GCP services',
-    category: 'cloud',
-    icon: '/integrations/gcp.svg',
-    status: 'available',
-    features: ['Cloud Logging', 'Cloud Monitoring', 'GKE integration'],
-    docsUrl: 'https://docs.logforge.io/integrations/gcp'
-  },
-  {
-    id: 'azure',
-    name: 'Azure',
-    description: 'Import logs and metrics from Azure',
-    category: 'cloud',
-    icon: '/integrations/azure.svg',
-    status: 'available',
-    features: ['Azure Monitor', 'Log Analytics', 'AKS integration'],
-    docsUrl: 'https://docs.logforge.io/integrations/azure'
-  },
-  {
-    id: 'splunk',
-    name: 'Splunk',
-    description: 'Migrate data from Splunk',
-    category: 'data',
-    icon: '/integrations/splunk.svg',
-    status: 'available',
-    features: ['Data migration', 'Query translation', 'Dashboard import'],
-    docsUrl: 'https://docs.logforge.io/integrations/splunk'
-  },
-  {
-    id: 'crowdstrike',
-    name: 'CrowdStrike',
-    description: 'Import threat intelligence and EDR data',
-    category: 'security',
-    icon: '/integrations/crowdstrike.svg',
-    status: 'available',
-    features: ['Threat intel', 'EDR events', 'IOC correlation'],
-    docsUrl: 'https://docs.logforge.io/integrations/crowdstrike'
-  },
-  {
-    id: 'okta',
-    name: 'Okta',
-    description: 'Import authentication and identity events',
-    category: 'security',
-    icon: '/integrations/okta.svg',
-    status: 'available',
-    features: ['Auth events', 'User activity', 'Policy changes'],
-    docsUrl: 'https://docs.logforge.io/integrations/okta'
-  },
-  {
-    id: 'servicenow',
-    name: 'ServiceNow',
-    description: 'Create incidents and manage CMDB',
-    category: 'ticketing',
-    icon: '/integrations/servicenow.svg',
-    status: 'available',
-    features: ['Incident management', 'CMDB sync', 'Change requests'],
-    docsUrl: 'https://docs.logforge.io/integrations/servicenow'
-  },
-  {
-    id: 'webhook',
-    name: 'Custom Webhook',
-    description: 'Send data to any HTTP endpoint',
-    category: 'data',
-    icon: '/integrations/webhook.svg',
-    status: 'connected',
-    config: { endpoints: 2 },
-    lastSync: new Date(Date.now() - 60000).toISOString(),
-    features: ['Custom payloads', 'Headers', 'Authentication', 'Retry logic'],
-    docsUrl: 'https://docs.logforge.io/integrations/webhook'
-  }
-]
-
 export default function IntegrationsPage() {
   const [integrations, setIntegrations] = useState<Integration[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -243,11 +77,11 @@ export default function IntegrationsPage() {
       if (response?.data?.integrations) {
         setIntegrations(response.data.integrations)
       } else {
-        setIntegrations(generateMockIntegrations())
+        setIntegrations([])
       }
     } catch (error) {
       console.error('Failed to load integrations:', error)
-      setIntegrations(generateMockIntegrations())
+      setIntegrations([])
     } finally {
       setIsLoading(false)
     }
@@ -458,6 +292,27 @@ export default function IntegrationsPage() {
         {isLoading ? (
           <div className="flex items-center justify-center h-48">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+          </div>
+        ) : filteredIntegrations.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 bg-gray-800/50 border border-gray-700 rounded-lg">
+            <Puzzle className="w-12 h-12 text-gray-500 mb-4" />
+            <h3 className="text-lg font-medium text-white mb-2">
+              {integrations.length === 0 ? 'No integrations configured' : 'No matching integrations'}
+            </h3>
+            <p className="text-gray-400 text-sm text-center max-w-md">
+              {integrations.length === 0
+                ? 'Connect your favorite tools to Logforge to start receiving alerts and syncing data.'
+                : 'Try adjusting your search or filter criteria.'}
+            </p>
+            {integrations.length === 0 && (
+              <button
+                onClick={loadIntegrations}
+                className="mt-4 flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Refresh
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

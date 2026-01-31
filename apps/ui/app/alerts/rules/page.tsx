@@ -77,129 +77,6 @@ interface AlertStats {
   by_severity: Record<string, number>
 }
 
-// Mock data generators
-const generateMockRules = (): AlertRule[] => [
-  {
-    id: 'rule-1',
-    name: 'High Error Rate',
-    description: 'Alert when error rate exceeds 5% over 5 minutes',
-    rule_type: 'threshold',
-    severity: 'critical',
-    enabled: true,
-    conditions: [{ field: 'error_rate', operator: 'gt', value: 5, aggregation: 'avg', time_window: '5m' }],
-    filters: [{ field: 'service', operator: 'eq', value: 'payment-service' }],
-    notification_channels: ['slack-ops', 'pagerduty-critical'],
-    cooldown_period: 300,
-    max_alerts_per_hour: 5,
-    evaluation_interval: 60,
-    last_triggered_at: new Date(Date.now() - 3600000).toISOString(),
-    trigger_count_24h: 3,
-    created_at: '2024-01-15T10:00:00Z',
-    updated_at: '2024-01-28T14:30:00Z',
-    created_by: 'admin@company.com'
-  },
-  {
-    id: 'rule-2',
-    name: 'API Latency Spike',
-    description: 'Alert when P99 latency exceeds 2 seconds',
-    rule_type: 'threshold',
-    severity: 'high',
-    enabled: true,
-    conditions: [{ field: 'latency_p99', operator: 'gt', value: 2000, aggregation: 'max', time_window: '3m' }],
-    filters: [{ field: 'endpoint', operator: 'contains', value: '/api/v1' }],
-    notification_channels: ['slack-engineering'],
-    cooldown_period: 600,
-    max_alerts_per_hour: 10,
-    evaluation_interval: 60,
-    trigger_count_24h: 7,
-    created_at: '2024-01-10T08:00:00Z',
-    updated_at: '2024-01-27T11:00:00Z',
-    created_by: 'dev@company.com'
-  },
-  {
-    id: 'rule-3',
-    name: 'Anomalous Login Pattern',
-    description: 'ML-based detection of unusual login behavior',
-    rule_type: 'anomaly',
-    severity: 'high',
-    enabled: true,
-    conditions: [{ field: 'login_events', operator: 'gt', value: 3, aggregation: 'distinct', time_window: '10m' }],
-    filters: [{ field: 'event_type', operator: 'eq', value: 'authentication' }],
-    notification_channels: ['slack-security', 'email-soc'],
-    cooldown_period: 1800,
-    max_alerts_per_hour: 3,
-    evaluation_interval: 300,
-    trigger_count_24h: 1,
-    created_at: '2024-01-20T16:00:00Z',
-    updated_at: '2024-01-26T09:00:00Z',
-    created_by: 'security@company.com'
-  },
-  {
-    id: 'rule-4',
-    name: 'Database Connection Pool Exhaustion',
-    description: 'Alert when available connections drop below 10%',
-    rule_type: 'threshold',
-    severity: 'critical',
-    enabled: true,
-    conditions: [{ field: 'available_connections_pct', operator: 'lt', value: 10, aggregation: 'min', time_window: '2m' }],
-    filters: [{ field: 'resource_type', operator: 'eq', value: 'database' }],
-    notification_channels: ['pagerduty-critical', 'slack-ops'],
-    cooldown_period: 180,
-    max_alerts_per_hour: 10,
-    evaluation_interval: 30,
-    last_triggered_at: new Date(Date.now() - 7200000).toISOString(),
-    trigger_count_24h: 2,
-    created_at: '2024-01-05T12:00:00Z',
-    updated_at: '2024-01-25T18:00:00Z',
-    created_by: 'dba@company.com'
-  },
-  {
-    id: 'rule-5',
-    name: 'Service Health Check Failure',
-    description: 'Alert when health check fails 3 times consecutively',
-    rule_type: 'frequency',
-    severity: 'medium',
-    enabled: false,
-    conditions: [{ field: 'health_check_failed', operator: 'gte', value: 3, aggregation: 'count', time_window: '5m' }],
-    filters: [],
-    notification_channels: ['slack-ops'],
-    cooldown_period: 600,
-    max_alerts_per_hour: 5,
-    evaluation_interval: 60,
-    trigger_count_24h: 0,
-    created_at: '2024-01-18T10:00:00Z',
-    updated_at: '2024-01-18T10:00:00Z',
-    created_by: 'sre@company.com'
-  },
-  {
-    id: 'rule-6',
-    name: 'Zero Traffic Alert',
-    description: 'Alert when no requests received for 5 minutes',
-    rule_type: 'absence',
-    severity: 'high',
-    enabled: true,
-    conditions: [{ field: 'request_count', operator: 'eq', value: 0, aggregation: 'count', time_window: '5m' }],
-    filters: [{ field: 'environment', operator: 'eq', value: 'production' }],
-    notification_channels: ['pagerduty-high', 'slack-ops'],
-    cooldown_period: 300,
-    max_alerts_per_hour: 2,
-    evaluation_interval: 60,
-    trigger_count_24h: 0,
-    created_at: '2024-01-22T14:00:00Z',
-    updated_at: '2024-01-22T14:00:00Z',
-    created_by: 'admin@company.com'
-  }
-]
-
-const generateMockChannels = (): NotificationChannel[] => [
-  { id: 'slack-ops', name: 'Slack #ops-alerts', type: 'slack', enabled: true },
-  { id: 'slack-engineering', name: 'Slack #engineering', type: 'slack', enabled: true },
-  { id: 'slack-security', name: 'Slack #security-alerts', type: 'slack', enabled: true },
-  { id: 'pagerduty-critical', name: 'PagerDuty Critical', type: 'pagerduty', enabled: true },
-  { id: 'pagerduty-high', name: 'PagerDuty High', type: 'pagerduty', enabled: true },
-  { id: 'email-soc', name: 'SOC Team Email', type: 'email', enabled: true },
-  { id: 'webhook-custom', name: 'Custom Webhook', type: 'webhook', enabled: true }
-]
 
 const SEVERITY_COLORS: Record<string, string> = {
   critical: 'bg-red-500/20 text-red-400 border-red-500/30',
@@ -239,34 +116,32 @@ export default function AlertRulesPage() {
       setIsLoading(true)
       const { start_time, end_time } = getApiTimeRange()
 
-      // Try to load from API, fall back to mock data
       const [rulesRes, channelsRes] = await Promise.allSettled([
         apiClient.get<{ rules: AlertRule[] }>('/v1/alerts/rules', { start_time, end_time }),
-        apiClient.get<{ channels: NotificationChannel[] }>('/v1/alerts/channels')
+        apiClient.get<{ channels: NotificationChannel[] }>('/v1/alerts/notifications/channels')
       ])
 
-      if (rulesRes.status === 'fulfilled' && rulesRes.value?.data?.rules) {
-        setRules(rulesRes.value.data.rules)
-      } else {
-        setRules(generateMockRules())
-      }
+      const loadedRules: AlertRule[] = rulesRes.status === 'fulfilled' && rulesRes.value?.data?.rules
+        ? rulesRes.value.data.rules
+        : rulesRes.status === 'fulfilled' && Array.isArray(rulesRes.value?.data)
+          ? rulesRes.value.data
+          : []
+
+      setRules(loadedRules)
 
       if (channelsRes.status === 'fulfilled' && channelsRes.value?.data?.channels) {
         setChannels(channelsRes.value.data.channels)
+      } else if (channelsRes.status === 'fulfilled' && Array.isArray(channelsRes.value?.data)) {
+        setChannels(channelsRes.value.data)
       } else {
-        setChannels(generateMockChannels())
+        setChannels([])
       }
 
-      // Calculate stats
-      const allRules = rulesRes.status === 'fulfilled' && rulesRes.value?.data?.rules
-        ? rulesRes.value.data.rules
-        : generateMockRules()
-
       const statsData: AlertStats = {
-        total_rules: allRules.length,
-        enabled_rules: allRules.filter(r => r.enabled).length,
-        triggered_24h: allRules.reduce((sum, r) => sum + r.trigger_count_24h, 0),
-        by_severity: allRules.reduce((acc, r) => {
+        total_rules: loadedRules.length,
+        enabled_rules: loadedRules.filter(r => r.enabled).length,
+        triggered_24h: loadedRules.reduce((sum, r) => sum + (r.trigger_count_24h || 0), 0),
+        by_severity: loadedRules.reduce((acc, r) => {
           acc[r.severity] = (acc[r.severity] || 0) + 1
           return acc
         }, {} as Record<string, number>)
@@ -275,8 +150,8 @@ export default function AlertRulesPage() {
 
     } catch (error) {
       console.error('Failed to load alert rules:', error)
-      setRules(generateMockRules())
-      setChannels(generateMockChannels())
+      setRules([])
+      setChannels([])
     } finally {
       setIsLoading(false)
     }
@@ -299,10 +174,6 @@ export default function AlertRulesPage() {
       ))
     } catch (error) {
       console.error('Failed to toggle rule:', error)
-      // Still update UI for demo
-      setRules(rules.map(r =>
-        r.id === ruleId ? { ...r, enabled: !r.enabled } : r
-      ))
     }
   }
 
@@ -314,7 +185,6 @@ export default function AlertRulesPage() {
       setRules(rules.filter(r => r.id !== ruleId))
     } catch (error) {
       console.error('Failed to delete rule:', error)
-      setRules(rules.filter(r => r.id !== ruleId))
     }
   }
 
@@ -328,14 +198,12 @@ export default function AlertRulesPage() {
       setTestResult(result.data)
     } catch (error) {
       console.error('Failed to test rule:', error)
-      // Mock result for demo
       setTestResult({
-        would_trigger: Math.random() > 0.5,
-        matched_count: Math.floor(Math.random() * 100),
-        sample_matches: [
-          { timestamp: new Date().toISOString(), message: 'Sample matching log entry' }
-        ],
-        evaluation_time_ms: Math.floor(Math.random() * 50) + 10
+        would_trigger: false,
+        matched_count: 0,
+        sample_matches: [],
+        evaluation_time_ms: 0,
+        error: 'Failed to test rule. Please try again.'
       })
     }
   }

@@ -44,105 +44,6 @@ interface AlertInstance {
   notes: string[]
 }
 
-// Mock data
-const generateMockInstances = (): AlertInstance[] => {
-  const now = Date.now()
-  return [
-    {
-      id: 'alert-001',
-      rule_id: 'rule-1',
-      rule_name: 'High Error Rate',
-      severity: 'critical',
-      status: 'triggered',
-      triggered_at: new Date(now - 300000).toISOString(),
-      trigger_data: {
-        matched_count: 156,
-        sample_values: [{ error: 'Connection timeout', service: 'payment-service' }],
-        threshold: 5,
-        actual_value: 12.5
-      },
-      related_logs_count: 1250,
-      related_traces_count: 45,
-      notes: []
-    },
-    {
-      id: 'alert-002',
-      rule_id: 'rule-2',
-      rule_name: 'API Latency Spike',
-      severity: 'high',
-      status: 'acknowledged',
-      triggered_at: new Date(now - 1800000).toISOString(),
-      acknowledged_at: new Date(now - 1200000).toISOString(),
-      acknowledged_by: 'john@company.com',
-      trigger_data: {
-        matched_count: 89,
-        sample_values: [{ endpoint: '/api/v1/checkout', latency: 3200 }],
-        threshold: 2000,
-        actual_value: 3200
-      },
-      related_logs_count: 890,
-      related_traces_count: 89,
-      notes: ['Investigating database connection pool issue']
-    },
-    {
-      id: 'alert-003',
-      rule_id: 'rule-3',
-      rule_name: 'Anomalous Login Pattern',
-      severity: 'high',
-      status: 'resolved',
-      triggered_at: new Date(now - 7200000).toISOString(),
-      acknowledged_at: new Date(now - 6900000).toISOString(),
-      resolved_at: new Date(now - 5400000).toISOString(),
-      acknowledged_by: 'security@company.com',
-      resolved_by: 'security@company.com',
-      trigger_data: {
-        matched_count: 23,
-        sample_values: [{ user: 'user@example.com', locations: ['US', 'RU', 'CN'] }]
-      },
-      related_logs_count: 230,
-      related_traces_count: 0,
-      notes: ['False positive - user traveling', 'Updated baseline for this user']
-    },
-    {
-      id: 'alert-004',
-      rule_id: 'rule-4',
-      rule_name: 'Database Connection Pool Exhaustion',
-      severity: 'critical',
-      status: 'resolved',
-      triggered_at: new Date(now - 10800000).toISOString(),
-      acknowledged_at: new Date(now - 10500000).toISOString(),
-      resolved_at: new Date(now - 9000000).toISOString(),
-      acknowledged_by: 'dba@company.com',
-      resolved_by: 'dba@company.com',
-      trigger_data: {
-        matched_count: 1,
-        sample_values: [{ pool: 'primary-db', available: 2, max: 100 }],
-        threshold: 10,
-        actual_value: 2
-      },
-      related_logs_count: 450,
-      related_traces_count: 120,
-      notes: ['Increased pool size from 100 to 200', 'Root cause: slow query in reports module']
-    },
-    {
-      id: 'alert-005',
-      rule_id: 'rule-1',
-      rule_name: 'High Error Rate',
-      severity: 'critical',
-      status: 'suppressed',
-      triggered_at: new Date(now - 600000).toISOString(),
-      trigger_data: {
-        matched_count: 45,
-        sample_values: [{ error: 'Connection timeout', service: 'payment-service' }],
-        threshold: 5,
-        actual_value: 8.2
-      },
-      related_logs_count: 450,
-      related_traces_count: 12,
-      notes: ['Suppressed - related to alert-001']
-    }
-  ]
-}
 
 const SEVERITY_COLORS: Record<string, string> = {
   critical: 'bg-red-500/20 text-red-400 border-red-500/30',
@@ -181,21 +82,37 @@ export default function AlertInstancesPage() {
       setIsLoading(true)
       const { start_time, end_time } = getApiTimeRange()
 
-      const response = await apiClient.get<{ instances: AlertInstance[] }>('/v1/alerts/instances', {
+      const response = await apiClient.get<{ alerts: AlertInstance[] }>('/v1/alerts', {
         start_time,
         end_time,
         status: filterStatus !== 'all' ? filterStatus : undefined,
-        severity: filterSeverity !== 'all' ? filterSeverity : undefined
+        severity: filterSeverity !== 'all' ? filterSeverity : undefined,
+        limit: 100
       })
 
-      if (response?.data?.instances) {
-        setInstances(response.data.instances)
+      if (response?.data?.alerts && response.data.alerts.length > 0) {
+        setInstances(response.data.alerts.map((alert: any) => ({
+          id: alert.alert_id || alert.id,
+          rule_id: alert.rule_id || '',
+          rule_name: alert.rule_name || alert.title || alert.name || 'Unnamed Alert',
+          severity: alert.severity || 'medium',
+          status: alert.status || 'triggered',
+          triggered_at: alert.triggered_at || alert.created_at || new Date().toISOString(),
+          acknowledged_at: alert.acknowledged_at,
+          resolved_at: alert.resolved_at,
+          acknowledged_by: alert.acknowledged_by,
+          resolved_by: alert.resolved_by,
+          trigger_data: alert.trigger_data || { matched_count: 0, sample_values: [] },
+          related_logs_count: alert.related_logs_count || 0,
+          related_traces_count: alert.related_traces_count || 0,
+          notes: alert.notes || []
+        })))
       } else {
-        setInstances(generateMockInstances())
+        setInstances([])
       }
     } catch (error) {
       console.error('Failed to load alert instances:', error)
-      setInstances(generateMockInstances())
+      setInstances([])
     } finally {
       setIsLoading(false)
     }
@@ -213,7 +130,7 @@ export default function AlertInstancesPage() {
 
   const acknowledgeAlert = async (instanceId: string) => {
     try {
-      await apiClient.post(`/v1/alerts/instances/${instanceId}/acknowledge`)
+      await apiClient.post(`/v1/alerts/${instanceId}/acknowledge`)
       setInstances(instances.map(i =>
         i.id === instanceId
           ? { ...i, status: 'acknowledged' as const, acknowledged_at: new Date().toISOString(), acknowledged_by: 'current-user' }
@@ -221,18 +138,12 @@ export default function AlertInstancesPage() {
       ))
     } catch (error) {
       console.error('Failed to acknowledge alert:', error)
-      // Still update UI for demo
-      setInstances(instances.map(i =>
-        i.id === instanceId
-          ? { ...i, status: 'acknowledged' as const, acknowledged_at: new Date().toISOString(), acknowledged_by: 'current-user' }
-          : i
-      ))
     }
   }
 
   const resolveAlert = async (instanceId: string) => {
     try {
-      await apiClient.post(`/v1/alerts/instances/${instanceId}/resolve`)
+      await apiClient.post(`/v1/alerts/${instanceId}/resolve`)
       setInstances(instances.map(i =>
         i.id === instanceId
           ? { ...i, status: 'resolved' as const, resolved_at: new Date().toISOString(), resolved_by: 'current-user' }
@@ -240,11 +151,6 @@ export default function AlertInstancesPage() {
       ))
     } catch (error) {
       console.error('Failed to resolve alert:', error)
-      setInstances(instances.map(i =>
-        i.id === instanceId
-          ? { ...i, status: 'resolved' as const, resolved_at: new Date().toISOString(), resolved_by: 'current-user' }
-          : i
-      ))
     }
   }
 
