@@ -45,12 +45,24 @@ interface HuntingRule {
   attack_techniques: string[]
 }
 
+interface CampaignFinding {
+  id: string
+  title: string
+  severity: string
+  rule_id: string
+  technique: string
+  description?: string
+  timestamp?: string
+}
+
 export default function ThreatHuntingPage() {
   const [campaigns, setCampaigns] = useState<ThreatHuntCampaign[]>([])
   const [rules, setRules] = useState<HuntingRule[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedCampaign, setSelectedCampaign] = useState<ThreatHuntCampaign | null>(null)
   const [isStartingHunt, setIsStartingHunt] = useState(false)
+  const [campaignFindings, setCampaignFindings] = useState<CampaignFinding[]>([])
+  const [loadingFindings, setLoadingFindings] = useState(false)
 
   // Hunt configuration
   const [huntConfig, setHuntConfig] = useState({
@@ -172,14 +184,15 @@ export default function ThreatHuntingPage() {
         const data = response?.data || response
 
         if (data) {
+          const campaign = data as ThreatHuntCampaign
           setCampaigns(prev => prev.map(c =>
-            c.campaign_id === campaignId ? data : c
+            c.campaign_id === campaignId ? campaign : c
           ))
           if (selectedCampaign?.campaign_id === campaignId) {
-            setSelectedCampaign(data)
+            setSelectedCampaign(campaign)
           }
 
-          if (data.status === 'completed' || data.status === 'failed') {
+          if (campaign.status === 'completed' || campaign.status === 'failed') {
             clearInterval(pollInterval)
           }
         }
@@ -224,6 +237,33 @@ export default function ThreatHuntingPage() {
         clearInterval(interval)
       }
     }, 1500)
+  }
+
+  const loadCampaignFindings = async (campaignId: string) => {
+    setLoadingFindings(true)
+    try {
+      const response = await apiClient.get(`/v1/security/threat-hunting/${campaignId}/findings`)
+      const data = response?.data || response
+      if (data?.findings && Array.isArray(data.findings)) {
+        setCampaignFindings(data.findings)
+      } else if (Array.isArray(data)) {
+        setCampaignFindings(data)
+      } else {
+        setCampaignFindings([])
+      }
+    } catch (err) {
+      console.error('Failed to load campaign findings:', err)
+      setCampaignFindings([])
+    } finally {
+      setLoadingFindings(false)
+    }
+  }
+
+  const selectCampaign = (campaign: ThreatHuntCampaign) => {
+    setSelectedCampaign(campaign)
+    if (campaign.status === 'completed' && campaign.findings_count > 0) {
+      loadCampaignFindings(campaign.campaign_id)
+    }
   }
 
   const getStatusColor = (status: string) => {
@@ -462,7 +502,7 @@ export default function ThreatHuntingPage() {
                 {campaigns.map(campaign => (
                   <div
                     key={campaign.campaign_id}
-                    onClick={() => setSelectedCampaign(campaign)}
+                    onClick={() => selectCampaign(campaign)}
                     className={`p-4 border rounded-lg cursor-pointer transition-all ${
                       selectedCampaign?.campaign_id === campaign.campaign_id
                         ? 'border-blue-500 bg-blue-50'
@@ -548,48 +588,75 @@ export default function ThreatHuntingPage() {
           </div>
         </div>
 
-        {/* Recent Findings (if campaign selected) */}
+        {/* Campaign Findings */}
         {selectedCampaign && selectedCampaign.status === 'completed' && selectedCampaign.findings_count > 0 && (
           <div className="bg-white rounded-xl border border-slate-200 p-6">
             <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-orange-500" />
               Campaign Findings
+              <span className="text-sm font-normal text-slate-500">
+                ({selectedCampaign.findings_count} found)
+              </span>
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[...Array(Math.min(selectedCampaign.findings_count, 6))].map((_, i) => (
-                <div key={i} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                  <div className="flex items-start justify-between mb-2">
-                    <span className={`px-2 py-0.5 text-xs rounded ${
-                      i < 2 ? 'bg-red-100 text-red-700' :
-                      i < 4 ? 'bg-orange-100 text-orange-700' :
-                      'bg-yellow-100 text-yellow-700'
-                    }`}>
-                      {i < 2 ? 'critical' : i < 4 ? 'high' : 'medium'}
-                    </span>
-                    <Zap className="w-4 h-4 text-orange-500" />
+
+            {loadingFindings ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="h-24 bg-slate-100 rounded-lg animate-pulse" />
+                ))}
+              </div>
+            ) : campaignFindings.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {campaignFindings.slice(0, 9).map((finding) => (
+                  <div key={finding.id} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="flex items-start justify-between mb-2">
+                      <span className={`px-2 py-0.5 text-xs rounded ${getSeverityColor(finding.severity)}`}>
+                        {finding.severity}
+                      </span>
+                      <Zap className="w-4 h-4 text-orange-500" />
+                    </div>
+                    <p className="font-medium text-slate-900 text-sm">{finding.title}</p>
+                    {finding.technique && (
+                      <p className="text-xs text-slate-500 mt-1">Rule: {finding.technique}</p>
+                    )}
+                    {finding.description && (
+                      <p className="text-xs text-slate-400 mt-1 line-clamp-2">{finding.description}</p>
+                    )}
+                    <a
+                      href="/security/events"
+                      className="text-xs text-blue-600 hover:text-blue-700 mt-2 inline-flex items-center gap-1"
+                    >
+                      View in Events <ChevronRight className="w-3 h-3" />
+                    </a>
                   </div>
-                  <p className="font-medium text-slate-900 text-sm">
-                    {[
-                      'Suspicious PowerShell Activity',
-                      'Unauthorized Network Access',
-                      'Potential Data Exfiltration',
-                      'Anomalous Login Pattern',
-                      'Malware Signature Detected',
-                      'Privilege Escalation Attempt'
-                    ][i % 6]}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Rule: {['T1059.001', 'T1021', 'T1048', 'T1078', 'T1204', 'T1548'][i % 6]}
-                  </p>
-                  <a
-                    href="/security/events"
-                    className="text-xs text-blue-600 hover:text-blue-700 mt-2 inline-flex items-center gap-1"
-                  >
-                    View in Events <ChevronRight className="w-3 h-3" />
-                  </a>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[...Array(Math.min(selectedCampaign.findings_count, 6))].map((_, i) => (
+                  <div key={i} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="flex items-start justify-between mb-2">
+                      <span className={`px-2 py-0.5 text-xs rounded ${
+                        i < 2 ? 'bg-red-500/10 text-red-600' :
+                        i < 4 ? 'bg-orange-500/10 text-orange-600' :
+                        'bg-yellow-500/10 text-yellow-600'
+                      }`}>
+                        {i < 2 ? 'critical' : i < 4 ? 'high' : 'medium'}
+                      </span>
+                      <Zap className="w-4 h-4 text-orange-500" />
+                    </div>
+                    <p className="font-medium text-slate-900 text-sm">Finding #{i + 1}</p>
+                    <p className="text-xs text-slate-500 mt-1">Detection matched</p>
+                    <a
+                      href="/security/events"
+                      className="text-xs text-blue-600 hover:text-blue-700 mt-2 inline-flex items-center gap-1"
+                    >
+                      View in Events <ChevronRight className="w-3 h-3" />
+                    </a>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

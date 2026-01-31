@@ -64,8 +64,38 @@ export default function AIInsightsWidget({ className }: AIInsightsWidgetProps) {
       const data = response?.data || response
       if (Array.isArray(data)) {
         setInsights(data)
-      } else if (data?.insights && Array.isArray(data.insights)) {
-        setInsights(data.insights)
+      } else if (data?.insights) {
+        // Backend returns { insights: { critical: [...], warnings: [...], informational: [...] } }
+        if (Array.isArray(data.insights)) {
+          setInsights(data.insights)
+        } else if (typeof data.insights === 'object') {
+          const flattened: Insight[] = []
+          const insightsObj = data.insights as Record<string, any[]>
+          const severityMap: Record<string, string> = {
+            critical: 'critical',
+            warnings: 'warning',
+            informational: 'info'
+          }
+          for (const [category, items] of Object.entries(insightsObj)) {
+            if (Array.isArray(items)) {
+              items.forEach((item: any, idx: number) => {
+                flattened.push({
+                  id: item.id || `${category}-${idx}`,
+                  type: item.type || 'recommendation',
+                  severity: (severityMap[category] || item.severity || 'info') as Insight['severity'],
+                  title: item.title || `${category} insight`,
+                  description: item.description || '',
+                  confidence: item.confidence || 0.7,
+                  created_at: item.created_at || new Date().toISOString(),
+                  metadata: item
+                })
+              })
+            }
+          }
+          setInsights(flattened.slice(0, 5))
+        } else {
+          setInsights([])
+        }
       } else {
         setInsights([])
       }

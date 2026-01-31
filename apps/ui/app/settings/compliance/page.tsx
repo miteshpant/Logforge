@@ -107,9 +107,18 @@ export default function CompliancePage() {
   const loadData = async () => {
     try {
       setIsLoading(true)
+      const now = new Date()
+      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
       const [fwRes, auditRes, retRes, holdRes] = await Promise.allSettled([
-        apiClient.get('/v1/enterprise/compliance/reports'),
-        apiClient.get('/v1/enterprise/compliance/audit-logs'),
+        apiClient.get('/v1/enterprise/compliance/reports', {
+          compliance_framework: 'SOC2',
+          period_start: monthAgo.toISOString(),
+          period_end: now.toISOString()
+        }),
+        apiClient.get('/v1/enterprise/audit-logs', {
+          start_time: monthAgo.toISOString(),
+          end_time: now.toISOString()
+        }),
         apiClient.get('/v1/enterprise/compliance/retention-policies'),
         apiClient.get('/v1/enterprise/compliance/legal-holds')
       ])
@@ -121,7 +130,7 @@ export default function CompliancePage() {
 
       if (auditRes.status === 'fulfilled' && auditRes.value?.data) {
         const data = auditRes.value.data
-        setAuditLogs(data.logs || data.entries || (Array.isArray(data) ? data : []))
+        setAuditLogs(data.audit_logs || data.logs || data.entries || (Array.isArray(data) ? data : []))
       }
 
       if (retRes.status === 'fulfilled' && retRes.value?.data) {

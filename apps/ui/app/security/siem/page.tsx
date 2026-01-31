@@ -12,7 +12,12 @@ import {
   TrendingUp,
   Clock,
   Target,
-  Zap
+  Zap,
+  CheckCircle,
+  Search,
+  XCircle,
+  Eye,
+  X
 } from 'lucide-react'
 
 interface SecurityEvent {
@@ -86,6 +91,40 @@ export default function SIEMDashboardPage() {
   const [rules, setRules] = useState<SigmaRule[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedSeverity, setSelectedSeverity] = useState<string>('all')
+  const [selectedEvent, setSelectedEvent] = useState<SecurityEvent | null>(null)
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
+
+  const handleEventAction = async (eventId: string, action: 'acknowledge' | 'investigate' | 'resolve' | 'false-positive') => {
+    setActionLoading(`${eventId}-${action}`)
+    try {
+      const body = action === 'resolve' || action === 'false-positive'
+        ? { resolution_notes: `Marked as ${action} from SIEM dashboard` }
+        : { notes: `Action taken from SIEM dashboard` }
+
+      await apiClient.post(`/v1/security/${eventId}/${action}`, body)
+
+      // Update event status in local state
+      const statusMap: Record<string, string> = {
+        'acknowledge': 'investigating',
+        'investigate': 'investigating',
+        'resolve': 'resolved',
+        'false-positive': 'false_positive'
+      }
+      if (dashboard) {
+        const updatedEvents = dashboard.recent_events.map(e =>
+          e.id === eventId ? { ...e, status: statusMap[action] } : e
+        )
+        setDashboard({ ...dashboard, recent_events: updatedEvents })
+        if (selectedEvent?.id === eventId) {
+          setSelectedEvent({ ...selectedEvent, status: statusMap[action] })
+        }
+      }
+    } catch (err) {
+      console.error(`Failed to ${action} event:`, err)
+    } finally {
+      setActionLoading(null)
+    }
+  }
 
   const loadSecurityData = async () => {
     try {
@@ -333,6 +372,40 @@ export default function SIEMDashboardPage() {
           </div>
         </div>
 
+        {/* Severity Distribution */}
+        {dashboard?.events_by_severity && (
+          <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              <ShieldAlert className="w-5 h-5 text-red-500" />
+              Event Severity Distribution
+            </h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {['critical', 'high', 'medium', 'low'].map(sev => {
+                const count = dashboard.events_by_severity[sev] || 0
+                const total = Object.values(dashboard.events_by_severity).reduce((s, v) => s + v, 0) || 1
+                const pct = ((count / total) * 100).toFixed(1)
+                const colors: Record<string, { bg: string; bar: string; text: string }> = {
+                  critical: { bg: 'bg-red-50', bar: 'bg-red-500', text: 'text-red-700' },
+                  high: { bg: 'bg-orange-50', bar: 'bg-orange-500', text: 'text-orange-700' },
+                  medium: { bg: 'bg-yellow-50', bar: 'bg-yellow-500', text: 'text-yellow-700' },
+                  low: { bg: 'bg-blue-50', bar: 'bg-blue-500', text: 'text-blue-700' }
+                }
+                const c = colors[sev]
+                return (
+                  <div key={sev} className={`p-4 ${c.bg} rounded-lg`}>
+                    <p className={`text-sm font-medium capitalize ${c.text}`}>{sev}</p>
+                    <p className="text-2xl font-bold text-slate-900 mt-1">{count}</p>
+                    <div className="mt-2 h-1.5 bg-white/60 rounded-full overflow-hidden">
+                      <div className={`h-full ${c.bar} rounded-full`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">{pct}% of total</p>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Recent Security Events */}
@@ -355,11 +428,14 @@ export default function SIEMDashboardPage() {
                 <p className="text-xs text-slate-400 mt-1">Events will appear here when detected by your rules</p>
               </div>
             ) : (
-              <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              <div className="space-y-3 max-h-[500px] overflow-y-auto">
                 {dashboard.recent_events.slice(0, 10).map((event) => (
                   <div
                     key={event.id}
-                    className="p-4 border border-slate-200 rounded-lg hover:border-blue-400 transition-colors cursor-pointer"
+                    className={`p-4 border rounded-lg transition-colors cursor-pointer ${
+                      selectedEvent?.id === event.id ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-blue-400'
+                    }`}
+                    onClick={() => setSelectedEvent(event)}
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
@@ -390,6 +466,44 @@ export default function SIEMDashboardPage() {
                         </div>
                       )}
                     </div>
+
+                    {/* Quick Action Buttons */}
+                    {event.status !== 'resolved' && event.status !== 'false_positive' && (
+                      <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-100">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleEventAction(event.id, 'acknowledge') }}
+                          disabled={actionLoading === `${event.id}-acknowledge`}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 rounded transition-colors disabled:opacity-50"
+                        >
+                          <Eye className="w-3 h-3" />
+                          Ack
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleEventAction(event.id, 'investigate') }}
+                          disabled={actionLoading === `${event.id}-investigate`}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-yellow-50 text-yellow-700 hover:bg-yellow-100 rounded transition-colors disabled:opacity-50"
+                        >
+                          <Search className="w-3 h-3" />
+                          Investigate
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleEventAction(event.id, 'resolve') }}
+                          disabled={actionLoading === `${event.id}-resolve`}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-green-50 text-green-700 hover:bg-green-100 rounded transition-colors disabled:opacity-50"
+                        >
+                          <CheckCircle className="w-3 h-3" />
+                          Resolve
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleEventAction(event.id, 'false-positive') }}
+                          disabled={actionLoading === `${event.id}-false-positive`}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-slate-50 text-slate-600 hover:bg-slate-100 rounded transition-colors disabled:opacity-50"
+                        >
+                          <XCircle className="w-3 h-3" />
+                          False +
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -498,6 +612,101 @@ export default function SIEMDashboardPage() {
             </div>
           </div>
         </div>
+        {/* Event Detail Panel */}
+        {selectedEvent && (
+          <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <Eye className="w-5 h-5 text-blue-500" />
+                Event Detail
+              </h2>
+              <button
+                onClick={() => setSelectedEvent(null)}
+                className="p-1 hover:bg-slate-100 rounded-lg"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-sm text-slate-500">Rule</span>
+                  <span className="text-sm font-medium text-slate-900">{selectedEvent.rule_title}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-slate-500">Event ID</span>
+                  <code className="text-xs bg-slate-100 px-2 py-1 rounded font-mono">{selectedEvent.id}</code>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-slate-500">Severity</span>
+                  <span className={`px-2 py-0.5 text-xs font-medium rounded border ${getSeverityColor(selectedEvent.severity)}`}>
+                    {selectedEvent.severity.toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-slate-500">Status</span>
+                  <span className={`px-2 py-0.5 text-xs font-medium rounded border ${getStatusBadge(selectedEvent.status)}`}>
+                    {selectedEvent.status}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-slate-500">Timestamp</span>
+                  <span className="text-sm text-slate-900">{formatTimestamp(selectedEvent.timestamp)}</span>
+                </div>
+                {selectedEvent.kill_chain_phase && (
+                  <div className="flex justify-between">
+                    <span className="text-sm text-slate-500">Kill Chain Phase</span>
+                    <span className="text-sm text-purple-700 bg-purple-50 px-2 py-0.5 rounded">{selectedEvent.kill_chain_phase}</span>
+                  </div>
+                )}
+                {selectedEvent.assigned_to && (
+                  <div className="flex justify-between">
+                    <span className="text-sm text-slate-500">Assigned To</span>
+                    <span className="text-sm text-slate-900">{selectedEvent.assigned_to}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                {selectedEvent.attack_techniques?.length > 0 && (
+                  <div>
+                    <p className="text-sm text-slate-500 mb-2">MITRE ATT&CK Techniques</p>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedEvent.attack_techniques.map(tech => (
+                        <span key={tech} className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded font-mono">
+                          {tech}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedEvent.matched_fields && Object.keys(selectedEvent.matched_fields).length > 0 && (
+                  <div>
+                    <p className="text-sm text-slate-500 mb-2">Matched Fields</p>
+                    <div className="bg-slate-50 rounded-lg p-3 max-h-32 overflow-y-auto">
+                      <pre className="text-xs text-slate-700 whitespace-pre-wrap">
+                        {JSON.stringify(selectedEvent.matched_fields, null, 2)}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+
+                {selectedEvent.investigation_notes?.length > 0 && (
+                  <div>
+                    <p className="text-sm text-slate-500 mb-2">Investigation Notes</p>
+                    <div className="space-y-1">
+                      {selectedEvent.investigation_notes.map((note, idx) => (
+                        <p key={idx} className="text-xs text-slate-700 bg-slate-50 px-3 py-2 rounded">{note}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   )
