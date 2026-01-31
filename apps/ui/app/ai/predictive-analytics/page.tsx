@@ -39,6 +39,7 @@ interface PredictionSummary {
 interface ForecastDataPoint {
   timestamp: string
   value: number
+  predicted_value?: number
   predicted?: boolean
   lower_bound?: number
   upper_bound?: number
@@ -46,9 +47,11 @@ interface ForecastDataPoint {
 
 interface ForecastResponse {
   metric: string
-  data_points?: ForecastDataPoint[]
-  forecast?: ForecastDataPoint[]
+  data_points?: number
   historical?: ForecastDataPoint[]
+  projected?: ForecastDataPoint[]
+  forecast?: ForecastDataPoint[]
+  regression?: { slope: number; intercept: number; r_squared: number }
   trend_direction?: string
   trend_percentage?: number
   current_value?: number
@@ -366,7 +369,7 @@ export default function PredictiveAnalyticsPage() {
               </div>
 
               {/* Data Points Table */}
-              {(forecast.data_points || forecast.forecast || forecast.historical) && (
+              {(Array.isArray(forecast.historical) || Array.isArray(forecast.projected) || Array.isArray(forecast.forecast)) && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -379,10 +382,15 @@ export default function PredictiveAnalyticsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(forecast.data_points || forecast.forecast || forecast.historical || []).slice(0, 14).map((point, idx) => (
+                      {[
+                        ...(Array.isArray(forecast.historical) ? forecast.historical : []).slice(-7).map(p => ({ ...p, _type: 'historical' as const })),
+                        ...(Array.isArray(forecast.projected) ? forecast.projected : Array.isArray(forecast.forecast) ? forecast.forecast : []).slice(0, 7).map(p => ({ ...p, _type: 'forecast' as const })),
+                      ].map((point, idx) => (
                         <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
                           <td className="py-2 px-3 text-slate-700">{formatTimestamp(point.timestamp)}</td>
-                          <td className="py-2 px-3 text-right font-mono text-slate-900">{point.value.toFixed(3)}</td>
+                          <td className="py-2 px-3 text-right font-mono text-slate-900">
+                            {(point.value ?? point.predicted_value ?? 0).toFixed(3)}
+                          </td>
                           <td className="py-2 px-3 text-right font-mono text-slate-500">
                             {point.lower_bound != null ? point.lower_bound.toFixed(3) : '--'}
                           </td>
@@ -391,11 +399,11 @@ export default function PredictiveAnalyticsPage() {
                           </td>
                           <td className="py-2 px-3 text-center">
                             <span className={`text-xs px-2 py-0.5 rounded-full ${
-                              point.predicted
+                              point._type === 'forecast'
                                 ? 'bg-purple-100 text-purple-700'
                                 : 'bg-blue-100 text-blue-700'
                             }`}>
-                              {point.predicted ? 'Forecast' : 'Historical'}
+                              {point._type === 'forecast' ? 'Forecast' : 'Historical'}
                             </span>
                           </td>
                         </tr>

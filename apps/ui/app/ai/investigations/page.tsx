@@ -48,15 +48,21 @@ interface AIQueryResponse {
 
 interface InvestigationResult {
   investigation_id?: string
-  root_cause?: string
-  contributing_factors?: string[]
+  root_cause?: string | { type?: string; description?: string; confidence?: number; service?: string; timestamp?: string }
+  contributing_factors?: Array<string | { type?: string; description?: string; confidence?: number; service?: string }>
   timeline?: Array<{
     timestamp: string
-    event: string
+    event?: string
+    description?: string
+    type?: string
     severity?: string
+    service?: string
+    impact_score?: number
   }>
   recommendations?: string[]
+  next_steps?: string[]
   confidence?: number
+  confidence_score?: number
   status?: string
 }
 
@@ -553,9 +559,9 @@ export default function AIInvestigationsPage() {
                     <div className="flex items-center gap-2">
                       <FileText className="w-5 h-5 text-purple-500" />
                       <h3 className="text-lg font-semibold text-slate-900">Investigation Results</h3>
-                      {investigationResult.confidence != null && (
-                        <span className={`ml-auto text-sm px-2.5 py-1 rounded-lg border font-medium ${getConfidenceColor(investigationResult.confidence)}`}>
-                          {Math.round(investigationResult.confidence * 100)}% confidence
+                      {(investigationResult.confidence ?? investigationResult.confidence_score) != null && (
+                        <span className={`ml-auto text-sm px-2.5 py-1 rounded-lg border font-medium ${getConfidenceColor(investigationResult.confidence ?? investigationResult.confidence_score ?? 0)}`}>
+                          {Math.round((investigationResult.confidence ?? investigationResult.confidence_score ?? 0) * 100)}% confidence
                         </span>
                       )}
                     </div>
@@ -568,8 +574,18 @@ export default function AIInvestigationsPage() {
                           <h4 className="text-sm font-semibold text-red-800">Root Cause</h4>
                         </div>
                         <p className="text-red-700 text-sm leading-relaxed">
-                          {investigationResult.root_cause}
+                          {typeof investigationResult.root_cause === 'string'
+                            ? investigationResult.root_cause
+                            : investigationResult.root_cause.description || investigationResult.root_cause.type || 'Unknown root cause'}
                         </p>
+                        {typeof investigationResult.root_cause === 'object' && investigationResult.root_cause.service && (
+                          <p className="text-red-600 text-xs mt-1">
+                            Service: {investigationResult.root_cause.service}
+                            {investigationResult.root_cause.confidence != null && (
+                              <span className="ml-2">Confidence: {Math.round(investigationResult.root_cause.confidence * 100)}%</span>
+                            )}
+                          </p>
+                        )}
                       </div>
                     )}
 
@@ -581,7 +597,9 @@ export default function AIInvestigationsPage() {
                           {investigationResult.contributing_factors.map((factor, idx) => (
                             <div key={idx} className="flex items-start gap-2 p-3 bg-orange-50 border border-orange-200 rounded-lg">
                               <span className="text-orange-500 font-bold text-sm mt-0.5">{idx + 1}.</span>
-                              <p className="text-sm text-orange-800">{factor}</p>
+                              <p className="text-sm text-orange-800">
+                                {typeof factor === 'string' ? factor : factor.description || factor.type || `Factor ${idx + 1}`}
+                              </p>
                             </div>
                           ))}
                         </div>
@@ -593,32 +611,41 @@ export default function AIInvestigationsPage() {
                       <div>
                         <h4 className="text-sm font-semibold text-slate-700 mb-2">Event Timeline</h4>
                         <div className="space-y-2">
-                          {investigationResult.timeline.map((event, idx) => (
-                            <div key={idx} className="flex items-start gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
-                              <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
-                                event.severity === 'critical' ? 'bg-red-500' :
-                                event.severity === 'high' ? 'bg-orange-500' :
-                                event.severity === 'medium' ? 'bg-yellow-500' :
-                                'bg-blue-500'
-                              }`} />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm text-slate-800">{event.event}</p>
-                                <p className="text-xs text-slate-500 mt-0.5">
-                                  {formatTimestamp(event.timestamp)}
-                                </p>
+                          {investigationResult.timeline.map((event, idx) => {
+                            const severity = event.severity || event.type || ''
+                            return (
+                              <div key={idx} className="flex items-start gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                                <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
+                                  severity === 'critical' || severity === 'root_cause' ? 'bg-red-500' :
+                                  severity === 'high' || severity === 'contributing_factor' ? 'bg-orange-500' :
+                                  severity === 'medium' || severity === 'symptom' ? 'bg-yellow-500' :
+                                  'bg-blue-500'
+                                }`} />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm text-slate-800">{event.event || event.description || 'Unknown event'}</p>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    {event.service && (
+                                      <span className="text-xs text-slate-500">{event.service}</span>
+                                    )}
+                                    <span className="text-xs text-slate-400">
+                                      {formatTimestamp(event.timestamp)}
+                                    </span>
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       </div>
                     )}
 
                     {/* Recommendations */}
-                    {investigationResult.recommendations && investigationResult.recommendations.length > 0 && (
+                    {((investigationResult.recommendations && investigationResult.recommendations.length > 0) ||
+                      (investigationResult.next_steps && investigationResult.next_steps.length > 0)) && (
                       <div>
                         <h4 className="text-sm font-semibold text-slate-700 mb-2">Recommendations</h4>
                         <div className="space-y-2">
-                          {investigationResult.recommendations.map((rec, idx) => (
+                          {(investigationResult.recommendations || investigationResult.next_steps || []).map((rec, idx) => (
                             <div key={idx} className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
                               <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
                               <p className="text-sm text-green-800">{rec}</p>
