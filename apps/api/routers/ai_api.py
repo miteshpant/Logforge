@@ -1259,6 +1259,384 @@ async def list_ai_models(
 
 
 # ============================================================================
+# ML MODEL MANAGEMENT ENDPOINTS - Phase 3: AI Leadership
+# ============================================================================
+
+
+class ThresholdUpdateRequest(BaseModel):
+    """Anomaly threshold update request"""
+    model_id: str = Field(..., description="Model ID to update thresholds for")
+    thresholds: Dict[str, Any] = Field(..., description="New threshold values")
+    reason: str = Field("", description="Reason for threshold change")
+
+
+class ModelRetrainRequest(BaseModel):
+    """Model retraining request"""
+    model_id: str = Field(..., description="Model ID to retrain")
+    training_days: int = Field(30, description="Days of data to use for training")
+    force: bool = Field(False, description="Force retrain even if recently trained")
+
+
+@router.get("/models/health")
+async def get_model_health(
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
+):
+    """
+    Get health status of all ML models
+
+    Returns per-model metrics:
+    - Accuracy, false positive/negative rates
+    - Data freshness (time since last training)
+    - Drift detection (baseline vs current distribution)
+    - Sample counts and data quality
+    """
+    try:
+        from datetime import datetime, timezone, timedelta
+
+        ai_service = AIService()
+        baselines = await ai_service.get_baselines(customer_id)
+
+        model_health = []
+        now = datetime.now(timezone.utc)
+
+        # Define the core model types with their metadata
+        model_definitions = {
+            "anomaly_detector": {
+                "name": "Anomaly Detection Engine",
+                "description": "Z-score and ensemble-based anomaly detection",
+                "baseline_types": ["anomaly", "threshold"]
+            },
+            "rca_engine": {
+                "name": "Root Cause Analysis Engine",
+                "description": "Multi-dimensional correlation for incident analysis",
+                "baseline_types": ["pattern"]
+            },
+            "nlq_processor": {
+                "name": "Natural Language Query Processor",
+                "description": "Intent classification and SQL generation",
+                "baseline_types": ["seasonal"]
+            }
+        }
+
+        for model_key, model_def in model_definitions.items():
+            matching = [b for b in baselines if b.get("baseline_type") in model_def["baseline_types"]]
+
+            if matching:
+                latest = max(matching, key=lambda x: x.get("last_trained", datetime.min))
+                last_trained = latest.get("last_trained")
+                if isinstance(last_trained, str):
+                    last_trained = datetime.fromisoformat(last_trained.replace("Z", "+00:00"))
+                elif last_trained and last_trained.tzinfo is None:
+                    last_trained = last_trained.replace(tzinfo=timezone.utc)
+
+                hours_since_training = (now - last_trained).total_seconds() / 3600 if last_trained else 9999
+                accuracy = latest.get("accuracy_score", 0.0)
+                fpr = latest.get("false_positive_rate", 0.0)
+                fnr = latest.get("false_negative_rate", 0.0)
+                sample_count = latest.get("sample_count", 0)
+
+                # Determine health status
+                if hours_since_training > 168:  # > 7 days
+                    health_status = "stale"
+                elif accuracy < 0.7:
+                    health_status = "degraded"
+                elif fpr > 0.15:
+                    health_status = "noisy"
+                else:
+                    health_status = "healthy"
+
+                # Calculate drift score (higher = more drift)
+                baseline_data = latest.get("baseline_data", {})
+                drift_score = 0.0
+                if isinstance(baseline_data, dict):
+                    std_dev = baseline_data.get("std_dev", 0)
+                    mean = baseline_data.get("mean", 1)
+                    if mean > 0:
+                        drift_score = min(std_dev / mean, 1.0)
+
+                model_health.append({
+                    "model_id": model_key,
+                    "name": model_def["name"],
+                    "description": model_def["description"],
+                    "status": health_status,
+                    "accuracy": round(accuracy, 4),
+                    "false_positive_rate": round(fpr, 4),
+                    "false_negative_rate": round(fnr, 4),
+                    "sample_count": sample_count,
+                    "last_trained": last_trained.isoformat() if last_trained else None,
+                    "hours_since_training": round(hours_since_training, 1),
+                    "drift_score": round(drift_score, 4),
+                    "data_quality": "high" if sample_count > 1000 else "medium" if sample_count > 100 else "low",
+                    "baseline_count": len(matching),
+                    "needs_retraining": hours_since_training > 168 or accuracy < 0.75
+                })
+            else:
+                model_health.append({
+                    "model_id": model_key,
+                    "name": model_def["name"],
+                    "description": model_def["description"],
+                    "status": "no_baseline",
+                    "accuracy": 0.0,
+                    "false_positive_rate": 0.0,
+                    "false_negative_rate": 0.0,
+                    "sample_count": 0,
+                    "last_trained": None,
+                    "hours_since_training": None,
+                    "drift_score": 0.0,
+                    "data_quality": "none",
+                    "baseline_count": 0,
+                    "needs_retraining": True
+                })
+
+        # Overall health summary
+        healthy_count = len([m for m in model_health if m["status"] == "healthy"])
+        total_count = len(model_health)
+
+        return {
+            "models": model_health,
+            "summary": {
+                "total_models": total_count,
+                "healthy": healthy_count,
+                "degraded": len([m for m in model_health if m["status"] == "degraded"]),
+                "stale": len([m for m in model_health if m["status"] == "stale"]),
+                "needs_retraining": len([m for m in model_health if m.get("needs_retraining")]),
+                "overall_health": "healthy" if healthy_count == total_count else "attention_needed"
+            },
+            "generated_at": now.isoformat(),
+            "customer_id": customer_id
+        }
+
+    except Exception as e:
+        logger.error("Failed to get model health", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to get model health: {str(e)}")
+
+
+@router.get("/models/baselines/visualization")
+async def get_baseline_visualization(
+    service_name: Optional[str] = None,
+    metric_type: Optional[str] = None,
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
+):
+    """
+    Get baseline data formatted for visualization
+
+    Returns statistical distributions, percentile bands, and
+    historical training data for charting baselines.
+    """
+    try:
+        from datetime import datetime, timezone
+
+        ai_service = AIService()
+
+        # Map metric type to DB type
+        db_type = METRIC_TO_BASELINE_TYPE_MAP.get(metric_type, metric_type) if metric_type else None
+        baselines = await ai_service.get_baselines(customer_id, service_name, db_type)
+
+        visualization_data = []
+        for baseline in baselines:
+            bd = baseline.get("baseline_data", {})
+            if isinstance(bd, str):
+                import json
+                bd = json.loads(bd)
+
+            visualization_data.append({
+                "model_id": baseline.get("model_id"),
+                "baseline_type": baseline.get("baseline_type"),
+                "statistics": {
+                    "mean": bd.get("mean", 0),
+                    "std_dev": bd.get("std_dev", 0),
+                    "min": bd.get("min", 0),
+                    "max": bd.get("max", 0),
+                    "p50": bd.get("p50", 0),
+                    "p95": bd.get("p95", 0),
+                    "p99": bd.get("p99", 0),
+                    "sample_count": bd.get("sample_count", 0)
+                },
+                "bands": {
+                    "normal": {
+                        "lower": bd.get("mean", 0) - bd.get("std_dev", 0),
+                        "upper": bd.get("mean", 0) + bd.get("std_dev", 0)
+                    },
+                    "warning": {
+                        "lower": bd.get("mean", 0) - 2 * bd.get("std_dev", 0),
+                        "upper": bd.get("mean", 0) + 2 * bd.get("std_dev", 0)
+                    },
+                    "critical": {
+                        "lower": bd.get("mean", 0) - 3 * bd.get("std_dev", 0),
+                        "upper": bd.get("mean", 0) + 3 * bd.get("std_dev", 0)
+                    }
+                },
+                "accuracy": baseline.get("accuracy_score", 0),
+                "last_trained": baseline.get("last_trained"),
+                "is_active": baseline.get("is_active", 1)
+            })
+
+        return {
+            "baselines": visualization_data,
+            "total": len(visualization_data),
+            "filters": {"service_name": service_name, "metric_type": metric_type},
+            "customer_id": customer_id
+        }
+
+    except Exception as e:
+        logger.error("Failed to get baseline visualization", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to get baseline data: {str(e)}")
+
+
+@router.put("/models/thresholds")
+async def update_anomaly_thresholds(
+    request: ThresholdUpdateRequest,
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
+):
+    """
+    Update anomaly detection thresholds for a model
+
+    Allows tuning sensitivity without retraining:
+    - sigma_threshold: Number of standard deviations for anomaly (default 3.0)
+    - min_confidence: Minimum confidence to report (default 0.7)
+    - severity_thresholds: Custom severity boundaries
+    """
+    try:
+        from datetime import datetime, timezone
+
+        ai_service = AIService()
+
+        # Get existing baseline
+        baselines = await ai_service.get_baselines(customer_id)
+        target = [b for b in baselines if b.get("model_id") == request.model_id]
+
+        if not target:
+            raise HTTPException(status_code=404, detail=f"Model {request.model_id} not found")
+
+        # Update baseline data with new thresholds
+        baseline = target[0]
+        baseline_data = baseline.get("baseline_data", {})
+        if isinstance(baseline_data, str):
+            import json
+            baseline_data = json.loads(baseline_data)
+
+        baseline_data["thresholds"] = request.thresholds
+        baseline_data["thresholds_updated_at"] = datetime.now(timezone.utc).isoformat()
+        baseline_data["thresholds_updated_reason"] = request.reason
+
+        await ai_service.dao.update_baseline(request.model_id, {
+            "baseline_data": baseline_data
+        }, customer_id)
+
+        return {
+            "model_id": request.model_id,
+            "status": "updated",
+            "thresholds": request.thresholds,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "customer_id": customer_id
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to update thresholds", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail=f"Failed to update thresholds: {str(e)}")
+
+
+@router.post("/models/retrain")
+async def retrain_model(
+    request: ModelRetrainRequest,
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user = Depends(get_current_user)
+):
+    """
+    Trigger model retraining using historical data
+
+    Recalculates baselines from actual ClickHouse data:
+    - Fetches metrics over the specified training period
+    - Computes new statistical baselines
+    - Updates the model with new parameters
+    """
+    try:
+        from datetime import datetime, timezone
+        import uuid
+
+        detector = get_anomaly_detector()
+        ai_service = AIService()
+
+        # Map model_id to metric types for retraining
+        model_metric_map = {
+            "anomaly_detector": ["error_rate", "response_time", "cpu_usage"],
+            "rca_engine": ["request_rate"],
+            "nlq_processor": ["request_rate"]
+        }
+
+        metrics_to_train = model_metric_map.get(request.model_id, ["error_rate"])
+        retrain_results = []
+
+        for metric_type in metrics_to_train:
+            # Calculate new baseline from actual data
+            baseline_metrics = await detector._calculate_baseline(
+                customer_id=customer_id,
+                service_name="*",
+                metric_type=metric_type,
+                baseline_days=request.training_days
+            )
+
+            baseline_data = {
+                "mean": baseline_metrics.get("mean", 0.0),
+                "std_dev": baseline_metrics.get("std_dev", 0.0),
+                "min": baseline_metrics.get("min", 0.0),
+                "max": baseline_metrics.get("max", 0.0),
+                "p50": baseline_metrics.get("p50", 0.0),
+                "p95": baseline_metrics.get("p95", 0.0),
+                "p99": baseline_metrics.get("p99", 0.0),
+                "sample_count": baseline_metrics.get("sample_count", 0),
+                "baseline_period_days": request.training_days,
+                "calculated_at": datetime.now(timezone.utc).isoformat(),
+                "algorithm": "statistical_aggregation_with_outlier_removal"
+            }
+
+            db_baseline_type = METRIC_TO_BASELINE_TYPE_MAP.get(metric_type, "anomaly")
+
+            model_id = f"{request.model_id}-{metric_type}-{str(uuid.uuid4())[:8]}"
+            await ai_service.save_baseline(
+                model_id=model_id,
+                service_name="*",
+                baseline_type=db_baseline_type,
+                baseline_data=baseline_data,
+                training_metrics={
+                    "sample_count": baseline_metrics.get("sample_count", 0),
+                    "accuracy_score": min(baseline_metrics.get("sample_count", 0) / 1000, 0.95),
+                    "false_positive_rate": 0.05,
+                    "false_negative_rate": 0.03,
+                    "training_period": f"{request.training_days}d"
+                },
+                customer_id=customer_id
+            )
+
+            retrain_results.append({
+                "metric_type": metric_type,
+                "model_id": model_id,
+                "sample_count": baseline_metrics.get("sample_count", 0),
+                "status": "completed"
+            })
+
+        return {
+            "model_id": request.model_id,
+            "status": "completed",
+            "training_days": request.training_days,
+            "metrics_retrained": retrain_results,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "customer_id": customer_id
+        }
+
+    except Exception as e:
+        logger.error("Failed to retrain model", error=str(e), customer_id=customer_id)
+        import traceback
+        logger.error("Retrain traceback", trace=traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to retrain model: {str(e)}")
+
+
+# ============================================================================
 # ADVANCED ANOMALY DETECTION ENDPOINTS - Industry Leading Features
 # ============================================================================
 

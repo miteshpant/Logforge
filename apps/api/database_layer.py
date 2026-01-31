@@ -65,7 +65,11 @@ class DatabaseLayer:
         # Streaming Configuration Service
         'StreamingConfigDAO': os.getenv('STREAMING_CONFIG_SERVICE_KEY', 'streaming-config-service-key'),
         # Migration Service
-        'MigrationService': os.getenv('MIGRATION_SERVICE_KEY', 'migration-service-key')
+        'MigrationService': os.getenv('MIGRATION_SERVICE_KEY', 'migration-service-key'),
+        # Alert Correlation Service
+        'AlertCorrelationService': os.getenv('ALERT_CORRELATION_SERVICE_KEY', 'alert-correlation-service-key'),
+        # Predictive Analytics Service
+        'PredictiveAnalyticsService': os.getenv('PREDICTIVE_ANALYTICS_SERVICE_KEY', 'predictive-analytics-service-key')
     }
     
     # Table access control by service
@@ -112,7 +116,11 @@ class DatabaseLayer:
         # Streaming Configuration Service
         'StreamingConfigDAO': ['tenant_configs_mt'],  # Needs to manage streaming configurations in tenant configs table
         # Migration Service
-        'MigrationService': ['system_migrations', 'sigma_rules_mt', 'security_events_mt']  # Needs to check migrations and manage security tables
+        'MigrationService': ['system_migrations', 'sigma_rules_mt', 'security_events_mt'],  # Needs to check migrations and manage security tables
+        # Alert Correlation Service - read-only access to alerts and logs for correlation analysis
+        'AlertCorrelationService': ['alert_instances_mt', 'alert_rules_mt', 'logs_normalized_mt'],
+        # Predictive Analytics Service - read-only access to logs, metrics, alerts, baselines for forecasting
+        'PredictiveAnalyticsService': ['logs_normalized_mt', 'metrics_mt', 'alert_instances_mt', 'ai_baselines_mt']
     }
     
     # Dangerous operations requiring admin privileges
