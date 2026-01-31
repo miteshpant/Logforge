@@ -10,7 +10,6 @@ import ObservabilityStatsWidgets from '@/components/centrum/ObservabilityStatsWi
 import UsageStatsWidgets from '@/components/centrum/UsageStatsWidgets'
 import APMPerformanceWidgets from '@/components/centrum/APMPerformanceWidgets'
 import IncidentCommandCenter from '@/components/centrum/IncidentCommandCenter'
-import ServiceHealthMap from '@/components/centrum/ServiceHealthMap'
 import { apiClient } from '@/lib/api'
 
 // Lazy load streaming panel to improve initial page load
@@ -417,30 +416,14 @@ export default function CentrumPage() {
           isLoading={isLoadingUsage}
         />
 
-        {/* Two-Column Layout: Incident Command Center + Service Health */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          {/* Incident Command Center - Takes 2 columns (main focus) */}
-          <div className="xl:col-span-2">
-            <IncidentCommandCenter timeRange={currentTimeRange.label} />
-          </div>
-
-          {/* Service Health Map - Takes 1 column */}
-          <div className="xl:col-span-1">
-            <ServiceHealthMap />
-          </div>
-        </div>
-
-        {/* Observability Stats - Third Row */}
+        {/* Observability + APM Stats */}
         <MemoizedObservabilityStats
           data={observabilityData}
           isLoading={isLoadingObservability}
         />
 
-        {/* APM Performance Stats - Fourth Row */}
-        <MemoizedAPMPerformance
-          data={apmData}
-          isLoading={isLoadingApm}
-        />
+        {/* Incident Command Center - Full Width */}
+        <IncidentCommandCenter timeRange={currentTimeRange.label} />
 
         {/* Main Widgets - Logs, Alerts, and Security Overview */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

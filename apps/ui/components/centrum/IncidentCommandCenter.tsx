@@ -8,7 +8,6 @@ import {
   AlertTriangle,
   AlertCircle,
   Activity,
-  TrendingUp,
   Clock,
   ExternalLink,
   ChevronRight,
@@ -18,8 +17,6 @@ import {
   GitBranch,
   Lightbulb,
   CheckCircle,
-  XCircle,
-  Eye,
   RefreshCw
 } from 'lucide-react'
 
@@ -86,97 +83,6 @@ const STATUS_CONFIG = {
   resolved: { color: 'text-green-400', bg: 'bg-green-500/20', label: 'Resolved' }
 }
 
-// Mock data generator for demo
-const generateMockIncidents = (): Incident[] => [
-  {
-    id: 'inc-001',
-    title: 'Database Connection Pool Exhaustion',
-    description: 'PostgreSQL connection pool at 95% capacity, causing timeout errors',
-    severity: 'critical',
-    status: 'investigating',
-    service: 'payment-service',
-    triggered_at: new Date(Date.now() - 180000).toISOString(),
-    acknowledged_at: new Date(Date.now() - 120000).toISOString(),
-    related_logs: 1247,
-    related_traces: 89,
-    related_alerts: 5,
-    ai_root_cause: 'Connection leak in PaymentProcessor.processTransaction() method. Connections are not being released after failed transactions.',
-    ai_confidence: 87,
-    estimated_cost_impact: 12500,
-    assignee: 'ops-team',
-    tags: ['database', 'postgresql', 'connection-pool']
-  },
-  {
-    id: 'inc-002',
-    title: 'High Error Rate in API Gateway',
-    description: 'Error rate spiked to 15% on /api/v1/orders endpoint',
-    severity: 'high',
-    status: 'acknowledged',
-    service: 'api-gateway',
-    triggered_at: new Date(Date.now() - 600000).toISOString(),
-    acknowledged_at: new Date(Date.now() - 300000).toISOString(),
-    related_logs: 856,
-    related_traces: 234,
-    related_alerts: 3,
-    ai_root_cause: 'Upstream service "inventory-service" returning 503 errors due to memory pressure. Consider increasing memory limits or scaling horizontally.',
-    ai_confidence: 92,
-    estimated_cost_impact: 8200,
-    assignee: 'platform-team',
-    tags: ['api', 'gateway', '5xx-errors']
-  },
-  {
-    id: 'inc-003',
-    title: 'Elevated Latency in Authentication Service',
-    description: 'P99 latency increased from 50ms to 850ms',
-    severity: 'high',
-    status: 'triggered',
-    service: 'auth-service',
-    triggered_at: new Date(Date.now() - 300000).toISOString(),
-    related_logs: 423,
-    related_traces: 156,
-    related_alerts: 2,
-    ai_root_cause: 'Redis cache miss rate at 78%. Token validation falling back to database lookups. Recent deployment may have invalidated cache.',
-    ai_confidence: 79,
-    estimated_cost_impact: 4500,
-    tags: ['auth', 'latency', 'cache']
-  },
-  {
-    id: 'inc-004',
-    title: 'Suspicious Login Attempts Detected',
-    description: 'Multiple failed login attempts from unusual geolocations',
-    severity: 'medium',
-    status: 'investigating',
-    service: 'auth-service',
-    triggered_at: new Date(Date.now() - 900000).toISOString(),
-    acknowledged_at: new Date(Date.now() - 800000).toISOString(),
-    related_logs: 2341,
-    related_traces: 12,
-    related_alerts: 8,
-    ai_root_cause: 'Credential stuffing attack pattern detected. 94% of attempts using known compromised credential lists. Recommend enabling rate limiting and CAPTCHA.',
-    ai_confidence: 95,
-    estimated_cost_impact: 0,
-    assignee: 'security-team',
-    tags: ['security', 'brute-force', 'credential-stuffing']
-  },
-  {
-    id: 'inc-005',
-    title: 'Disk Usage Warning on Kafka Broker',
-    description: 'Kafka broker disk usage at 82%, trending upward',
-    severity: 'low',
-    status: 'acknowledged',
-    service: 'kafka-cluster',
-    triggered_at: new Date(Date.now() - 1800000).toISOString(),
-    acknowledged_at: new Date(Date.now() - 1500000).toISOString(),
-    related_logs: 156,
-    related_traces: 0,
-    related_alerts: 1,
-    ai_root_cause: 'Consumer lag in "order-events" topic causing message retention. Consumer group "analytics-processor" is 4 hours behind.',
-    ai_confidence: 88,
-    estimated_cost_impact: 200,
-    tags: ['kafka', 'disk', 'consumer-lag']
-  }
-]
-
 export default function IncidentCommandCenter({ isLoading: externalLoading, timeRange }: IncidentCommandCenterProps) {
   const router = useRouter()
   const { getApiTimeRange, currentTimeRange } = useTimeRange()
@@ -192,7 +98,6 @@ export default function IncidentCommandCenter({ isLoading: externalLoading, time
   const loadIncidents = async () => {
     try {
       setIsLoading(true)
-      // Load real incidents from alerts API with time range from global selector
       const { start_time, end_time } = getApiTimeRange()
       const response = await apiClient.get('/v1/alerts', {
         status: 'triggered',
@@ -202,7 +107,6 @@ export default function IncidentCommandCenter({ isLoading: externalLoading, time
       })
 
       if (response?.data?.alerts && response.data.alerts.length > 0) {
-        // Transform API data to incident format
         setIncidents(response.data.alerts.map((alert: any) => ({
           id: alert.alert_id || alert.id,
           title: alert.rule_name || alert.title || alert.name || 'Unnamed Alert',
@@ -223,12 +127,11 @@ export default function IncidentCommandCenter({ isLoading: externalLoading, time
           tags: alert.details?.tags || alert.tags || []
         })))
       } else {
-        // Use mock data for demo when no real alerts exist
-        setIncidents(generateMockIncidents())
+        setIncidents([])
       }
     } catch (error) {
       console.error('Failed to load incidents:', error)
-      setIncidents(generateMockIncidents())
+      setIncidents([])
     } finally {
       setIsLoading(false)
     }
@@ -267,7 +170,6 @@ export default function IncidentCommandCenter({ isLoading: externalLoading, time
     router.push(`/alerts/instances?id=${incidentId}`)
   }
 
-  // Calculate summary stats
   const stats = {
     total: incidents.length,
     critical: incidents.filter(i => i.severity === 'critical' && i.status !== 'resolved').length,
@@ -280,7 +182,7 @@ export default function IncidentCommandCenter({ isLoading: externalLoading, time
   if (isLoading || externalLoading) {
     return (
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-6">
-        <div className="flex items-center justify-center h-64">
+        <div className="flex items-center justify-center h-48">
           <div className="text-slate-400 text-sm animate-pulse">Loading incidents...</div>
         </div>
       </div>
@@ -289,10 +191,6 @@ export default function IncidentCommandCenter({ isLoading: externalLoading, time
 
   return (
     <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5">
-      {/* Background glow effects */}
-      <div className="absolute top-0 right-0 w-64 h-64 -translate-y-32 translate-x-32 bg-red-500/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-48 h-48 translate-y-24 -translate-x-24 bg-blue-500/8 rounded-full blur-3xl pointer-events-none" />
-
       {/* Header */}
       <div className="relative z-10 p-4 border-b border-white/5">
         <div className="flex items-center justify-between">
@@ -302,11 +200,16 @@ export default function IncidentCommandCenter({ isLoading: externalLoading, time
             </div>
             <div>
               <h2 className="text-lg font-bold text-white">Incident Command Center</h2>
-              <p className="text-xs text-slate-400">{stats.active} active incidents • {formatCurrency(stats.totalCostImpact)} estimated impact</p>
+              <p className="text-xs text-slate-400">
+                {stats.active > 0
+                  ? `${stats.active} active incident${stats.active !== 1 ? 's' : ''}`
+                  : 'No active incidents'
+                }
+                {stats.totalCostImpact > 0 && ` • ${formatCurrency(stats.totalCostImpact)} estimated impact`}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {/* Filter Tabs */}
             <div className="flex bg-slate-800/50 rounded-lg p-0.5">
               {(['active', 'critical', 'all'] as const).map(f => (
                 <button
@@ -331,32 +234,36 @@ export default function IncidentCommandCenter({ isLoading: externalLoading, time
           </div>
         </div>
 
-        {/* Summary Stats */}
-        <div className="flex gap-4 mt-4">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20">
-            <AlertCircle className="w-4 h-4 text-red-400" />
-            <span className="text-sm font-semibold text-red-400">{stats.critical}</span>
-            <span className="text-xs text-slate-400">Critical</span>
+        {/* Summary Stats - only show if there are incidents */}
+        {incidents.length > 0 && (
+          <div className="flex gap-4 mt-4">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20">
+              <AlertCircle className="w-4 h-4 text-red-400" />
+              <span className="text-sm font-semibold text-red-400">{stats.critical}</span>
+              <span className="text-xs text-slate-400">Critical</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20">
+              <Activity className="w-4 h-4 text-orange-400" />
+              <span className="text-sm font-semibold text-orange-400">{stats.active}</span>
+              <span className="text-xs text-slate-400">Active</span>
+            </div>
+            {stats.totalCostImpact > 0 && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20">
+                <DollarSign className="w-4 h-4 text-green-400" />
+                <span className="text-sm font-semibold text-green-400">{formatCurrency(stats.totalCostImpact)}</span>
+                <span className="text-xs text-slate-400">Est. Impact</span>
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20">
-            <Activity className="w-4 h-4 text-orange-400" />
-            <span className="text-sm font-semibold text-orange-400">{stats.active}</span>
-            <span className="text-xs text-slate-400">Active</span>
-          </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20">
-            <DollarSign className="w-4 h-4 text-green-400" />
-            <span className="text-sm font-semibold text-green-400">{formatCurrency(stats.totalCostImpact)}</span>
-            <span className="text-xs text-slate-400">Est. Impact</span>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Incident List */}
-      <div className="relative z-10 divide-y divide-white/5 max-h-[500px] overflow-y-auto">
+      <div className="relative z-10 divide-y divide-white/5 max-h-[400px] overflow-y-auto">
         {filteredIncidents.length === 0 ? (
-          <div className="flex items-center justify-center h-48 text-slate-400">
+          <div className="flex items-center justify-center h-32 text-slate-400">
             <div className="text-center">
-              <CheckCircle className="w-12 h-12 mx-auto mb-2 text-green-400" />
+              <CheckCircle className="w-10 h-10 mx-auto mb-2 text-green-400" />
               <p className="text-sm">No active incidents</p>
               <p className="text-xs text-slate-500">All systems operational</p>
             </div>
