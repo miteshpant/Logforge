@@ -10,6 +10,8 @@ import ObservabilityStatsWidgets from '@/components/centrum/ObservabilityStatsWi
 import UsageStatsWidgets from '@/components/centrum/UsageStatsWidgets'
 import APMPerformanceWidgets from '@/components/centrum/APMPerformanceWidgets'
 import IncidentCommandCenter from '@/components/centrum/IncidentCommandCenter'
+import AIInsightsWidget from '@/components/centrum/AIInsightsWidget'
+import AnomalyStatsWidget from '@/components/centrum/AnomalyStatsWidget'
 import { apiClient } from '@/lib/api'
 
 // Lazy load streaming panel to improve initial page load
@@ -22,6 +24,8 @@ const MemoizedAPMPerformance = memo(APMPerformanceWidgets)
 const MemoizedLogsOverview = memo(LogsOverviewWidget)
 const MemoizedAlertsOverview = memo(AlertsOverviewWidget)
 const MemoizedSecurityEvents = memo(SecurityEventsWidget)
+const MemoizedAIInsights = memo(AIInsightsWidget)
+const MemoizedAnomalyStats = memo(AnomalyStatsWidget)
 
 export default function CentrumPage() {
   const { getApiTimeRange, currentTimeRange } = useTimeRange()
@@ -442,6 +446,12 @@ export default function CentrumPage() {
             isLoading={isLoadingSecurity}
             timeRange={currentTimeRange.label}
           />
+        </div>
+
+        {/* AI Intelligence Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <MemoizedAIInsights />
+          <MemoizedAnomalyStats />
         </div>
 
         {/* Live Streaming Panel - Bottom Row (Lazy Loaded) */}

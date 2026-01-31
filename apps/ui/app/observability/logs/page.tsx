@@ -23,7 +23,12 @@ import {
   Copy,
   ExternalLink,
   Columns,
-  BarChart3
+  BarChart3,
+  Save,
+  FolderOpen,
+  Trash2,
+  CheckCircle,
+  Loader2
 } from 'lucide-react'
 
 interface LogEntry {
@@ -63,6 +68,115 @@ export default function LogExplorerPage() {
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null)
   const [isLiveMode, setIsLiveMode] = useState(false)
   const [services, setServices] = useState<string[]>([])
+  const [savedQueries, setSavedQueries] = useState<any[]>([])
+  const [showSavedQueries, setShowSavedQueries] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveQueryName, setSaveQueryName] = useState('')
+  const [showSaveDialog, setShowSaveDialog] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+  const [queryValidation, setQueryValidation] = useState<{ valid: boolean; message?: string } | null>(null)
+
+  const loadSavedQueries = useCallback(async () => {
+    try {
+      const response = await apiClient.get('/v1/query/saved')
+      const data = response?.data || response
+      if (Array.isArray(data)) {
+        setSavedQueries(data)
+      } else if (data?.queries && Array.isArray(data.queries)) {
+        setSavedQueries(data.queries)
+      }
+    } catch (error) {
+      console.error('Failed to load saved queries:', error)
+    }
+  }, [])
+
+  const saveCurrentQuery = async () => {
+    if (!saveQueryName.trim()) return
+    try {
+      setIsSaving(true)
+      await apiClient.post('/v1/query/saved', {
+        name: saveQueryName,
+        query: searchQuery,
+        filters: {
+          levels: levelFilter,
+          service: serviceFilter
+        }
+      })
+      await loadSavedQueries()
+      setShowSaveDialog(false)
+      setSaveQueryName('')
+    } catch (error) {
+      console.error('Failed to save query:', error)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const deleteSavedQuery = async (queryId: string) => {
+    try {
+      await apiClient.delete(`/v1/query/saved/${queryId}`)
+      setSavedQueries(prev => prev.filter(q => q.id !== queryId))
+    } catch (error) {
+      console.error('Failed to delete saved query:', error)
+    }
+  }
+
+  const applySavedQuery = (query: any) => {
+    if (query.query) setSearchQuery(query.query)
+    if (query.filters?.levels) setLevelFilter(query.filters.levels)
+    if (query.filters?.service) setServiceFilter(query.filters.service)
+    setShowSavedQueries(false)
+  }
+
+  const validateQuery = async () => {
+    if (!searchQuery.trim()) {
+      setQueryValidation(null)
+      return
+    }
+    try {
+      const response = await apiClient.post('/v1/query/validate', {
+        query: searchQuery
+      })
+      const data = response?.data || response
+      setQueryValidation(data)
+    } catch (error) {
+      setQueryValidation({ valid: false, message: 'Validation failed' })
+    }
+  }
+
+  const exportViaAPI = async () => {
+    try {
+      setIsExporting(true)
+      const { start_time, end_time } = getApiTimeRange()
+      const response = await apiClient.post('/v1/export', {
+        start_time,
+        end_time,
+        format: 'csv',
+        query: searchQuery || undefined,
+        filters: {
+          levels: levelFilter.length > 0 ? levelFilter : undefined,
+          service: serviceFilter !== 'all' ? serviceFilter : undefined
+        }
+      })
+      const data = response?.data || response
+      if (data?.download_url) {
+        window.open(data.download_url, '_blank')
+      } else if (typeof data === 'string') {
+        const blob = new Blob([data], { type: 'text/csv' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `logs-export-${new Date().toISOString()}.csv`
+        a.click()
+        URL.revokeObjectURL(url)
+      }
+    } catch (error) {
+      console.error('API export failed, falling back to client export:', error)
+      exportLogs()
+    } finally {
+      setIsExporting(false)
+    }
+  }
 
   const loadLogs = useCallback(async () => {
     try {
@@ -110,7 +224,8 @@ export default function LogExplorerPage() {
 
   useEffect(() => {
     loadLogs()
-  }, [loadLogs])
+    loadSavedQueries()
+  }, [loadLogs, loadSavedQueries])
 
   // Live mode polling
   useEffect(() => {
@@ -210,11 +325,103 @@ export default function LogExplorerPage() {
             <span className={`w-2 h-2 rounded-full ${isLiveMode ? 'bg-white animate-pulse' : 'bg-slate-400'}`} />
             {isLiveMode ? 'Live' : 'Live Mode'}
           </button>
+
+          {/* Saved Queries */}
+          <div className="relative">
+            <button
+              onClick={() => setShowSavedQueries(!showSavedQueries)}
+              className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50"
+            >
+              <FolderOpen className="w-4 h-4" />
+              Saved Queries
+              {savedQueries.length > 0 && (
+                <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
+                  {savedQueries.length}
+                </span>
+              )}
+            </button>
+            {showSavedQueries && (
+              <div className="absolute top-full mt-1 left-0 w-72 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+                {savedQueries.length === 0 ? (
+                  <div className="p-4 text-center text-sm text-slate-500">
+                    No saved queries yet
+                  </div>
+                ) : (
+                  savedQueries.map(q => (
+                    <div
+                      key={q.id}
+                      className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0"
+                    >
+                      <button
+                        onClick={() => applySavedQuery(q)}
+                        className="flex-1 text-left"
+                      >
+                        <p className="text-sm font-medium text-slate-900">{q.name}</p>
+                        {q.query && <p className="text-xs text-slate-500 truncate">{q.query}</p>}
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteSavedQuery(q.id) }}
+                        className="p-1 text-slate-400 hover:text-red-500 ml-2"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Save Current Query */}
+          {searchQuery && (
+            <div className="relative">
+              <button
+                onClick={() => setShowSaveDialog(!showSaveDialog)}
+                className="flex items-center gap-2 px-3 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50"
+              >
+                <Save className="w-4 h-4" />
+                Save
+              </button>
+              {showSaveDialog && (
+                <div className="absolute top-full mt-1 left-0 w-64 bg-white border border-slate-200 rounded-lg shadow-lg z-50 p-3">
+                  <input
+                    type="text"
+                    placeholder="Query name..."
+                    value={saveQueryName}
+                    onChange={(e) => setSaveQueryName(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-blue-500 mb-2"
+                    autoFocus
+                    onKeyDown={(e) => e.key === 'Enter' && saveCurrentQuery()}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={saveCurrentQuery}
+                      disabled={!saveQueryName.trim() || isSaving}
+                      className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-medium disabled:opacity-50"
+                    >
+                      {isSaving ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Save'}
+                    </button>
+                    <button
+                      onClick={() => setShowSaveDialog(false)}
+                      className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <button
-            onClick={exportLogs}
-            className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50"
+            onClick={exportViaAPI}
+            disabled={isExporting}
+            className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
-            <Download className="w-4 h-4" />
+            {isExporting
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Download className="w-4 h-4" />
+            }
             Export
           </button>
           <button
@@ -226,6 +433,21 @@ export default function LogExplorerPage() {
             Refresh
           </button>
         </div>
+
+        {/* Query Validation Feedback */}
+        {queryValidation && (
+          <div className={`flex items-center gap-2 px-3 py-2 rounded-lg mb-4 text-sm ${
+            queryValidation.valid
+              ? 'bg-green-50 text-green-700 border border-green-200'
+              : 'bg-red-50 text-red-700 border border-red-200'
+          }`}>
+            {queryValidation.valid
+              ? <CheckCircle className="w-4 h-4" />
+              : <AlertCircle className="w-4 h-4" />
+            }
+            {queryValidation.message || (queryValidation.valid ? 'Query is valid' : 'Invalid query')}
+          </div>
+        )}
 
         {/* Stats Bar */}
         {stats && (
@@ -257,7 +479,8 @@ export default function LogExplorerPage() {
               type="text"
               placeholder="Search logs by message, service, trace ID, or metadata..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => { setSearchQuery(e.target.value); setQueryValidation(null) }}
+              onBlur={validateQuery}
               className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500"
             />
           </div>

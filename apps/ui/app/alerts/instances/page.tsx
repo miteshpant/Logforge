@@ -19,7 +19,10 @@ import {
   RefreshCw,
   ExternalLink,
   Zap,
-  TrendingUp
+  TrendingUp,
+  TrendingDown,
+  BarChart3,
+  Activity
 } from 'lucide-react'
 
 interface AlertInstance {
@@ -76,6 +79,47 @@ export default function AlertInstancesPage() {
   const [filterSeverity, setFilterSeverity] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [alertStats, setAlertStats] = useState<any>(null)
+  const [isLoadingStats, setIsLoadingStats] = useState(true)
+  const [alertDetail, setAlertDetail] = useState<any>(null)
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false)
+
+  const loadAlertStats = useCallback(async () => {
+    try {
+      setIsLoadingStats(true)
+      const { start_time, end_time } = getApiTimeRange()
+
+      const response = await apiClient.get('/v1/alerts/stats', {
+        start_time,
+        end_time
+      })
+
+      const data = response?.data || response
+      if (data) {
+        setAlertStats(data)
+      }
+    } catch (error) {
+      console.error('Failed to load alert stats:', error)
+    } finally {
+      setIsLoadingStats(false)
+    }
+  }, [getApiTimeRange])
+
+  const loadAlertDetail = useCallback(async (alertId: string) => {
+    try {
+      setIsLoadingDetail(true)
+      const response = await apiClient.get(`/v1/alerts/${alertId}`)
+      const data = response?.data || response
+      if (data) {
+        setAlertDetail(data)
+      }
+    } catch (error) {
+      console.error('Failed to load alert detail:', error)
+      setAlertDetail(null)
+    } finally {
+      setIsLoadingDetail(false)
+    }
+  }, [])
 
   const loadInstances = useCallback(async () => {
     try {
@@ -120,7 +164,16 @@ export default function AlertInstancesPage() {
 
   useEffect(() => {
     loadInstances()
-  }, [loadInstances])
+    loadAlertStats()
+  }, [loadInstances, loadAlertStats])
+
+  useEffect(() => {
+    if (selectedInstance) {
+      loadAlertDetail(selectedInstance.id)
+    } else {
+      setAlertDetail(null)
+    }
+  }, [selectedInstance?.id, loadAlertDetail])
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
@@ -249,6 +302,63 @@ export default function AlertInstancesPage() {
             </div>
           </div>
         </div>
+
+        {/* Alert Analytics from API */}
+        {alertStats && (
+          <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <BarChart3 className="w-4 h-4 text-blue-400" />
+              <h3 className="text-sm font-semibold text-white">Alert Analytics</h3>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {alertStats.mean_time_to_acknowledge != null && (
+                <div className="p-3 bg-gray-900/50 rounded-lg">
+                  <p className="text-xs text-gray-400">MTTA</p>
+                  <p className="text-lg font-bold text-white">
+                    {typeof alertStats.mean_time_to_acknowledge === 'number'
+                      ? `${Math.round(alertStats.mean_time_to_acknowledge / 60)}m`
+                      : alertStats.mean_time_to_acknowledge}
+                  </p>
+                  <p className="text-[10px] text-gray-500">Mean time to ack</p>
+                </div>
+              )}
+              {alertStats.mean_time_to_resolve != null && (
+                <div className="p-3 bg-gray-900/50 rounded-lg">
+                  <p className="text-xs text-gray-400">MTTR</p>
+                  <p className="text-lg font-bold text-white">
+                    {typeof alertStats.mean_time_to_resolve === 'number'
+                      ? `${Math.round(alertStats.mean_time_to_resolve / 60)}m`
+                      : alertStats.mean_time_to_resolve}
+                  </p>
+                  <p className="text-[10px] text-gray-500">Mean time to resolve</p>
+                </div>
+              )}
+              {alertStats.alert_frequency != null && (
+                <div className="p-3 bg-gray-900/50 rounded-lg">
+                  <p className="text-xs text-gray-400">Frequency</p>
+                  <p className="text-lg font-bold text-white flex items-center gap-1">
+                    <Activity className="w-4 h-4 text-blue-400" />
+                    {typeof alertStats.alert_frequency === 'number'
+                      ? alertStats.alert_frequency.toFixed(1)
+                      : alertStats.alert_frequency}
+                  </p>
+                  <p className="text-[10px] text-gray-500">alerts/hour</p>
+                </div>
+              )}
+              {alertStats.noise_ratio != null && (
+                <div className="p-3 bg-gray-900/50 rounded-lg">
+                  <p className="text-xs text-gray-400">Noise Ratio</p>
+                  <p className="text-lg font-bold text-white">
+                    {typeof alertStats.noise_ratio === 'number'
+                      ? `${(alertStats.noise_ratio * 100).toFixed(1)}%`
+                      : alertStats.noise_ratio}
+                  </p>
+                  <p className="text-[10px] text-gray-500">False positives</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Filters */}
         <div className="flex flex-wrap gap-4 items-center">
@@ -502,16 +612,68 @@ export default function AlertInstancesPage() {
                   </div>
                 </div>
 
+                {/* Enhanced Detail from API */}
+                {isLoadingDetail && (
+                  <div className="flex items-center justify-center py-4">
+                    <RefreshCw className="w-5 h-5 text-blue-400 animate-spin" />
+                  </div>
+                )}
+                {alertDetail && !isLoadingDetail && (
+                  <div className="border border-gray-700 rounded-lg p-4">
+                    <h3 className="text-white font-medium mb-3 flex items-center gap-2">
+                      <BarChart3 className="w-4 h-4 text-blue-400" />
+                      Extended Details
+                    </h3>
+                    <div className="space-y-2">
+                      {alertDetail.description && (
+                        <div className="bg-gray-800 p-3 rounded-lg">
+                          <p className="text-gray-400 text-xs mb-1">Description</p>
+                          <p className="text-sm text-white">{alertDetail.description}</p>
+                        </div>
+                      )}
+                      {alertDetail.runbook_url && (
+                        <a
+                          href={alertDetail.runbook_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 p-3 bg-blue-900/30 border border-blue-700/30 rounded-lg text-blue-400 text-sm hover:bg-blue-900/50 transition-colors"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          View Runbook
+                        </a>
+                      )}
+                      {alertDetail.labels && Object.keys(alertDetail.labels).length > 0 && (
+                        <div className="bg-gray-800 p-3 rounded-lg">
+                          <p className="text-gray-400 text-xs mb-2">Labels</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {Object.entries(alertDetail.labels).map(([key, value]) => (
+                              <span key={key} className="px-2 py-0.5 bg-gray-700 text-gray-300 rounded text-xs">
+                                {key}={String(value)}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Actions */}
                 <div className="flex gap-3">
-                  <button className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors">
+                  <a
+                    href={`/observability/logs?alert_id=${selectedInstance.id}`}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                  >
                     <ExternalLink className="w-4 h-4" />
                     View Logs
-                  </button>
-                  <button className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors">
+                  </a>
+                  <a
+                    href={`/observability/traces?alert_id=${selectedInstance.id}`}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                  >
                     <ExternalLink className="w-4 h-4" />
                     View Traces
-                  </button>
+                  </a>
                 </div>
               </div>
             </div>

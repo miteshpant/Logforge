@@ -9,7 +9,7 @@ import APMTransactions from '@/components/observability/APMTransactions'
 import APMApdexScore from '@/components/observability/APMApdexScore'
 import { apiClient } from '@/lib/api'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
-import { GitCompare, RefreshCw, Pause, Play } from 'lucide-react'
+import { GitCompare, RefreshCw, Pause, Play, TrendingUp, TrendingDown, Activity, AlertTriangle } from 'lucide-react'
 
 // Comparison period options
 export type ComparisonPeriod = 'none' | 'previous_period' | 'yesterday' | 'last_week'
@@ -127,6 +127,10 @@ export default function APMPage() {
 
   const [selectedService, setSelectedService] = useState<string>('all')
 
+  // Performance trends state
+  const [trends, setTrends] = useState<any>(null)
+  const [isLoadingTrends, setIsLoadingTrends] = useState(true)
+
   // Comparison mode state
   const [comparisonPeriod, setComparisonPeriod] = useState<ComparisonPeriod>('none')
   const [comparisonServices, setComparisonServices] = useState<ServicePerformance[]>([])
@@ -148,6 +152,7 @@ export default function APMPage() {
   const endpointsAbortRef = useRef<AbortController | null>(null)
   const errorRatesAbortRef = useRef<AbortController | null>(null)
   const transactionsAbortRef = useRef<AbortController | null>(null)
+  const trendsAbortRef = useRef<AbortController | null>(null)
 
   // Individual data loaders
   const loadServices = async () => {
@@ -277,6 +282,34 @@ export default function APMPage() {
     }
   }
 
+  // Load performance trends
+  const loadTrends = async () => {
+    try {
+      if (trendsAbortRef.current) trendsAbortRef.current.abort()
+      trendsAbortRef.current = new AbortController()
+
+      setIsLoadingTrends(true)
+      const { start_time, end_time } = getApiTimeRange()
+
+      const response = await apiClient.get('/v1/observability/trends', {
+        start_time,
+        end_time
+      })
+
+      const data = response?.data?.data || response?.data || response
+      if (data) {
+        setTrends(data)
+      }
+    } catch (error: any) {
+      if (error.name !== 'AbortError' && error.name !== 'CanceledError') {
+        console.error('Failed to load trends:', error)
+      }
+      setTrends(null)
+    } finally {
+      setIsLoadingTrends(false)
+    }
+  }
+
   // Load comparison data
   const loadComparisonData = async () => {
     if (comparisonPeriod === 'none') {
@@ -386,12 +419,21 @@ export default function APMPage() {
     }
   }, [enableTransactions, currentTimeRange.value])
 
+  // Load trends when services finish loading
+  useEffect(() => {
+    if (!isLoadingServices) {
+      const timer = setTimeout(() => loadTrends(), 400)
+      return () => clearTimeout(timer)
+    }
+  }, [isLoadingServices, currentTimeRange.value])
+
   // Manual refresh
   const handleRefresh = () => {
     loadServices()
     setTimeout(() => loadEndpoints(), 100)
     setTimeout(() => loadErrorRates(), 200)
     setTimeout(() => loadTransactions(), 300)
+    setTimeout(() => loadTrends(), 400)
     setLastRefresh(new Date())
   }
 
@@ -535,6 +577,78 @@ export default function APMPage() {
           }
           isLoading={isLoadingTransactions}
         />
+
+        {/* Performance Trends */}
+        {!isLoadingTrends && trends && (
+          <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <Activity className="w-5 h-5 text-cyan-400" />
+              <h3 className="text-lg font-semibold text-white">Performance Trends</h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {trends.latency_trend != null && (
+                <div className="p-4 rounded-lg bg-slate-900/50 border border-slate-700">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-400">Latency Trend</span>
+                    {trends.latency_trend > 0
+                      ? <TrendingUp className="w-4 h-4 text-red-400" />
+                      : <TrendingDown className="w-4 h-4 text-green-400" />
+                    }
+                  </div>
+                  <div className={`text-2xl font-bold mt-2 ${trends.latency_trend > 0 ? 'text-red-400' : 'text-green-400'}`}>
+                    {trends.latency_trend > 0 ? '+' : ''}{typeof trends.latency_trend === 'number' ? trends.latency_trend.toFixed(1) : trends.latency_trend}%
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">vs previous period</div>
+                </div>
+              )}
+              {trends.throughput_trend != null && (
+                <div className="p-4 rounded-lg bg-slate-900/50 border border-slate-700">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-400">Throughput Trend</span>
+                    {trends.throughput_trend > 0
+                      ? <TrendingUp className="w-4 h-4 text-green-400" />
+                      : <TrendingDown className="w-4 h-4 text-red-400" />
+                    }
+                  </div>
+                  <div className={`text-2xl font-bold mt-2 ${trends.throughput_trend > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {trends.throughput_trend > 0 ? '+' : ''}{typeof trends.throughput_trend === 'number' ? trends.throughput_trend.toFixed(1) : trends.throughput_trend}%
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">vs previous period</div>
+                </div>
+              )}
+              {trends.error_rate_trend != null && (
+                <div className="p-4 rounded-lg bg-slate-900/50 border border-slate-700">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-400">Error Rate Trend</span>
+                    {trends.error_rate_trend > 0
+                      ? <AlertTriangle className="w-4 h-4 text-red-400" />
+                      : <TrendingDown className="w-4 h-4 text-green-400" />
+                    }
+                  </div>
+                  <div className={`text-2xl font-bold mt-2 ${trends.error_rate_trend > 0 ? 'text-red-400' : 'text-green-400'}`}>
+                    {trends.error_rate_trend > 0 ? '+' : ''}{typeof trends.error_rate_trend === 'number' ? trends.error_rate_trend.toFixed(1) : trends.error_rate_trend}%
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">vs previous period</div>
+                </div>
+              )}
+              {trends.apdex_trend != null && (
+                <div className="p-4 rounded-lg bg-slate-900/50 border border-slate-700">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-400">Apdex Trend</span>
+                    {trends.apdex_trend >= 0
+                      ? <TrendingUp className="w-4 h-4 text-green-400" />
+                      : <TrendingDown className="w-4 h-4 text-red-400" />
+                    }
+                  </div>
+                  <div className={`text-2xl font-bold mt-2 ${trends.apdex_trend >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {trends.apdex_trend > 0 ? '+' : ''}{typeof trends.apdex_trend === 'number' ? trends.apdex_trend.toFixed(3) : trends.apdex_trend}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">vs previous period</div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   )

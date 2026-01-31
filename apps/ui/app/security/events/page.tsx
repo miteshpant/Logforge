@@ -17,7 +17,11 @@ import {
   X,
   MessageSquare,
   ExternalLink,
-  Target
+  Target,
+  Microscope,
+  CheckSquare,
+  Square,
+  Loader2
 } from 'lucide-react'
 
 interface SecurityEvent {
@@ -46,6 +50,9 @@ export default function SecurityEventsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [isActionLoading, setIsActionLoading] = useState(false)
   const [newNote, setNewNote] = useState('')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [isBulkLoading, setIsBulkLoading] = useState(false)
+  const [investigationData, setInvestigationData] = useState<Record<string, any>>({})
 
   const loadEvents = async () => {
     try {
@@ -150,6 +157,74 @@ export default function SecurityEventsPage() {
     } finally {
       setIsActionLoading(false)
       setNewNote('')
+    }
+  }
+
+  const handleInvestigate = async (eventId: string) => {
+    try {
+      setIsActionLoading(true)
+      const response = await apiClient.post(`/v1/security/${eventId}/investigate`, {
+        notes: newNote || undefined
+      })
+      const data = response?.data || response
+      if (data) {
+        setInvestigationData(prev => ({ ...prev, [eventId]: data }))
+      }
+      await loadEvents()
+      if (selectedEvent?.id === eventId) {
+        setSelectedEvent(prev => prev ? { ...prev, status: 'investigating' } : null)
+      }
+    } catch (error) {
+      console.error('Failed to start investigation:', error)
+      setEvents(prev => prev.map(e =>
+        e.id === eventId ? { ...e, status: 'investigating' as const } : e
+      ))
+      if (selectedEvent?.id === eventId) {
+        setSelectedEvent(prev => prev ? { ...prev, status: 'investigating' } : null)
+      }
+    } finally {
+      setIsActionLoading(false)
+      setNewNote('')
+    }
+  }
+
+  const toggleSelection = (eventId: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(eventId)) {
+        next.delete(eventId)
+      } else {
+        next.add(eventId)
+      }
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredEvents.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filteredEvents.map(e => e.id)))
+    }
+  }
+
+  const handleBulkAction = async (action: 'acknowledge' | 'resolve' | 'false-positive') => {
+    if (selectedIds.size === 0) return
+    setIsBulkLoading(true)
+    try {
+      const promises = Array.from(selectedIds).map(id => {
+        const endpoint = `/v1/security/${id}/${action}`
+        return apiClient.post(endpoint, {
+          notes: `Bulk ${action} action`
+        }).catch(() => null)
+      })
+      await Promise.allSettled(promises)
+      await loadEvents()
+      setSelectedIds(new Set())
+    } catch (error) {
+      console.error(`Bulk ${action} failed:`, error)
+    } finally {
+      setIsBulkLoading(false)
     }
   }
 
@@ -298,6 +373,44 @@ export default function SecurityEventsPage() {
                 <option value="low">Low</option>
               </select>
             </div>
+
+            {/* Bulk Actions Bar */}
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-3 mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <span className="text-sm font-medium text-blue-700">
+                  {selectedIds.size} selected
+                </span>
+                <div className="flex gap-2 ml-auto">
+                  <button
+                    onClick={() => handleBulkAction('acknowledge')}
+                    disabled={isBulkLoading}
+                    className="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    {isBulkLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Acknowledge All'}
+                  </button>
+                  <button
+                    onClick={() => handleBulkAction('resolve')}
+                    disabled={isBulkLoading}
+                    className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    Resolve All
+                  </button>
+                  <button
+                    onClick={() => handleBulkAction('false-positive')}
+                    disabled={isBulkLoading}
+                    className="px-3 py-1.5 bg-slate-500 hover:bg-slate-600 text-white rounded text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    False Positive All
+                  </button>
+                  <button
+                    onClick={() => setSelectedIds(new Set())}
+                    className="px-3 py-1.5 text-slate-600 hover:bg-slate-200 rounded text-sm transition-colors"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Events List */}
@@ -324,10 +437,21 @@ export default function SecurityEventsPage() {
                     className={`p-4 bg-white rounded-lg border cursor-pointer transition-all ${
                       selectedEvent?.id === event.id
                         ? 'border-blue-500 ring-2 ring-blue-500/20'
+                        : selectedIds.has(event.id)
+                        ? 'border-blue-300 bg-blue-50/50'
                         : 'border-slate-200 hover:border-blue-300'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-4">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleSelection(event.id) }}
+                        className="mt-0.5 flex-shrink-0"
+                      >
+                        {selectedIds.has(event.id)
+                          ? <CheckSquare className="w-4 h-4 text-blue-500" />
+                          : <Square className="w-4 h-4 text-slate-300 hover:text-slate-400" />
+                        }
+                      </button>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-2">
                           <span className={`px-2 py-0.5 text-xs font-medium rounded border ${getSeverityColor(event.severity)}`}>
@@ -397,13 +521,23 @@ export default function SecurityEventsPage() {
                   <h3 className="text-sm font-semibold text-slate-900 mb-3">Quick Actions</h3>
                   <div className="flex gap-2">
                     {selectedEvent.status === 'triggered' && (
-                      <button
-                        onClick={() => handleAcknowledge(selectedEvent.id)}
-                        disabled={isActionLoading}
-                        className="flex-1 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
-                      >
-                        Acknowledge
-                      </button>
+                      <>
+                        <button
+                          onClick={() => handleAcknowledge(selectedEvent.id)}
+                          disabled={isActionLoading}
+                          className="flex-1 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                        >
+                          Acknowledge
+                        </button>
+                        <button
+                          onClick={() => handleInvestigate(selectedEvent.id)}
+                          disabled={isActionLoading}
+                          className="flex-1 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                        >
+                          <Microscope className="w-4 h-4" />
+                          Investigate
+                        </button>
+                      </>
                     )}
                     <button
                       onClick={() => handleResolve(selectedEvent.id)}
@@ -420,6 +554,19 @@ export default function SecurityEventsPage() {
                       False Positive
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* Investigation Results */}
+              {investigationData[selectedEvent.id] && (
+                <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                  <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                    <Microscope className="w-4 h-4 text-purple-600" />
+                    Investigation Results
+                  </h3>
+                  <pre className="p-3 bg-slate-900 text-green-400 rounded-lg text-xs overflow-x-auto max-h-48">
+                    {JSON.stringify(investigationData[selectedEvent.id], null, 2)}
+                  </pre>
                 </div>
               )}
 

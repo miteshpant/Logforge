@@ -21,7 +21,12 @@ import {
   ChevronRight,
   FolderOpen,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  X,
+  Users,
+  Link2,
+  CheckCircle,
+  Loader2
 } from 'lucide-react'
 
 interface Dashboard {
@@ -120,6 +125,61 @@ export default function DashboardsPage() {
   const [showTemplates, setShowTemplates] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showMenuFor, setShowMenuFor] = useState<string | null>(null)
+  const [showShareModal, setShowShareModal] = useState<string | null>(null)
+  const [shareEmail, setShareEmail] = useState('')
+  const [sharePermission, setSharePermission] = useState<'view' | 'edit'>('view')
+  const [shares, setShares] = useState<any[]>([])
+  const [isLoadingShares, setIsLoadingShares] = useState(false)
+  const [isSharing, setIsSharing] = useState(false)
+  const [shareSuccess, setShareSuccess] = useState(false)
+  const [shareLinkCopied, setShareLinkCopied] = useState(false)
+
+  // Share dashboard
+  const shareDashboard = async (dashboardId: string) => {
+    if (!shareEmail.trim()) return
+    try {
+      setIsSharing(true)
+      await apiClient.post(`/v1/dashboards/${dashboardId}/share`, {
+        email: shareEmail,
+        permission: sharePermission
+      })
+      setShareEmail('')
+      setShareSuccess(true)
+      setTimeout(() => setShareSuccess(false), 2000)
+      loadShares(dashboardId)
+    } catch (err) {
+      console.error('Failed to share dashboard:', err)
+    } finally {
+      setIsSharing(false)
+    }
+  }
+
+  // Load shares for a dashboard
+  const loadShares = async (dashboardId: string) => {
+    try {
+      setIsLoadingShares(true)
+      const response = await apiClient.get(`/v1/dashboards/${dashboardId}/shares`)
+      const data = response?.data?.shares || response?.data || []
+      setShares(Array.isArray(data) ? data : [])
+    } catch (err) {
+      console.error('Failed to load shares:', err)
+      setShares([])
+    } finally {
+      setIsLoadingShares(false)
+    }
+  }
+
+  const openShareModal = (dashboardId: string) => {
+    setShowShareModal(dashboardId)
+    setShowMenuFor(null)
+    loadShares(dashboardId)
+  }
+
+  const copyShareLink = (dashboardId: string) => {
+    navigator.clipboard.writeText(`${window.location.origin}/dashboards/${dashboardId}`)
+    setShareLinkCopied(true)
+    setTimeout(() => setShareLinkCopied(false), 2000)
+  }
 
   // Fetch dashboards
   useEffect(() => {
@@ -427,6 +487,7 @@ export default function DashboardsPage() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
+                              openShareModal(dashboard.id)
                             }}
                             className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700"
                           >
@@ -482,6 +543,97 @@ export default function DashboardsPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Share Modal */}
+        {showShareModal && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowShareModal(null)}>
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 w-full max-w-md mx-4 border border-white/10 shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+                  <Share2 className="w-5 h-5 text-blue-400" />
+                  Share Dashboard
+                </h2>
+                <button onClick={() => setShowShareModal(null)} className="text-slate-400 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Copy Link */}
+              <div className="mb-4">
+                <button
+                  onClick={() => copyShareLink(showShareModal)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-700/50 border border-white/10 rounded-lg text-slate-300 hover:bg-slate-700 transition-colors"
+                >
+                  {shareLinkCopied
+                    ? <><CheckCircle className="w-4 h-4 text-green-400" /> Link copied!</>
+                    : <><Link2 className="w-4 h-4" /> Copy Dashboard Link</>
+                  }
+                </button>
+              </div>
+
+              {/* Share with user */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-300 mb-2">Share with team member</label>
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    placeholder="user@example.com"
+                    value={shareEmail}
+                    onChange={(e) => setShareEmail(e.target.value)}
+                    className="flex-1 px-4 py-2 bg-slate-700/50 border border-white/10 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                    onKeyDown={(e) => e.key === 'Enter' && shareDashboard(showShareModal)}
+                  />
+                  <select
+                    value={sharePermission}
+                    onChange={(e) => setSharePermission(e.target.value as 'view' | 'edit')}
+                    className="px-3 py-2 bg-slate-700/50 border border-white/10 rounded-lg text-white text-sm"
+                  >
+                    <option value="view">View</option>
+                    <option value="edit">Edit</option>
+                  </select>
+                  <button
+                    onClick={() => shareDashboard(showShareModal)}
+                    disabled={!shareEmail.trim() || isSharing}
+                    className="px-4 py-2 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-lg font-medium hover:bg-blue-500/30 transition-colors disabled:opacity-50"
+                  >
+                    {isSharing ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Share'}
+                  </button>
+                </div>
+                {shareSuccess && (
+                  <p className="text-sm text-green-400 mt-2 flex items-center gap-1">
+                    <CheckCircle className="w-3.5 h-3.5" /> Shared successfully
+                  </p>
+                )}
+              </div>
+
+              {/* Current shares */}
+              <div>
+                <h3 className="text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
+                  <Users className="w-4 h-4" />
+                  Shared with
+                </h3>
+                {isLoadingShares ? (
+                  <div className="flex justify-center py-4">
+                    <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
+                  </div>
+                ) : shares.length === 0 ? (
+                  <p className="text-sm text-slate-500 py-3 text-center">Not shared with anyone yet</p>
+                ) : (
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {shares.map((share, i) => (
+                      <div key={i} className="flex items-center justify-between px-3 py-2 bg-slate-700/30 rounded-lg">
+                        <div>
+                          <p className="text-sm text-white">{share.email || share.user_email || 'User'}</p>
+                          <p className="text-xs text-slate-400 capitalize">{share.permission || 'view'}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
