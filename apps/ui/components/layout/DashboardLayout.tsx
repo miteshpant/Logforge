@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
@@ -33,6 +33,7 @@ import {
   LogOut,
   Building2,
   ChevronDown,
+  ChevronRight,
   Home,
   GitBranch,
   Clock,
@@ -50,136 +51,80 @@ import {
   UserCog,
   DollarSign,
   ClipboardCheck,
+  Eye,
+  Siren,
 } from 'lucide-react'
 import { TenantSelector } from '@/components/TenantSelector'
 import PWASupport from '@/components/PWASupport'
 
-const navigation = [
+interface NavItem {
+  name: string
+  href: string
+  icon: React.ComponentType<{ className?: string }>
+  badge?: string
+}
+
+interface NavSection {
+  id: string
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  items: NavItem[]
+}
+
+const navSections: NavSection[] = [
   {
-    name: 'Centrum',
-    href: '/centrum',
-    icon: Home,
-    description: 'Central command center'
-  },
-  // Observability Section
-  {
-    name: 'Service Map',
-    href: '/observability/service-map',
-    icon: GitBranch,
-    description: 'Interactive service dependencies'
-  },
-  {
-    name: 'Distributed Tracing',
-    href: '/observability/traces',
-    icon: Clock,
-    description: 'Request traces & waterfall'
-  },
-  {
-    name: 'APM Dashboard',
-    href: '/observability/apm',
-    icon: Gauge,
-    description: 'Application performance metrics'
-  },
-  {
-    name: 'Metrics',
-    href: '/observability/metrics',
-    icon: Radio,
-    description: 'Metrics explorer and visualization'
+    id: 'observe',
+    label: 'Observability',
+    icon: Eye,
+    items: [
+      { name: 'Service Map', href: '/observability/service-map', icon: GitBranch },
+      { name: 'Tracing', href: '/observability/traces', icon: Clock },
+      { name: 'APM', href: '/observability/apm', icon: Gauge },
+      { name: 'Metrics', href: '/observability/metrics', icon: Radio },
+      { name: 'Log Explorer', href: '/observability/logs', icon: ScrollText },
+      { name: 'Dashboards', href: '/dashboards', icon: LayoutDashboard },
+      { name: 'Anomaly Detection', href: '/anomaly-detection', icon: Brain },
+    ],
   },
   {
-    name: 'Dashboards',
-    href: '/dashboards',
-    icon: LayoutDashboard,
-    description: 'Custom dashboards and visualizations'
-  },
-  {
-    name: 'Log Explorer',
-    href: '/observability/logs',
-    icon: ScrollText,
-    description: 'Search & analyze logs'
-  },
-  {
-    name: 'Anomaly Detection',
-    href: '/anomaly-detection',
-    icon: Brain,
-    description: 'AI-powered anomaly detection'
-  },
-  // Alert Management Section
-  {
-    name: 'Alert Rules',
-    href: '/alerts/rules',
-    icon: AlertTriangle,
-    description: 'Configure alerting rules',
-    badge: 'New'
-  },
-  {
-    name: 'Alert Instances',
-    href: '/alerts/instances',
+    id: 'alerts',
+    label: 'Alerts',
     icon: BellRing,
-    description: 'Active & historical alerts'
+    items: [
+      { name: 'Alert Rules', href: '/alerts/rules', icon: AlertTriangle },
+      { name: 'Alert Instances', href: '/alerts/instances', icon: BellRing },
+      { name: 'Channels', href: '/alerts/channels', icon: Bell },
+    ],
   },
   {
-    name: 'Notification Channels',
-    href: '/alerts/channels',
-    icon: Bell,
-    description: 'Slack, PagerDuty, email, webhooks'
-  },
-  // Security Section
-  {
-    name: 'SIEM Dashboard',
-    href: '/security/siem',
+    id: 'security',
+    label: 'Security',
     icon: ShieldAlert,
-    description: 'Security operations center'
+    items: [
+      { name: 'SIEM Dashboard', href: '/security/siem', icon: ShieldAlert },
+      { name: 'Events', href: '/security/events', icon: Shield },
+      { name: 'Detection Rules', href: '/security/rules', icon: FileText },
+      { name: 'Threat Intel', href: '/security/threat-intel', icon: Globe },
+      { name: 'Threat Hunting', href: '/security/threat-hunting', icon: Crosshair },
+    ],
   },
   {
-    name: 'Security Events',
-    href: '/security/events',
-    icon: Shield,
-    description: 'Investigate security incidents'
+    id: 'settings',
+    label: 'Settings',
+    icon: Settings,
+    items: [
+      { name: 'Integrations', href: '/settings/integrations', icon: Puzzle },
+      { name: 'Roles & Access', href: '/settings/roles', icon: UserCog },
+      { name: 'Cost Analytics', href: '/settings/costs', icon: DollarSign },
+      { name: 'Compliance', href: '/settings/compliance', icon: ClipboardCheck },
+    ],
   },
-  {
-    name: 'Detection Rules',
-    href: '/security/rules',
-    icon: FileText,
-    description: 'Sigma detection rules'
-  },
-  {
-    name: 'Threat Intel',
-    href: '/security/threat-intel',
-    icon: Globe,
-    description: 'IOC & threat feeds'
-  },
-  {
-    name: 'Threat Hunting',
-    href: '/security/threat-hunting',
-    icon: Crosshair,
-    description: 'Proactive threat hunting'
-  },
-  // Settings & Admin
-  {
-    name: 'Integrations',
-    href: '/settings/integrations',
-    icon: Puzzle,
-    description: 'Connect external tools'
-  },
-  {
-    name: 'Role Management',
-    href: '/settings/roles',
-    icon: UserCog,
-    description: 'RBAC and permissions'
-  },
-  {
-    name: 'Cost Analytics',
-    href: '/settings/costs',
-    icon: DollarSign,
-    description: 'Usage and billing insights'
-  },
-  {
-    name: 'Compliance',
-    href: '/settings/compliance',
-    icon: ClipboardCheck,
-    description: 'SOC2, HIPAA, PCI compliance'
-  },
+]
+
+// Flat list for header title resolution
+const allNavItems = [
+  { name: 'Centrum', href: '/centrum' },
+  ...navSections.flatMap(s => s.items),
 ]
 
 interface DashboardLayoutProps {
@@ -190,6 +135,27 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { user, tenant, logout, userRole } = useAuth()
   const pathname = usePathname()
+
+  // Auto-expand sections that contain the active page
+  const initialExpanded = useMemo(() => {
+    const expanded: string[] = []
+    for (const section of navSections) {
+      if (section.items.some(item => pathname === item.href || pathname?.startsWith(item.href + '/'))) {
+        expanded.push(section.id)
+      }
+    }
+    return expanded
+  }, [pathname])
+
+  const [expandedSections, setExpandedSections] = useState<string[]>(initialExpanded)
+
+  const toggleSection = (sectionId: string) => {
+    setExpandedSections(prev =>
+      prev.includes(sectionId)
+        ? prev.filter(id => id !== sectionId)
+        : [...prev, sectionId]
+    )
+  }
 
   const handleLogout = async () => {
     try {
@@ -203,7 +169,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     <div className="min-h-screen bg-slate-50 flex">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         >
@@ -242,48 +208,95 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto" data-testid="main-navigation">
-            {navigation.map((item) => {
-              const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={`
-                    group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200
-                    ${isActive 
-                      ? 'bg-blue-50 text-blue-700 border border-blue-200' 
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                    }
-                  `}
-                  onClick={() => setSidebarOpen(false)}
-                  data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
-                >
-                  <item.icon className={`
-                    flex-shrink-0 w-5 h-5 mr-3 transition-colors
-                    ${isActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-500'}
-                  `} />
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="truncate">{item.name}</span>
-                      {item.badge && (
-                        <Badge 
-                          variant={item.badge === 'New' ? 'default' : 'secondary'}
-                          className="ml-2 text-xs"
-                          data-testid={`badge-${item.badge.toLowerCase()}`}
-                        >
-                          {item.badge}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-500 mt-0.5 group-hover:text-slate-600">
-                      {item.description}
-                    </p>
+          <nav className="flex-1 px-3 py-4 overflow-y-auto" data-testid="main-navigation">
+            {/* Centrum - always visible at top */}
+            <Link
+              href="/centrum"
+              className={`
+                group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 mb-3
+                ${pathname === '/centrum'
+                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }
+              `}
+              onClick={() => setSidebarOpen(false)}
+              data-testid="nav-centrum"
+            >
+              <Home className={`flex-shrink-0 w-5 h-5 mr-3 ${pathname === '/centrum' ? 'text-blue-600' : 'text-slate-400'}`} />
+              <span>Centrum</span>
+            </Link>
+
+            {/* Grouped sections */}
+            <div className="space-y-1">
+              {navSections.map((section) => {
+                const isExpanded = expandedSections.includes(section.id)
+                const hasActiveChild = section.items.some(
+                  item => pathname === item.href || pathname?.startsWith(item.href + '/')
+                )
+
+                return (
+                  <div key={section.id}>
+                    {/* Section header */}
+                    <button
+                      onClick={() => toggleSection(section.id)}
+                      className={`
+                        w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200
+                        ${hasActiveChild
+                          ? 'text-blue-700 bg-blue-50/50'
+                          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+                        }
+                      `}
+                      data-testid={`nav-section-${section.id}`}
+                    >
+                      <div className="flex items-center">
+                        <section.icon className={`flex-shrink-0 w-4 h-4 mr-2.5 ${hasActiveChild ? 'text-blue-600' : 'text-slate-400'}`} />
+                        <span>{section.label}</span>
+                      </div>
+                      {isExpanded
+                        ? <ChevronDown className="w-4 h-4 text-slate-400" />
+                        : <ChevronRight className="w-4 h-4 text-slate-400" />
+                      }
+                    </button>
+
+                    {/* Section items */}
+                    {isExpanded && (
+                      <div className="ml-4 pl-3 border-l border-slate-200 mt-1 mb-2 space-y-0.5">
+                        {section.items.map((item) => {
+                          const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
+                          return (
+                            <Link
+                              key={item.name}
+                              href={item.href}
+                              className={`
+                                group flex items-center px-3 py-1.5 text-sm rounded-lg transition-all duration-200
+                                ${isActive
+                                  ? 'bg-blue-50 text-blue-700 font-medium'
+                                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                                }
+                              `}
+                              onClick={() => setSidebarOpen(false)}
+                              data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
+                            >
+                              <item.icon className={`flex-shrink-0 w-4 h-4 mr-2.5 ${isActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-500'}`} />
+                              <span className="truncate">{item.name}</span>
+                              {item.badge && (
+                                <Badge
+                                  variant={item.badge === 'New' ? 'default' : 'secondary'}
+                                  className="ml-auto text-[10px] px-1.5 py-0"
+                                  data-testid={`badge-${item.badge.toLowerCase()}`}
+                                >
+                                  {item.badge}
+                                </Badge>
+                              )}
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
-                </Link>
-              )
-            })}
+                )
+              })}
+            </div>
           </nav>
 
           {/* User menu */}
@@ -307,22 +320,22 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   </div>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent 
-                align="end" 
+              <DropdownMenuContent
+                align="end"
                 className="w-56 bg-white border border-slate-200 shadow-lg rounded-md p-1 z-50"
                 style={{ backdropFilter: 'none' }}
               >
                 <DropdownMenuLabel className="px-3 py-2 text-sm font-semibold text-slate-900 bg-slate-50">
                   Account
                 </DropdownMenuLabel>
-                <DropdownMenuItem 
+                <DropdownMenuItem
                   data-testid="profile-settings"
                   className="flex items-center px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer rounded-sm"
                 >
                   <User className="w-4 h-4 mr-2" />
                   Profile Settings
                 </DropdownMenuItem>
-                <DropdownMenuItem 
+                <DropdownMenuItem
                   data-testid="preferences"
                   className="flex items-center px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer rounded-sm"
                 >
@@ -330,8 +343,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   Preferences
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="my-1 border-slate-200" />
-                <DropdownMenuItem 
-                  onClick={handleLogout} 
+                <DropdownMenuItem
+                  onClick={handleLogout}
                   data-testid="logout-button"
                   className="flex items-center px-3 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 cursor-pointer rounded-sm font-medium"
                 >
@@ -358,11 +371,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               >
                 <Menu className="w-5 h-5" />
               </Button>
-              
+
               {/* Breadcrumb or page title can go here */}
               <div className="hidden sm:block">
                 <h2 className="text-xl font-semibold text-slate-900">
-                  {navigation.find(item => pathname === item.href || pathname?.startsWith(item.href + '/'))?.name || 'Dashboard'}
+                  {allNavItems.find(item => pathname === item.href || pathname?.startsWith(item.href + '/'))?.name || 'Dashboard'}
                 </h2>
               </div>
             </div>
@@ -371,10 +384,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <div className="flex items-center space-x-3">
               {/* Global Time Selector */}
               <GlobalTimeSelector variant="compact" showRefresh={true} />
-              
+
               {/* Tenant Selector */}
               <TenantSelector />
-              
+
               {/* Settings */}
               <Button variant="ghost" size="sm">
                 <Settings className="w-5 h-5" />
