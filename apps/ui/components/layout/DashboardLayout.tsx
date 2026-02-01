@@ -87,6 +87,7 @@ const navSections: NavSection[] = [
       { name: 'Metrics', href: '/observability/metrics', icon: Radio },
       { name: 'Log Explorer', href: '/observability/logs', icon: ScrollText },
       { name: 'Dashboards', href: '/dashboards', icon: LayoutDashboard },
+      { name: 'System Intelligence', href: '/dashboards/system', icon: Database },
       { name: 'Anomaly Detection', href: '/anomaly-detection', icon: Brain },
     ],
   },
