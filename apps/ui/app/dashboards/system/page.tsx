@@ -258,7 +258,7 @@ function ErrorsByServiceWidget({ data, isLoading }: { data: ErrorByService[]; is
             <div key={idx}>
               <div className="flex items-center justify-between text-sm mb-1">
                 <span className="text-slate-300 font-medium truncate max-w-[180px]">{item.service || 'unknown'}</span>
-                <span className="text-red-600 font-bold">{item.error_count.toLocaleString()}</span>
+                <span className="text-red-400 font-bold">{item.error_count.toLocaleString()}</span>
               </div>
               <div className="h-2 bg-slate-800/30 rounded-full overflow-hidden">
                 <div
@@ -292,7 +292,7 @@ function ResponseTimeTrendsWidget({ data, isLoading }: { data: TimeSeriesBucket[
                 <div key={idx} className="flex-1 flex flex-col items-center justify-end group relative h-full">
                   {/* P95 bar (background) */}
                   <div
-                    className="w-full bg-blue-200 rounded-t absolute bottom-0"
+                    className="w-full bg-blue-500/30 rounded-t absolute bottom-0"
                     style={{ height: `${Math.max(p95Height, 2)}%` }}
                   />
                   {/* Avg bar (foreground) */}
@@ -313,7 +313,7 @@ function ResponseTimeTrendsWidget({ data, isLoading }: { data: TimeSeriesBucket[
               <span>Avg</span>
             </div>
             <div className="flex items-center gap-1">
-              <div className="w-3 h-2 bg-blue-200 rounded" />
+              <div className="w-3 h-2 bg-blue-500/30 rounded" />
               <span>P95</span>
             </div>
           </div>
@@ -365,7 +365,7 @@ function TopErrorMessagesWidget({ data, isLoading }: { data: TopErrorMessage[]; 
         <div className="space-y-2 max-h-[220px] overflow-y-auto">
           {data.map((item, idx) => (
             <div key={idx} className="flex items-start gap-2 p-2 bg-slate-800/50 rounded-lg">
-              <span className="text-xs font-mono text-red-500 bg-red-50 px-1.5 py-0.5 rounded shrink-0">
+              <span className="text-xs font-mono text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded shrink-0">
                 {item.error_count}x
               </span>
               <p className="text-xs text-slate-300 line-clamp-2 break-all">{item.msg || 'Unknown error'}</p>
@@ -412,7 +412,7 @@ function ServiceHealthMatrixWidget({ data, isLoading }: { data: ServiceHealthEnt
             </thead>
             <tbody>
               {services.map(([svc, counts]) => (
-                <tr key={svc} className="border-b border-slate-100 hover:bg-white/5">
+                <tr key={svc} className="border-b border-white/5 hover:bg-white/5">
                   <td className="py-1.5 text-slate-300 font-medium truncate max-w-[120px]">{svc}</td>
                   {levels.map(l => {
                     const count = counts[l] || 0
@@ -457,9 +457,9 @@ function SlowestEndpointsWidget({ data, isLoading }: { data: SlowEndpoint[]; isL
                 </div>
               </div>
               <span className={`text-sm font-bold ${
-                item.p95_response_time > 2000 ? 'text-red-600' :
-                item.p95_response_time > 500 ? 'text-orange-600' :
-                'text-green-600'
+                item.p95_response_time > 2000 ? 'text-red-400' :
+                item.p95_response_time > 500 ? 'text-orange-400' :
+                'text-green-400'
               }`}>
                 {formatMs(item.p95_response_time)}
               </span>
@@ -474,23 +474,23 @@ function SlowestEndpointsWidget({ data, isLoading }: { data: SlowEndpoint[]; isL
 function SecurityPatternsWidget({ data, isLoading }: { data: SecurityPattern[]; isLoading: boolean }) {
   const totalEvents = data.reduce((s, d) => s + d.security_events, 0)
   return (
-    <WidgetShell title="Security Events (Regex)" icon={Shield} iconColor="text-red-600" isLoading={isLoading}>
+    <WidgetShell title="Security Events (Regex)" icon={Shield} iconColor="text-red-400" isLoading={isLoading}>
       {data.length === 0 ? (
         <div className="text-center py-4">
           <Shield className="w-8 h-8 text-green-400 mx-auto mb-2" />
-          <p className="text-sm text-green-600 font-medium">No suspicious patterns</p>
+          <p className="text-sm text-green-400 font-medium">No suspicious patterns</p>
         </div>
       ) : (
         <>
-          <p className="text-lg font-bold text-red-600 mb-3">{totalEvents.toLocaleString()} <span className="text-sm font-normal text-slate-400">security events</span></p>
+          <p className="text-lg font-bold text-red-400 mb-3">{totalEvents.toLocaleString()} <span className="text-sm font-normal text-slate-400">security events</span></p>
           <div className="space-y-2 max-h-[180px] overflow-y-auto">
             {data.map((item, idx) => (
-              <div key={idx} className="flex items-center justify-between p-2 bg-red-50 rounded-lg">
+              <div key={idx} className="flex items-center justify-between p-2 bg-red-500/10 rounded-lg">
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-mono text-slate-300">{item.source_ip || 'unknown'}</p>
                   <p className="text-[10px] text-slate-400">{item.service}</p>
                 </div>
-                <span className="text-xs font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded">
+                <span className="text-xs font-bold text-red-400 bg-red-500/20 px-2 py-0.5 rounded">
                   {item.security_events}
                 </span>
               </div>
@@ -548,7 +548,7 @@ function InfraUtilizationWidget({ data, isLoading }: { data: InfraMetric[]; isLo
               </div>
             </div>
           ))}
-          <div className="flex items-center gap-3 pt-2 border-t border-slate-100 text-[10px] text-slate-400">
+          <div className="flex items-center gap-3 pt-2 border-t border-white/5 text-[10px] text-slate-400">
             <div className="flex items-center gap-1"><div className="w-2 h-2 bg-blue-500 rounded" /> CPU</div>
             <div className="flex items-center gap-1"><div className="w-2 h-2 bg-purple-500 rounded" /> Memory</div>
             <div className="flex items-center gap-1"><div className="w-2 h-2 bg-orange-500 rounded" /> Disk</div>
@@ -663,13 +663,13 @@ export default function SystemIntelligenceDashboard() {
         {/* Query Engine Badges */}
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-slate-400">Powered by:</span>
-          <span className="px-2 py-1 text-[10px] font-medium bg-blue-50 text-blue-700 rounded-full border border-blue-200">
+          <span className="px-2 py-1 text-[10px] font-medium bg-blue-500/10 text-blue-400 rounded-full border border-blue-500/30">
             POST /v1/query/advanced
           </span>
-          <span className="px-2 py-1 text-[10px] font-medium bg-green-50 text-green-700 rounded-full border border-green-200">
+          <span className="px-2 py-1 text-[10px] font-medium bg-green-500/10 text-green-400 rounded-full border border-green-500/30">
             POST /v1/query/timeseries
           </span>
-          <span className="px-2 py-1 text-[10px] font-medium bg-purple-50 text-purple-700 rounded-full border border-purple-200">
+          <span className="px-2 py-1 text-[10px] font-medium bg-purple-500/10 text-purple-400 rounded-full border border-purple-500/30">
             POST /v1/query/aggregate
           </span>
           <span className="px-2 py-1 text-[10px] font-medium bg-slate-800/50 text-slate-400 rounded-full border border-white/5">

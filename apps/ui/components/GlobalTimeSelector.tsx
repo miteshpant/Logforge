@@ -108,21 +108,21 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
         <Button
           variant="outline"
           onClick={() => setIsOpen(!isOpen)}
-          className="h-9 px-3 bg-white/95 backdrop-blur-sm border-slate-200/60 hover:bg-slate-50/80 hover:border-slate-300/80 transition-all duration-200"
+          className="h-9 px-3 bg-slate-800/80 backdrop-blur-sm border-white/10 hover:bg-slate-700/80 hover:border-white/20 transition-all duration-200"
           data-testid="time-range-button"
         >
-          <Clock className="w-4 h-4 mr-2 text-slate-600" />
-          <span className="font-medium text-slate-700" data-testid="current-time-range">{currentTimeRange.label}</span>
-          <ChevronDown className={`w-4 h-4 ml-2 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+          <Clock className="w-4 h-4 mr-2 text-slate-400" />
+          <span className="font-medium text-slate-300" data-testid="current-time-range">{currentTimeRange.label}</span>
+          <ChevronDown className={`w-4 h-4 ml-2 text-slate-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
         </Button>
 
         {isOpen && (
-          <Card className="absolute top-full right-0 mt-16 w-80 shadow-xl border-0 bg-white/95 backdrop-blur-md z-50 animate-in slide-in-from-top-2 duration-200">
+          <Card className="absolute top-full right-0 mt-16 w-80 shadow-xl border-white/10 bg-slate-800/95 backdrop-blur-md z-50 animate-in slide-in-from-top-2 duration-200">
             <CardContent className="p-3">
               {!showCustomPicker ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold text-slate-900 text-sm">Select Time Range</h3>
+                    <h3 className="font-semibold text-white text-sm">Select Time Range</h3>
                   </div>
 
                   <div className="space-y-1">
@@ -132,8 +132,8 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
                         onClick={() => handleTimeRangeSelect(range)}
                         className={`w-full flex items-center justify-between p-2 rounded-lg transition-all duration-150 ${
                           currentTimeRange.value === range.value
-                            ? 'bg-blue-500 text-white shadow-sm'
-                            : 'hover:bg-slate-100 text-slate-700'
+                            ? 'bg-blue-500/20 text-blue-400 shadow-sm'
+                            : 'hover:bg-white/5 text-slate-300'
                         }`}
                         data-testid={`time-range-${range.value}`}
                       >
@@ -149,11 +149,11 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
                   </div>
 
                   {/* Custom Range Button */}
-                  <div className="pt-2 border-t border-slate-200">
+                  <div className="pt-2 border-t border-white/10">
                     <Button
                       variant="outline"
                       onClick={() => setShowCustomPicker(true)}
-                      className="w-full justify-between text-sm hover:bg-slate-50"
+                      className="w-full justify-between text-sm hover:bg-white/5"
                       data-testid="custom-range-button"
                     >
                       <div className="flex items-center space-x-2">
@@ -167,12 +167,12 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
               ) : (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-slate-900 text-sm">Custom Range</h3>
+                    <h3 className="font-semibold text-white text-sm">Custom Range</h3>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => setShowCustomPicker(false)}
-                      className="text-slate-500 hover:text-slate-700 h-auto py-1"
+                      className="text-slate-400 hover:text-white h-auto py-1"
                     >
                       Back
                     </Button>
@@ -180,23 +180,23 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
 
                   <div className="space-y-2">
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Start Date & Time</label>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">Start Date & Time</label>
                       <input
                         type="datetime-local"
                         value={customStart}
                         onChange={(e) => setCustomStart(e.target.value)}
-                        className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full px-2 py-1.5 text-sm text-white bg-slate-700/50 border border-white/10 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         data-testid="custom-start-input"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">End Date & Time</label>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">End Date & Time</label>
                       <input
                         type="datetime-local"
                         value={customEnd}
                         onChange={(e) => setCustomEnd(e.target.value)}
-                        className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full px-2 py-1.5 text-sm text-white bg-slate-700/50 border border-white/10 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         data-testid="custom-end-input"
                       />
                     </div>
@@ -204,7 +204,7 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
                     <Button
                       onClick={handleCustomRangeSubmit}
                       disabled={!customStart || !customEnd}
-                      className="w-full bg-blue-500 hover:bg-blue-600 text-white text-sm py-2 rounded-lg"
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm py-2 rounded-lg"
                       data-testid="apply-custom-range"
                     >
                       Apply Custom Range
@@ -221,13 +221,13 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
 
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
-      <div className="flex items-center space-x-3 bg-gradient-to-r from-white/90 to-slate-50/90 backdrop-blur-md rounded-xl border border-slate-200/60 shadow-sm p-3">
+      <div className="flex items-center space-x-3 bg-slate-800/80 backdrop-blur-md rounded-xl border border-white/10 shadow-sm p-3">
 
         {/* Time Range Button */}
         <Button
           variant="ghost"
           onClick={() => setIsOpen(!isOpen)}
-          className="h-auto p-3 bg-white/80 hover:bg-white/90 border border-slate-200/80 hover:border-slate-300/80 rounded-lg transition-all duration-200 group"
+          className="h-auto p-3 bg-slate-700/50 hover:bg-slate-700/80 border border-white/10 hover:border-white/20 rounded-lg transition-all duration-200 group"
         >
           <div className="flex items-center space-x-3">
             <div className="flex items-center space-x-2">
@@ -235,20 +235,20 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
                 <Calendar className="w-4 h-4" />
               </div>
               <div className="text-left">
-                <div className="font-semibold text-slate-900 text-sm">{currentTimeRange.label}</div>
+                <div className="font-semibold text-white text-sm">{currentTimeRange.label}</div>
                 {currentTimeRange.description && (
-                  <div className="text-xs text-slate-500">{currentTimeRange.description}</div>
+                  <div className="text-xs text-slate-400">{currentTimeRange.description}</div>
                 )}
               </div>
             </div>
-            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 group-hover:text-slate-600 ${isOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 group-hover:text-slate-300 ${isOpen ? 'rotate-180' : ''}`} />
           </div>
         </Button>
 
         {/* Live Status Indicator */}
-        <div className="flex items-center space-x-2 px-3 py-2 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200/60">
+        <div className="flex items-center space-x-2 px-3 py-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span className="text-xs font-medium text-green-700">Live Data</span>
+          <span className="text-xs font-medium text-emerald-400">Live Data</span>
         </div>
 
         {/* Refresh Button */}
@@ -258,9 +258,9 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
             size="sm"
             onClick={refreshData}
             disabled={isRefreshing}
-            className="h-auto p-2.5 bg-white/80 hover:bg-white/90 border border-slate-200/80 hover:border-slate-300/80 rounded-lg transition-all duration-200"
+            className="h-auto p-2.5 bg-slate-700/50 hover:bg-slate-700/80 border border-white/10 hover:border-white/20 rounded-lg transition-all duration-200"
           >
-            <RefreshCw className={`w-4 h-4 text-slate-600 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 text-slate-400 ${isRefreshing ? 'animate-spin' : ''}`} />
           </Button>
         )}
 
@@ -275,12 +275,12 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <Card className="absolute top-full left-0 mt-2 w-full max-w-md shadow-2xl border-0 bg-white/95 backdrop-blur-xl z-50 animate-in slide-in-from-top-2 duration-300">
+        <Card className="absolute top-full left-0 mt-2 w-full max-w-md shadow-2xl border-white/10 bg-slate-800/95 backdrop-blur-xl z-50 animate-in slide-in-from-top-2 duration-300">
           <CardContent className="p-4">
             {!showCustomPicker ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-slate-900">Select Time Range</h3>
+                  <h3 className="font-semibold text-white">Select Time Range</h3>
                   <Badge variant="outline" className="text-xs">
                     {availableRanges.length} presets
                   </Badge>
@@ -293,31 +293,31 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
                       onClick={() => handleTimeRangeSelect(range)}
                       className={`group p-3 rounded-lg border-2 transition-all duration-200 text-left ${
                         currentTimeRange.value === range.value
-                          ? 'border-blue-500 bg-blue-50 shadow-sm'
-                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                          ? 'border-blue-500/50 bg-blue-500/10 shadow-sm'
+                          : 'border-white/5 hover:border-white/10 hover:bg-white/5'
                       }`}
                     >
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center space-x-2">
                           {getRangeIcon(range.value)}
-                          <span className="font-medium text-slate-900 text-sm">{range.label}</span>
+                          <span className="font-medium text-white text-sm">{range.label}</span>
                         </div>
                         {currentTimeRange.value === range.value && (
                           <CheckCircle className="w-4 h-4 text-blue-500" />
                         )}
                       </div>
                       {range.description && (
-                        <p className="text-xs text-slate-500">{range.description}</p>
+                        <p className="text-xs text-slate-400">{range.description}</p>
                       )}
                     </button>
                   ))}
                 </div>
 
-                <div className="pt-3 border-t border-slate-200">
+                <div className="pt-3 border-t border-white/10">
                   <Button
                     variant="outline"
                     onClick={() => setShowCustomPicker(true)}
-                    className="w-full justify-between group hover:bg-gradient-to-r hover:from-slate-50 hover:to-slate-100"
+                    className="w-full justify-between group hover:bg-white/5"
                   >
                     <div className="flex items-center space-x-2">
                       <Calendar className="w-4 h-4" />
@@ -330,12 +330,12 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
             ) : (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-slate-900">Custom Range</h3>
+                  <h3 className="font-semibold text-white">Custom Range</h3>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setShowCustomPicker(false)}
-                    className="text-slate-500 hover:text-slate-700"
+                    className="text-slate-400 hover:text-white"
                   >
                     Back
                   </Button>
@@ -343,29 +343,29 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Start Date & Time</label>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Start Date & Time</label>
                     <input
                       type="datetime-local"
                       value={customStart}
                       onChange={(e) => setCustomStart(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                      className="w-full px-3 py-2 text-white bg-slate-700/50 border border-white/10 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">End Date & Time</label>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">End Date & Time</label>
                     <input
                       type="datetime-local"
                       value={customEnd}
                       onChange={(e) => setCustomEnd(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                      className="w-full px-3 py-2 text-white bg-slate-700/50 border border-white/10 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     />
                   </div>
 
                   <Button
                     onClick={handleCustomRangeSubmit}
                     disabled={!customStart || !customEnd}
-                    className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium py-2 rounded-lg transition-all duration-200"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg transition-all duration-200"
                   >
                     Apply Custom Range
                   </Button>

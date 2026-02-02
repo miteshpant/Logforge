@@ -343,7 +343,7 @@ export default function NotificationChannelsPage() {
                   <input
                     type="text"
                     placeholder="e.g., Ops Team Slack"
-                    className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   />
                 </div>
 
@@ -355,7 +355,7 @@ export default function NotificationChannelsPage() {
                       <input
                         type="text"
                         placeholder="https://hooks.slack.com/services/..."
-                        className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
+                        className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 text-sm"
                       />
                     </div>
                     <div>
@@ -363,7 +363,7 @@ export default function NotificationChannelsPage() {
                       <input
                         type="text"
                         placeholder="#alerts"
-                        className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
+                        className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 text-sm"
                       />
                     </div>
                   </div>

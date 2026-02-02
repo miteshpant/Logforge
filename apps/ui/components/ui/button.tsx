@@ -11,14 +11,14 @@ export interface ButtonProps
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = "default", size = "default", asChild = false, children, ...props }, ref) => {
     const buttonClasses = cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-950 disabled:pointer-events-none disabled:opacity-50",
+      "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-400 disabled:pointer-events-none disabled:opacity-50",
       {
-        "bg-gray-900 text-gray-50 shadow hover:bg-gray-900/90": variant === "default",
-        "bg-red-500 text-gray-50 shadow-sm hover:bg-red-500/90": variant === "destructive",
-        "border border-gray-200 bg-white shadow-sm hover:bg-gray-100 hover:text-gray-900": variant === "outline",
-        "bg-gray-100 text-gray-900 shadow-sm hover:bg-gray-100/80": variant === "secondary",
-        "hover:bg-gray-100 hover:text-gray-900": variant === "ghost",
-        "text-gray-900 underline-offset-4 hover:underline": variant === "link",
+        "bg-blue-600 text-white shadow hover:bg-blue-700": variant === "default",
+        "bg-red-600 text-white shadow-sm hover:bg-red-700": variant === "destructive",
+        "border border-white/10 bg-transparent shadow-sm hover:bg-white/5 text-slate-300 hover:text-white": variant === "outline",
+        "bg-slate-800 text-slate-300 shadow-sm hover:bg-slate-700 hover:text-white": variant === "secondary",
+        "hover:bg-white/5 text-slate-300 hover:text-white": variant === "ghost",
+        "text-blue-400 underline-offset-4 hover:underline hover:text-blue-300": variant === "link",
       },
       {
         "h-9 px-4 py-2": size === "default",

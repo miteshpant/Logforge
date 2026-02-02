@@ -265,11 +265,11 @@ export const AiChatAssistant: React.FC<AiChatAssistantProps> = ({
 
   const getInsightColor = (type: string) => {
     switch (type) {
-      case 'metric': return 'bg-blue-100 text-blue-800 border-blue-200'
-      case 'alert': return 'bg-red-100 text-red-800 border-red-200'
-      case 'prediction': return 'bg-purple-100 text-purple-800 border-purple-200'
-      case 'recommendation': return 'bg-green-100 text-green-800 border-green-200'
-      default: return 'bg-gray-100 text-gray-800 border-gray-200'
+      case 'metric': return 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+      case 'alert': return 'bg-red-500/10 text-red-400 border-red-500/30'
+      case 'prediction': return 'bg-purple-500/10 text-purple-400 border-purple-500/30'
+      case 'recommendation': return 'bg-green-500/10 text-green-400 border-green-500/30'
+      default: return 'bg-slate-500/10 text-slate-400 border-slate-500/30'
     }
   }
 
@@ -427,7 +427,7 @@ export const AiChatAssistant: React.FC<AiChatAssistantProps> = ({
         </div>
         
         {/* Input */}
-        <div className="border-t border-slate-200 p-4 bg-white">
+        <div className="border-t border-white/10 p-4 bg-slate-800">
           <div className="flex items-center space-x-2">
             <div className="flex-1 relative">
               <Input

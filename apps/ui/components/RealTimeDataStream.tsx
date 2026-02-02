@@ -384,11 +384,11 @@ export const RealTimeDataStream: React.FC<RealTimeDataStreamProps> = ({
     
     switch (type) {
       case 'log': return 'bg-blue-100 border-blue-200 text-blue-800'
-      case 'alert': return 'bg-yellow-100 border-yellow-200 text-yellow-800'
-      case 'metric': return 'bg-green-100 border-green-200 text-green-800'
-      case 'security': return 'bg-purple-100 border-purple-200 text-purple-800'
-      case 'ai_insight': return 'bg-indigo-100 border-indigo-200 text-indigo-800'
-      default: return 'bg-gray-100 border-gray-200 text-gray-800'
+      case 'alert': return 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
+      case 'metric': return 'bg-green-500/10 border-green-500/30 text-green-400'
+      case 'security': return 'bg-purple-500/10 border-purple-500/30 text-purple-400'
+      case 'ai_insight': return 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400'
+      default: return 'bg-slate-500/10 border-slate-500/30 text-slate-400'
     }
   }
 
@@ -398,7 +398,7 @@ export const RealTimeDataStream: React.FC<RealTimeDataStreamProps> = ({
       case 'high': return 'bg-orange-500'
       case 'medium': return 'bg-yellow-500'
       case 'low': return 'bg-green-500'
-      default: return 'bg-gray-500'
+      default: return 'bg-slate-500'
     }
   }
 

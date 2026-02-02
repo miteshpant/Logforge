@@ -271,7 +271,7 @@ export default function ThreatHuntingPage() {
       case 'running': return 'bg-blue-500/10 text-blue-400 border-blue-500/30'
       case 'completed': return 'bg-green-500/10 text-green-400 border-green-500/30'
       case 'failed': return 'bg-red-500/10 text-red-400 border-red-500/30'
-      default: return 'bg-slate-800/500/10 text-slate-400 border-slate-500/30'
+      default: return 'bg-slate-500/10 text-slate-400 border-slate-500/30'
     }
   }
 

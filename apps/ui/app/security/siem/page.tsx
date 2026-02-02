@@ -175,11 +175,11 @@ export default function SIEMDashboardPage() {
 
   const getSeverityColor = (severity: string) => {
     switch (severity?.toLowerCase()) {
-      case 'critical': return 'text-red-500 bg-red-500/100/10 border-red-500/30'
-      case 'high': return 'text-orange-500 bg-orange-500/100/10 border-orange-500/30'
-      case 'medium': return 'text-yellow-500 bg-yellow-500/100/10 border-yellow-500/30'
-      case 'low': return 'text-blue-500 bg-blue-500/100/10 border-blue-500/30'
-      default: return 'text-slate-500 bg-slate-500/100/10 border-slate-500/30'
+      case 'critical': return 'text-red-500 bg-red-500/10 border-red-500/30'
+      case 'high': return 'text-orange-500 bg-orange-500/10 border-orange-500/30'
+      case 'medium': return 'text-yellow-500 bg-yellow-500/10 border-yellow-500/30'
+      case 'low': return 'text-blue-500 bg-blue-500/10 border-blue-500/30'
+      default: return 'text-slate-500 bg-slate-500/10 border-slate-500/30'
     }
   }
 
@@ -187,15 +187,15 @@ export default function SIEMDashboardPage() {
     switch (status?.toLowerCase()) {
       case 'triggered':
       case 'new':
-        return 'bg-red-500/100/20 text-red-400 border-red-500/30'
+        return 'bg-red-500/20 text-red-400 border-red-500/30'
       case 'investigating':
-        return 'bg-yellow-500/100/20 text-yellow-400 border-yellow-500/30'
+        return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
       case 'resolved':
         return 'bg-green-500/20 text-green-400 border-green-500/30'
       case 'false_positive':
-        return 'bg-slate-500/100/20 text-slate-400 border-slate-500/30'
+        return 'bg-slate-500/20 text-slate-400 border-slate-500/30'
       default:
-        return 'bg-slate-500/100/20 text-slate-400 border-slate-500/30'
+        return 'bg-slate-500/20 text-slate-400 border-slate-500/30'
     }
   }
 
@@ -288,7 +288,7 @@ export default function SIEMDashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-6">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-red-500/100/10 rounded-lg">
+              <div className="p-3 bg-red-500/10 rounded-lg">
                 <ShieldAlert className="w-6 h-6 text-red-500" />
               </div>
               <div>
@@ -302,7 +302,7 @@ export default function SIEMDashboardPage() {
 
           <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-6">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-orange-500/100/10 rounded-lg">
+              <div className="p-3 bg-orange-500/10 rounded-lg">
                 <AlertTriangle className="w-6 h-6 text-orange-500" />
               </div>
               <div>
@@ -316,7 +316,7 @@ export default function SIEMDashboardPage() {
 
           <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-6">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-blue-500/100/10 rounded-lg">
+              <div className="p-3 bg-blue-500/10 rounded-lg">
                 <Shield className="w-6 h-6 text-blue-500" />
               </div>
               <div>
@@ -330,7 +330,7 @@ export default function SIEMDashboardPage() {
 
           <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-6">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-purple-500/100/10 rounded-lg">
+              <div className="p-3 bg-purple-500/10 rounded-lg">
                 <Target className="w-6 h-6 text-purple-500" />
               </div>
               <div>
@@ -385,10 +385,10 @@ export default function SIEMDashboardPage() {
                 const total = Object.values(dashboard.events_by_severity).reduce((s, v) => s + v, 0) || 1
                 const pct = ((count / total) * 100).toFixed(1)
                 const colors: Record<string, { bg: string; bar: string; text: string }> = {
-                  critical: { bg: 'bg-red-500/10', bar: 'bg-red-500/100', text: 'text-red-400' },
-                  high: { bg: 'bg-orange-500/10', bar: 'bg-orange-500/100', text: 'text-orange-400' },
-                  medium: { bg: 'bg-yellow-500/10', bar: 'bg-yellow-500/100', text: 'text-yellow-400' },
-                  low: { bg: 'bg-blue-500/10', bar: 'bg-blue-500/100', text: 'text-blue-400' }
+                  critical: { bg: 'bg-red-500/10', bar: 'bg-red-500', text: 'text-red-400' },
+                  high: { bg: 'bg-orange-500/10', bar: 'bg-orange-500', text: 'text-orange-400' },
+                  medium: { bg: 'bg-yellow-500/10', bar: 'bg-yellow-500', text: 'text-yellow-400' },
+                  low: { bg: 'bg-blue-500/10', bar: 'bg-blue-500', text: 'text-blue-400' }
                 }
                 const c = colors[sev]
                 return (

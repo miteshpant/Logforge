@@ -66,9 +66,9 @@ export default function AnomalyFeedback({ anomalyId, onSubmitSuccess }: AnomalyF
   }
 
   return (
-    <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4 space-y-4">
+    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-4">
       <div>
-        <h3 className="text-sm font-medium text-gray-300 mb-3">Was this detection accurate?</h3>
+        <h3 className="text-sm font-medium text-slate-300 mb-3">Was this detection accurate?</h3>
 
         <div className="grid grid-cols-2 gap-2">
           <button
@@ -76,7 +76,7 @@ export default function AnomalyFeedback({ anomalyId, onSubmitSuccess }: AnomalyF
             className={`px-4 py-2 rounded-lg border transition-colors ${
               feedbackType === 'true_positive'
                 ? 'bg-green-500/20 border-green-500/50 text-green-400'
-                : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                : 'bg-slate-700/50 border-slate-600 text-slate-400 hover:bg-slate-700'
             }`}
           >
             ✓ Accurate
@@ -87,7 +87,7 @@ export default function AnomalyFeedback({ anomalyId, onSubmitSuccess }: AnomalyF
             className={`px-4 py-2 rounded-lg border transition-colors ${
               feedbackType === 'false_positive'
                 ? 'bg-red-500/20 border-red-500/50 text-red-400'
-                : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                : 'bg-slate-700/50 border-slate-600 text-slate-400 hover:bg-slate-700'
             }`}
           >
             ✗ False Alarm
@@ -98,7 +98,7 @@ export default function AnomalyFeedback({ anomalyId, onSubmitSuccess }: AnomalyF
             className={`px-4 py-2 rounded-lg border transition-colors ${
               feedbackType === 'severity_wrong'
                 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400'
-                : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                : 'bg-slate-700/50 border-slate-600 text-slate-400 hover:bg-slate-700'
             }`}
           >
             ⚠ Wrong Severity
@@ -109,7 +109,7 @@ export default function AnomalyFeedback({ anomalyId, onSubmitSuccess }: AnomalyF
             className={`px-4 py-2 rounded-lg border transition-colors ${
               feedbackType === 'duplicate'
                 ? 'bg-blue-500/20 border-blue-500/50 text-blue-400'
-                : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:bg-gray-700'
+                : 'bg-slate-700/50 border-slate-600 text-slate-400 hover:bg-slate-700'
             }`}
           >
             ⊕ Duplicate
@@ -119,11 +119,11 @@ export default function AnomalyFeedback({ anomalyId, onSubmitSuccess }: AnomalyF
 
       {feedbackType === 'severity_wrong' && (
         <div>
-          <label className="block text-sm text-gray-400 mb-2">Correct Severity:</label>
+          <label className="block text-sm text-slate-400 mb-2">Correct Severity:</label>
           <select
             value={correctSeverity}
             onChange={(e) => setCorrectSeverity(e.target.value)}
-            className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-gray-200"
+            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-slate-200"
           >
             <option value="">Select severity...</option>
             <option value="low">Low</option>
@@ -135,12 +135,12 @@ export default function AnomalyFeedback({ anomalyId, onSubmitSuccess }: AnomalyF
       )}
 
       <div>
-        <label className="block text-sm text-gray-400 mb-2">Additional Notes (optional):</label>
+        <label className="block text-sm text-slate-400 mb-2">Additional Notes (optional):</label>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Why was this detection inaccurate? What should we look for instead?"
-          className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-gray-200 placeholder-gray-500 text-sm"
+          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-slate-200 placeholder-slate-500 text-sm"
           rows={3}
         />
       </div>
@@ -148,12 +148,12 @@ export default function AnomalyFeedback({ anomalyId, onSubmitSuccess }: AnomalyF
       <button
         onClick={handleSubmit}
         disabled={!feedbackType || isSubmitting}
-        className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors"
+        className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors"
       >
         {isSubmitting ? 'Submitting...' : 'Submit Feedback'}
       </button>
 
-      <p className="text-xs text-gray-500 text-center">
+      <p className="text-xs text-slate-500 text-center">
         Your feedback helps our ML models learn and improve detection accuracy over time.
       </p>
     </div>

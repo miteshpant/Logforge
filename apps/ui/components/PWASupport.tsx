@@ -187,7 +187,7 @@ export const PWASupport: React.FC<PWASupportProps> = ({ className = '' }) => {
             <div className="flex space-x-2">
               <Button
                 onClick={handleInstallClick}
-                className="flex-1 bg-white text-blue-600 hover:bg-gray-100"
+                className="flex-1 bg-blue-600 text-white hover:bg-blue-700"
                 data-testid="install-pwa"
               >
                 <Download className="w-4 h-4 mr-2" />

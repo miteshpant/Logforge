@@ -15,7 +15,7 @@ interface RootCauseTimelineProps {
 export default function RootCauseTimeline({ timeline, rootCauseType }: RootCauseTimelineProps) {
   if (!timeline || timeline.length === 0) {
     return (
-      <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 text-center text-gray-500">
+      <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6 text-center text-slate-500">
         No timeline data available
       </div>
     )
@@ -65,10 +65,10 @@ export default function RootCauseTimeline({ timeline, rootCauseType }: RootCause
   )
 
   return (
-    <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 space-y-4">
+    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-200">Root Cause Timeline</h3>
+        <h3 className="text-lg font-semibold text-slate-200">Root Cause Timeline</h3>
         {rootCauseType && (
           <span className="text-sm bg-purple-500/20 text-purple-400 px-3 py-1 rounded-full border border-purple-500/30">
             {rootCauseType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
@@ -79,7 +79,7 @@ export default function RootCauseTimeline({ timeline, rootCauseType }: RootCause
       {/* Timeline */}
       <div className="relative">
         {/* Vertical line */}
-        <div className="absolute left-6 top-4 bottom-4 w-0.5 bg-gradient-to-b from-gray-600 via-gray-500 to-gray-600" />
+        <div className="absolute left-6 top-4 bottom-4 w-0.5 bg-gradient-to-b from-slate-600 via-slate-500 to-slate-600" />
 
         <div className="space-y-6">
           {sortedTimeline.map((event, index) => {
@@ -96,10 +96,10 @@ export default function RootCauseTimeline({ timeline, rootCauseType }: RootCause
                 </div>
 
                 {/* Event card */}
-                <div className={`bg-gray-700/50 rounded-lg p-4 border ${
+                <div className={`bg-slate-700/50 rounded-lg p-4 border ${
                   isCriticalEvent ? 'border-red-500/50 shadow-lg shadow-red-500/10' :
                   isHighImpact ? 'border-orange-500/50' :
-                  'border-gray-600'
+                  'border-slate-600'
                 }`}>
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
@@ -109,22 +109,22 @@ export default function RootCauseTimeline({ timeline, rootCauseType }: RootCause
                         <p className={`text-sm font-medium ${
                           isCriticalEvent ? 'text-red-300' :
                           isHighImpact ? 'text-orange-300' :
-                          'text-gray-200'
+                          'text-slate-200'
                         }`}>
                           {event.event}
                         </p>
                       </div>
 
                       {/* Source and time */}
-                      <div className="flex items-center gap-3 text-xs text-gray-500">
+                      <div className="flex items-center gap-3 text-xs text-slate-500">
                         <span className="flex items-center gap-1">
-                          <span className="text-gray-400">Source:</span>
-                          <span className="text-gray-300 font-mono">{event.source}</span>
+                          <span className="text-slate-400">Source:</span>
+                          <span className="text-slate-300 font-mono">{event.source}</span>
                         </span>
-                        <span className="text-gray-600">•</span>
+                        <span className="text-slate-600">•</span>
                         <span className="flex items-center gap-1">
-                          <span className="text-gray-400">Time:</span>
-                          <span className="text-gray-300 font-mono">{formatTime(event.time)}</span>
+                          <span className="text-slate-400">Time:</span>
+                          <span className="text-slate-300 font-mono">{formatTime(event.time)}</span>
                         </span>
                       </div>
                     </div>
@@ -141,7 +141,7 @@ export default function RootCauseTimeline({ timeline, rootCauseType }: RootCause
                       </span>
 
                       {/* Impact indicator */}
-                      <div className="w-16 h-1.5 bg-gray-600 rounded-full overflow-hidden">
+                      <div className="w-16 h-1.5 bg-slate-600 rounded-full overflow-hidden">
                         <div
                           className={`h-full ${getImpactColor(event.impact_score)} transition-all duration-500`}
                           style={{ width: `${event.impact_score * 100}%` }}
@@ -153,7 +153,7 @@ export default function RootCauseTimeline({ timeline, rootCauseType }: RootCause
 
                 {/* Connection line to next event */}
                 {index < sortedTimeline.length - 1 && (
-                  <div className="absolute left-6 -bottom-3 w-0.5 h-6 bg-gradient-to-b from-gray-500 to-transparent" />
+                  <div className="absolute left-6 -bottom-3 w-0.5 h-6 bg-gradient-to-b from-slate-500 to-transparent" />
                 )}
               </div>
             )
@@ -162,23 +162,23 @@ export default function RootCauseTimeline({ timeline, rootCauseType }: RootCause
       </div>
 
       {/* Summary */}
-      <div className="border-t border-gray-700 pt-4">
+      <div className="border-t border-slate-700 pt-4">
         <div className="grid grid-cols-3 gap-4 text-center">
-          <div className="bg-gray-700/30 rounded-lg p-3">
-            <p className="text-2xl font-bold text-gray-200">{timeline.length}</p>
-            <p className="text-xs text-gray-500 mt-1">Events Detected</p>
+          <div className="bg-slate-700/30 rounded-lg p-3">
+            <p className="text-2xl font-bold text-slate-200">{timeline.length}</p>
+            <p className="text-xs text-slate-500 mt-1">Events Detected</p>
           </div>
-          <div className="bg-gray-700/30 rounded-lg p-3">
+          <div className="bg-slate-700/30 rounded-lg p-3">
             <p className="text-2xl font-bold text-orange-400">
               {timeline.filter(e => e.impact_score >= 0.7).length}
             </p>
-            <p className="text-xs text-gray-500 mt-1">High Impact Events</p>
+            <p className="text-xs text-slate-500 mt-1">High Impact Events</p>
           </div>
-          <div className="bg-gray-700/30 rounded-lg p-3">
+          <div className="bg-slate-700/30 rounded-lg p-3">
             <p className="text-2xl font-bold text-red-400">
               {timeline.filter(e => e.impact_score >= 0.8).length}
             </p>
-            <p className="text-xs text-gray-500 mt-1">Critical Events</p>
+            <p className="text-xs text-slate-500 mt-1">Critical Events</p>
           </div>
         </div>
       </div>

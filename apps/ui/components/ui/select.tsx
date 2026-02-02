@@ -44,7 +44,7 @@ const SelectTrigger = React.forwardRef<
   <button
     ref={ref}
     className={cn(
-      "flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-gray-200 bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-white placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-950 disabled:cursor-not-allowed disabled:opacity-50",
+      "flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-white/10 bg-slate-800/50 px-3 py-2 text-sm text-white shadow-sm ring-offset-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50",
       className
     )}
     onClick={() => setIsOpen?.(!isOpen)}
@@ -71,7 +71,7 @@ const SelectContent = ({ children, isOpen, handleSelect }: {
   if (!isOpen) return null
 
   return (
-    <div className="absolute top-full left-0 z-50 w-full min-w-[8rem] overflow-hidden rounded-md border border-gray-200 bg-white text-gray-950 shadow-md">
+    <div className="absolute top-full left-0 z-50 w-full min-w-[8rem] overflow-hidden rounded-md border border-white/10 bg-slate-800 text-white shadow-md">
       <div className="p-1">
         {React.Children.map(children, (child) => {
           if (React.isValidElement(child)) {
@@ -98,7 +98,7 @@ const SelectItem = React.forwardRef<
     <div
       ref={ref}
       className={cn(
-        "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-2 pr-8 text-sm outline-none hover:bg-gray-100 focus:bg-gray-100",
+        "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-2 pr-8 text-sm outline-none hover:bg-white/10 focus:bg-white/10",
         className
       )}
       onClick={() => handleSelect?.(value)}

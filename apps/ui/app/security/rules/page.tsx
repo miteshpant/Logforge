@@ -258,7 +258,7 @@ export default function SigmaRulesPage() {
       case 'high': return 'bg-orange-500/10 text-orange-400 border-orange-500/30'
       case 'medium': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
       case 'low': return 'bg-blue-500/10 text-blue-400 border-blue-500/30'
-      default: return 'bg-slate-800/500/10 text-slate-400 border-slate-500/30'
+      default: return 'bg-slate-500/10 text-slate-400 border-slate-500/30'
     }
   }
 
