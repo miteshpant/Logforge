@@ -143,7 +143,7 @@ export default function NotificationChannelsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">Notification Channels</h1>
-            <p className="text-gray-400 mt-1">Configure where alerts are sent</p>
+            <p className="text-slate-400 mt-1">Configure where alerts are sent</p>
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
@@ -160,14 +160,14 @@ export default function NotificationChannelsPage() {
             const count = channels.filter(c => c.type === type).length
             const enabled = channels.filter(c => c.type === type && c.enabled).length
             return (
-              <div key={type} className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+              <div key={type} className="bg-slate-800/50 border border-white/5 rounded-lg p-4">
                 <div className="flex items-center gap-3">
                   <div className={`p-2 rounded-lg ${CHANNEL_COLORS[type]}`}>
                     {icon}
                   </div>
                   <div>
                     <p className="text-white font-medium capitalize">{type}</p>
-                    <p className="text-gray-400 text-sm">{enabled}/{count} active</p>
+                    <p className="text-slate-400 text-sm">{enabled}/{count} active</p>
                   </div>
                 </div>
               </div>
@@ -176,13 +176,13 @@ export default function NotificationChannelsPage() {
         </div>
 
         {/* Channels List */}
-        <div className="bg-gray-800/50 border border-gray-700 rounded-lg overflow-hidden">
+        <div className="bg-slate-800/50 border border-white/5 rounded-lg overflow-hidden">
           {isLoading ? (
             <div className="flex items-center justify-center h-48">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
             </div>
           ) : channels.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-48 text-gray-400">
+            <div className="flex flex-col items-center justify-center h-48 text-slate-400">
               <Bell className="w-12 h-12 mb-4 opacity-50" />
               <p>No notification channels configured</p>
               <button
@@ -194,24 +194,24 @@ export default function NotificationChannelsPage() {
             </div>
           ) : (
             <table className="w-full">
-              <thead className="bg-gray-900/50">
+              <thead className="bg-slate-900/50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Channel</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Last Used</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Success Rate</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Actions</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Channel</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Last Used</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Success Rate</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-700">
+              <tbody className="divide-y divide-white/5">
                 {channels.map((channel) => (
-                  <tr key={channel.id} className="hover:bg-gray-700/30 transition-colors">
+                  <tr key={channel.id} className="hover:bg-slate-700/30 transition-colors">
                     <td className="px-4 py-4">
                       <button
                         onClick={() => toggleChannel(channel.id)}
                         className={`relative w-10 h-6 rounded-full transition-colors ${
-                          channel.enabled ? 'bg-green-500' : 'bg-gray-600'
+                          channel.enabled ? 'bg-green-500' : 'bg-slate-600'
                         }`}
                       >
                         <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
@@ -226,7 +226,7 @@ export default function NotificationChannelsPage() {
                         </div>
                         <div>
                           <p className="text-white font-medium">{channel.name}</p>
-                          <p className="text-gray-400 text-sm">
+                          <p className="text-slate-400 text-sm">
                             {channel.type === 'slack' && channel.config.channel}
                             {channel.type === 'email' && `${channel.config.recipients?.length || 0} recipients`}
                             {channel.type === 'webhook' && 'Custom endpoint'}
@@ -241,12 +241,12 @@ export default function NotificationChannelsPage() {
                         {channel.type.toUpperCase()}
                       </span>
                     </td>
-                    <td className="px-4 py-4 text-gray-400">
+                    <td className="px-4 py-4 text-slate-400">
                       {formatTimeAgo(channel.last_used_at)}
                     </td>
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-2">
-                        <div className="flex-1 h-2 bg-gray-700 rounded-full max-w-[100px]">
+                        <div className="flex-1 h-2 bg-slate-700 rounded-full max-w-[100px]">
                           <div
                             className={`h-full rounded-full ${
                               channel.success_rate >= 99 ? 'bg-green-500' :
@@ -280,7 +280,7 @@ export default function NotificationChannelsPage() {
                         ) : (
                           <button
                             onClick={() => testChannel(channel.id)}
-                            className="p-2 text-gray-400 hover:text-blue-400 hover:bg-gray-700 rounded transition-colors"
+                            className="p-2 text-slate-400 hover:text-blue-400 hover:bg-slate-700 rounded transition-colors"
                             title="Test channel"
                           >
                             <TestTube className="w-4 h-4" />
@@ -288,14 +288,14 @@ export default function NotificationChannelsPage() {
                         )}
                         <button
                           onClick={() => setSelectedChannel(channel)}
-                          className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+                          className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded transition-colors"
                           title="Edit channel"
                         >
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => deleteChannel(channel.id)}
-                          className="p-2 text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded transition-colors"
+                          className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
                           title="Delete channel"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -312,24 +312,24 @@ export default function NotificationChannelsPage() {
         {/* Create Channel Modal */}
         {showCreateModal && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-            <div className="bg-gray-800 border border-gray-700 rounded-lg w-full max-w-lg mx-4">
-              <div className="flex items-center justify-between p-4 border-b border-gray-700">
+            <div className="bg-slate-800 border border-white/5 rounded-lg w-full max-w-lg mx-4">
+              <div className="flex items-center justify-between p-4 border-b border-white/5">
                 <h3 className="text-lg font-semibold text-white">Add Notification Channel</h3>
                 <button
                   onClick={() => setShowCreateModal(false)}
-                  className="text-gray-400 hover:text-white"
+                  className="text-slate-400 hover:text-white"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
               <div className="p-4 space-y-4">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Channel Type</label>
+                  <label className="block text-sm text-slate-400 mb-1">Channel Type</label>
                   <div className="grid grid-cols-3 gap-2">
                     {Object.entries(CHANNEL_ICONS).map(([type, icon]) => (
                       <button
                         key={type}
-                        className={`flex items-center gap-2 p-3 rounded-lg border border-gray-600 hover:border-blue-500 transition-colors ${CHANNEL_COLORS[type]}`}
+                        className={`flex items-center gap-2 p-3 rounded-lg border border-white/10 hover:border-blue-500 transition-colors ${CHANNEL_COLORS[type]}`}
                       >
                         {icon}
                         <span className="capitalize text-sm">{type}</span>
@@ -339,31 +339,31 @@ export default function NotificationChannelsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Channel Name</label>
+                  <label className="block text-sm text-slate-400 mb-1">Channel Name</label>
                   <input
                     type="text"
                     placeholder="e.g., Ops Team Slack"
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
                   />
                 </div>
 
-                <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
+                <div className="bg-slate-700/50 border border-white/10 rounded-lg p-4">
                   <h4 className="text-white text-sm font-medium mb-3">Slack Configuration</h4>
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-sm text-gray-400 mb-1">Webhook URL</label>
+                      <label className="block text-sm text-slate-400 mb-1">Webhook URL</label>
                       <input
                         type="text"
                         placeholder="https://hooks.slack.com/services/..."
-                        className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
+                        className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm text-gray-400 mb-1">Channel</label>
+                      <label className="block text-sm text-slate-400 mb-1">Channel</label>
                       <input
                         type="text"
                         placeholder="#alerts"
-                        className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
+                        className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
                       />
                     </div>
                   </div>
@@ -376,10 +376,10 @@ export default function NotificationChannelsPage() {
                   </p>
                 </div>
               </div>
-              <div className="flex justify-end gap-3 p-4 border-t border-gray-700">
+              <div className="flex justify-end gap-3 p-4 border-t border-white/5">
                 <button
                   onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
                 >
                   Cancel
                 </button>

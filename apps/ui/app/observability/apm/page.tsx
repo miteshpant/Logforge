@@ -482,7 +482,7 @@ export default function APMPage() {
             <select
               value={comparisonPeriod}
               onChange={(e) => setComparisonPeriod(e.target.value as ComparisonPeriod)}
-              className="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500"
+              className="px-3 py-2 bg-slate-800/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500"
             >
               <option value="none">No Comparison</option>
               <option value="previous_period">Previous Period</option>
@@ -495,7 +495,7 @@ export default function APMPage() {
           <select
             value={selectedService}
             onChange={(e) => setSelectedService(e.target.value)}
-            className="px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
+            className="px-4 py-2 bg-slate-800/50 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
           >
             <option value="all">All Services</option>
             {services.map(s => (
@@ -511,8 +511,8 @@ export default function APMPage() {
             <select
               value={refreshInterval}
               onChange={(e) => setRefreshInterval(Number(e.target.value) as RefreshInterval)}
-              className={`px-3 py-2 bg-slate-800 border rounded-lg text-white text-sm focus:outline-none ${
-                refreshInterval > 0 ? 'border-emerald-500/50' : 'border-slate-600'
+              className={`px-3 py-2 bg-slate-800/50 border rounded-lg text-white text-sm focus:outline-none ${
+                refreshInterval > 0 ? 'border-emerald-500/50' : 'border-white/10'
               }`}
             >
               <option value={0}>Auto-Refresh: Off</option>
@@ -580,14 +580,14 @@ export default function APMPage() {
 
         {/* Performance Trends */}
         {!isLoadingTrends && trends && (
-          <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-6">
+          <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-6">
             <div className="flex items-center gap-3 mb-4">
               <Activity className="w-5 h-5 text-cyan-400" />
               <h3 className="text-lg font-semibold text-white">Performance Trends</h3>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {trends.latency_trend != null && (
-                <div className="p-4 rounded-lg bg-slate-900/50 border border-slate-700">
+                <div className="p-4 rounded-lg bg-slate-900/50 border border-white/5">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-400">Latency Trend</span>
                     {trends.latency_trend > 0
@@ -602,7 +602,7 @@ export default function APMPage() {
                 </div>
               )}
               {trends.throughput_trend != null && (
-                <div className="p-4 rounded-lg bg-slate-900/50 border border-slate-700">
+                <div className="p-4 rounded-lg bg-slate-900/50 border border-white/5">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-400">Throughput Trend</span>
                     {trends.throughput_trend > 0
@@ -617,7 +617,7 @@ export default function APMPage() {
                 </div>
               )}
               {trends.error_rate_trend != null && (
-                <div className="p-4 rounded-lg bg-slate-900/50 border border-slate-700">
+                <div className="p-4 rounded-lg bg-slate-900/50 border border-white/5">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-400">Error Rate Trend</span>
                     {trends.error_rate_trend > 0
@@ -632,7 +632,7 @@ export default function APMPage() {
                 </div>
               )}
               {trends.apdex_trend != null && (
-                <div className="p-4 rounded-lg bg-slate-900/50 border border-slate-700">
+                <div className="p-4 rounded-lg bg-slate-900/50 border border-white/5">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-400">Apdex Trend</span>
                     {trends.apdex_trend >= 0

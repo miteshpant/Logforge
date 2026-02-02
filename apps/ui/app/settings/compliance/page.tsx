@@ -163,7 +163,7 @@ export default function CompliancePage() {
       case 'warning':
         return 'text-yellow-400 bg-yellow-500/20 border-yellow-500/30'
       default:
-        return 'text-gray-400 bg-gray-500/20 border-gray-500/30'
+        return 'text-slate-400 bg-slate-500/20 border-slate-500/30'
     }
   }
 
@@ -181,7 +181,7 @@ export default function CompliancePage() {
       case 'warning':
         return <AlertTriangle className="w-4 h-4 text-yellow-400" />
       default:
-        return <Clock className="w-4 h-4 text-gray-400" />
+        return <Clock className="w-4 h-4 text-slate-400" />
     }
   }
 
@@ -212,12 +212,12 @@ export default function CompliancePage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">Compliance & Audit</h1>
-            <p className="text-gray-400 mt-1">Monitor compliance status, audit logs, and data governance</p>
+            <p className="text-slate-400 mt-1">Monitor compliance status, audit logs, and data governance</p>
           </div>
           <div className="flex items-center gap-3">
             <button
               onClick={loadData}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
             >
               <RefreshCw className="w-4 h-4" />
               Refresh
@@ -237,7 +237,7 @@ export default function CompliancePage() {
                 <Shield className="w-6 h-6 text-green-400" />
               </div>
               <div>
-                <p className="text-gray-400 text-sm">Compliance Status</p>
+                <p className="text-slate-400 text-sm">Compliance Status</p>
                 <p className="text-2xl font-bold text-white">{compliantCount}/{enabledFrameworks.length}</p>
                 <p className="text-xs text-green-400 mt-1">Frameworks Compliant</p>
               </div>
@@ -250,7 +250,7 @@ export default function CompliancePage() {
                 <ClipboardCheck className="w-6 h-6 text-blue-400" />
               </div>
               <div>
-                <p className="text-gray-400 text-sm">Control Status</p>
+                <p className="text-slate-400 text-sm">Control Status</p>
                 <p className="text-2xl font-bold text-white">{passingControls}/{totalControls}</p>
                 <p className="text-xs text-blue-400 mt-1">Controls Passing</p>
               </div>
@@ -263,7 +263,7 @@ export default function CompliancePage() {
                 <Eye className="w-6 h-6 text-purple-400" />
               </div>
               <div>
-                <p className="text-gray-400 text-sm">Audit Events</p>
+                <p className="text-slate-400 text-sm">Audit Events</p>
                 <p className="text-2xl font-bold text-white">{auditLogs.length}</p>
                 <p className="text-xs text-purple-400 mt-1">Last 24 hours</p>
               </div>
@@ -276,7 +276,7 @@ export default function CompliancePage() {
                 <Lock className="w-6 h-6 text-orange-400" />
               </div>
               <div>
-                <p className="text-gray-400 text-sm">Legal Holds</p>
+                <p className="text-slate-400 text-sm">Legal Holds</p>
                 <p className="text-2xl font-bold text-white">{legalHolds.filter(h => h.status === 'active').length}</p>
                 <p className="text-xs text-orange-400 mt-1">Active Holds</p>
               </div>
@@ -285,7 +285,7 @@ export default function CompliancePage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-gray-800/50 p-1 rounded-lg w-fit">
+        <div className="flex gap-1 bg-slate-800/50 p-1 rounded-lg w-fit">
           {[
             { id: 'frameworks', label: 'Frameworks', icon: Shield },
             { id: 'audit', label: 'Audit Logs', icon: FileText },
@@ -298,7 +298,7 @@ export default function CompliancePage() {
               className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                 activeTab === tab.id
                   ? 'bg-blue-500/20 text-blue-400'
-                  : 'text-gray-400 hover:text-white'
+                  : 'text-slate-400 hover:text-white'
               }`}
             >
               <tab.icon className="w-4 h-4" />
@@ -317,10 +317,10 @@ export default function CompliancePage() {
             {activeTab === 'frameworks' && (
               <div className="space-y-4">
                 {frameworks.length === 0 && (
-                  <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-12 text-center">
-                    <Shield className="w-12 h-12 mx-auto mb-4 text-gray-600" />
+                  <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-12 text-center">
+                    <Shield className="w-12 h-12 mx-auto mb-4 text-slate-600" />
                     <h3 className="text-lg font-semibold text-white mb-2">No Compliance Frameworks Configured</h3>
-                    <p className="text-gray-400 text-sm max-w-md mx-auto">
+                    <p className="text-slate-400 text-sm max-w-md mx-auto">
                       Configure compliance frameworks (SOC2, HIPAA, PCI DSS, GDPR) to track your security posture and audit readiness.
                     </p>
                   </div>
@@ -328,14 +328,14 @@ export default function CompliancePage() {
                 {frameworks.map((framework) => (
                   <div
                     key={framework.id}
-                    className={`bg-gray-800/50 border rounded-lg overflow-hidden ${
-                      framework.enabled ? 'border-gray-700' : 'border-gray-800 opacity-60'
+                    className={`bg-slate-800/50 border rounded-lg overflow-hidden ${
+                      framework.enabled ? 'border-white/5' : 'border-slate-800 opacity-60'
                     }`}
                   >
                     {/* Framework Header */}
                     <div
                       onClick={() => framework.enabled && setExpandedFramework(expandedFramework === framework.id ? null : framework.id)}
-                      className={`p-4 ${framework.enabled ? 'cursor-pointer hover:bg-gray-700/30' : ''} transition-colors`}
+                      className={`p-4 ${framework.enabled ? 'cursor-pointer hover:bg-white/[0.02]' : ''} transition-colors`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
@@ -349,12 +349,12 @@ export default function CompliancePage() {
                                 {framework.status.replace('_', ' ').toUpperCase()}
                               </span>
                               {!framework.enabled && (
-                                <span className="px-2 py-0.5 bg-gray-700 text-gray-400 text-xs rounded">
+                                <span className="px-2 py-0.5 bg-slate-700 text-slate-400 text-xs rounded">
                                   Disabled
                                 </span>
                               )}
                             </div>
-                            <p className="text-sm text-gray-400 mt-1">{framework.description}</p>
+                            <p className="text-sm text-slate-400 mt-1">{framework.description}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-6">
@@ -362,16 +362,16 @@ export default function CompliancePage() {
                             <>
                               <div className="text-center">
                                 <p className="text-2xl font-bold text-white">{framework.overallScore}%</p>
-                                <p className="text-xs text-gray-500">Score</p>
+                                <p className="text-xs text-slate-500">Score</p>
                               </div>
                               <div className="text-right text-sm">
-                                <p className="text-gray-400">Last: {formatDate(framework.lastAssessment)}</p>
-                                <p className="text-gray-500">Next: {formatDate(framework.nextAssessment)}</p>
+                                <p className="text-slate-400">Last: {formatDate(framework.lastAssessment)}</p>
+                                <p className="text-slate-500">Next: {formatDate(framework.nextAssessment)}</p>
                               </div>
                               {expandedFramework === framework.id ? (
-                                <ChevronDown className="w-5 h-5 text-gray-400" />
+                                <ChevronDown className="w-5 h-5 text-slate-400" />
                               ) : (
-                                <ChevronRight className="w-5 h-5 text-gray-400" />
+                                <ChevronRight className="w-5 h-5 text-slate-400" />
                               )}
                             </>
                           )}
@@ -381,22 +381,22 @@ export default function CompliancePage() {
 
                     {/* Expanded Controls */}
                     {expandedFramework === framework.id && framework.enabled && (
-                      <div className="border-t border-gray-700 p-4 space-y-3">
+                      <div className="border-t border-white/5 p-4 space-y-3">
                         {framework.controls.map((category) => (
-                          <div key={category.id} className="border border-gray-600 rounded-lg overflow-hidden">
+                          <div key={category.id} className="border border-white/10 rounded-lg overflow-hidden">
                             <button
                               onClick={() => setExpandedCategory(expandedCategory === category.id ? null : category.id)}
-                              className="w-full flex items-center justify-between p-3 bg-gray-700/50 hover:bg-gray-700 transition-colors"
+                              className="w-full flex items-center justify-between p-3 bg-slate-700/50 hover:bg-slate-700 transition-colors"
                             >
                               <span className="text-white font-medium">{category.name}</span>
                               <div className="flex items-center gap-3">
-                                <span className="text-sm text-gray-400">
+                                <span className="text-sm text-slate-400">
                                   {category.controls.filter(c => c.status === 'pass').length}/{category.controls.length} passing
                                 </span>
                                 {expandedCategory === category.id ? (
-                                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                                  <ChevronDown className="w-4 h-4 text-slate-400" />
                                 ) : (
-                                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                                  <ChevronRight className="w-4 h-4 text-slate-400" />
                                 )}
                               </div>
                             </button>
@@ -405,15 +405,15 @@ export default function CompliancePage() {
                                 {category.controls.map((control) => (
                                   <div
                                     key={control.id}
-                                    className="flex items-start gap-3 p-3 bg-gray-800/50 rounded-lg"
+                                    className="flex items-start gap-3 p-3 bg-slate-800/50 rounded-lg"
                                   >
                                     {getStatusIcon(control.status)}
                                     <div className="flex-1">
                                       <div className="flex items-center gap-2">
                                         <span className="text-sm font-medium text-white">{control.id}</span>
-                                        <span className="text-sm text-gray-300">{control.name}</span>
+                                        <span className="text-sm text-slate-300">{control.name}</span>
                                       </div>
-                                      <p className="text-xs text-gray-500 mt-1">{control.description}</p>
+                                      <p className="text-xs text-slate-500 mt-1">{control.description}</p>
                                       {control.remediation && (
                                         <p className="text-xs text-yellow-400 mt-2 flex items-center gap-1">
                                           <AlertCircle className="w-3 h-3" />
@@ -421,7 +421,7 @@ export default function CompliancePage() {
                                         </p>
                                       )}
                                     </div>
-                                    <span className="text-xs text-gray-500">
+                                    <span className="text-xs text-slate-500">
                                       {formatDate(control.lastChecked)}
                                     </span>
                                   </div>
@@ -439,57 +439,57 @@ export default function CompliancePage() {
 
             {/* Audit Logs Tab */}
             {activeTab === 'audit' && (
-              <div className="bg-gray-800/50 border border-gray-700 rounded-lg overflow-hidden">
-                <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+              <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 overflow-hidden">
+                <div className="p-4 border-b border-white/5 flex items-center justify-between">
                   <div className="relative w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                       type="text"
                       placeholder="Search audit logs..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 text-sm"
+                      className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm"
                     />
                   </div>
-                  <button className="flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg text-sm">
+                  <button className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-sm">
                     <Filter className="w-4 h-4" />
                     Filters
                   </button>
                 </div>
                 {auditLogs.length === 0 ? (
                   <div className="p-12 text-center">
-                    <FileText className="w-12 h-12 mx-auto mb-4 text-gray-600" />
+                    <FileText className="w-12 h-12 mx-auto mb-4 text-slate-600" />
                     <h3 className="text-lg font-semibold text-white mb-2">No Audit Logs</h3>
-                    <p className="text-gray-400 text-sm">Audit log entries will appear as users interact with the system.</p>
+                    <p className="text-slate-400 text-sm">Audit log entries will appear as users interact with the system.</p>
                   </div>
                 ) : (
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-gray-700">
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Timestamp</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">User</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Action</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Resource</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Details</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">IP Address</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Result</th>
+                    <tr className="border-b border-white/5">
+                      <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">Timestamp</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">User</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">Action</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">Resource</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">Details</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">IP Address</th>
+                      <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">Result</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-700">
+                  <tbody className="divide-y divide-white/5">
                     {auditLogs.map((log) => (
-                      <tr key={log.id} className="hover:bg-gray-700/30">
-                        <td className="px-4 py-3 text-sm text-gray-300">
+                      <tr key={log.id} className="hover:bg-white/[0.02]">
+                        <td className="px-4 py-3 text-sm text-slate-300">
                           {formatTimeAgo(log.timestamp)}
                         </td>
                         <td className="px-4 py-3 text-sm text-white">{log.user}</td>
                         <td className="px-4 py-3">
-                          <span className="px-2 py-1 bg-gray-700 text-gray-300 text-xs rounded font-mono">
+                          <span className="px-2 py-1 bg-slate-700 text-slate-300 text-xs rounded font-mono">
                             {log.action}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-300">{log.resource}</td>
-                        <td className="px-4 py-3 text-sm text-gray-400 max-w-xs truncate">{log.details}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 font-mono">{log.ip_address}</td>
+                        <td className="px-4 py-3 text-sm text-slate-300">{log.resource}</td>
+                        <td className="px-4 py-3 text-sm text-slate-400 max-w-xs truncate">{log.details}</td>
+                        <td className="px-4 py-3 text-sm text-slate-500 font-mono">{log.ip_address}</td>
                         <td className="px-4 py-3">
                           <span className={`flex items-center gap-1 ${
                             log.result === 'success' ? 'text-green-400' : 'text-red-400'
@@ -515,18 +515,18 @@ export default function CompliancePage() {
                   </button>
                 </div>
                 {retentionPolicies.length === 0 ? (
-                  <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-12 text-center">
-                    <Archive className="w-12 h-12 mx-auto mb-4 text-gray-600" />
+                  <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-12 text-center">
+                    <Archive className="w-12 h-12 mx-auto mb-4 text-slate-600" />
                     <h3 className="text-lg font-semibold text-white mb-2">No Retention Policies</h3>
-                    <p className="text-gray-400 text-sm">Configure data retention policies to manage storage and compliance requirements.</p>
+                    <p className="text-slate-400 text-sm">Configure data retention policies to manage storage and compliance requirements.</p>
                   </div>
                 ) : (
                 <div className="grid gap-4">
                   {retentionPolicies.map((policy) => (
                     <div
                       key={policy.id}
-                      className={`bg-gray-800/50 border rounded-lg p-4 ${
-                        policy.enabled ? 'border-gray-700' : 'border-gray-800 opacity-60'
+                      className={`bg-slate-800/50 border rounded-lg p-4 ${
+                        policy.enabled ? 'border-white/5' : 'border-slate-800 opacity-60'
                       }`}
                     >
                       <div className="flex items-center justify-between">
@@ -536,30 +536,30 @@ export default function CompliancePage() {
                           </div>
                           <div>
                             <h3 className="text-white font-semibold">{policy.name}</h3>
-                            <p className="text-sm text-gray-400">Type: {policy.dataType}</p>
+                            <p className="text-sm text-slate-400">Type: {policy.dataType}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-6 text-sm">
                           <div className="text-center">
                             <p className="text-white font-medium">{policy.retentionDays}d</p>
-                            <p className="text-xs text-gray-500">Retention</p>
+                            <p className="text-xs text-slate-500">Retention</p>
                           </div>
                           {policy.archiveAfterDays && (
                             <div className="text-center">
                               <p className="text-white font-medium">{policy.archiveAfterDays}d</p>
-                              <p className="text-xs text-gray-500">Archive After</p>
+                              <p className="text-xs text-slate-500">Archive After</p>
                             </div>
                           )}
                           {policy.deleteAfterDays && (
                             <div className="text-center">
                               <p className="text-white font-medium">{policy.deleteAfterDays}d</p>
-                              <p className="text-xs text-gray-500">Delete After</p>
+                              <p className="text-xs text-slate-500">Delete After</p>
                             </div>
                           )}
                           <span className={`px-2 py-1 rounded text-xs ${
                             policy.enabled
                               ? 'bg-green-500/20 text-green-400'
-                              : 'bg-gray-500/20 text-gray-400'
+                              : 'bg-slate-500/20 text-slate-400'
                           }`}>
                             {policy.enabled ? 'Active' : 'Disabled'}
                           </span>
@@ -582,19 +582,19 @@ export default function CompliancePage() {
                   </button>
                 </div>
                 {legalHolds.length === 0 ? (
-                  <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-8 text-center">
-                    <Lock className="w-12 h-12 mx-auto mb-3 text-gray-600" />
-                    <p className="text-gray-400">No legal holds active</p>
+                  <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-8 text-center">
+                    <Lock className="w-12 h-12 mx-auto mb-3 text-slate-600" />
+                    <p className="text-slate-400">No legal holds active</p>
                   </div>
                 ) : (
                   <div className="grid gap-4">
                     {legalHolds.map((hold) => (
                       <div
                         key={hold.id}
-                        className={`bg-gray-800/50 border rounded-lg p-4 ${
+                        className={`bg-slate-800/50 border rounded-lg p-4 ${
                           hold.status === 'active'
                             ? 'border-orange-500/30'
-                            : 'border-gray-700 opacity-60'
+                            : 'border-white/5 opacity-60'
                         }`}
                       >
                         <div className="flex items-start justify-between">
@@ -602,10 +602,10 @@ export default function CompliancePage() {
                             <div className={`p-3 rounded-lg ${
                               hold.status === 'active'
                                 ? 'bg-orange-500/20'
-                                : 'bg-gray-500/20'
+                                : 'bg-slate-500/20'
                             }`}>
                               <Lock className={`w-5 h-5 ${
-                                hold.status === 'active' ? 'text-orange-400' : 'text-gray-400'
+                                hold.status === 'active' ? 'text-orange-400' : 'text-slate-400'
                               }`} />
                             </div>
                             <div>
@@ -614,20 +614,20 @@ export default function CompliancePage() {
                                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                                   hold.status === 'active'
                                     ? 'bg-orange-500/20 text-orange-400'
-                                    : 'bg-gray-500/20 text-gray-400'
+                                    : 'bg-slate-500/20 text-slate-400'
                                 }`}>
                                   {hold.status.toUpperCase()}
                                 </span>
                               </div>
-                              <p className="text-sm text-gray-400 mt-1">{hold.description}</p>
-                              <p className="text-sm text-gray-500 mt-2">{hold.reason}</p>
-                              <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
+                              <p className="text-sm text-slate-400 mt-1">{hold.description}</p>
+                              <p className="text-sm text-slate-500 mt-2">{hold.reason}</p>
+                              <div className="flex items-center gap-4 mt-3 text-xs text-slate-500">
                                 <span>Created by: {hold.createdBy}</span>
                                 <span>Created: {formatDate(hold.createdAt)}</span>
                               </div>
                               <div className="flex gap-1 mt-2">
                                 {hold.affectedData.map((data) => (
-                                  <span key={data} className="px-2 py-0.5 bg-gray-700 text-gray-300 text-xs rounded">
+                                  <span key={data} className="px-2 py-0.5 bg-slate-700 text-slate-300 text-xs rounded">
                                     {data}
                                   </span>
                                 ))}
@@ -635,7 +635,7 @@ export default function CompliancePage() {
                             </div>
                           </div>
                           {hold.status === 'active' && (
-                            <button className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors">
+                            <button className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm rounded-lg transition-colors">
                               Release Hold
                             </button>
                           )}

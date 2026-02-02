@@ -239,18 +239,18 @@ export default function AlertCorrelationPage() {
   }
 
   const getFatigueColor = (score: number) => {
-    if (score < 30) return { bg: 'bg-green-500', text: 'text-green-700', label: 'Healthy', ring: 'ring-green-200' }
-    if (score < 60) return { bg: 'bg-yellow-500', text: 'text-yellow-700', label: 'Moderate', ring: 'ring-yellow-200' }
-    return { bg: 'bg-red-500', text: 'text-red-700', label: 'Critical', ring: 'ring-red-200' }
+    if (score < 30) return { bg: 'bg-green-500', text: 'text-green-400', label: 'Healthy', ring: 'ring-green-500/30' }
+    if (score < 60) return { bg: 'bg-yellow-500', text: 'text-yellow-400', label: 'Moderate', ring: 'ring-yellow-500/30' }
+    return { bg: 'bg-red-500', text: 'text-red-400', label: 'Critical', ring: 'ring-red-500/30' }
   }
 
   const getSeverityBadge = (severity: string) => {
     const colors: Record<string, string> = {
-      critical: 'bg-red-100 text-red-700 border-red-200',
-      high: 'bg-orange-100 text-orange-700 border-orange-200',
-      medium: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-      low: 'bg-blue-100 text-blue-700 border-blue-200',
-      info: 'bg-slate-100 text-slate-600 border-slate-200'
+      critical: 'bg-red-500/20 text-red-400 border-red-500/30',
+      high: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+      medium: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+      low: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+      info: 'bg-slate-800/30 text-slate-400 border-white/5'
     }
     return colors[severity] || colors.info
   }
@@ -271,17 +271,17 @@ export default function AlertCorrelationPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
               <Link2 className="w-7 h-7 text-indigo-500" />
               Smart Alert Correlation
             </h1>
-            <p className="text-slate-600 mt-1">
+            <p className="text-slate-400 mt-1">
               Reduce alert noise through intelligent correlation, deduplication, and fatigue detection
             </p>
           </div>
           <button
             onClick={() => { loadSummary(); loadFatigueScore(); loadCorrelatedGroups(); loadDuplicates(); loadTrends() }}
-            className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 border border-white/10 rounded-lg text-slate-300 hover:bg-slate-800/50/5 transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
             Refresh All
@@ -292,15 +292,15 @@ export default function AlertCorrelationPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {isLoadingSummary ? (
             [1, 2, 3, 4].map(i => (
-              <div key={i} className="bg-white rounded-xl border border-slate-200 p-5 h-24 animate-pulse">
-                <div className="h-4 bg-slate-200 rounded w-24 mb-3" />
-                <div className="h-7 bg-slate-200 rounded w-16" />
+              <div key={i} className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5 h-24 animate-pulse">
+                <div className="h-4 bg-slate-700 rounded w-24 mb-3" />
+                <div className="h-7 bg-slate-700 rounded w-16" />
               </div>
             ))
           ) : (
             <>
-              <div className="bg-white rounded-xl border border-slate-200 p-5">
-                <div className="flex items-center gap-2 text-slate-600 mb-2">
+              <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+                <div className="flex items-center gap-2 text-slate-400 mb-2">
                   <Gauge className="w-4 h-4 text-orange-500" />
                   <span className="text-sm font-medium">Fatigue Score</span>
                 </div>
@@ -312,24 +312,24 @@ export default function AlertCorrelationPage() {
                   {summary?.fatigue_score ?? '--'}
                 </p>
               </div>
-              <div className="bg-white rounded-xl border border-slate-200 p-5">
-                <div className="flex items-center gap-2 text-slate-600 mb-2">
+              <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+                <div className="flex items-center gap-2 text-slate-400 mb-2">
                   <Layers className="w-4 h-4 text-indigo-500" />
                   <span className="text-sm font-medium">Correlated Groups</span>
                 </div>
-                <p className="text-3xl font-bold text-slate-900">{summary?.correlated_groups_count ?? 0}</p>
+                <p className="text-3xl font-bold text-white">{summary?.correlated_groups_count ?? 0}</p>
               </div>
-              <div className="bg-white rounded-xl border border-slate-200 p-5">
-                <div className="flex items-center gap-2 text-slate-600 mb-2">
+              <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+                <div className="flex items-center gap-2 text-slate-400 mb-2">
                   <Copy className="w-4 h-4 text-purple-500" />
                   <span className="text-sm font-medium">Duplicate %</span>
                 </div>
-                <p className="text-3xl font-bold text-slate-900">
+                <p className="text-3xl font-bold text-white">
                   {summary?.duplicate_percentage != null ? `${summary.duplicate_percentage.toFixed(1)}%` : '--'}
                 </p>
               </div>
-              <div className="bg-white rounded-xl border border-slate-200 p-5">
-                <div className="flex items-center gap-2 text-slate-600 mb-2">
+              <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+                <div className="flex items-center gap-2 text-slate-400 mb-2">
                   <BellOff className="w-4 h-4 text-green-500" />
                   <span className="text-sm font-medium">Noise Reduction</span>
                 </div>
@@ -343,8 +343,8 @@ export default function AlertCorrelationPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Alert Fatigue Score */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <Gauge className="w-5 h-5 text-orange-500" />
               Alert Fatigue Score
             </h2>
@@ -359,14 +359,14 @@ export default function AlertCorrelationPage() {
                 <div className="flex items-center justify-center">
                   <div className={`relative w-32 h-32 rounded-full flex items-center justify-center ring-8 ${getFatigueColor(fatigueScore.score).ring}`}>
                     <div className={`w-28 h-28 rounded-full flex flex-col items-center justify-center ${
-                      fatigueScore.score < 30 ? 'bg-green-50' :
-                      fatigueScore.score < 60 ? 'bg-yellow-50' :
-                      'bg-red-50'
+                      fatigueScore.score < 30 ? 'bg-green-500/10' :
+                      fatigueScore.score < 60 ? 'bg-yellow-500/10' :
+                      'bg-red-500/10'
                     }`}>
                       <span className={`text-4xl font-bold ${getFatigueColor(fatigueScore.score).text}`}>
                         {fatigueScore.score}
                       </span>
-                      <span className="text-xs text-slate-500">/ 100</span>
+                      <span className="text-xs text-slate-400">/ 100</span>
                     </div>
                   </div>
                 </div>
@@ -377,13 +377,13 @@ export default function AlertCorrelationPage() {
                 {/* Contributing Factors */}
                 {fatigueScore.contributing_factors && fatigueScore.contributing_factors.length > 0 && (
                   <div>
-                    <h3 className="text-sm font-medium text-slate-700 mb-2">Contributing Factors</h3>
+                    <h3 className="text-sm font-medium text-slate-300 mb-2">Contributing Factors</h3>
                     <div className="space-y-2">
                       {fatigueScore.contributing_factors.map((factor, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg">
-                          <span className="text-sm text-slate-700">{factor.factor}</span>
+                        <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-800/50 rounded-lg">
+                          <span className="text-sm text-slate-300">{factor.factor}</span>
                           <div className="flex items-center gap-2">
-                            <div className="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                            <div className="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full ${
                                   factor.impact > 0.7 ? 'bg-red-500' :
@@ -393,7 +393,7 @@ export default function AlertCorrelationPage() {
                                 style={{ width: `${factor.impact * 100}%` }}
                               />
                             </div>
-                            <span className="text-xs text-slate-500 w-8 text-right">
+                            <span className="text-xs text-slate-400 w-8 text-right">
                               {Math.round(factor.impact * 100)}%
                             </span>
                           </div>
@@ -406,15 +406,15 @@ export default function AlertCorrelationPage() {
                 {/* Recommendations */}
                 {fatigueScore.recommendations && fatigueScore.recommendations.length > 0 && (
                   <div>
-                    <h3 className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-1">
+                    <h3 className="text-sm font-medium text-slate-300 mb-2 flex items-center gap-1">
                       <Lightbulb className="w-4 h-4 text-amber-500" />
                       Recommendations
                     </h3>
                     <div className="space-y-2">
                       {fatigueScore.recommendations.map((rec, idx) => (
-                        <div key={idx} className="flex items-start gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
-                          <CheckCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                          <p className="text-sm text-amber-800">{rec}</p>
+                        <div key={idx} className="flex items-start gap-2 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                          <CheckCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                          <p className="text-sm text-amber-300">{rec}</p>
                         </div>
                       ))}
                     </div>
@@ -424,14 +424,14 @@ export default function AlertCorrelationPage() {
             ) : (
               <div className="text-center py-10">
                 <Gauge className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                <p className="text-slate-500 text-sm">No fatigue score data available</p>
+                <p className="text-slate-400 text-sm">No fatigue score data available</p>
               </div>
             )}
           </div>
 
           {/* Duplicate Detection */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <Copy className="w-5 h-5 text-purple-500" />
               Duplicate Detection
             </h2>
@@ -439,19 +439,19 @@ export default function AlertCorrelationPage() {
             {isLoadingDuplicates ? (
               <div className="space-y-3">
                 {[1, 2, 3].map(i => (
-                  <div key={i} className="h-14 bg-slate-100 rounded-lg animate-pulse" />
+                  <div key={i} className="h-14 bg-slate-800/30 rounded-lg animate-pulse" />
                 ))}
               </div>
             ) : duplicates ? (
               <div className="space-y-4">
                 {/* Noise Reduction Stat */}
                 {duplicates.noise_reduction_pct != null && (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between">
+                  <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <BellOff className="w-5 h-5 text-green-600" />
-                      <span className="text-sm font-medium text-green-800">Noise Reduction</span>
+                      <BellOff className="w-5 h-5 text-green-400" />
+                      <span className="text-sm font-medium text-green-300">Noise Reduction</span>
                     </div>
-                    <span className="text-xl font-bold text-green-700">{duplicates.noise_reduction_pct.toFixed(1)}%</span>
+                    <span className="text-xl font-bold text-green-400">{duplicates.noise_reduction_pct.toFixed(1)}%</span>
                   </div>
                 )}
 
@@ -460,32 +460,32 @@ export default function AlertCorrelationPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b border-slate-200">
-                          <th className="text-left py-2 px-2 text-slate-500 font-medium">Pattern / Rule</th>
-                          <th className="text-right py-2 px-2 text-slate-500 font-medium">Count</th>
-                          <th className="text-right py-2 px-2 text-slate-500 font-medium">Suppressible</th>
+                        <tr className="border-b border-white/5">
+                          <th className="text-left py-2 px-2 text-slate-400 font-medium">Pattern / Rule</th>
+                          <th className="text-right py-2 px-2 text-slate-400 font-medium">Count</th>
+                          <th className="text-right py-2 px-2 text-slate-400 font-medium">Suppressible</th>
                         </tr>
                       </thead>
                       <tbody>
                         {(duplicates.groups || duplicates.duplicates || []).map((group, idx) => (
-                          <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
+                          <tr key={idx} className="border-b border-white/5 hover:bg-slate-800/50/5">
                             <td className="py-2.5 px-2">
-                              <span className="font-medium text-slate-800">
+                              <span className="font-medium text-white">
                                 {group.rule_name || group.pattern || `Group ${idx + 1}`}
                               </span>
                               {group.services && group.services.length > 0 && (
                                 <div className="flex flex-wrap gap-1 mt-1">
                                   {group.services.map((svc, i) => (
-                                    <span key={i} className="text-xs px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">
+                                    <span key={i} className="text-xs px-1.5 py-0.5 bg-slate-800/30 text-slate-400 rounded">
                                       {svc}
                                     </span>
                                   ))}
                                 </div>
                               )}
                             </td>
-                            <td className="py-2.5 px-2 text-right font-mono text-slate-700">{group.count}</td>
+                            <td className="py-2.5 px-2 text-right font-mono text-slate-300">{group.count}</td>
                             <td className="py-2.5 px-2 text-right">
-                              <span className="font-mono text-orange-600 font-medium">{group.suppressible ?? 0}</span>
+                              <span className="font-mono text-orange-400 font-medium">{group.suppressible ?? 0}</span>
                             </td>
                           </tr>
                         ))}
@@ -495,22 +495,22 @@ export default function AlertCorrelationPage() {
                 ) : (
                   <div className="text-center py-8">
                     <CheckCircle className="w-8 h-8 text-green-400 mx-auto mb-2" />
-                    <p className="text-slate-500 text-sm">No duplicate groups detected</p>
+                    <p className="text-slate-400 text-sm">No duplicate groups detected</p>
                   </div>
                 )}
               </div>
             ) : (
               <div className="text-center py-10">
                 <Copy className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                <p className="text-slate-500 text-sm">No duplicate data available</p>
+                <p className="text-slate-400 text-sm">No duplicate data available</p>
               </div>
             )}
           </div>
         </div>
 
         {/* Correlated Alert Groups */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+        <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
             <Layers className="w-5 h-5 text-indigo-500" />
             Correlated Alert Groups
           </h2>
@@ -518,23 +518,23 @@ export default function AlertCorrelationPage() {
           {isLoadingGroups ? (
             <div className="space-y-3">
               {[1, 2, 3].map(i => (
-                <div key={i} className="h-20 bg-slate-100 rounded-lg animate-pulse" />
+                <div key={i} className="h-20 bg-slate-800/30 rounded-lg animate-pulse" />
               ))}
             </div>
           ) : correlatedGroups.length === 0 ? (
             <div className="text-center py-12">
               <Layers className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">No correlated alert groups found</p>
+              <p className="text-slate-400">No correlated alert groups found</p>
               <p className="text-slate-400 text-xs mt-1">Alerts will be grouped when correlated patterns are detected</p>
             </div>
           ) : (
             <div className="space-y-3">
               {correlatedGroups.map(group => (
-                <div key={group.group_id} className="border border-slate-200 rounded-lg overflow-hidden">
+                <div key={group.group_id} className="border border-white/5 rounded-lg overflow-hidden">
                   {/* Group Header */}
                   <button
                     onClick={() => toggleGroup(group.group_id)}
-                    className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors text-left"
+                    className="w-full flex items-center justify-between p-4 hover:bg-slate-800/50/5 transition-colors text-left"
                   >
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                       {expandedGroups[group.group_id]
@@ -544,12 +544,12 @@ export default function AlertCorrelationPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           {group.root_alert && (
-                            <span className="font-medium text-slate-900 truncate">
+                            <span className="font-medium text-white truncate">
                               {group.root_alert.name}
                             </span>
                           )}
                           {group.pattern_type && (
-                            <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full">
+                            <span className="text-xs px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded-full">
                               {group.pattern_type}
                             </span>
                           )}
@@ -561,7 +561,7 @@ export default function AlertCorrelationPage() {
                         </div>
                         <div className="flex items-center gap-3 mt-1">
                           {group.common_services && group.common_services.length > 0 && (
-                            <span className="text-xs text-slate-500 flex items-center gap-1">
+                            <span className="text-xs text-slate-400 flex items-center gap-1">
                               <Server className="w-3 h-3" />
                               {group.common_services.join(', ')}
                             </span>
@@ -572,14 +572,14 @@ export default function AlertCorrelationPage() {
                     <div className="flex items-center gap-3 flex-shrink-0">
                       {group.correlation_score != null && (
                         <span className={`text-xs px-2.5 py-1 rounded-lg font-medium ${
-                          group.correlation_score >= 0.8 ? 'bg-green-100 text-green-700' :
-                          group.correlation_score >= 0.5 ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-slate-100 text-slate-600'
+                          group.correlation_score >= 0.8 ? 'bg-green-500/20 text-green-400' :
+                          group.correlation_score >= 0.5 ? 'bg-yellow-500/20 text-yellow-400' :
+                          'bg-slate-800/30 text-slate-400'
                         }`}>
                           {Math.round(group.correlation_score * 100)}% correlated
                         </span>
                       )}
-                      <span className="text-sm text-slate-500">
+                      <span className="text-sm text-slate-400">
                         {group.alert_count ?? (group.member_alerts?.length ?? 0) + 1} alerts
                       </span>
                     </div>
@@ -587,18 +587,18 @@ export default function AlertCorrelationPage() {
 
                   {/* Expanded Members */}
                   {expandedGroups[group.group_id] && (
-                    <div className="border-t border-slate-200 bg-slate-50 p-4">
+                    <div className="border-t border-white/5 bg-slate-800/50 p-4">
                       {/* Root Alert */}
                       {group.root_alert && (
                         <div className="mb-3">
-                          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Root Alert</p>
-                          <div className="flex items-center gap-3 p-3 bg-white border border-indigo-200 rounded-lg">
-                            <AlertTriangle className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Root Alert</p>
+                          <div className="flex items-center gap-3 p-3 bg-slate-800/50 border border-indigo-500/20 rounded-lg">
+                            <AlertTriangle className="w-4 h-4 text-indigo-400 flex-shrink-0" />
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-slate-900">{group.root_alert.name}</p>
+                              <p className="text-sm font-medium text-white">{group.root_alert.name}</p>
                               <div className="flex items-center gap-2 mt-0.5">
                                 {group.root_alert.service && (
-                                  <span className="text-xs text-slate-500">{group.root_alert.service}</span>
+                                  <span className="text-xs text-slate-400">{group.root_alert.service}</span>
                                 )}
                                 <span className="text-xs text-slate-400">
                                   {formatTimestamp(group.root_alert.triggered_at)}
@@ -615,18 +615,18 @@ export default function AlertCorrelationPage() {
                       {/* Member Alerts */}
                       {group.member_alerts && group.member_alerts.length > 0 && (
                         <div>
-                          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
                             Correlated Alerts ({group.member_alerts.length})
                           </p>
                           <div className="space-y-2">
                             {group.member_alerts.map(alert => (
-                              <div key={alert.id} className="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-lg">
+                              <div key={alert.id} className="flex items-center gap-3 p-2.5 bg-slate-800/50 border border-white/5 rounded-lg">
                                 <Bell className="w-4 h-4 text-slate-400 flex-shrink-0" />
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-sm text-slate-800">{alert.name}</p>
+                                  <p className="text-sm text-white">{alert.name}</p>
                                   <div className="flex items-center gap-2 mt-0.5">
                                     {alert.service && (
-                                      <span className="text-xs text-slate-500">{alert.service}</span>
+                                      <span className="text-xs text-slate-400">{alert.service}</span>
                                     )}
                                     <span className="text-xs text-slate-400">
                                       {formatTimestamp(alert.triggered_at)}
@@ -650,15 +650,15 @@ export default function AlertCorrelationPage() {
         </div>
 
         {/* Alert Trends */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
+        <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-blue-500" />
               Alert Trends (7 Day)
             </h2>
             <div className="flex items-center gap-2">
               {trends?.overall_trend && (
-                <span className="flex items-center gap-1 text-sm text-slate-600">
+                <span className="flex items-center gap-1 text-sm text-slate-400">
                   {getTrendIndicator(trends.overall_trend)}
                   <span className="capitalize">{trends.overall_trend}</span>
                   {trends.change_percentage != null && (
@@ -681,28 +681,28 @@ export default function AlertCorrelationPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200">
-                    <th className="text-left py-2 px-3 text-slate-500 font-medium">Time</th>
-                    <th className="text-right py-2 px-3 text-slate-500 font-medium">Total</th>
-                    <th className="text-right py-2 px-3 text-slate-500 font-medium">
+                  <tr className="border-b border-white/5">
+                    <th className="text-left py-2 px-3 text-slate-400 font-medium">Time</th>
+                    <th className="text-right py-2 px-3 text-slate-400 font-medium">Total</th>
+                    <th className="text-right py-2 px-3 text-slate-400 font-medium">
                       <span className="flex items-center justify-end gap-1">
                         <span className="w-2 h-2 rounded-full bg-red-500" />
                         Critical
                       </span>
                     </th>
-                    <th className="text-right py-2 px-3 text-slate-500 font-medium">
+                    <th className="text-right py-2 px-3 text-slate-400 font-medium">
                       <span className="flex items-center justify-end gap-1">
                         <span className="w-2 h-2 rounded-full bg-orange-500" />
                         High
                       </span>
                     </th>
-                    <th className="text-right py-2 px-3 text-slate-500 font-medium">
+                    <th className="text-right py-2 px-3 text-slate-400 font-medium">
                       <span className="flex items-center justify-end gap-1">
                         <span className="w-2 h-2 rounded-full bg-yellow-500" />
                         Medium
                       </span>
                     </th>
-                    <th className="text-right py-2 px-3 text-slate-500 font-medium">
+                    <th className="text-right py-2 px-3 text-slate-400 font-medium">
                       <span className="flex items-center justify-end gap-1">
                         <span className="w-2 h-2 rounded-full bg-blue-500" />
                         Low
@@ -712,9 +712,9 @@ export default function AlertCorrelationPage() {
                 </thead>
                 <tbody>
                   {(trends.data_points || trends.trends || []).map((point, idx) => (
-                    <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
-                      <td className="py-2 px-3 text-slate-700">{formatTimestamp(point.timestamp)}</td>
-                      <td className="py-2 px-3 text-right font-mono font-medium text-slate-900">{point.total ?? '--'}</td>
+                    <tr key={idx} className="border-b border-white/5 hover:bg-slate-800/50/5">
+                      <td className="py-2 px-3 text-slate-300">{formatTimestamp(point.timestamp)}</td>
+                      <td className="py-2 px-3 text-right font-mono font-medium text-white">{point.total ?? '--'}</td>
                       <td className="py-2 px-3 text-right font-mono text-red-600">{point.critical ?? 0}</td>
                       <td className="py-2 px-3 text-right font-mono text-orange-600">{point.high ?? 0}</td>
                       <td className="py-2 px-3 text-right font-mono text-yellow-600">{point.medium ?? 0}</td>
@@ -727,7 +727,7 @@ export default function AlertCorrelationPage() {
           ) : (
             <div className="text-center py-12">
               <BarChart3 className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">No trend data available</p>
+              <p className="text-slate-400">No trend data available</p>
             </div>
           )}
         </div>

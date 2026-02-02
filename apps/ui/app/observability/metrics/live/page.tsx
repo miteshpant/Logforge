@@ -305,15 +305,15 @@ export default function LiveMetricsPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl rounded-lg p-4 border border-white/5">
             <div className="text-sm text-slate-400 mb-1">Data Points</div>
             <div className="text-2xl font-bold text-white">{dataPoints.length}</div>
           </div>
-          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl rounded-lg p-4 border border-white/5">
             <div className="text-sm text-slate-400 mb-1">Update Interval</div>
             <div className="text-2xl font-bold text-white">{config.interval}ms</div>
           </div>
-          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl rounded-lg p-4 border border-white/5">
             <div className="text-sm text-slate-400 mb-1">Status</div>
             <div className={`text-2xl font-bold ${isStreaming ? 'text-emerald-400' : 'text-slate-400'}`}>
               {isStreaming ? 'Streaming' : 'Stopped'}

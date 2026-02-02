@@ -205,9 +205,9 @@ export default function AIInvestigationsPage() {
   }
 
   const getConfidenceColor = (score: number) => {
-    if (score >= 0.8) return 'text-green-600 bg-green-50 border-green-200'
-    if (score >= 0.5) return 'text-yellow-600 bg-yellow-50 border-yellow-200'
-    return 'text-red-600 bg-red-50 border-red-200'
+    if (score >= 0.8) return 'text-green-400 bg-green-900/20 border-green-500/20'
+    if (score >= 0.5) return 'text-yellow-400 bg-yellow-900/20 border-yellow-500/20'
+    return 'text-red-400 bg-red-900/20 border-red-500/20'
   }
 
   const formatTimestamp = (ts: string) => {
@@ -220,18 +220,18 @@ export default function AIInvestigationsPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
               <Brain className="w-7 h-7 text-purple-500" />
               AI Investigation Assistant
             </h1>
-            <p className="text-slate-600 mt-1">
+            <p className="text-slate-400 mt-1">
               Ask questions about your infrastructure, investigate incidents, and get AI-powered insights
             </p>
           </div>
           <button
             onClick={loadHistory}
             disabled={isLoadingHistory}
-            className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 border border-white/10 rounded-lg text-slate-300 hover:bg-white/5 transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${isLoadingHistory ? 'animate-spin' : ''}`} />
             Refresh
@@ -241,22 +241,22 @@ export default function AIInvestigationsPage() {
         {/* Main Two-Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Panel - History */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5 lg:col-span-1">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-              <History className="w-5 h-5 text-slate-500" />
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5 lg:col-span-1">
+            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <History className="w-5 h-5 text-slate-400" />
               Recent Queries
             </h2>
 
             {isLoadingHistory ? (
               <div className="space-y-3">
                 {[1, 2, 3, 4].map(i => (
-                  <div key={i} className="h-16 bg-slate-100 rounded-lg animate-pulse" />
+                  <div key={i} className="h-16 bg-slate-800/30 rounded-lg animate-pulse" />
                 ))}
               </div>
             ) : history.length === 0 ? (
               <div className="text-center py-12">
                 <MessageSquare className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                <p className="text-slate-500 text-sm">No query history yet</p>
+                <p className="text-slate-400 text-sm">No query history yet</p>
                 <p className="text-slate-400 text-xs mt-1">Ask a question to get started</p>
               </div>
             ) : (
@@ -265,13 +265,13 @@ export default function AIInvestigationsPage() {
                   <button
                     key={item.id}
                     onClick={() => handleHistoryClick(item)}
-                    className="w-full text-left p-3 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors group"
+                    className="w-full text-left p-3 bg-slate-800/50 hover:bg-white/5 rounded-lg transition-colors group"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm text-slate-800 font-medium line-clamp-2">
+                      <p className="text-sm text-white font-medium line-clamp-2">
                         {item.question}
                       </p>
-                      <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 flex-shrink-0 mt-0.5" />
+                      <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-400 flex-shrink-0 mt-0.5" />
                     </div>
                     <div className="flex items-center gap-2 mt-1.5">
                       <Clock className="w-3 h-3 text-slate-400" />
@@ -299,7 +299,7 @@ export default function AIInvestigationsPage() {
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   activeTab === 'query'
                     ? 'bg-purple-600 text-white'
-                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                    : 'bg-slate-800/50 border border-white/5 text-slate-300 hover:bg-white/5'
                 }`}
               >
                 <Search className="w-4 h-4" />
@@ -310,7 +310,7 @@ export default function AIInvestigationsPage() {
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   activeTab === 'investigate'
                     ? 'bg-purple-600 text-white'
-                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                    : 'bg-slate-800/50 border border-white/5 text-slate-300 hover:bg-white/5'
                 }`}
               >
                 <Target className="w-4 h-4" />
@@ -322,8 +322,8 @@ export default function AIInvestigationsPage() {
             {activeTab === 'query' && (
               <div className="space-y-6">
                 {/* Query Input */}
-                <div className="bg-white rounded-xl border border-slate-200 p-5">
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
                     What would you like to know?
                   </label>
                   <div className="flex gap-3">
@@ -340,7 +340,7 @@ export default function AIInvestigationsPage() {
                         }}
                         placeholder="e.g., Why is auth-service erroring? What caused the spike in latency at 3pm?"
                         rows={3}
-                        className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 resize-none"
+                        className="w-full pl-10 pr-4 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 resize-none"
                       />
                     </div>
                     <button
@@ -366,7 +366,7 @@ export default function AIInvestigationsPage() {
                       <button
                         key={suggestion}
                         onClick={() => setQueryInput(suggestion)}
-                        className="text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition-colors"
+                        className="text-xs px-3 py-1.5 bg-slate-800/30 hover:bg-white/10 text-slate-400 rounded-full transition-colors"
                       >
                         {suggestion}
                       </button>
@@ -376,20 +376,20 @@ export default function AIInvestigationsPage() {
 
                 {/* Loading State */}
                 {isQuerying && (
-                  <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+                  <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-8 text-center">
                     <Loader2 className="w-8 h-8 text-purple-500 animate-spin mx-auto mb-3" />
-                    <p className="text-slate-600">Analyzing your infrastructure data...</p>
+                    <p className="text-slate-400">Analyzing your infrastructure data...</p>
                     <p className="text-slate-400 text-sm mt-1">This may take a few seconds</p>
                   </div>
                 )}
 
                 {/* Query Response */}
                 {queryResponse && !isQuerying && (
-                  <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+                  <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5 space-y-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-center gap-2">
                         <Sparkles className="w-5 h-5 text-purple-500" />
-                        <h3 className="text-lg font-semibold text-slate-900">AI Response</h3>
+                        <h3 className="text-lg font-semibold text-white">AI Response</h3>
                       </div>
                       {queryResponse.confidence_score != null && (
                         <span className={`text-sm px-2.5 py-1 rounded-lg border font-medium ${getConfidenceColor(queryResponse.confidence_score)}`}>
@@ -399,8 +399,8 @@ export default function AIInvestigationsPage() {
                     </div>
 
                     {/* Answer Text */}
-                    <div className="bg-slate-50 rounded-lg p-4">
-                      <p className="text-slate-800 whitespace-pre-wrap leading-relaxed">
+                    <div className="bg-slate-800/50 rounded-lg p-4">
+                      <p className="text-white whitespace-pre-wrap leading-relaxed">
                         {queryResponse.answer}
                       </p>
                     </div>
@@ -409,8 +409,8 @@ export default function AIInvestigationsPage() {
                     {queryResponse.generated_sql && (
                       <div>
                         <div className="flex items-center gap-2 mb-2">
-                          <Code className="w-4 h-4 text-slate-500" />
-                          <h4 className="text-sm font-medium text-slate-700">Generated Query</h4>
+                          <Code className="w-4 h-4 text-slate-400" />
+                          <h4 className="text-sm font-medium text-slate-300">Generated Query</h4>
                         </div>
                         <pre className="bg-slate-900 text-green-400 p-4 rounded-lg text-sm overflow-x-auto">
                           {queryResponse.generated_sql}
@@ -423,14 +423,14 @@ export default function AIInvestigationsPage() {
                       <div>
                         <div className="flex items-center gap-2 mb-2">
                           <Lightbulb className="w-4 h-4 text-amber-500" />
-                          <h4 className="text-sm font-medium text-slate-700">Follow-up Questions</h4>
+                          <h4 className="text-sm font-medium text-slate-300">Follow-up Questions</h4>
                         </div>
                         <div className="space-y-2">
                           {queryResponse.suggestions.map((suggestion, idx) => (
                             <button
                               key={idx}
                               onClick={() => setQueryInput(suggestion)}
-                              className="w-full text-left p-3 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg text-sm text-amber-800 transition-colors flex items-center gap-2"
+                              className="w-full text-left p-3 bg-amber-900/20 hover:bg-amber-900/30 border border-amber-500/20 rounded-lg text-sm text-amber-400 transition-colors flex items-center gap-2"
                             >
                               <ArrowRight className="w-4 h-4 flex-shrink-0" />
                               {suggestion}
@@ -443,10 +443,10 @@ export default function AIInvestigationsPage() {
                     {/* Sources */}
                     {queryResponse.sources && queryResponse.sources.length > 0 && (
                       <div>
-                        <h4 className="text-sm font-medium text-slate-700 mb-2">Data Sources</h4>
+                        <h4 className="text-sm font-medium text-slate-300 mb-2">Data Sources</h4>
                         <div className="flex flex-wrap gap-2">
                           {queryResponse.sources.map((source, idx) => (
-                            <span key={idx} className="text-xs px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full">
+                            <span key={idx} className="text-xs px-2.5 py-1 bg-slate-800/30 text-slate-400 rounded-full">
                               {source}
                             </span>
                           ))}
@@ -456,15 +456,15 @@ export default function AIInvestigationsPage() {
 
                     {/* Feedback */}
                     {queryResponse.query_id && (
-                      <div className="flex items-center gap-3 pt-3 border-t border-slate-200">
-                        <span className="text-sm text-slate-500">Was this helpful?</span>
+                      <div className="flex items-center gap-3 pt-3 border-t border-white/5">
+                        <span className="text-sm text-slate-400">Was this helpful?</span>
                         <button
                           onClick={() => handleFeedback(queryResponse.query_id!, 'up')}
                           disabled={!!feedbackGiven[queryResponse.query_id!]}
                           className={`p-2 rounded-lg transition-colors ${
                             feedbackGiven[queryResponse.query_id!] === 'up'
-                              ? 'bg-green-100 text-green-600'
-                              : 'hover:bg-slate-100 text-slate-400 hover:text-slate-600'
+                              ? 'bg-green-500/20 text-green-400'
+                              : 'hover:bg-white/5 text-slate-400 hover:text-slate-400'
                           }`}
                         >
                           <ThumbsUp className="w-4 h-4" />
@@ -474,8 +474,8 @@ export default function AIInvestigationsPage() {
                           disabled={!!feedbackGiven[queryResponse.query_id!]}
                           className={`p-2 rounded-lg transition-colors ${
                             feedbackGiven[queryResponse.query_id!] === 'down'
-                              ? 'bg-red-100 text-red-600'
-                              : 'hover:bg-slate-100 text-slate-400 hover:text-slate-600'
+                              ? 'bg-red-500/20 text-red-400'
+                              : 'hover:bg-white/5 text-slate-400 hover:text-slate-400'
                           }`}
                         >
                           <ThumbsDown className="w-4 h-4" />
@@ -494,14 +494,14 @@ export default function AIInvestigationsPage() {
             {activeTab === 'investigate' && (
               <div className="space-y-6">
                 {/* Investigation Form */}
-                <div className="bg-white rounded-xl border border-slate-200 p-5">
-                  <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+                  <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                     <Target className="w-5 h-5 text-purple-500" />
                     New Investigation
                   </h3>
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                      <label className="block text-sm font-medium text-slate-300 mb-1">
                         Investigation Title
                       </label>
                       <input
@@ -509,11 +509,11 @@ export default function AIInvestigationsPage() {
                         value={investigationTitle}
                         onChange={(e) => setInvestigationTitle(e.target.value)}
                         placeholder="e.g., Auth service degradation at 3pm"
-                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                        className="w-full px-4 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                      <label className="block text-sm font-medium text-slate-300 mb-1">
                         Description (optional)
                       </label>
                       <textarea
@@ -521,7 +521,7 @@ export default function AIInvestigationsPage() {
                         onChange={(e) => setInvestigationDescription(e.target.value)}
                         placeholder="Describe what you observed, affected services, user reports..."
                         rows={4}
-                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 resize-none"
+                        className="w-full px-4 py-2.5 bg-slate-800/50 border border-white/10 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 resize-none"
                       />
                     </div>
                     <button
@@ -546,19 +546,19 @@ export default function AIInvestigationsPage() {
 
                 {/* Investigation Loading */}
                 {isInvestigating && (
-                  <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+                  <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-8 text-center">
                     <Loader2 className="w-8 h-8 text-purple-500 animate-spin mx-auto mb-3" />
-                    <p className="text-slate-600">Running AI investigation...</p>
+                    <p className="text-slate-400">Running AI investigation...</p>
                     <p className="text-slate-400 text-sm mt-1">Analyzing logs, traces, and metrics for root cause</p>
                   </div>
                 )}
 
                 {/* Investigation Results */}
                 {investigationResult && !isInvestigating && (
-                  <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-5">
+                  <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5 space-y-5">
                     <div className="flex items-center gap-2">
                       <FileText className="w-5 h-5 text-purple-500" />
-                      <h3 className="text-lg font-semibold text-slate-900">Investigation Results</h3>
+                      <h3 className="text-lg font-semibold text-white">Investigation Results</h3>
                       {(investigationResult.confidence ?? investigationResult.confidence_score) != null && (
                         <span className={`ml-auto text-sm px-2.5 py-1 rounded-lg border font-medium ${getConfidenceColor(investigationResult.confidence ?? investigationResult.confidence_score ?? 0)}`}>
                           {Math.round((investigationResult.confidence ?? investigationResult.confidence_score ?? 0) * 100)}% confidence
@@ -568,18 +568,18 @@ export default function AIInvestigationsPage() {
 
                     {/* Root Cause */}
                     {investigationResult.root_cause && (
-                      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                      <div className="bg-red-900/20 border border-red-500/20 rounded-lg p-4">
                         <div className="flex items-center gap-2 mb-2">
-                          <AlertTriangle className="w-4 h-4 text-red-600" />
-                          <h4 className="text-sm font-semibold text-red-800">Root Cause</h4>
+                          <AlertTriangle className="w-4 h-4 text-red-400" />
+                          <h4 className="text-sm font-semibold text-red-400">Root Cause</h4>
                         </div>
-                        <p className="text-red-700 text-sm leading-relaxed">
+                        <p className="text-red-300 text-sm leading-relaxed">
                           {typeof investigationResult.root_cause === 'string'
                             ? investigationResult.root_cause
                             : investigationResult.root_cause.description || investigationResult.root_cause.type || 'Unknown root cause'}
                         </p>
                         {typeof investigationResult.root_cause === 'object' && investigationResult.root_cause.service && (
-                          <p className="text-red-600 text-xs mt-1">
+                          <p className="text-red-400 text-xs mt-1">
                             Service: {investigationResult.root_cause.service}
                             {investigationResult.root_cause.confidence != null && (
                               <span className="ml-2">Confidence: {Math.round(investigationResult.root_cause.confidence * 100)}%</span>
@@ -592,12 +592,12 @@ export default function AIInvestigationsPage() {
                     {/* Contributing Factors */}
                     {investigationResult.contributing_factors && investigationResult.contributing_factors.length > 0 && (
                       <div>
-                        <h4 className="text-sm font-semibold text-slate-700 mb-2">Contributing Factors</h4>
+                        <h4 className="text-sm font-semibold text-slate-300 mb-2">Contributing Factors</h4>
                         <div className="space-y-2">
                           {investigationResult.contributing_factors.map((factor, idx) => (
-                            <div key={idx} className="flex items-start gap-2 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                            <div key={idx} className="flex items-start gap-2 p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
                               <span className="text-orange-500 font-bold text-sm mt-0.5">{idx + 1}.</span>
-                              <p className="text-sm text-orange-800">
+                              <p className="text-sm text-orange-300">
                                 {typeof factor === 'string' ? factor : factor.description || factor.type || `Factor ${idx + 1}`}
                               </p>
                             </div>
@@ -609,12 +609,12 @@ export default function AIInvestigationsPage() {
                     {/* Timeline */}
                     {investigationResult.timeline && investigationResult.timeline.length > 0 && (
                       <div>
-                        <h4 className="text-sm font-semibold text-slate-700 mb-2">Event Timeline</h4>
+                        <h4 className="text-sm font-semibold text-slate-300 mb-2">Event Timeline</h4>
                         <div className="space-y-2">
                           {investigationResult.timeline.map((event, idx) => {
                             const severity = event.severity || event.type || ''
                             return (
-                              <div key={idx} className="flex items-start gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                              <div key={idx} className="flex items-start gap-3 p-3 bg-slate-800/50 border border-white/5 rounded-lg">
                                 <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
                                   severity === 'critical' || severity === 'root_cause' ? 'bg-red-500' :
                                   severity === 'high' || severity === 'contributing_factor' ? 'bg-orange-500' :
@@ -622,10 +622,10 @@ export default function AIInvestigationsPage() {
                                   'bg-blue-500'
                                 }`} />
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-sm text-slate-800">{event.event || event.description || 'Unknown event'}</p>
+                                  <p className="text-sm text-white">{event.event || event.description || 'Unknown event'}</p>
                                   <div className="flex items-center gap-2 mt-0.5">
                                     {event.service && (
-                                      <span className="text-xs text-slate-500">{event.service}</span>
+                                      <span className="text-xs text-slate-400">{event.service}</span>
                                     )}
                                     <span className="text-xs text-slate-400">
                                       {formatTimestamp(event.timestamp)}
@@ -643,12 +643,12 @@ export default function AIInvestigationsPage() {
                     {((investigationResult.recommendations && investigationResult.recommendations.length > 0) ||
                       (investigationResult.next_steps && investigationResult.next_steps.length > 0)) && (
                       <div>
-                        <h4 className="text-sm font-semibold text-slate-700 mb-2">Recommendations</h4>
+                        <h4 className="text-sm font-semibold text-slate-300 mb-2">Recommendations</h4>
                         <div className="space-y-2">
                           {(investigationResult.recommendations || investigationResult.next_steps || []).map((rec, idx) => (
-                            <div key={idx} className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-                              <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-                              <p className="text-sm text-green-800">{rec}</p>
+                            <div key={idx} className="flex items-start gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                              <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
+                              <p className="text-sm text-green-300">{rec}</p>
                             </div>
                           ))}
                         </div>

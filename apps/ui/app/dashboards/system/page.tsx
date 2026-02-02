@@ -230,10 +230,10 @@ function WidgetShell({ title, icon: Icon, iconColor, isLoading, children }: {
   children: React.ReactNode
 }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-6 flex flex-col">
+    <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-6 flex flex-col">
       <div className="flex items-center gap-2 mb-4">
         <Icon className={`w-5 h-5 ${iconColor}`} />
-        <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+        <h3 className="text-sm font-semibold text-white">{title}</h3>
       </div>
       {isLoading ? (
         <div className="flex-1 flex items-center justify-center py-8">
@@ -257,10 +257,10 @@ function ErrorsByServiceWidget({ data, isLoading }: { data: ErrorByService[]; is
           {data.map((item, idx) => (
             <div key={idx}>
               <div className="flex items-center justify-between text-sm mb-1">
-                <span className="text-slate-700 font-medium truncate max-w-[180px]">{item.service || 'unknown'}</span>
+                <span className="text-slate-300 font-medium truncate max-w-[180px]">{item.service || 'unknown'}</span>
                 <span className="text-red-600 font-bold">{item.error_count.toLocaleString()}</span>
               </div>
-              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div className="h-2 bg-slate-800/30 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-red-400 to-red-600 rounded-full transition-all"
                   style={{ width: `${(item.error_count / maxCount) * 100}%` }}
@@ -307,7 +307,7 @@ function ResponseTimeTrendsWidget({ data, isLoading }: { data: TimeSeriesBucket[
               )
             })}
           </div>
-          <div className="flex items-center gap-4 text-[10px] text-slate-500">
+          <div className="flex items-center gap-4 text-[10px] text-slate-400">
             <div className="flex items-center gap-1">
               <div className="w-3 h-2 bg-blue-500 rounded" />
               <span>Avg</span>
@@ -332,7 +332,7 @@ function LogVolumeWidget({ data, isLoading }: { data: TimeSeriesBucket[]; isLoad
         <p className="text-sm text-slate-400 text-center py-4">No log data</p>
       ) : (
         <>
-          <p className="text-2xl font-bold text-slate-900 mb-3">{totalLogs.toLocaleString()} <span className="text-sm font-normal text-slate-500">total logs</span></p>
+          <p className="text-2xl font-bold text-white mb-3">{totalLogs.toLocaleString()} <span className="text-sm font-normal text-slate-400">total logs</span></p>
           <div className="flex items-end gap-0.5 h-24">
             {data.slice(-40).map((bucket, idx) => {
               const count = bucket.count || 0
@@ -364,11 +364,11 @@ function TopErrorMessagesWidget({ data, isLoading }: { data: TopErrorMessage[]; 
       ) : (
         <div className="space-y-2 max-h-[220px] overflow-y-auto">
           {data.map((item, idx) => (
-            <div key={idx} className="flex items-start gap-2 p-2 bg-slate-50 rounded-lg">
+            <div key={idx} className="flex items-start gap-2 p-2 bg-slate-800/50 rounded-lg">
               <span className="text-xs font-mono text-red-500 bg-red-50 px-1.5 py-0.5 rounded shrink-0">
                 {item.error_count}x
               </span>
-              <p className="text-xs text-slate-700 line-clamp-2 break-all">{item.msg || 'Unknown error'}</p>
+              <p className="text-xs text-slate-300 line-clamp-2 break-all">{item.msg || 'Unknown error'}</p>
             </div>
           ))}
         </div>
@@ -403,17 +403,17 @@ function ServiceHealthMatrixWidget({ data, isLoading }: { data: ServiceHealthEnt
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-slate-200">
-                <th className="text-left py-1.5 text-slate-500 font-medium">Service</th>
+              <tr className="border-b border-white/5">
+                <th className="text-left py-1.5 text-slate-400 font-medium">Service</th>
                 {levels.map(l => (
-                  <th key={l} className="text-right py-1.5 text-slate-500 font-medium px-2">{l}</th>
+                  <th key={l} className="text-right py-1.5 text-slate-400 font-medium px-2">{l}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {services.map(([svc, counts]) => (
-                <tr key={svc} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="py-1.5 text-slate-700 font-medium truncate max-w-[120px]">{svc}</td>
+                <tr key={svc} className="border-b border-slate-100 hover:bg-white/5">
+                  <td className="py-1.5 text-slate-300 font-medium truncate max-w-[120px]">{svc}</td>
                   {levels.map(l => {
                     const count = counts[l] || 0
                     return (
@@ -446,11 +446,11 @@ function SlowestEndpointsWidget({ data, isLoading }: { data: SlowEndpoint[]; isL
       ) : (
         <div className="space-y-2">
           {data.map((item, idx) => (
-            <div key={idx} className="flex items-center gap-3 p-2 bg-slate-50 rounded-lg">
-              <span className="text-xs font-mono text-slate-500 w-5">#{idx + 1}</span>
+            <div key={idx} className="flex items-center gap-3 p-2 bg-slate-800/50 rounded-lg">
+              <span className="text-xs font-mono text-slate-400 w-5">#{idx + 1}</span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-slate-700 font-medium truncate">{item.service || 'unknown'}</p>
-                <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-0.5">
+                <p className="text-sm text-slate-300 font-medium truncate">{item.service || 'unknown'}</p>
+                <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-0.5">
                   <span>avg: {formatMs(item.avg_response_time)}</span>
                   <span>max: {formatMs(item.max_response_time)}</span>
                   <span>{item.request_count.toLocaleString()} req</span>
@@ -482,13 +482,13 @@ function SecurityPatternsWidget({ data, isLoading }: { data: SecurityPattern[]; 
         </div>
       ) : (
         <>
-          <p className="text-lg font-bold text-red-600 mb-3">{totalEvents.toLocaleString()} <span className="text-sm font-normal text-slate-500">security events</span></p>
+          <p className="text-lg font-bold text-red-600 mb-3">{totalEvents.toLocaleString()} <span className="text-sm font-normal text-slate-400">security events</span></p>
           <div className="space-y-2 max-h-[180px] overflow-y-auto">
             {data.map((item, idx) => (
               <div key={idx} className="flex items-center justify-between p-2 bg-red-50 rounded-lg">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-mono text-slate-700">{item.source_ip || 'unknown'}</p>
-                  <p className="text-[10px] text-slate-500">{item.service}</p>
+                  <p className="text-xs font-mono text-slate-300">{item.source_ip || 'unknown'}</p>
+                  <p className="text-[10px] text-slate-400">{item.service}</p>
                 </div>
                 <span className="text-xs font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded">
                   {item.security_events}
@@ -526,20 +526,20 @@ function InfraUtilizationWidget({ data, isLoading }: { data: InfraMetric[]; isLo
         <div className="space-y-3">
           {hosts.map(([host, metrics]) => (
             <div key={host}>
-              <p className="text-xs font-medium text-slate-700 mb-1 truncate">{host}</p>
+              <p className="text-xs font-medium text-slate-300 mb-1 truncate">{host}</p>
               <div className="flex gap-2">
                 {metrics.map((m, idx) => {
                   const pct = Math.min(m.avg_value, 100)
                   const color = metricColors[m.metric_name] || 'bg-slate-400'
                   return (
                     <div key={idx} className="flex-1">
-                      <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-3 bg-slate-800/30 rounded-full overflow-hidden">
                         <div
                           className={`h-full ${color} rounded-full transition-all`}
                           style={{ width: `${pct}%` }}
                         />
                       </div>
-                      <p className="text-[9px] text-slate-500 mt-0.5 text-center">
+                      <p className="text-[9px] text-slate-400 mt-0.5 text-center">
                         {m.metric_name?.replace('_', ' ')} {pct.toFixed(0)}%
                       </p>
                     </div>
@@ -548,7 +548,7 @@ function InfraUtilizationWidget({ data, isLoading }: { data: InfraMetric[]; isLo
               </div>
             </div>
           ))}
-          <div className="flex items-center gap-3 pt-2 border-t border-slate-100 text-[10px] text-slate-500">
+          <div className="flex items-center gap-3 pt-2 border-t border-slate-100 text-[10px] text-slate-400">
             <div className="flex items-center gap-1"><div className="w-2 h-2 bg-blue-500 rounded" /> CPU</div>
             <div className="flex items-center gap-1"><div className="w-2 h-2 bg-purple-500 rounded" /> Memory</div>
             <div className="flex items-center gap-1"><div className="w-2 h-2 bg-orange-500 rounded" /> Disk</div>
@@ -634,17 +634,17 @@ export default function SystemIntelligenceDashboard() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
+            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
               <Database className="w-8 h-8 text-blue-600" />
               System Intelligence
             </h1>
-            <p className="text-slate-600 mt-1">
+            <p className="text-slate-400 mt-1">
               Auto-generated dashboard powered by the Advanced Query Engine
             </p>
           </div>
           <div className="flex items-center gap-3">
             {lastRefreshed && (
-              <span className="text-xs text-slate-500 flex items-center gap-1">
+              <span className="text-xs text-slate-400 flex items-center gap-1">
                 <Clock className="w-3 h-3" />
                 Updated {lastRefreshed.toLocaleTimeString()}
               </span>
@@ -662,7 +662,7 @@ export default function SystemIntelligenceDashboard() {
 
         {/* Query Engine Badges */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-slate-500">Powered by:</span>
+          <span className="text-xs text-slate-400">Powered by:</span>
           <span className="px-2 py-1 text-[10px] font-medium bg-blue-50 text-blue-700 rounded-full border border-blue-200">
             POST /v1/query/advanced
           </span>
@@ -672,7 +672,7 @@ export default function SystemIntelligenceDashboard() {
           <span className="px-2 py-1 text-[10px] font-medium bg-purple-50 text-purple-700 rounded-full border border-purple-200">
             POST /v1/query/aggregate
           </span>
-          <span className="px-2 py-1 text-[10px] font-medium bg-slate-50 text-slate-600 rounded-full border border-slate-200">
+          <span className="px-2 py-1 text-[10px] font-medium bg-slate-800/50 text-slate-400 rounded-full border border-white/5">
             8 query types: count, sum, avg, min, max, percentile, unique, cardinality
           </span>
         </div>

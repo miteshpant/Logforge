@@ -182,7 +182,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
@@ -195,18 +195,18 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
       {/* Sidebar */}
       <div className={`
-        fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0
+        fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 border-r border-white/5 transform transition-transform duration-300 ease-in-out lg:translate-x-0
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         <div className="flex flex-col h-full">
           {/* Logo and tenant info */}
-          <div className="flex items-center justify-between p-6 border-b border-slate-200">
+          <div className="flex items-center justify-between p-6 border-b border-white/5">
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
                 <BarChart3 className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-slate-900">Logforge</h1>
+                <h1 className="text-xl font-bold text-white">Logforge</h1>
                 <p className="text-xs text-slate-500 flex items-center space-x-1">
                   <Building2 className="w-3 h-3" />
                   <span>{tenant?.name || 'Loading...'}</span>
@@ -231,14 +231,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               className={`
                 group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 mb-3
                 ${pathname === '/centrum'
-                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                  : 'text-slate-400 hover:text-white hover:bg-white/5'
                 }
               `}
               onClick={() => setSidebarOpen(false)}
               data-testid="nav-centrum"
             >
-              <Home className={`flex-shrink-0 w-5 h-5 mr-3 ${pathname === '/centrum' ? 'text-blue-600' : 'text-slate-400'}`} />
+              <Home className={`flex-shrink-0 w-5 h-5 mr-3 ${pathname === '/centrum' ? 'text-blue-400' : 'text-slate-500'}`} />
               <span>Centrum</span>
             </Link>
 
@@ -258,8 +258,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                       className={`
                         w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200
                         ${hasActiveChild
-                          ? 'text-blue-700 bg-blue-50/50'
-                          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+                          ? 'text-blue-400 bg-blue-500/10'
+                          : 'text-slate-400 hover:text-white hover:bg-white/5'
                         }
                       `}
                       data-testid={`nav-section-${section.id}`}
@@ -276,7 +276,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
                     {/* Section items */}
                     {isExpanded && (
-                      <div className="ml-4 pl-3 border-l border-slate-200 mt-1 mb-2 space-y-0.5">
+                      <div className="ml-4 pl-3 border-l border-white/10 mt-1 mb-2 space-y-0.5">
                         {section.items.map((item) => {
                           const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
                           return (
@@ -286,14 +286,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                               className={`
                                 group flex items-center px-3 py-1.5 text-sm rounded-lg transition-all duration-200
                                 ${isActive
-                                  ? 'bg-blue-50 text-blue-700 font-medium'
-                                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                                  ? 'bg-blue-500/10 text-blue-400 font-medium'
+                                  : 'text-slate-400 hover:text-white hover:bg-white/5'
                                 }
                               `}
                               onClick={() => setSidebarOpen(false)}
                               data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
                             >
-                              <item.icon className={`flex-shrink-0 w-4 h-4 mr-2.5 ${isActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-500'}`} />
+                              <item.icon className={`flex-shrink-0 w-4 h-4 mr-2.5 ${isActive ? 'text-blue-400' : 'text-slate-500 group-hover:text-slate-400'}`} />
                               <span className="truncate">{item.name}</span>
                               {item.badge && (
                                 <Badge
@@ -316,19 +316,19 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </nav>
 
           {/* User menu */}
-          <div className="p-4 border-t border-slate-200">
+          <div className="p-4 border-t border-white/5">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="w-full justify-start h-auto p-3" data-testid="user-menu">
                   <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-gradient-to-br from-slate-400 to-slate-500 rounded-full flex items-center justify-center">
+                    <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center">
                       <User className="w-4 h-4 text-white" />
                     </div>
                     <div className="flex-1 text-left">
-                      <p className="text-sm font-medium text-slate-900">
+                      <p className="text-sm font-medium text-white">
                         {user?.full_name || user?.email || 'Loading...'}
                       </p>
-                      <p className="text-xs text-slate-500 capitalize" data-testid="current-tenant">
+                      <p className="text-xs text-slate-400 capitalize" data-testid="current-tenant">
                         {userRole} • {tenant?.name}
                       </p>
                     </div>
@@ -338,31 +338,31 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="end"
-                className="w-56 bg-white border border-slate-200 shadow-lg rounded-md p-1 z-50"
+                className="w-56 bg-slate-800 border border-white/10 shadow-lg rounded-md p-1 z-50"
                 style={{ backdropFilter: 'none' }}
               >
-                <DropdownMenuLabel className="px-3 py-2 text-sm font-semibold text-slate-900 bg-slate-50">
+                <DropdownMenuLabel className="px-3 py-2 text-sm font-semibold text-white bg-slate-700/50">
                   Account
                 </DropdownMenuLabel>
                 <DropdownMenuItem
                   data-testid="profile-settings"
-                  className="flex items-center px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer rounded-sm"
+                  className="flex items-center px-3 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white cursor-pointer rounded-sm"
                 >
                   <User className="w-4 h-4 mr-2" />
                   Profile Settings
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   data-testid="preferences"
-                  className="flex items-center px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer rounded-sm"
+                  className="flex items-center px-3 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white cursor-pointer rounded-sm"
                 >
                   <Settings className="w-4 h-4 mr-2" />
                   Preferences
                 </DropdownMenuItem>
-                <DropdownMenuSeparator className="my-1 border-slate-200" />
+                <DropdownMenuSeparator className="my-1 border-white/10" />
                 <DropdownMenuItem
                   onClick={handleLogout}
                   data-testid="logout-button"
-                  className="flex items-center px-3 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 cursor-pointer rounded-sm font-medium"
+                  className="flex items-center px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 cursor-pointer rounded-sm font-medium"
                 >
                   <LogOut className="w-4 h-4 mr-2" />
                   Sign Out
@@ -376,7 +376,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Main content */}
       <div className="flex-1 lg:ml-64">
         {/* Top header */}
-        <header className="bg-white border-b border-slate-200 px-4 lg:px-6 py-4">
+        <header className="bg-slate-900/80 backdrop-blur-xl border-b border-white/5 px-4 lg:px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <Button
@@ -390,7 +390,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
               {/* Breadcrumb or page title can go here */}
               <div className="hidden sm:block">
-                <h2 className="text-xl font-semibold text-slate-900">
+                <h2 className="text-xl font-semibold text-white">
                   {allNavItems.find(item => pathname === item.href || pathname?.startsWith(item.href + '/'))?.name || 'Dashboard'}
                 </h2>
               </div>

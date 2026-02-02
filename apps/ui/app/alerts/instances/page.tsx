@@ -53,14 +53,14 @@ const SEVERITY_COLORS: Record<string, string> = {
   high: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
   medium: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
   low: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  info: 'bg-gray-500/20 text-gray-400 border-gray-500/30'
+  info: 'bg-slate-500/20 text-slate-400 border-slate-500/30'
 }
 
 const STATUS_COLORS: Record<string, string> = {
   triggered: 'bg-red-500/20 text-red-400',
   acknowledged: 'bg-yellow-500/20 text-yellow-400',
   resolved: 'bg-green-500/20 text-green-400',
-  suppressed: 'bg-gray-500/20 text-gray-400'
+  suppressed: 'bg-slate-500/20 text-slate-400'
 }
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
@@ -243,12 +243,12 @@ export default function AlertInstancesPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">Alert Instances</h1>
-            <p className="text-gray-400 mt-1">View and manage triggered alerts</p>
+            <p className="text-slate-400 mt-1">View and manage triggered alerts</p>
           </div>
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             Refresh
@@ -305,55 +305,55 @@ export default function AlertInstancesPage() {
 
         {/* Alert Analytics from API */}
         {alertStats && (
-          <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+          <div className="bg-slate-800/50 border border-white/5 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-3">
               <BarChart3 className="w-4 h-4 text-blue-400" />
               <h3 className="text-sm font-semibold text-white">Alert Analytics</h3>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {alertStats.mean_time_to_acknowledge != null && (
-                <div className="p-3 bg-gray-900/50 rounded-lg">
-                  <p className="text-xs text-gray-400">MTTA</p>
+                <div className="p-3 bg-slate-900/50 rounded-lg">
+                  <p className="text-xs text-slate-400">MTTA</p>
                   <p className="text-lg font-bold text-white">
                     {typeof alertStats.mean_time_to_acknowledge === 'number'
                       ? `${Math.round(alertStats.mean_time_to_acknowledge / 60)}m`
                       : alertStats.mean_time_to_acknowledge}
                   </p>
-                  <p className="text-[10px] text-gray-500">Mean time to ack</p>
+                  <p className="text-[10px] text-slate-500">Mean time to ack</p>
                 </div>
               )}
               {alertStats.mean_time_to_resolve != null && (
-                <div className="p-3 bg-gray-900/50 rounded-lg">
-                  <p className="text-xs text-gray-400">MTTR</p>
+                <div className="p-3 bg-slate-900/50 rounded-lg">
+                  <p className="text-xs text-slate-400">MTTR</p>
                   <p className="text-lg font-bold text-white">
                     {typeof alertStats.mean_time_to_resolve === 'number'
                       ? `${Math.round(alertStats.mean_time_to_resolve / 60)}m`
                       : alertStats.mean_time_to_resolve}
                   </p>
-                  <p className="text-[10px] text-gray-500">Mean time to resolve</p>
+                  <p className="text-[10px] text-slate-500">Mean time to resolve</p>
                 </div>
               )}
               {alertStats.alert_frequency != null && (
-                <div className="p-3 bg-gray-900/50 rounded-lg">
-                  <p className="text-xs text-gray-400">Frequency</p>
+                <div className="p-3 bg-slate-900/50 rounded-lg">
+                  <p className="text-xs text-slate-400">Frequency</p>
                   <p className="text-lg font-bold text-white flex items-center gap-1">
                     <Activity className="w-4 h-4 text-blue-400" />
                     {typeof alertStats.alert_frequency === 'number'
                       ? alertStats.alert_frequency.toFixed(1)
                       : alertStats.alert_frequency}
                   </p>
-                  <p className="text-[10px] text-gray-500">alerts/hour</p>
+                  <p className="text-[10px] text-slate-500">alerts/hour</p>
                 </div>
               )}
               {alertStats.noise_ratio != null && (
-                <div className="p-3 bg-gray-900/50 rounded-lg">
-                  <p className="text-xs text-gray-400">Noise Ratio</p>
+                <div className="p-3 bg-slate-900/50 rounded-lg">
+                  <p className="text-xs text-slate-400">Noise Ratio</p>
                   <p className="text-lg font-bold text-white">
                     {typeof alertStats.noise_ratio === 'number'
                       ? `${(alertStats.noise_ratio * 100).toFixed(1)}%`
                       : alertStats.noise_ratio}
                   </p>
-                  <p className="text-[10px] text-gray-500">False positives</p>
+                  <p className="text-[10px] text-slate-500">False positives</p>
                 </div>
               )}
             </div>
@@ -363,20 +363,20 @@ export default function AlertInstancesPage() {
         {/* Filters */}
         <div className="flex flex-wrap gap-4 items-center">
           <div className="relative flex-1 min-w-[200px] max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
               placeholder="Search alerts..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
             />
           </div>
 
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+            className="px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
           >
             <option value="all">All Status</option>
             <option value="triggered">Triggered</option>
@@ -388,7 +388,7 @@ export default function AlertInstancesPage() {
           <select
             value={filterSeverity}
             onChange={(e) => setFilterSeverity(e.target.value)}
-            className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+            className="px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
           >
             <option value="all">All Severities</option>
             <option value="critical">Critical</option>
@@ -405,7 +405,7 @@ export default function AlertInstancesPage() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
             </div>
           ) : filteredInstances.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-48 text-gray-400 bg-gray-800/50 rounded-lg border border-gray-700">
+            <div className="flex flex-col items-center justify-center h-48 text-slate-400 bg-slate-800/50 rounded-lg border border-white/5">
               <Bell className="w-12 h-12 mb-4 opacity-50" />
               <p>No alerts found</p>
             </div>
@@ -413,10 +413,10 @@ export default function AlertInstancesPage() {
             filteredInstances.map((instance) => (
               <div
                 key={instance.id}
-                className={`bg-gray-800/50 border rounded-lg p-4 hover:bg-gray-800/70 transition-colors cursor-pointer ${
+                className={`bg-slate-800/50 border rounded-lg p-4 hover:bg-slate-800/70 transition-colors cursor-pointer ${
                   instance.status === 'triggered' ? 'border-red-500/50' :
                   instance.status === 'acknowledged' ? 'border-yellow-500/50' :
-                  'border-gray-700'
+                  'border-white/5'
                 }`}
                 onClick={() => setSelectedInstance(instance)}
               >
@@ -435,7 +435,7 @@ export default function AlertInstancesPage() {
                           {instance.status}
                         </span>
                       </div>
-                      <div className="flex items-center gap-4 mt-1 text-sm text-gray-400">
+                      <div className="flex items-center gap-4 mt-1 text-sm text-slate-400">
                         <span className="flex items-center gap-1">
                           <Clock className="w-3 h-3" />
                           {formatTimeAgo(instance.triggered_at)}
@@ -452,7 +452,7 @@ export default function AlertInstancesPage() {
                         )}
                       </div>
                       {instance.acknowledged_by && (
-                        <p className="text-sm text-gray-500 mt-1">
+                        <p className="text-sm text-slate-500 mt-1">
                           Acknowledged by {instance.acknowledged_by}
                         </p>
                       )}
@@ -475,7 +475,7 @@ export default function AlertInstancesPage() {
                         Resolve
                       </button>
                     )}
-                    <ChevronRight className="w-5 h-5 text-gray-500" />
+                    <ChevronRight className="w-5 h-5 text-slate-500" />
                   </div>
                 </div>
               </div>
@@ -487,7 +487,7 @@ export default function AlertInstancesPage() {
         {selectedInstance && (
           <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setSelectedInstance(null)}>
             <div
-              className="fixed right-0 top-0 h-full w-full max-w-xl bg-gray-900 border-l border-gray-700 overflow-y-auto"
+              className="fixed right-0 top-0 h-full w-full max-w-xl bg-slate-900 border-l border-white/5 overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="p-6 space-y-6">
@@ -505,14 +505,14 @@ export default function AlertInstancesPage() {
                   </div>
                   <button
                     onClick={() => setSelectedInstance(null)}
-                    className="text-gray-400 hover:text-white"
+                    className="text-slate-400 hover:text-white"
                   >
                     <XCircle className="w-6 h-6" />
                   </button>
                 </div>
 
                 {/* Timeline */}
-                <div className="border border-gray-700 rounded-lg p-4">
+                <div className="border border-white/5 rounded-lg p-4">
                   <h3 className="text-white font-medium mb-3">Timeline</h3>
                   <div className="space-y-3">
                     <div className="flex items-start gap-3">
@@ -521,7 +521,7 @@ export default function AlertInstancesPage() {
                       </div>
                       <div>
                         <p className="text-white text-sm">Triggered</p>
-                        <p className="text-gray-400 text-xs">{new Date(selectedInstance.triggered_at).toLocaleString()}</p>
+                        <p className="text-slate-400 text-xs">{new Date(selectedInstance.triggered_at).toLocaleString()}</p>
                       </div>
                     </div>
                     {selectedInstance.acknowledged_at && (
@@ -531,7 +531,7 @@ export default function AlertInstancesPage() {
                         </div>
                         <div>
                           <p className="text-white text-sm">Acknowledged by {selectedInstance.acknowledged_by}</p>
-                          <p className="text-gray-400 text-xs">{new Date(selectedInstance.acknowledged_at).toLocaleString()}</p>
+                          <p className="text-slate-400 text-xs">{new Date(selectedInstance.acknowledged_at).toLocaleString()}</p>
                         </div>
                       </div>
                     )}
@@ -542,7 +542,7 @@ export default function AlertInstancesPage() {
                         </div>
                         <div>
                           <p className="text-white text-sm">Resolved by {selectedInstance.resolved_by}</p>
-                          <p className="text-gray-400 text-xs">{new Date(selectedInstance.resolved_at).toLocaleString()}</p>
+                          <p className="text-slate-400 text-xs">{new Date(selectedInstance.resolved_at).toLocaleString()}</p>
                         </div>
                       </div>
                     )}
@@ -550,27 +550,27 @@ export default function AlertInstancesPage() {
                 </div>
 
                 {/* Trigger Data */}
-                <div className="border border-gray-700 rounded-lg p-4">
+                <div className="border border-white/5 rounded-lg p-4">
                   <h3 className="text-white font-medium mb-3">Trigger Details</h3>
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-gray-800 p-3 rounded-lg">
-                      <p className="text-gray-400 text-sm">Matched Events</p>
+                    <div className="bg-slate-800 p-3 rounded-lg">
+                      <p className="text-slate-400 text-sm">Matched Events</p>
                       <p className="text-xl font-bold text-white">{selectedInstance.trigger_data.matched_count}</p>
                     </div>
                     {selectedInstance.trigger_data.threshold && (
                       <>
-                        <div className="bg-gray-800 p-3 rounded-lg">
-                          <p className="text-gray-400 text-sm">Threshold</p>
+                        <div className="bg-slate-800 p-3 rounded-lg">
+                          <p className="text-slate-400 text-sm">Threshold</p>
                           <p className="text-xl font-bold text-white">{selectedInstance.trigger_data.threshold}</p>
                         </div>
-                        <div className="bg-gray-800 p-3 rounded-lg">
-                          <p className="text-gray-400 text-sm">Actual Value</p>
+                        <div className="bg-slate-800 p-3 rounded-lg">
+                          <p className="text-slate-400 text-sm">Actual Value</p>
                           <p className="text-xl font-bold text-red-400">{selectedInstance.trigger_data.actual_value}</p>
                         </div>
                       </>
                     )}
-                    <div className="bg-gray-800 p-3 rounded-lg">
-                      <p className="text-gray-400 text-sm">Related Logs</p>
+                    <div className="bg-slate-800 p-3 rounded-lg">
+                      <p className="text-slate-400 text-sm">Related Logs</p>
                       <p className="text-xl font-bold text-white">{selectedInstance.related_logs_count}</p>
                     </div>
                   </div>
@@ -578,33 +578,33 @@ export default function AlertInstancesPage() {
 
                 {/* Sample Values */}
                 {selectedInstance.trigger_data.sample_values.length > 0 && (
-                  <div className="border border-gray-700 rounded-lg p-4">
+                  <div className="border border-white/5 rounded-lg p-4">
                     <h3 className="text-white font-medium mb-3">Sample Data</h3>
-                    <pre className="bg-gray-800 p-3 rounded-lg text-sm text-gray-300 overflow-x-auto">
+                    <pre className="bg-slate-800 p-3 rounded-lg text-sm text-slate-300 overflow-x-auto">
                       {JSON.stringify(selectedInstance.trigger_data.sample_values, null, 2)}
                     </pre>
                   </div>
                 )}
 
                 {/* Notes */}
-                <div className="border border-gray-700 rounded-lg p-4">
+                <div className="border border-white/5 rounded-lg p-4">
                   <h3 className="text-white font-medium mb-3">Investigation Notes</h3>
                   {selectedInstance.notes.length > 0 ? (
                     <div className="space-y-2">
                       {selectedInstance.notes.map((note, idx) => (
-                        <div key={idx} className="bg-gray-800 p-3 rounded-lg text-sm text-gray-300">
+                        <div key={idx} className="bg-slate-800 p-3 rounded-lg text-sm text-slate-300">
                           {note}
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-gray-500 text-sm">No notes yet</p>
+                    <p className="text-slate-500 text-sm">No notes yet</p>
                   )}
                   <div className="mt-3">
                     <textarea
                       placeholder="Add a note..."
                       rows={2}
-                      className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-500 text-sm focus:outline-none focus:border-blue-500"
+                      className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-gray-500 text-sm focus:outline-none focus:border-blue-500"
                     />
                     <button className="mt-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors">
                       Add Note
@@ -619,15 +619,15 @@ export default function AlertInstancesPage() {
                   </div>
                 )}
                 {alertDetail && !isLoadingDetail && (
-                  <div className="border border-gray-700 rounded-lg p-4">
+                  <div className="border border-white/5 rounded-lg p-4">
                     <h3 className="text-white font-medium mb-3 flex items-center gap-2">
                       <BarChart3 className="w-4 h-4 text-blue-400" />
                       Extended Details
                     </h3>
                     <div className="space-y-2">
                       {alertDetail.description && (
-                        <div className="bg-gray-800 p-3 rounded-lg">
-                          <p className="text-gray-400 text-xs mb-1">Description</p>
+                        <div className="bg-slate-800 p-3 rounded-lg">
+                          <p className="text-slate-400 text-xs mb-1">Description</p>
                           <p className="text-sm text-white">{alertDetail.description}</p>
                         </div>
                       )}
@@ -643,11 +643,11 @@ export default function AlertInstancesPage() {
                         </a>
                       )}
                       {alertDetail.labels && Object.keys(alertDetail.labels).length > 0 && (
-                        <div className="bg-gray-800 p-3 rounded-lg">
-                          <p className="text-gray-400 text-xs mb-2">Labels</p>
+                        <div className="bg-slate-800 p-3 rounded-lg">
+                          <p className="text-slate-400 text-xs mb-2">Labels</p>
                           <div className="flex flex-wrap gap-1.5">
                             {Object.entries(alertDetail.labels).map(([key, value]) => (
-                              <span key={key} className="px-2 py-0.5 bg-gray-700 text-gray-300 rounded text-xs">
+                              <span key={key} className="px-2 py-0.5 bg-slate-700 text-slate-300 rounded text-xs">
                                 {key}={String(value)}
                               </span>
                             ))}
@@ -662,14 +662,14 @@ export default function AlertInstancesPage() {
                 <div className="flex gap-3">
                   <a
                     href={`/observability/logs?alert_id=${selectedInstance.id}`}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
                   >
                     <ExternalLink className="w-4 h-4" />
                     View Logs
                   </a>
                   <a
                     href={`/observability/traces?alert_id=${selectedInstance.id}`}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
                   >
                     <ExternalLink className="w-4 h-4" />
                     View Traces

@@ -148,8 +148,8 @@ export default function IntegrationsPage() {
     switch (status) {
       case 'connected': return <CheckCircle className="w-5 h-5 text-green-400" />
       case 'error': return <AlertTriangle className="w-5 h-5 text-red-400" />
-      case 'available': return <Plus className="w-5 h-5 text-gray-400" />
-      default: return <XCircle className="w-5 h-5 text-gray-400" />
+      case 'available': return <Plus className="w-5 h-5 text-slate-400" />
+      default: return <XCircle className="w-5 h-5 text-slate-400" />
     }
   }
 
@@ -157,7 +157,7 @@ export default function IntegrationsPage() {
     switch (status) {
       case 'connected': return 'border-green-500/50 bg-green-500/5'
       case 'error': return 'border-red-500/50 bg-red-500/5'
-      default: return 'border-gray-700 hover:border-gray-600'
+      default: return 'border-white/5 hover:border-white/10'
     }
   }
 
@@ -190,11 +190,11 @@ export default function IntegrationsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">Integrations</h1>
-            <p className="text-gray-400 mt-1">Connect Logforge with your favorite tools</p>
+            <p className="text-slate-400 mt-1">Connect Logforge with your favorite tools</p>
           </div>
           <button
             onClick={loadIntegrations}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
             Refresh
@@ -203,46 +203,46 @@ export default function IntegrationsPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+          <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-blue-500/20 rounded-lg">
                 <Puzzle className="w-5 h-5 text-blue-400" />
               </div>
               <div>
-                <p className="text-gray-400 text-sm">Total Integrations</p>
+                <p className="text-slate-400 text-sm">Total Integrations</p>
                 <p className="text-2xl font-bold text-white">{stats.total}</p>
               </div>
             </div>
           </div>
-          <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+          <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-green-500/20 rounded-lg">
                 <CheckCircle className="w-5 h-5 text-green-400" />
               </div>
               <div>
-                <p className="text-gray-400 text-sm">Connected</p>
+                <p className="text-slate-400 text-sm">Connected</p>
                 <p className="text-2xl font-bold text-white">{stats.connected}</p>
               </div>
             </div>
           </div>
-          <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+          <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-gray-500/20 rounded-lg">
-                <Plus className="w-5 h-5 text-gray-400" />
+              <div className="p-2 bg-slate-500/20 rounded-lg">
+                <Plus className="w-5 h-5 text-slate-400" />
               </div>
               <div>
-                <p className="text-gray-400 text-sm">Available</p>
+                <p className="text-slate-400 text-sm">Available</p>
                 <p className="text-2xl font-bold text-white">{stats.available}</p>
               </div>
             </div>
           </div>
-          <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+          <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-red-500/20 rounded-lg">
                 <AlertTriangle className="w-5 h-5 text-red-400" />
               </div>
               <div>
-                <p className="text-gray-400 text-sm">Errors</p>
+                <p className="text-slate-400 text-sm">Errors</p>
                 <p className="text-2xl font-bold text-white">{stats.errors}</p>
               </div>
             </div>
@@ -252,20 +252,20 @@ export default function IntegrationsPage() {
         {/* Filters */}
         <div className="flex flex-wrap gap-4 items-center">
           <div className="relative flex-1 min-w-[200px] max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
               placeholder="Search integrations..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
             />
           </div>
 
           <select
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value)}
-            className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+            className="px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
           >
             <option value="all">All Categories</option>
             <option value="alerting">Alerting</option>
@@ -279,7 +279,7 @@ export default function IntegrationsPage() {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+            className="px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
           >
             <option value="all">All Status</option>
             <option value="connected">Connected</option>
@@ -294,12 +294,12 @@ export default function IntegrationsPage() {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
           </div>
         ) : filteredIntegrations.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 bg-gray-800/50 border border-gray-700 rounded-lg">
-            <Puzzle className="w-12 h-12 text-gray-500 mb-4" />
+          <div className="flex flex-col items-center justify-center h-64 rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5">
+            <Puzzle className="w-12 h-12 text-slate-500 mb-4" />
             <h3 className="text-lg font-medium text-white mb-2">
               {integrations.length === 0 ? 'No integrations configured' : 'No matching integrations'}
             </h3>
-            <p className="text-gray-400 text-sm text-center max-w-md">
+            <p className="text-slate-400 text-sm text-center max-w-md">
               {integrations.length === 0
                 ? 'Connect your favorite tools to Logforge to start receiving alerts and syncing data.'
                 : 'Try adjusting your search or filter criteria.'}
@@ -319,7 +319,7 @@ export default function IntegrationsPage() {
             {filteredIntegrations.map((integration) => (
               <div
                 key={integration.id}
-                className={`bg-gray-800/50 border rounded-lg p-4 cursor-pointer transition-all hover:bg-gray-800/70 ${getStatusColor(integration.status)}`}
+                className={`bg-slate-800/50 border rounded-lg p-4 cursor-pointer transition-all hover:bg-slate-800/70 ${getStatusColor(integration.status)}`}
                 onClick={() => {
                   setSelectedIntegration(integration)
                   setShowConfigModal(true)
@@ -339,21 +339,21 @@ export default function IntegrationsPage() {
                   </div>
                   {getStatusIcon(integration.status)}
                 </div>
-                <p className="text-gray-400 text-sm mt-3">{integration.description}</p>
+                <p className="text-slate-400 text-sm mt-3">{integration.description}</p>
                 <div className="flex flex-wrap gap-1 mt-3">
                   {integration.features.slice(0, 3).map((feature, idx) => (
-                    <span key={idx} className="px-2 py-0.5 bg-gray-700 rounded text-xs text-gray-300">
+                    <span key={idx} className="px-2 py-0.5 bg-slate-700 rounded text-xs text-slate-300">
                       {feature}
                     </span>
                   ))}
                   {integration.features.length > 3 && (
-                    <span className="px-2 py-0.5 bg-gray-700 rounded text-xs text-gray-400">
+                    <span className="px-2 py-0.5 bg-slate-700 rounded text-xs text-slate-400">
                       +{integration.features.length - 3}
                     </span>
                   )}
                 </div>
                 {integration.status === 'connected' && integration.lastSync && (
-                  <p className="text-gray-500 text-xs mt-3">
+                  <p className="text-slate-500 text-xs mt-3">
                     Last synced: {formatTimeAgo(integration.lastSync)}
                   </p>
                 )}
@@ -371,8 +371,8 @@ export default function IntegrationsPage() {
         {/* Configuration Modal */}
         {showConfigModal && selectedIntegration && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-            <div className="bg-gray-800 border border-gray-700 rounded-lg w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between p-4 border-b border-gray-700">
+            <div className="bg-slate-800 border border-white/5 rounded-lg w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-4 border-b border-white/5">
                 <div className="flex items-center gap-3">
                   <div className={`p-2 rounded-lg ${CATEGORY_COLORS[selectedIntegration.category]}`}>
                     {getIntegrationIcon(selectedIntegration)}
@@ -386,33 +386,33 @@ export default function IntegrationsPage() {
                 </div>
                 <button
                   onClick={() => setShowConfigModal(false)}
-                  className="text-gray-400 hover:text-white"
+                  className="text-slate-400 hover:text-white"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               <div className="p-4 space-y-4">
-                <p className="text-gray-300">{selectedIntegration.description}</p>
+                <p className="text-slate-300">{selectedIntegration.description}</p>
 
                 {/* Status */}
                 <div className={`flex items-center gap-2 p-3 rounded-lg ${
                   selectedIntegration.status === 'connected' ? 'bg-green-500/10 border border-green-500/30' :
                   selectedIntegration.status === 'error' ? 'bg-red-500/10 border border-red-500/30' :
-                  'bg-gray-700/50 border border-gray-600'
+                  'bg-slate-700/50 border border-white/10'
                 }`}>
                   {getStatusIcon(selectedIntegration.status)}
                   <span className={`font-medium ${
                     selectedIntegration.status === 'connected' ? 'text-green-400' :
                     selectedIntegration.status === 'error' ? 'text-red-400' :
-                    'text-gray-300'
+                    'text-slate-300'
                   }`}>
                     {selectedIntegration.status === 'connected' ? 'Connected' :
                      selectedIntegration.status === 'error' ? 'Connection Error' :
                      'Not Connected'}
                   </span>
                   {selectedIntegration.lastSync && (
-                    <span className="text-gray-500 text-sm ml-auto">
+                    <span className="text-slate-500 text-sm ml-auto">
                       Last sync: {formatTimeAgo(selectedIntegration.lastSync)}
                     </span>
                   )}
@@ -423,7 +423,7 @@ export default function IntegrationsPage() {
                   <h4 className="text-white font-medium mb-2">Features</h4>
                   <div className="flex flex-wrap gap-2">
                     {selectedIntegration.features.map((feature, idx) => (
-                      <span key={idx} className="px-3 py-1 bg-gray-700 rounded-full text-sm text-gray-300">
+                      <span key={idx} className="px-3 py-1 bg-slate-700 rounded-full text-sm text-slate-300">
                         {feature}
                       </span>
                     ))}
@@ -432,24 +432,24 @@ export default function IntegrationsPage() {
 
                 {/* Configuration Form */}
                 {selectedIntegration.status === 'available' ? (
-                  <div className="border border-gray-600 rounded-lg p-4">
+                  <div className="border border-white/10 rounded-lg p-4">
                     <h4 className="text-white font-medium mb-3">Connect {selectedIntegration.name}</h4>
                     {selectedIntegration.id === 'slack' && (
                       <div className="space-y-3">
                         <div>
-                          <label className="block text-sm text-gray-400 mb-1">Webhook URL</label>
+                          <label className="block text-sm text-slate-400 mb-1">Webhook URL</label>
                           <input
                             type="text"
                             placeholder="https://hooks.slack.com/services/..."
-                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 text-sm"
+                            className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm"
                           />
                         </div>
                         <div>
-                          <label className="block text-sm text-gray-400 mb-1">Default Channel</label>
+                          <label className="block text-sm text-slate-400 mb-1">Default Channel</label>
                           <input
                             type="text"
                             placeholder="#alerts"
-                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 text-sm"
+                            className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm"
                           />
                         </div>
                       </div>
@@ -457,19 +457,19 @@ export default function IntegrationsPage() {
                     {selectedIntegration.id === 'pagerduty' && (
                       <div className="space-y-3">
                         <div>
-                          <label className="block text-sm text-gray-400 mb-1">API Key</label>
+                          <label className="block text-sm text-slate-400 mb-1">API Key</label>
                           <input
                             type="password"
                             placeholder="Enter your PagerDuty API key"
-                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 text-sm"
+                            className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm"
                           />
                         </div>
                         <div>
-                          <label className="block text-sm text-gray-400 mb-1">Service ID</label>
+                          <label className="block text-sm text-slate-400 mb-1">Service ID</label>
                           <input
                             type="text"
                             placeholder="PXXXXXX"
-                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 text-sm"
+                            className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm"
                           />
                         </div>
                       </div>
@@ -477,31 +477,31 @@ export default function IntegrationsPage() {
                     {!['slack', 'pagerduty'].includes(selectedIntegration.id) && (
                       <div className="space-y-3">
                         <div>
-                          <label className="block text-sm text-gray-400 mb-1">API Key / Token</label>
+                          <label className="block text-sm text-slate-400 mb-1">API Key / Token</label>
                           <input
                             type="password"
                             placeholder="Enter your API key"
-                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 text-sm"
+                            className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm"
                           />
                         </div>
                         <div>
-                          <label className="block text-sm text-gray-400 mb-1">Endpoint URL (optional)</label>
+                          <label className="block text-sm text-slate-400 mb-1">Endpoint URL (optional)</label>
                           <input
                             type="text"
                             placeholder="https://api.example.com"
-                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 text-sm"
+                            className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm"
                           />
                         </div>
                       </div>
                     )}
                   </div>
                 ) : selectedIntegration.status === 'connected' && selectedIntegration.config && (
-                  <div className="border border-gray-600 rounded-lg p-4">
+                  <div className="border border-white/10 rounded-lg p-4">
                     <h4 className="text-white font-medium mb-3">Configuration</h4>
                     <div className="space-y-2">
                       {Object.entries(selectedIntegration.config).map(([key, value]) => (
                         <div key={key} className="flex justify-between">
-                          <span className="text-gray-400 capitalize">{key.replace(/_/g, ' ')}</span>
+                          <span className="text-slate-400 capitalize">{key.replace(/_/g, ' ')}</span>
                           <span className="text-white">
                             {Array.isArray(value) ? value.join(', ') : String(value)}
                           </span>
@@ -523,10 +523,10 @@ export default function IntegrationsPage() {
                 </a>
               </div>
 
-              <div className="flex justify-end gap-3 p-4 border-t border-gray-700">
+              <div className="flex justify-end gap-3 p-4 border-t border-white/5">
                 <button
                   onClick={() => setShowConfigModal(false)}
-                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
                 >
                   Close
                 </button>

@@ -230,11 +230,11 @@ export default function PredictiveAnalyticsPage() {
 
   const getRiskColor = (level?: string) => {
     switch (level) {
-      case 'critical': return 'bg-red-100 text-red-700 border-red-200'
-      case 'high': return 'bg-orange-100 text-orange-700 border-orange-200'
-      case 'medium': return 'bg-yellow-100 text-yellow-700 border-yellow-200'
-      case 'low': return 'bg-green-100 text-green-700 border-green-200'
-      default: return 'bg-slate-100 text-slate-700 border-slate-200'
+      case 'critical': return 'bg-red-500/20 text-red-400 border-red-500/30'
+      case 'high': return 'bg-orange-500/20 text-orange-400 border-orange-500/30'
+      case 'medium': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
+      case 'low': return 'bg-green-500/20 text-green-400 border-green-500/30'
+      default: return 'bg-slate-800/30 text-slate-300 border-white/5'
     }
   }
 
@@ -248,17 +248,17 @@ export default function PredictiveAnalyticsPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
               <Brain className="w-7 h-7 text-blue-500" />
               Predictive Analytics
             </h1>
-            <p className="text-slate-600 mt-1">
+            <p className="text-slate-400 mt-1">
               AI-powered forecasting, SLA breach predictions, and capacity planning
             </p>
           </div>
           <button
             onClick={() => { loadSummary(); loadForecast(); loadSLABreaches(); loadCapacity() }}
-            className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 border border-white/10 rounded-lg text-slate-300 hover:bg-slate-800/50 transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
             Refresh All
@@ -269,40 +269,40 @@ export default function PredictiveAnalyticsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {isLoadingSummary ? (
             [1, 2, 3, 4].map(i => (
-              <div key={i} className="bg-white rounded-xl border border-slate-200 p-5 h-28 animate-pulse">
-                <div className="h-4 bg-slate-200 rounded w-24 mb-3" />
-                <div className="h-8 bg-slate-200 rounded w-16" />
+              <div key={i} className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5 h-28 animate-pulse">
+                <div className="h-4 bg-slate-700 rounded w-24 mb-3" />
+                <div className="h-8 bg-slate-700 rounded w-16" />
               </div>
             ))
           ) : (
             <>
-              <div className="bg-white rounded-xl border border-slate-200 p-5">
-                <div className="flex items-center gap-2 text-slate-600 mb-2">
+              <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+                <div className="flex items-center gap-2 text-slate-400 mb-2">
                   <BarChart3 className="w-4 h-4 text-blue-500" />
                   <span className="text-sm font-medium">Total Predictions</span>
                 </div>
-                <p className="text-3xl font-bold text-slate-900">{summary?.total_predictions ?? 0}</p>
+                <p className="text-3xl font-bold text-white">{summary?.total_predictions ?? 0}</p>
               </div>
-              <div className="bg-white rounded-xl border border-slate-200 p-5">
-                <div className="flex items-center gap-2 text-slate-600 mb-2">
+              <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+                <div className="flex items-center gap-2 text-slate-400 mb-2">
                   <AlertTriangle className="w-4 h-4 text-orange-500" />
                   <span className="text-sm font-medium">Services at Risk</span>
                 </div>
                 <p className="text-3xl font-bold text-orange-600">{summary?.services_at_risk ?? 0}</p>
               </div>
-              <div className="bg-white rounded-xl border border-slate-200 p-5">
-                <div className="flex items-center gap-2 text-slate-600 mb-2">
+              <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+                <div className="flex items-center gap-2 text-slate-400 mb-2">
                   <TrendingUp className="w-4 h-4 text-purple-500" />
                   <span className="text-sm font-medium">Capacity Trend</span>
                 </div>
-                <p className="text-xl font-bold text-slate-900 capitalize">{summary?.capacity_trend || 'Stable'}</p>
+                <p className="text-xl font-bold text-white capitalize">{summary?.capacity_trend || 'Stable'}</p>
               </div>
-              <div className="bg-white rounded-xl border border-slate-200 p-5">
-                <div className="flex items-center gap-2 text-slate-600 mb-2">
+              <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+                <div className="flex items-center gap-2 text-slate-400 mb-2">
                   <Target className="w-4 h-4 text-green-500" />
                   <span className="text-sm font-medium">Avg Confidence</span>
                 </div>
-                <p className="text-3xl font-bold text-slate-900">
+                <p className="text-3xl font-bold text-white">
                   {summary?.avg_confidence != null ? `${Math.round(summary.avg_confidence * 100)}%` : '--'}
                 </p>
               </div>
@@ -311,16 +311,16 @@ export default function PredictiveAnalyticsPage() {
         </div>
 
         {/* Trend Forecast */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
+        <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
               <Activity className="w-5 h-5 text-blue-500" />
               Trend Forecast
             </h2>
             <select
               value={selectedMetric}
               onChange={(e) => setSelectedMetric(e.target.value)}
-              className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:border-blue-500"
+              className="px-3 py-2 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-300 focus:outline-none focus:border-blue-500"
             >
               <option value="error_rate">Error Rate</option>
               <option value="log_volume">Log Volume</option>
@@ -336,25 +336,25 @@ export default function PredictiveAnalyticsPage() {
             <div className="space-y-4">
               {/* Trend Summary */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-slate-50 rounded-lg p-4">
-                  <p className="text-sm text-slate-500 mb-1">Current Value</p>
-                  <p className="text-2xl font-bold text-slate-900">
+                <div className="bg-slate-800/50 rounded-lg p-4">
+                  <p className="text-sm text-slate-400 mb-1">Current Value</p>
+                  <p className="text-2xl font-bold text-white">
                     {forecast.current_value != null ? forecast.current_value.toFixed(2) : '--'}
                   </p>
                 </div>
-                <div className="bg-slate-50 rounded-lg p-4">
-                  <p className="text-sm text-slate-500 mb-1">Predicted Value (7d)</p>
+                <div className="bg-slate-800/50 rounded-lg p-4">
+                  <p className="text-sm text-slate-400 mb-1">Predicted Value (7d)</p>
                   <div className="flex items-center gap-2">
-                    <p className="text-2xl font-bold text-slate-900">
+                    <p className="text-2xl font-bold text-white">
                       {forecast.predicted_value != null ? forecast.predicted_value.toFixed(2) : '--'}
                     </p>
                     {getTrendIcon(forecast.trend_direction)}
                   </div>
                 </div>
-                <div className="bg-slate-50 rounded-lg p-4">
-                  <p className="text-sm text-slate-500 mb-1">Trend</p>
+                <div className="bg-slate-800/50 rounded-lg p-4">
+                  <p className="text-sm text-slate-400 mb-1">Trend</p>
                   <div className="flex items-center gap-2">
-                    <p className="text-2xl font-bold text-slate-900 capitalize">
+                    <p className="text-2xl font-bold text-white capitalize">
                       {forecast.trend_direction || 'Stable'}
                     </p>
                     {forecast.trend_percentage != null && (
@@ -373,12 +373,12 @@ export default function PredictiveAnalyticsPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-slate-200">
-                        <th className="text-left py-2 px-3 text-slate-500 font-medium">Timestamp</th>
-                        <th className="text-right py-2 px-3 text-slate-500 font-medium">Value</th>
-                        <th className="text-right py-2 px-3 text-slate-500 font-medium">Lower Bound</th>
-                        <th className="text-right py-2 px-3 text-slate-500 font-medium">Upper Bound</th>
-                        <th className="text-center py-2 px-3 text-slate-500 font-medium">Type</th>
+                      <tr className="border-b border-white/5">
+                        <th className="text-left py-2 px-3 text-slate-400 font-medium">Timestamp</th>
+                        <th className="text-right py-2 px-3 text-slate-400 font-medium">Value</th>
+                        <th className="text-right py-2 px-3 text-slate-400 font-medium">Lower Bound</th>
+                        <th className="text-right py-2 px-3 text-slate-400 font-medium">Upper Bound</th>
+                        <th className="text-center py-2 px-3 text-slate-400 font-medium">Type</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -386,22 +386,22 @@ export default function PredictiveAnalyticsPage() {
                         ...(Array.isArray(forecast.historical) ? forecast.historical : []).slice(-7).map(p => ({ ...p, _type: 'historical' as const })),
                         ...(Array.isArray(forecast.projected) ? forecast.projected : Array.isArray(forecast.forecast) ? forecast.forecast : []).slice(0, 7).map(p => ({ ...p, _type: 'forecast' as const })),
                       ].map((point, idx) => (
-                        <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
-                          <td className="py-2 px-3 text-slate-700">{formatTimestamp(point.timestamp)}</td>
-                          <td className="py-2 px-3 text-right font-mono text-slate-900">
+                        <tr key={idx} className="border-b border-white/5 hover:bg-slate-800/50">
+                          <td className="py-2 px-3 text-slate-300">{formatTimestamp(point.timestamp)}</td>
+                          <td className="py-2 px-3 text-right font-mono text-white">
                             {(point.value ?? point.predicted_value ?? 0).toFixed(3)}
                           </td>
-                          <td className="py-2 px-3 text-right font-mono text-slate-500">
+                          <td className="py-2 px-3 text-right font-mono text-slate-400">
                             {point.lower_bound != null ? point.lower_bound.toFixed(3) : '--'}
                           </td>
-                          <td className="py-2 px-3 text-right font-mono text-slate-500">
+                          <td className="py-2 px-3 text-right font-mono text-slate-400">
                             {point.upper_bound != null ? point.upper_bound.toFixed(3) : '--'}
                           </td>
                           <td className="py-2 px-3 text-center">
                             <span className={`text-xs px-2 py-0.5 rounded-full ${
                               point._type === 'forecast'
-                                ? 'bg-purple-100 text-purple-700'
-                                : 'bg-blue-100 text-blue-700'
+                                ? 'bg-purple-500/20 text-purple-400'
+                                : 'bg-blue-500/20 text-blue-400'
                             }`}>
                               {point._type === 'forecast' ? 'Forecast' : 'Historical'}
                             </span>
@@ -416,15 +416,15 @@ export default function PredictiveAnalyticsPage() {
           ) : (
             <div className="text-center py-12">
               <Activity className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">No forecast data available</p>
+              <p className="text-slate-400">No forecast data available</p>
             </div>
           )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* SLA Breach Predictions */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <Shield className="w-5 h-5 text-red-500" />
               SLA Breach Predictions
             </h2>
@@ -432,44 +432,44 @@ export default function PredictiveAnalyticsPage() {
             {isLoadingSLA ? (
               <div className="space-y-3">
                 {[1, 2, 3].map(i => (
-                  <div key={i} className="h-16 bg-slate-100 rounded-lg animate-pulse" />
+                  <div key={i} className="h-16 bg-slate-800/30 rounded-lg animate-pulse" />
                 ))}
               </div>
             ) : slaBreaches.length === 0 ? (
               <div className="text-center py-10">
                 <Shield className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                <p className="text-slate-500 text-sm">No SLA breach risks detected</p>
+                <p className="text-slate-400 text-sm">No SLA breach risks detected</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-200">
-                      <th className="text-left py-2 px-2 text-slate-500 font-medium">Service</th>
-                      <th className="text-right py-2 px-2 text-slate-500 font-medium">Error Rate</th>
-                      <th className="text-right py-2 px-2 text-slate-500 font-medium">Breach In</th>
-                      <th className="text-center py-2 px-2 text-slate-500 font-medium">Confidence</th>
-                      <th className="text-center py-2 px-2 text-slate-500 font-medium">Risk</th>
+                    <tr className="border-b border-white/5">
+                      <th className="text-left py-2 px-2 text-slate-400 font-medium">Service</th>
+                      <th className="text-right py-2 px-2 text-slate-400 font-medium">Error Rate</th>
+                      <th className="text-right py-2 px-2 text-slate-400 font-medium">Breach In</th>
+                      <th className="text-center py-2 px-2 text-slate-400 font-medium">Confidence</th>
+                      <th className="text-center py-2 px-2 text-slate-400 font-medium">Risk</th>
                     </tr>
                   </thead>
                   <tbody>
                     {slaBreaches.map((item, idx) => (
-                      <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
+                      <tr key={idx} className="border-b border-white/5 hover:bg-slate-800/50">
                         <td className="py-2.5 px-2">
                           <div className="flex items-center gap-2">
                             <Server className="w-4 h-4 text-slate-400" />
-                            <span className="font-medium text-slate-900">{item.service_name}</span>
+                            <span className="font-medium text-white">{item.service_name}</span>
                           </div>
                         </td>
-                        <td className="py-2.5 px-2 text-right font-mono text-slate-700">
+                        <td className="py-2.5 px-2 text-right font-mono text-slate-300">
                           {item.current_error_rate != null ? `${(item.current_error_rate * 100).toFixed(2)}%` : '--'}
                         </td>
-                        <td className="py-2.5 px-2 text-right text-slate-700">
+                        <td className="py-2.5 px-2 text-right text-slate-300">
                           {item.predicted_breach_time || '--'}
                         </td>
                         <td className="py-2.5 px-2 text-center">
                           {item.confidence != null && (
-                            <span className="text-xs font-medium text-slate-600">
+                            <span className="text-xs font-medium text-slate-400">
                               {Math.round(item.confidence * 100)}%
                             </span>
                           )}
@@ -488,8 +488,8 @@ export default function PredictiveAnalyticsPage() {
           </div>
 
           {/* Capacity Planning */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <HardDrive className="w-5 h-5 text-purple-500" />
               Capacity Planning
             </h2>
@@ -501,19 +501,19 @@ export default function PredictiveAnalyticsPage() {
             ) : capacity ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-slate-50 rounded-lg p-3">
-                    <p className="text-xs text-slate-500 mb-1">Growth Rate</p>
-                    <p className="text-xl font-bold text-slate-900">
+                  <div className="bg-slate-800/50 rounded-lg p-3">
+                    <p className="text-xs text-slate-400 mb-1">Growth Rate</p>
+                    <p className="text-xl font-bold text-white">
                       {capacity.growth_rate != null ? `${capacity.growth_rate.toFixed(1)}%` : '--'}
                     </p>
                     <p className="text-xs text-slate-400">per day</p>
                   </div>
-                  <div className="bg-slate-50 rounded-lg p-3">
-                    <p className="text-xs text-slate-500 mb-1">Days Until Limit</p>
+                  <div className="bg-slate-800/50 rounded-lg p-3">
+                    <p className="text-xs text-slate-400 mb-1">Days Until Limit</p>
                     <p className={`text-xl font-bold ${
                       capacity.days_until_limit != null && capacity.days_until_limit < 30
                         ? 'text-red-600'
-                        : 'text-slate-900'
+                        : 'text-white'
                     }`}>
                       {capacity.days_until_limit ?? '--'}
                     </p>
@@ -523,11 +523,11 @@ export default function PredictiveAnalyticsPage() {
 
                 {capacity.current_usage_pct != null && (
                   <div>
-                    <div className="flex justify-between text-xs text-slate-500 mb-1">
+                    <div className="flex justify-between text-xs text-slate-400 mb-1">
                       <span>Current Usage</span>
                       <span>{capacity.current_usage_pct.toFixed(1)}%</span>
                     </div>
-                    <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                    <div className="h-2.5 bg-slate-700 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${
                           capacity.current_usage_pct > 80 ? 'bg-red-500' :
@@ -543,16 +543,16 @@ export default function PredictiveAnalyticsPage() {
                 {/* Top Growing Services */}
                 {capacity.top_growing_services && capacity.top_growing_services.length > 0 && (
                   <div>
-                    <h3 className="text-sm font-medium text-slate-700 mb-2">Top Growing Services</h3>
+                    <h3 className="text-sm font-medium text-slate-300 mb-2">Top Growing Services</h3>
                     <div className="space-y-2">
                       {capacity.top_growing_services.map((svc, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg">
+                        <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-800/50 rounded-lg">
                           <div className="flex items-center gap-2">
                             <Server className="w-4 h-4 text-slate-400" />
-                            <span className="text-sm font-medium text-slate-800">{svc.service}</span>
+                            <span className="text-sm font-medium text-white">{svc.service}</span>
                           </div>
                           <div className="flex items-center gap-3">
-                            <span className="text-xs text-slate-500">{svc.current_usage.toFixed(1)}% used</span>
+                            <span className="text-xs text-slate-400">{svc.current_usage.toFixed(1)}% used</span>
                             <span className="text-xs font-medium text-red-600 flex items-center gap-0.5">
                               <ArrowUpRight className="w-3 h-3" />
                               {svc.growth_rate.toFixed(1)}%/d
@@ -567,15 +567,15 @@ export default function PredictiveAnalyticsPage() {
             ) : (
               <div className="text-center py-10">
                 <HardDrive className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                <p className="text-slate-500 text-sm">No capacity data available</p>
+                <p className="text-slate-400 text-sm">No capacity data available</p>
               </div>
             )}
           </div>
         </div>
 
         {/* What-If Scenario */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+        <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
             <Zap className="w-5 h-5 text-amber-500" />
             What-If Scenario Analysis
           </h2>
@@ -584,11 +584,11 @@ export default function PredictiveAnalyticsPage() {
             {/* Input Form */}
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Scenario Type</label>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Scenario Type</label>
                 <select
                   value={whatIfScenario}
                   onChange={(e) => setWhatIfScenario(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-300 focus:outline-none focus:border-blue-500"
                 >
                   <option value="traffic_spike">Traffic Spike</option>
                   <option value="service_failure">Service Failure</option>
@@ -599,24 +599,24 @@ export default function PredictiveAnalyticsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Multiplier</label>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Multiplier</label>
                 <input
                   type="text"
                   value={whatIfParams.multiplier || ''}
                   onChange={(e) => setWhatIfParams({ ...whatIfParams, multiplier: e.target.value })}
                   placeholder="e.g., 2"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-300 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Duration</label>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Duration</label>
                 <input
                   type="text"
                   value={whatIfParams.duration || ''}
                   onChange={(e) => setWhatIfParams({ ...whatIfParams, duration: e.target.value })}
                   placeholder="e.g., 1h, 30m, 2d"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-300 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -645,16 +645,16 @@ export default function PredictiveAnalyticsPage() {
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center">
                     <Loader2 className="w-8 h-8 text-amber-500 animate-spin mx-auto mb-3" />
-                    <p className="text-slate-600 text-sm">Simulating scenario...</p>
+                    <p className="text-slate-400 text-sm">Simulating scenario...</p>
                   </div>
                 </div>
               ) : whatIfResult ? (
                 <div className="space-y-4">
                   {/* Impact Summary */}
                   {whatIfResult.impact_summary && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                      <h4 className="text-sm font-semibold text-amber-800 mb-1">Impact Summary</h4>
-                      <p className="text-sm text-amber-700">{whatIfResult.impact_summary}</p>
+                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
+                      <h4 className="text-sm font-semibold text-amber-400 mb-1">Impact Summary</h4>
+                      <p className="text-sm text-amber-300">{whatIfResult.impact_summary}</p>
                     </div>
                   )}
 
@@ -663,11 +663,11 @@ export default function PredictiveAnalyticsPage() {
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="border-b border-slate-200">
-                            <th className="text-left py-2 px-2 text-slate-500 font-medium">Metric</th>
-                            <th className="text-right py-2 px-2 text-slate-500 font-medium">Baseline</th>
-                            <th className="text-right py-2 px-2 text-slate-500 font-medium">Projected</th>
-                            <th className="text-right py-2 px-2 text-slate-500 font-medium">Change</th>
+                          <tr className="border-b border-white/5">
+                            <th className="text-left py-2 px-2 text-slate-400 font-medium">Metric</th>
+                            <th className="text-right py-2 px-2 text-slate-400 font-medium">Baseline</th>
+                            <th className="text-right py-2 px-2 text-slate-400 font-medium">Projected</th>
+                            <th className="text-right py-2 px-2 text-slate-400 font-medium">Change</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -678,14 +678,14 @@ export default function PredictiveAnalyticsPage() {
                               ? ((projected - baseline) / baseline) * 100
                               : null
                             return (
-                              <tr key={key} className="border-b border-slate-100">
-                                <td className="py-2 px-2 text-slate-700 capitalize">
+                              <tr key={key} className="border-b border-white/5">
+                                <td className="py-2 px-2 text-slate-300 capitalize">
                                   {key.replace(/_/g, ' ')}
                                 </td>
-                                <td className="py-2 px-2 text-right font-mono text-slate-600">
+                                <td className="py-2 px-2 text-right font-mono text-slate-400">
                                   {typeof baseline === 'number' ? baseline.toFixed(2) : baseline}
                                 </td>
-                                <td className="py-2 px-2 text-right font-mono text-slate-900 font-medium">
+                                <td className="py-2 px-2 text-right font-mono text-white font-medium">
                                   {typeof projected === 'number' ? projected.toFixed(2) : projected}
                                 </td>
                                 <td className="py-2 px-2 text-right">
@@ -705,9 +705,9 @@ export default function PredictiveAnalyticsPage() {
 
                   {/* Risk Change */}
                   {whatIfResult.risk_change && (
-                    <div className="bg-slate-50 rounded-lg p-3">
-                      <p className="text-xs text-slate-500 mb-0.5">Risk Level Change</p>
-                      <p className="text-sm font-medium text-slate-800">{whatIfResult.risk_change}</p>
+                    <div className="bg-slate-800/50 rounded-lg p-3">
+                      <p className="text-xs text-slate-400 mb-0.5">Risk Level Change</p>
+                      <p className="text-sm font-medium text-white">{whatIfResult.risk_change}</p>
                     </div>
                   )}
 
@@ -715,7 +715,7 @@ export default function PredictiveAnalyticsPage() {
                   {whatIfResult.details && whatIfResult.details.length > 0 && (
                     <div className="space-y-1">
                       {whatIfResult.details.map((detail, idx) => (
-                        <div key={idx} className="flex items-start gap-2 text-sm text-slate-600">
+                        <div key={idx} className="flex items-start gap-2 text-sm text-slate-400">
                           <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
                           <span>{detail}</span>
                         </div>
@@ -727,7 +727,7 @@ export default function PredictiveAnalyticsPage() {
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center py-8">
                     <Zap className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                    <p className="text-slate-500 text-sm">Configure a scenario and click Run</p>
+                    <p className="text-slate-400 text-sm">Configure a scenario and click Run</p>
                     <p className="text-slate-400 text-xs mt-1">See how changes would impact your system</p>
                   </div>
                 </div>

@@ -254,21 +254,21 @@ export default function MLModelsPage() {
 
   const getStatusBadge = (status: string) => {
     const map: Record<string, { bg: string; text: string; icon: typeof CheckCircle }> = {
-      healthy: { bg: 'bg-green-100 border-green-200', text: 'text-green-700', icon: CheckCircle },
-      degraded: { bg: 'bg-orange-100 border-orange-200', text: 'text-orange-700', icon: AlertTriangle },
-      stale: { bg: 'bg-yellow-100 border-yellow-200', text: 'text-yellow-700', icon: Clock },
-      noisy: { bg: 'bg-purple-100 border-purple-200', text: 'text-purple-700', icon: Activity },
-      no_baseline: { bg: 'bg-slate-100 border-slate-200', text: 'text-slate-600', icon: XCircle }
+      healthy: { bg: 'bg-green-500/20 border-green-500/30', text: 'text-green-400', icon: CheckCircle },
+      degraded: { bg: 'bg-orange-500/20 border-orange-500/30', text: 'text-orange-400', icon: AlertTriangle },
+      stale: { bg: 'bg-yellow-500/20 border-yellow-500/30', text: 'text-yellow-400', icon: Clock },
+      noisy: { bg: 'bg-purple-500/20 border-purple-500/30', text: 'text-purple-400', icon: Activity },
+      no_baseline: { bg: 'bg-slate-800/30 border-white/5', text: 'text-slate-400', icon: XCircle }
     }
     return map[status] || map.no_baseline
   }
 
   const getQualityBadge = (quality: string) => {
     const map: Record<string, string> = {
-      high: 'bg-green-100 text-green-700',
-      medium: 'bg-yellow-100 text-yellow-700',
-      low: 'bg-red-100 text-red-700',
-      none: 'bg-slate-100 text-slate-500'
+      high: 'bg-green-500/20 text-green-400',
+      medium: 'bg-yellow-500/20 text-yellow-400',
+      low: 'bg-red-500/20 text-red-400',
+      none: 'bg-slate-800/30 text-slate-400'
     }
     return map[quality] || map.none
   }
@@ -292,17 +292,17 @@ export default function MLModelsPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
               <Brain className="w-7 h-7 text-indigo-500" />
               ML Model Management
             </h1>
-            <p className="text-slate-600 mt-1">
+            <p className="text-slate-400 mt-1">
               Monitor model health, manage baselines, tune thresholds, and trigger retraining
             </p>
           </div>
           <button
             onClick={() => { loadModelHealth(); loadBaselines(); loadBaselineList() }}
-            className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 border border-white/10 rounded-lg text-slate-300 hover:bg-white/5 transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
             Refresh All
@@ -313,13 +313,13 @@ export default function MLModelsPage() {
         {actionResult && (
           <div className={`flex items-center gap-3 p-4 rounded-lg border ${
             actionResult.success
-              ? 'bg-green-50 border-green-200 text-green-800'
-              : 'bg-red-50 border-red-200 text-red-800'
+              ? 'bg-green-500/10 border-green-500/30 text-green-400'
+              : 'bg-red-500/10 border-red-500/30 text-red-400'
           }`}>
             {actionResult.success ? (
-              <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+              <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
             ) : (
-              <XCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+              <XCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
             )}
             <span className="text-sm font-medium">{actionResult.message}</span>
             <button
@@ -335,51 +335,51 @@ export default function MLModelsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           {isLoadingHealth ? (
             [1, 2, 3, 4, 5].map(i => (
-              <div key={i} className="bg-white rounded-xl border border-slate-200 p-5 h-24 animate-pulse">
-                <div className="h-4 bg-slate-200 rounded w-24 mb-3" />
-                <div className="h-7 bg-slate-200 rounded w-12" />
+              <div key={i} className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5 h-24 animate-pulse">
+                <div className="h-4 bg-slate-700 rounded w-24 mb-3" />
+                <div className="h-7 bg-slate-700 rounded w-12" />
               </div>
             ))
           ) : healthSummary ? (
             <>
-              <div className="bg-white rounded-xl border border-slate-200 p-5">
-                <div className="flex items-center gap-2 text-slate-600 mb-2">
+              <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+                <div className="flex items-center gap-2 text-slate-400 mb-2">
                   <Layers className="w-4 h-4 text-indigo-500" />
                   <span className="text-sm font-medium">Total Models</span>
                 </div>
-                <p className="text-3xl font-bold text-slate-900">{healthSummary.total_models}</p>
+                <p className="text-3xl font-bold text-white">{healthSummary.total_models}</p>
               </div>
-              <div className="bg-white rounded-xl border border-slate-200 p-5">
-                <div className="flex items-center gap-2 text-slate-600 mb-2">
+              <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+                <div className="flex items-center gap-2 text-slate-400 mb-2">
                   <CheckCircle className="w-4 h-4 text-green-500" />
                   <span className="text-sm font-medium">Healthy</span>
                 </div>
-                <p className="text-3xl font-bold text-green-600">{healthSummary.healthy}</p>
+                <p className="text-3xl font-bold text-green-400">{healthSummary.healthy}</p>
               </div>
-              <div className="bg-white rounded-xl border border-slate-200 p-5">
-                <div className="flex items-center gap-2 text-slate-600 mb-2">
+              <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+                <div className="flex items-center gap-2 text-slate-400 mb-2">
                   <AlertTriangle className="w-4 h-4 text-orange-500" />
                   <span className="text-sm font-medium">Degraded</span>
                 </div>
-                <p className="text-3xl font-bold text-orange-600">{healthSummary.degraded}</p>
+                <p className="text-3xl font-bold text-orange-400">{healthSummary.degraded}</p>
               </div>
-              <div className="bg-white rounded-xl border border-slate-200 p-5">
-                <div className="flex items-center gap-2 text-slate-600 mb-2">
+              <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+                <div className="flex items-center gap-2 text-slate-400 mb-2">
                   <Clock className="w-4 h-4 text-yellow-500" />
                   <span className="text-sm font-medium">Stale</span>
                 </div>
-                <p className="text-3xl font-bold text-yellow-600">{healthSummary.stale}</p>
+                <p className="text-3xl font-bold text-yellow-400">{healthSummary.stale}</p>
               </div>
-              <div className="bg-white rounded-xl border border-slate-200 p-5">
-                <div className="flex items-center gap-2 text-slate-600 mb-2">
+              <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+                <div className="flex items-center gap-2 text-slate-400 mb-2">
                   <RotateCcw className="w-4 h-4 text-purple-500" />
                   <span className="text-sm font-medium">Needs Retraining</span>
                 </div>
-                <p className="text-3xl font-bold text-purple-600">{healthSummary.needs_retraining}</p>
+                <p className="text-3xl font-bold text-purple-400">{healthSummary.needs_retraining}</p>
               </div>
             </>
           ) : (
-            <div className="col-span-5 text-center py-8 text-slate-500">
+            <div className="col-span-5 text-center py-8 text-slate-400">
               No model health data available
             </div>
           )}
@@ -387,7 +387,7 @@ export default function MLModelsPage() {
 
         {/* Model Cards */}
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
             <Activity className="w-5 h-5 text-indigo-500" />
             Model Health Details
           </h2>
@@ -395,13 +395,13 @@ export default function MLModelsPage() {
           {isLoadingHealth ? (
             <div className="space-y-3">
               {[1, 2, 3].map(i => (
-                <div key={i} className="h-24 bg-white border border-slate-200 rounded-xl animate-pulse" />
+                <div key={i} className="h-24 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl border border-white/5 rounded-xl animate-pulse" />
               ))}
             </div>
           ) : models.length === 0 ? (
-            <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+            <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-12 text-center">
               <Brain className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">No ML models found</p>
+              <p className="text-slate-400">No ML models found</p>
               <p className="text-slate-400 text-sm mt-1">Models will appear here once baselines are created</p>
             </div>
           ) : (
@@ -412,11 +412,11 @@ export default function MLModelsPage() {
                 const isExpanded = expandedModels[model.model_id]
 
                 return (
-                  <div key={model.model_id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                  <div key={model.model_id} className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 overflow-hidden">
                     {/* Model Header Row */}
                     <button
                       onClick={() => toggleModel(model.model_id)}
-                      className="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-colors text-left"
+                      className="w-full flex items-center justify-between p-5 hover:bg-white/5 transition-colors text-left"
                     >
                       <div className="flex items-center gap-4 flex-1 min-w-0">
                         {isExpanded
@@ -425,40 +425,40 @@ export default function MLModelsPage() {
                         }
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-3 flex-wrap">
-                            <span className="font-semibold text-slate-900">{model.name}</span>
+                            <span className="font-semibold text-white">{model.name}</span>
                             <span className={`text-xs px-2.5 py-0.5 rounded-full border ${statusStyle.bg} ${statusStyle.text} flex items-center gap-1`}>
                               <StatusIcon className="w-3 h-3" />
                               {model.status}
                             </span>
                             {model.needs_retraining && (
-                              <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full border border-purple-200">
+                              <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full border border-purple-500/30">
                                 Needs Retraining
                               </span>
                             )}
                           </div>
-                          <p className="text-sm text-slate-500 mt-0.5">{model.description}</p>
+                          <p className="text-sm text-slate-400 mt-0.5">{model.description}</p>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-6 flex-shrink-0 ml-4">
                         <div className="text-right">
-                          <p className="text-xs text-slate-500">Accuracy</p>
+                          <p className="text-xs text-slate-400">Accuracy</p>
                           <p className={`text-lg font-bold ${
-                            model.accuracy >= 0.8 ? 'text-green-600' :
-                            model.accuracy >= 0.6 ? 'text-yellow-600' :
-                            'text-red-600'
+                            model.accuracy >= 0.8 ? 'text-green-400' :
+                            model.accuracy >= 0.6 ? 'text-yellow-400' :
+                            'text-red-400'
                           }`}>
                             {model.accuracy > 0 ? `${(model.accuracy * 100).toFixed(1)}%` : '--'}
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-xs text-slate-500">Last Trained</p>
-                          <p className="text-sm font-medium text-slate-700">
+                          <p className="text-xs text-slate-400">Last Trained</p>
+                          <p className="text-sm font-medium text-slate-300">
                             {formatHours(model.hours_since_training)}
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-xs text-slate-500">Quality</p>
+                          <p className="text-xs text-slate-400">Quality</p>
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getQualityBadge(model.data_quality)}`}>
                             {model.data_quality}
                           </span>
@@ -468,45 +468,45 @@ export default function MLModelsPage() {
 
                     {/* Expanded Details */}
                     {isExpanded && (
-                      <div className="border-t border-slate-200 bg-slate-50 p-5 space-y-5">
+                      <div className="border-t border-white/5 bg-slate-800/50 p-5 space-y-5">
                         {/* Metrics Grid */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          <div className="bg-white p-4 rounded-lg border border-slate-200">
+                          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl p-4 rounded-lg border border-white/5">
                             <div className="flex items-center gap-2 mb-1">
                               <Gauge className="w-4 h-4 text-blue-500" />
-                              <span className="text-xs text-slate-500">Accuracy</span>
+                              <span className="text-xs text-slate-400">Accuracy</span>
                             </div>
-                            <p className="text-xl font-bold text-slate-900">
+                            <p className="text-xl font-bold text-white">
                               {model.accuracy > 0 ? `${(model.accuracy * 100).toFixed(2)}%` : 'N/A'}
                             </p>
                           </div>
-                          <div className="bg-white p-4 rounded-lg border border-slate-200">
+                          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl p-4 rounded-lg border border-white/5">
                             <div className="flex items-center gap-2 mb-1">
                               <AlertTriangle className="w-4 h-4 text-orange-500" />
-                              <span className="text-xs text-slate-500">False Positive Rate</span>
+                              <span className="text-xs text-slate-400">False Positive Rate</span>
                             </div>
-                            <p className="text-xl font-bold text-slate-900">
+                            <p className="text-xl font-bold text-white">
                               {model.false_positive_rate > 0 ? `${(model.false_positive_rate * 100).toFixed(2)}%` : 'N/A'}
                             </p>
                           </div>
-                          <div className="bg-white p-4 rounded-lg border border-slate-200">
+                          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl p-4 rounded-lg border border-white/5">
                             <div className="flex items-center gap-2 mb-1">
                               <XCircle className="w-4 h-4 text-red-500" />
-                              <span className="text-xs text-slate-500">False Negative Rate</span>
+                              <span className="text-xs text-slate-400">False Negative Rate</span>
                             </div>
-                            <p className="text-xl font-bold text-slate-900">
+                            <p className="text-xl font-bold text-white">
                               {model.false_negative_rate > 0 ? `${(model.false_negative_rate * 100).toFixed(2)}%` : 'N/A'}
                             </p>
                           </div>
-                          <div className="bg-white p-4 rounded-lg border border-slate-200">
+                          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl p-4 rounded-lg border border-white/5">
                             <div className="flex items-center gap-2 mb-1">
                               <TrendingUp className="w-4 h-4 text-purple-500" />
-                              <span className="text-xs text-slate-500">Drift Score</span>
+                              <span className="text-xs text-slate-400">Drift Score</span>
                             </div>
                             <p className={`text-xl font-bold ${
-                              model.drift_score > 0.5 ? 'text-red-600' :
-                              model.drift_score > 0.2 ? 'text-yellow-600' :
-                              'text-green-600'
+                              model.drift_score > 0.5 ? 'text-red-400' :
+                              model.drift_score > 0.2 ? 'text-yellow-400' :
+                              'text-green-400'
                             }`}>
                               {model.drift_score > 0 ? model.drift_score.toFixed(4) : 'N/A'}
                             </p>
@@ -515,27 +515,27 @@ export default function MLModelsPage() {
 
                         {/* Additional Info */}
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                          <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200">
+                          <div className="flex items-center gap-3 p-3 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-lg border border-white/5">
                             <Database className="w-5 h-5 text-slate-400" />
                             <div>
-                              <p className="text-xs text-slate-500">Sample Count</p>
-                              <p className="text-sm font-semibold text-slate-900">
+                              <p className="text-xs text-slate-400">Sample Count</p>
+                              <p className="text-sm font-semibold text-white">
                                 {formatNumber(model.sample_count)}
                               </p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200">
+                          <div className="flex items-center gap-3 p-3 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-lg border border-white/5">
                             <BarChart3 className="w-5 h-5 text-slate-400" />
                             <div>
-                              <p className="text-xs text-slate-500">Baselines</p>
-                              <p className="text-sm font-semibold text-slate-900">{model.baseline_count}</p>
+                              <p className="text-xs text-slate-400">Baselines</p>
+                              <p className="text-sm font-semibold text-white">{model.baseline_count}</p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200">
+                          <div className="flex items-center gap-3 p-3 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-lg border border-white/5">
                             <Clock className="w-5 h-5 text-slate-400" />
                             <div>
-                              <p className="text-xs text-slate-500">Last Trained</p>
-                              <p className="text-sm font-semibold text-slate-900">
+                              <p className="text-xs text-slate-400">Last Trained</p>
+                              <p className="text-sm font-semibold text-white">
                                 {model.last_trained
                                   ? new Date(model.last_trained).toLocaleString()
                                   : 'Never'}
@@ -548,12 +548,12 @@ export default function MLModelsPage() {
                         <div className="flex items-center gap-3 pt-2">
                           {/* Retrain Button */}
                           {retrainingModel === model.model_id ? (
-                            <div className="flex items-center gap-3 p-3 bg-white border border-indigo-200 rounded-lg">
-                              <label className="text-sm text-slate-700">Training days:</label>
+                            <div className="flex items-center gap-3 p-3 bg-slate-800/50 border border-indigo-500/20 rounded-lg">
+                              <label className="text-sm text-slate-300">Training days:</label>
                               <select
                                 value={retrainDays}
                                 onChange={(e) => setRetrainDays(Number(e.target.value))}
-                                className="px-2 py-1 border border-slate-300 rounded text-sm"
+                                className="px-2 py-1 border border-white/10 rounded text-sm"
                               >
                                 <option value={7}>7 days</option>
                                 <option value={14}>14 days</option>
@@ -575,7 +575,7 @@ export default function MLModelsPage() {
                               </button>
                               <button
                                 onClick={() => setRetrainingModel(null)}
-                                className="text-sm text-slate-500 hover:text-slate-700"
+                                className="text-sm text-slate-400 hover:text-slate-300"
                               >
                                 Cancel
                               </button>
@@ -593,7 +593,7 @@ export default function MLModelsPage() {
                           {/* Threshold Button */}
                           <button
                             onClick={() => setShowThresholdModal(model.model_id)}
-                            className="flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 text-sm rounded-lg hover:bg-slate-50 transition-colors"
+                            className="flex items-center gap-2 px-4 py-2 border border-white/10 text-slate-300 text-sm rounded-lg hover:bg-white/5 transition-colors"
                           >
                             <Sliders className="w-4 h-4" />
                             Tune Thresholds
@@ -602,14 +602,14 @@ export default function MLModelsPage() {
 
                         {/* Threshold Modal */}
                         {showThresholdModal === model.model_id && (
-                          <div className="p-4 bg-white border border-slate-200 rounded-lg space-y-4">
-                            <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                          <div className="p-4 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl border border-white/5 rounded-lg space-y-4">
+                            <h4 className="text-sm font-semibold text-white flex items-center gap-2">
                               <Sliders className="w-4 h-4 text-indigo-500" />
                               Adjust Detection Thresholds
                             </h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div>
-                                <label className="block text-xs font-medium text-slate-600 mb-1">
+                                <label className="block text-xs font-medium text-slate-400 mb-1">
                                   Sigma Threshold (standard deviations)
                                 </label>
                                 <input
@@ -619,12 +619,12 @@ export default function MLModelsPage() {
                                   step="0.5"
                                   min="1"
                                   max="5"
-                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                                  className="w-full px-3 py-2 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                                 />
                                 <p className="text-xs text-slate-400 mt-1">Lower = more sensitive, Higher = fewer alerts</p>
                               </div>
                               <div>
-                                <label className="block text-xs font-medium text-slate-600 mb-1">
+                                <label className="block text-xs font-medium text-slate-400 mb-1">
                                   Minimum Confidence (0-1)
                                 </label>
                                 <input
@@ -634,13 +634,13 @@ export default function MLModelsPage() {
                                   step="0.05"
                                   min="0"
                                   max="1"
-                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                                  className="w-full px-3 py-2 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                                 />
                                 <p className="text-xs text-slate-400 mt-1">Only report anomalies above this confidence</p>
                               </div>
                             </div>
                             <div>
-                              <label className="block text-xs font-medium text-slate-600 mb-1">
+                              <label className="block text-xs font-medium text-slate-400 mb-1">
                                 Reason for change (optional)
                               </label>
                               <input
@@ -648,7 +648,7 @@ export default function MLModelsPage() {
                                 value={thresholdReason}
                                 onChange={(e) => setThresholdReason(e.target.value)}
                                 placeholder="e.g., Reducing false positives after deployment"
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                                className="w-full px-3 py-2 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                               />
                             </div>
                             <div className="flex items-center gap-3">
@@ -666,7 +666,7 @@ export default function MLModelsPage() {
                               </button>
                               <button
                                 onClick={() => { setShowThresholdModal(null); setThresholdReason('') }}
-                                className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800"
+                                className="px-4 py-2 text-sm text-slate-400 hover:text-white"
                               >
                                 Cancel
                               </button>
@@ -683,8 +683,8 @@ export default function MLModelsPage() {
         </div>
 
         {/* Baseline Visualization */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+        <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-blue-500" />
             Baseline Statistical Overview
           </h2>
@@ -692,64 +692,64 @@ export default function MLModelsPage() {
           {isLoadingBaselines ? (
             <div className="space-y-3">
               {[1, 2, 3].map(i => (
-                <div key={i} className="h-20 bg-slate-100 rounded-lg animate-pulse" />
+                <div key={i} className="h-20 bg-slate-800/30 rounded-lg animate-pulse" />
               ))}
             </div>
           ) : baselines.length === 0 ? (
             <div className="text-center py-12">
               <BarChart3 className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">No baselines available</p>
+              <p className="text-slate-400">No baselines available</p>
               <p className="text-slate-400 text-sm mt-1">Create baselines by saving ML model data</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200">
-                    <th className="text-left py-2.5 px-3 text-slate-500 font-medium">Model</th>
-                    <th className="text-left py-2.5 px-3 text-slate-500 font-medium">Type</th>
-                    <th className="text-right py-2.5 px-3 text-slate-500 font-medium">Mean</th>
-                    <th className="text-right py-2.5 px-3 text-slate-500 font-medium">Std Dev</th>
-                    <th className="text-right py-2.5 px-3 text-slate-500 font-medium">P50</th>
-                    <th className="text-right py-2.5 px-3 text-slate-500 font-medium">P95</th>
-                    <th className="text-right py-2.5 px-3 text-slate-500 font-medium">P99</th>
-                    <th className="text-right py-2.5 px-3 text-slate-500 font-medium">Samples</th>
-                    <th className="text-right py-2.5 px-3 text-slate-500 font-medium">Accuracy</th>
-                    <th className="text-center py-2.5 px-3 text-slate-500 font-medium">Active</th>
+                  <tr className="border-b border-white/5">
+                    <th className="text-left py-2.5 px-3 text-slate-400 font-medium">Model</th>
+                    <th className="text-left py-2.5 px-3 text-slate-400 font-medium">Type</th>
+                    <th className="text-right py-2.5 px-3 text-slate-400 font-medium">Mean</th>
+                    <th className="text-right py-2.5 px-3 text-slate-400 font-medium">Std Dev</th>
+                    <th className="text-right py-2.5 px-3 text-slate-400 font-medium">P50</th>
+                    <th className="text-right py-2.5 px-3 text-slate-400 font-medium">P95</th>
+                    <th className="text-right py-2.5 px-3 text-slate-400 font-medium">P99</th>
+                    <th className="text-right py-2.5 px-3 text-slate-400 font-medium">Samples</th>
+                    <th className="text-right py-2.5 px-3 text-slate-400 font-medium">Accuracy</th>
+                    <th className="text-center py-2.5 px-3 text-slate-400 font-medium">Active</th>
                   </tr>
                 </thead>
                 <tbody>
                   {baselines.map((baseline, idx) => (
-                    <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
-                      <td className="py-2.5 px-3 font-medium text-slate-800">{baseline.model_id}</td>
+                    <tr key={idx} className="border-b border-white/5 hover:bg-white/5">
+                      <td className="py-2.5 px-3 font-medium text-white">{baseline.model_id}</td>
                       <td className="py-2.5 px-3">
-                        <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full">
+                        <span className="text-xs px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded-full">
                           {baseline.baseline_type}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-slate-700">
+                      <td className="py-2.5 px-3 text-right font-mono text-slate-300">
                         {baseline.statistics.mean.toFixed(2)}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-slate-700">
+                      <td className="py-2.5 px-3 text-right font-mono text-slate-300">
                         {baseline.statistics.std_dev.toFixed(2)}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-slate-700">
+                      <td className="py-2.5 px-3 text-right font-mono text-slate-300">
                         {baseline.statistics.p50.toFixed(2)}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-slate-700">
+                      <td className="py-2.5 px-3 text-right font-mono text-slate-300">
                         {baseline.statistics.p95.toFixed(2)}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-slate-700">
+                      <td className="py-2.5 px-3 text-right font-mono text-slate-300">
                         {baseline.statistics.p99.toFixed(2)}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-slate-700">
+                      <td className="py-2.5 px-3 text-right font-mono text-slate-300">
                         {formatNumber(baseline.statistics.sample_count)}
                       </td>
                       <td className="py-2.5 px-3 text-right">
                         <span className={`font-mono font-medium ${
-                          baseline.accuracy >= 0.8 ? 'text-green-600' :
-                          baseline.accuracy >= 0.5 ? 'text-yellow-600' :
-                          'text-slate-500'
+                          baseline.accuracy >= 0.8 ? 'text-green-400' :
+                          baseline.accuracy >= 0.5 ? 'text-yellow-400' :
+                          'text-slate-400'
                         }`}>
                           {baseline.accuracy > 0 ? `${(baseline.accuracy * 100).toFixed(1)}%` : '--'}
                         </span>
@@ -771,42 +771,42 @@ export default function MLModelsPage() {
 
         {/* Detection Bands */}
         {baselines.length > 0 && (
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <Shield className="w-5 h-5 text-green-500" />
               Anomaly Detection Bands
             </h2>
-            <p className="text-sm text-slate-500 mb-4">
+            <p className="text-sm text-slate-400 mb-4">
               These bands define the boundaries for normal, warning, and critical anomaly detection thresholds.
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {baselines.map((baseline, idx) => (
-                <div key={idx} className="border border-slate-200 rounded-lg p-4 space-y-3">
+                <div key={idx} className="border border-white/5 rounded-lg p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-slate-900">{baseline.model_id}</span>
-                    <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full">
+                    <span className="text-sm font-semibold text-white">{baseline.model_id}</span>
+                    <span className="text-xs px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded-full">
                       {baseline.baseline_type}
                     </span>
                   </div>
 
                   {/* Band Visualization */}
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between p-2 bg-green-50 border border-green-200 rounded">
-                      <span className="text-xs font-medium text-green-700">Normal</span>
-                      <span className="text-xs font-mono text-green-600">
+                    <div className="flex items-center justify-between p-2 bg-green-500/10 border border-green-500/30 rounded">
+                      <span className="text-xs font-medium text-green-400">Normal</span>
+                      <span className="text-xs font-mono text-green-400">
                         {baseline.bands.normal.lower.toFixed(2)} &ndash; {baseline.bands.normal.upper.toFixed(2)}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between p-2 bg-yellow-50 border border-yellow-200 rounded">
-                      <span className="text-xs font-medium text-yellow-700">Warning</span>
-                      <span className="text-xs font-mono text-yellow-600">
+                    <div className="flex items-center justify-between p-2 bg-yellow-500/10 border border-yellow-500/30 rounded">
+                      <span className="text-xs font-medium text-yellow-400">Warning</span>
+                      <span className="text-xs font-mono text-yellow-400">
                         {baseline.bands.warning.lower.toFixed(2)} &ndash; {baseline.bands.warning.upper.toFixed(2)}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between p-2 bg-red-50 border border-red-200 rounded">
-                      <span className="text-xs font-medium text-red-700">Critical</span>
-                      <span className="text-xs font-mono text-red-600">
+                    <div className="flex items-center justify-between p-2 bg-red-500/10 border border-red-500/30 rounded">
+                      <span className="text-xs font-medium text-red-400">Critical</span>
+                      <span className="text-xs font-mono text-red-400">
                         {baseline.bands.critical.lower.toFixed(2)} &ndash; {baseline.bands.critical.upper.toFixed(2)}
                       </span>
                     </div>
@@ -818,62 +818,62 @@ export default function MLModelsPage() {
         )}
 
         {/* Baseline Inventory */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-            <Database className="w-5 h-5 text-slate-500" />
+        <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
+          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <Database className="w-5 h-5 text-slate-400" />
             Baseline Inventory
           </h2>
 
           {isLoadingBaselineList ? (
             <div className="space-y-3">
               {[1, 2, 3].map(i => (
-                <div key={i} className="h-14 bg-slate-100 rounded-lg animate-pulse" />
+                <div key={i} className="h-14 bg-slate-800/30 rounded-lg animate-pulse" />
               ))}
             </div>
           ) : baselineList.length === 0 ? (
             <div className="text-center py-12">
               <Database className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">No baselines saved yet</p>
+              <p className="text-slate-400">No baselines saved yet</p>
               <p className="text-slate-400 text-sm mt-1">Use the API to save ML baselines for anomaly detection</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200">
-                    <th className="text-left py-2.5 px-3 text-slate-500 font-medium">Model ID</th>
-                    <th className="text-left py-2.5 px-3 text-slate-500 font-medium">Service</th>
-                    <th className="text-left py-2.5 px-3 text-slate-500 font-medium">Type</th>
-                    <th className="text-right py-2.5 px-3 text-slate-500 font-medium">Samples</th>
-                    <th className="text-right py-2.5 px-3 text-slate-500 font-medium">Accuracy</th>
-                    <th className="text-right py-2.5 px-3 text-slate-500 font-medium">Last Trained</th>
+                  <tr className="border-b border-white/5">
+                    <th className="text-left py-2.5 px-3 text-slate-400 font-medium">Model ID</th>
+                    <th className="text-left py-2.5 px-3 text-slate-400 font-medium">Service</th>
+                    <th className="text-left py-2.5 px-3 text-slate-400 font-medium">Type</th>
+                    <th className="text-right py-2.5 px-3 text-slate-400 font-medium">Samples</th>
+                    <th className="text-right py-2.5 px-3 text-slate-400 font-medium">Accuracy</th>
+                    <th className="text-right py-2.5 px-3 text-slate-400 font-medium">Last Trained</th>
                   </tr>
                 </thead>
                 <tbody>
                   {baselineList.map((item, idx) => (
-                    <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
-                      <td className="py-2.5 px-3 font-medium text-slate-800 font-mono text-xs">
+                    <tr key={idx} className="border-b border-white/5 hover:bg-white/5">
+                      <td className="py-2.5 px-3 font-medium text-white font-mono text-xs">
                         {item.model_id}
                       </td>
-                      <td className="py-2.5 px-3 text-slate-700">{item.service_name || '--'}</td>
+                      <td className="py-2.5 px-3 text-slate-300">{item.service_name || '--'}</td>
                       <td className="py-2.5 px-3">
-                        <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">
+                        <span className="text-xs px-2 py-0.5 bg-slate-800/30 text-slate-400 rounded-full">
                           {item.baseline_type}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-slate-700">
+                      <td className="py-2.5 px-3 text-right font-mono text-slate-300">
                         {item.sample_count != null ? formatNumber(item.sample_count) : '--'}
                       </td>
                       <td className="py-2.5 px-3 text-right">
                         <span className={`font-mono font-medium ${
-                          (item.accuracy_score ?? 0) >= 0.8 ? 'text-green-600' :
-                          (item.accuracy_score ?? 0) >= 0.5 ? 'text-yellow-600' :
-                          'text-slate-500'
+                          (item.accuracy_score ?? 0) >= 0.8 ? 'text-green-400' :
+                          (item.accuracy_score ?? 0) >= 0.5 ? 'text-yellow-400' :
+                          'text-slate-400'
                         }`}>
                           {item.accuracy_score != null ? `${(item.accuracy_score * 100).toFixed(1)}%` : '--'}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 text-right text-slate-500 text-xs">
+                      <td className="py-2.5 px-3 text-right text-slate-400 text-xs">
                         {item.last_trained
                           ? new Date(item.last_trained).toLocaleString()
                           : 'N/A'}

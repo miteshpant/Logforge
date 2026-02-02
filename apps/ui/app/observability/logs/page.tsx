@@ -49,11 +49,11 @@ interface LogStats {
 }
 
 const LOG_LEVEL_STYLES: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
-  debug: { bg: 'bg-slate-100', text: 'text-slate-600', icon: <Bug className="w-3 h-3" /> },
-  info: { bg: 'bg-blue-100', text: 'text-blue-600', icon: <Info className="w-3 h-3" /> },
-  warning: { bg: 'bg-yellow-100', text: 'text-yellow-600', icon: <AlertTriangle className="w-3 h-3" /> },
-  error: { bg: 'bg-red-100', text: 'text-red-600', icon: <AlertCircle className="w-3 h-3" /> },
-  critical: { bg: 'bg-red-200', text: 'text-red-700', icon: <AlertCircle className="w-3 h-3" /> }
+  debug: { bg: 'bg-slate-800/30', text: 'text-slate-400', icon: <Bug className="w-3 h-3" /> },
+  info: { bg: 'bg-blue-500/20', text: 'text-blue-400', icon: <Info className="w-3 h-3" /> },
+  warning: { bg: 'bg-yellow-500/20', text: 'text-yellow-400', icon: <AlertTriangle className="w-3 h-3" /> },
+  error: { bg: 'bg-red-500/20', text: 'text-red-400', icon: <AlertCircle className="w-3 h-3" /> },
+  critical: { bg: 'bg-red-500/30', text: 'text-red-400', icon: <AlertCircle className="w-3 h-3" /> }
 }
 
 export default function LogExplorerPage() {
@@ -319,7 +319,7 @@ export default function LogExplorerPage() {
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
               isLiveMode
                 ? 'bg-green-500 text-white'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                : 'bg-slate-800/30 text-slate-300 hover:bg-white/10'
             }`}
           >
             <span className={`w-2 h-2 rounded-full ${isLiveMode ? 'bg-white animate-pulse' : 'bg-slate-400'}`} />
@@ -330,34 +330,34 @@ export default function LogExplorerPage() {
           <div className="relative">
             <button
               onClick={() => setShowSavedQueries(!showSavedQueries)}
-              className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50"
+              className="flex items-center gap-2 px-4 py-2 border border-white/10 rounded-lg text-slate-300 hover:bg-white/5"
             >
               <FolderOpen className="w-4 h-4" />
               Saved Queries
               {savedQueries.length > 0 && (
-                <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
+                <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded-full">
                   {savedQueries.length}
                 </span>
               )}
             </button>
             {showSavedQueries && (
-              <div className="absolute top-full mt-1 left-0 w-72 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+              <div className="absolute top-full mt-1 left-0 w-72 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl border border-white/5 rounded-2xl shadow-xl z-50 max-h-64 overflow-y-auto">
                 {savedQueries.length === 0 ? (
-                  <div className="p-4 text-center text-sm text-slate-500">
+                  <div className="p-4 text-center text-sm text-slate-400">
                     No saved queries yet
                   </div>
                 ) : (
                   savedQueries.map(q => (
                     <div
                       key={q.id}
-                      className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0"
+                      className="flex items-center justify-between px-4 py-2.5 hover:bg-white/5 cursor-pointer border-b border-white/5 last:border-0"
                     >
                       <button
                         onClick={() => applySavedQuery(q)}
                         className="flex-1 text-left"
                       >
-                        <p className="text-sm font-medium text-slate-900">{q.name}</p>
-                        {q.query && <p className="text-xs text-slate-500 truncate">{q.query}</p>}
+                        <p className="text-sm font-medium text-white">{q.name}</p>
+                        {q.query && <p className="text-xs text-slate-400 truncate">{q.query}</p>}
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); deleteSavedQuery(q.id) }}
@@ -377,19 +377,19 @@ export default function LogExplorerPage() {
             <div className="relative">
               <button
                 onClick={() => setShowSaveDialog(!showSaveDialog)}
-                className="flex items-center gap-2 px-3 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50"
+                className="flex items-center gap-2 px-3 py-2 border border-white/10 rounded-lg text-slate-300 hover:bg-white/5"
               >
                 <Save className="w-4 h-4" />
                 Save
               </button>
               {showSaveDialog && (
-                <div className="absolute top-full mt-1 left-0 w-64 bg-white border border-slate-200 rounded-lg shadow-lg z-50 p-3">
+                <div className="absolute top-full mt-1 left-0 w-64 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl border border-white/5 rounded-2xl shadow-xl z-50 p-3">
                   <input
                     type="text"
                     placeholder="Query name..."
                     value={saveQueryName}
                     onChange={(e) => setSaveQueryName(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-blue-500 mb-2"
+                    className="w-full px-3 py-2 border border-white/10 rounded-lg text-sm bg-slate-800/50 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 mb-2"
                     autoFocus
                     onKeyDown={(e) => e.key === 'Enter' && saveCurrentQuery()}
                   />
@@ -403,7 +403,7 @@ export default function LogExplorerPage() {
                     </button>
                     <button
                       onClick={() => setShowSaveDialog(false)}
-                      className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded text-sm"
+                      className="px-3 py-1.5 text-slate-400 hover:bg-white/5 rounded text-sm"
                     >
                       Cancel
                     </button>
@@ -416,7 +416,7 @@ export default function LogExplorerPage() {
           <button
             onClick={exportViaAPI}
             disabled={isExporting}
-            className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 border border-white/10 rounded-lg text-slate-300 hover:bg-white/5 disabled:opacity-50"
           >
             {isExporting
               ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -438,8 +438,8 @@ export default function LogExplorerPage() {
         {queryValidation && (
           <div className={`flex items-center gap-2 px-3 py-2 rounded-lg mb-4 text-sm ${
             queryValidation.valid
-              ? 'bg-green-50 text-green-700 border border-green-200'
-              : 'bg-red-50 text-red-700 border border-red-200'
+              ? 'bg-green-500/10 text-green-400 border border-green-500/30'
+              : 'bg-red-500/10 text-red-400 border border-red-500/30'
           }`}>
             {queryValidation.valid
               ? <CheckCircle className="w-4 h-4" />
@@ -452,21 +452,21 @@ export default function LogExplorerPage() {
         {/* Stats Bar */}
         {stats && (
           <div className="flex gap-4 mb-4">
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg">
-              <FileText className="w-4 h-4 text-slate-500" />
-              <span className="text-sm font-medium text-slate-700">{stats.total.toLocaleString()} logs</span>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/30 rounded-lg">
+              <FileText className="w-4 h-4 text-slate-400" />
+              <span className="text-sm font-medium text-slate-300">{stats.total.toLocaleString()} logs</span>
             </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-red-100 rounded-lg">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/20 rounded-lg">
               <AlertCircle className="w-4 h-4 text-red-500" />
-              <span className="text-sm font-medium text-red-700">{(stats.by_level.error || 0) + (stats.by_level.critical || 0)} errors</span>
+              <span className="text-sm font-medium text-red-400">{(stats.by_level.error || 0) + (stats.by_level.critical || 0)} errors</span>
             </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-100 rounded-lg">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500/20 rounded-lg">
               <AlertTriangle className="w-4 h-4 text-yellow-600" />
-              <span className="text-sm font-medium text-yellow-700">{stats.by_level.warning || 0} warnings</span>
+              <span className="text-sm font-medium text-yellow-400">{stats.by_level.warning || 0} warnings</span>
             </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 rounded-lg">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/20 rounded-lg">
               <Server className="w-4 h-4 text-blue-500" />
-              <span className="text-sm font-medium text-blue-700">{Object.keys(stats.by_service).length} services</span>
+              <span className="text-sm font-medium text-blue-400">{Object.keys(stats.by_service).length} services</span>
             </div>
           </div>
         )}
@@ -481,12 +481,12 @@ export default function LogExplorerPage() {
               value={searchQuery}
               onChange={(e) => { setSearchQuery(e.target.value); setQueryValidation(null) }}
               onBlur={validateQuery}
-              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500"
+              className="w-full pl-10 pr-4 py-2 border border-white/10 rounded-lg bg-slate-800/50 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
             />
           </div>
 
           {/* Level Filter */}
-          <div className="flex items-center gap-1 px-2 py-1 bg-slate-100 rounded-lg">
+          <div className="flex items-center gap-1 px-2 py-1 bg-slate-800/30 rounded-lg">
             {Object.entries(LOG_LEVEL_STYLES).map(([level, style]) => (
               <button
                 key={level}
@@ -507,7 +507,7 @@ export default function LogExplorerPage() {
           <select
             value={serviceFilter}
             onChange={(e) => setServiceFilter(e.target.value)}
-            className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500"
+            className="px-4 py-2 border border-white/10 rounded-lg bg-slate-800/50 text-white focus:outline-none focus:border-blue-500"
           >
             <option value="all">All Services</option>
             {services.map(service => (
@@ -517,9 +517,9 @@ export default function LogExplorerPage() {
         </div>
 
         {/* Log List */}
-        <div className="flex-1 bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col">
+        <div className="flex-1 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-2xl border border-white/5 shadow-xl overflow-hidden flex flex-col">
           {/* Table Header */}
-          <div className="flex items-center gap-4 px-4 py-2 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase">
+          <div className="flex items-center gap-4 px-4 py-2 bg-slate-800/50 border-b border-white/5 text-xs font-semibold text-slate-400 uppercase">
             <div className="w-8" />
             <div className="w-40">Timestamp</div>
             <div className="w-20">Level</div>
@@ -533,22 +533,22 @@ export default function LogExplorerPage() {
             {isLoading ? (
               <div className="p-8 text-center">
                 <RefreshCw className="w-8 h-8 text-slate-300 animate-spin mx-auto mb-3" />
-                <p className="text-slate-500">Loading logs...</p>
+                <p className="text-slate-400">Loading logs...</p>
               </div>
             ) : filteredLogs.length === 0 ? (
               <div className="p-8 text-center">
                 <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                <p className="text-slate-500">No logs found</p>
+                <p className="text-slate-400">No logs found</p>
                 <p className="text-sm text-slate-400 mt-1">Try adjusting your filters</p>
               </div>
             ) : (
-              <div className="divide-y divide-slate-100">
+              <div className="divide-y divide-white/5">
                 {filteredLogs.map(log => {
                   const isExpanded = expandedLogs.has(log.id)
                   const levelStyle = LOG_LEVEL_STYLES[log.level] || LOG_LEVEL_STYLES.info
 
                   return (
-                    <div key={log.id} className="hover:bg-slate-50">
+                    <div key={log.id} className="hover:bg-white/5">
                       {/* Log Row */}
                       <div
                         className="flex items-center gap-4 px-4 py-2 cursor-pointer"
@@ -561,7 +561,7 @@ export default function LogExplorerPage() {
                               : <ChevronRight className="w-4 h-4 text-slate-400" />
                           )}
                         </div>
-                        <div className="w-40 text-xs text-slate-500 font-mono">
+                        <div className="w-40 text-xs text-slate-400 font-mono">
                           <div>{formatTimestamp(log.timestamp)}</div>
                           <div className="text-slate-400">{formatRelativeTime(log.timestamp)}</div>
                         </div>
@@ -572,10 +572,10 @@ export default function LogExplorerPage() {
                           </span>
                         </div>
                         <div className="w-32">
-                          <span className="text-sm text-slate-700 truncate block">{log.service}</span>
+                          <span className="text-sm text-slate-300 truncate block">{log.service}</span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className={`text-sm truncate ${log.level === 'error' || log.level === 'critical' ? 'text-red-700' : 'text-slate-700'}`}>
+                          <p className={`text-sm truncate ${log.level === 'error' || log.level === 'critical' ? 'text-red-400' : 'text-slate-300'}`}>
                             {log.message}
                           </p>
                         </div>
@@ -586,7 +586,7 @@ export default function LogExplorerPage() {
                                 e.stopPropagation()
                                 copyToClipboard(log.trace_id!)
                               }}
-                              className="text-xs font-mono text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                              className="text-xs font-mono text-blue-400 hover:text-blue-300 flex items-center gap-1"
                             >
                               {log.trace_id.slice(0, 8)}...
                               <Copy className="w-3 h-3" />
@@ -619,7 +619,7 @@ export default function LogExplorerPage() {
                             {log.trace_id && (
                               <a
                                 href={`/observability/traces?trace_id=${log.trace_id}`}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-200"
+                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-xs font-medium hover:bg-purple-500/30"
                               >
                                 <ExternalLink className="w-3 h-3" />
                                 View Trace
@@ -627,7 +627,7 @@ export default function LogExplorerPage() {
                             )}
                             <button
                               onClick={() => setSearchQuery(`service:${log.service}`)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-200"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-800/30 text-slate-300 rounded-lg text-xs font-medium hover:bg-white/10"
                             >
                               <Filter className="w-3 h-3" />
                               Filter by Service
@@ -645,13 +645,13 @@ export default function LogExplorerPage() {
 
         {/* Log Detail Panel */}
         {selectedLog && (
-          <div className="fixed inset-y-0 right-0 w-1/2 bg-white shadow-xl border-l border-slate-200 z-50 overflow-y-auto">
+          <div className="fixed inset-y-0 right-0 w-1/2 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border-l border-white/5 z-50 overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold text-slate-900">Log Details</h3>
+                <h3 className="text-lg font-semibold text-white">Log Details</h3>
                 <button
                   onClick={() => setSelectedLog(null)}
-                  className="p-2 hover:bg-slate-100 rounded-lg"
+                  className="p-2 hover:bg-white/5 rounded-lg"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -660,31 +660,31 @@ export default function LogExplorerPage() {
               {/* Details */}
               <div className="space-y-4">
                 <div>
-                  <label className="text-xs text-slate-500">Timestamp</label>
-                  <p className="text-sm text-slate-900 font-mono">{selectedLog.timestamp}</p>
+                  <label className="text-xs text-slate-400">Timestamp</label>
+                  <p className="text-sm text-white font-mono">{selectedLog.timestamp}</p>
                 </div>
                 <div>
-                  <label className="text-xs text-slate-500">Level</label>
+                  <label className="text-xs text-slate-400">Level</label>
                   <p className={`text-sm font-medium ${LOG_LEVEL_STYLES[selectedLog.level]?.text}`}>
                     {selectedLog.level.toUpperCase()}
                   </p>
                 </div>
                 <div>
-                  <label className="text-xs text-slate-500">Service</label>
-                  <p className="text-sm text-slate-900">{selectedLog.service}</p>
+                  <label className="text-xs text-slate-400">Service</label>
+                  <p className="text-sm text-white">{selectedLog.service}</p>
                 </div>
                 <div>
-                  <label className="text-xs text-slate-500">Message</label>
-                  <p className="text-sm text-slate-900">{selectedLog.message}</p>
+                  <label className="text-xs text-slate-400">Message</label>
+                  <p className="text-sm text-white">{selectedLog.message}</p>
                 </div>
                 {selectedLog.trace_id && (
                   <div>
-                    <label className="text-xs text-slate-500">Trace ID</label>
-                    <p className="text-sm text-slate-900 font-mono">{selectedLog.trace_id}</p>
+                    <label className="text-xs text-slate-400">Trace ID</label>
+                    <p className="text-sm text-white font-mono">{selectedLog.trace_id}</p>
                   </div>
                 )}
                 <div>
-                  <label className="text-xs text-slate-500">Metadata</label>
+                  <label className="text-xs text-slate-400">Metadata</label>
                   <pre className="mt-2 p-4 bg-slate-900 text-green-400 rounded-lg text-xs overflow-x-auto">
                     {JSON.stringify(selectedLog.metadata, null, 2)}
                   </pre>

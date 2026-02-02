@@ -180,7 +180,7 @@ export default function AnomalyDetectionPage() {
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6">
+      <div className="min-h-screen bg-gradient-to-br from-slate-800/80 to-slate-900/95 p-6">
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div>
@@ -197,7 +197,7 @@ export default function AnomalyDetectionPage() {
             <select
               value={severityFilter}
               onChange={(e) => setSeverityFilter(e.target.value)}
-              className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 focus:outline-none focus:border-blue-500"
+              className="px-4 py-2 bg-slate-800 border border-white/5 rounded-lg text-slate-300 focus:outline-none focus:border-blue-500"
             >
               <option value="all">All Severities</option>
               <option value="critical">Critical</option>
@@ -238,7 +238,7 @@ export default function AnomalyDetectionPage() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg p-6">
+          <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-white/5 rounded-lg p-6">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-slate-400 text-sm font-medium">Total Anomalies</h3>
               <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
@@ -254,7 +254,7 @@ export default function AnomalyDetectionPage() {
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg p-6">
+          <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-white/5 rounded-lg p-6">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-slate-400 text-sm font-medium">Critical</h3>
               <div className="w-10 h-10 bg-red-500/10 rounded-lg flex items-center justify-center">
@@ -267,7 +267,7 @@ export default function AnomalyDetectionPage() {
             <p className="text-xs text-slate-500 mt-1">Require immediate attention</p>
           </div>
 
-          <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg p-6">
+          <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-white/5 rounded-lg p-6">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-slate-400 text-sm font-medium">Investigations</h3>
               <div className="w-10 h-10 bg-green-500/10 rounded-lg flex items-center justify-center">
@@ -280,7 +280,7 @@ export default function AnomalyDetectionPage() {
             <p className="text-xs text-slate-500 mt-1">Active investigations</p>
           </div>
 
-          <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg p-6">
+          <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-white/5 rounded-lg p-6">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-slate-400 text-sm font-medium">Accuracy</h3>
               <div className="w-10 h-10 bg-purple-500/10 rounded-lg flex items-center justify-center">
@@ -299,7 +299,7 @@ export default function AnomalyDetectionPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
             {/* By Category */}
             {stats.by_category && Object.keys(stats.by_category).length > 0 && (
-              <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6">
+              <div className="bg-slate-800/50 border border-white/5 rounded-lg p-6">
                 <h3 className="text-white font-semibold mb-4">Anomaly Categories</h3>
                 <div className="space-y-3">
                   {Object.entries(stats.by_category).map(([category, count]) => {
@@ -326,13 +326,13 @@ export default function AnomalyDetectionPage() {
 
             {/* Top Affected Services */}
             {stats.top_affected_services && stats.top_affected_services.length > 0 && (
-              <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6">
+              <div className="bg-slate-800/50 border border-white/5 rounded-lg p-6">
                 <h3 className="text-white font-semibold mb-4">Top Affected Services</h3>
                 <div className="space-y-2">
                   {stats.top_affected_services.map((service, idx) => (
                     <div
                       key={service}
-                      className="flex items-center gap-3 p-3 bg-slate-900/50 rounded-lg border border-slate-700"
+                      className="flex items-center gap-3 p-3 bg-slate-900/50 rounded-lg border border-white/5"
                     >
                       <span className="text-slate-500 text-sm font-mono w-6">#{idx + 1}</span>
                       <div className="w-2 h-2 rounded-full bg-blue-500" />
@@ -346,8 +346,8 @@ export default function AnomalyDetectionPage() {
         )}
 
         {/* Anomalies Table */}
-        <div className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden">
-          <div className="p-6 border-b border-slate-700 flex items-center justify-between">
+        <div className="bg-slate-800/50 border border-white/5 rounded-lg overflow-hidden">
+          <div className="p-6 border-b border-white/5 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-white">
               Detected Anomalies
               {filteredAnomalies.length > 0 && (
@@ -371,7 +371,7 @@ export default function AnomalyDetectionPage() {
               <p className="text-sm text-slate-500 mt-1">System is operating within normal parameters</p>
             </div>
           ) : (
-            <div className="divide-y divide-slate-700">
+            <div className="divide-y divide-white/5">
               {filteredAnomalies.map((anomaly) => (
                 <div
                   key={anomaly.anomaly_id}
@@ -454,7 +454,7 @@ export default function AnomalyDetectionPage() {
 
         {/* Analysis Detail Panel */}
         {selectedAnomaly && (
-          <div className="mt-6 bg-slate-800/50 border border-slate-700 rounded-lg p-6">
+          <div className="mt-6 bg-slate-800/50 border border-white/5 rounded-lg p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-white">Anomaly Detail</h3>
               <button
@@ -513,7 +513,7 @@ export default function AnomalyDetectionPage() {
                 <h4 className="text-sm font-medium text-slate-400 mb-2">Affected Metrics</h4>
                 <div className="space-y-3">
                   {selectedAnomaly.affected_metrics?.map((metric, idx) => (
-                    <div key={idx} className="p-3 bg-slate-900/50 rounded-lg border border-slate-700">
+                    <div key={idx} className="p-3 bg-slate-900/50 rounded-lg border border-white/5">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm font-medium text-white">{metric.metric}</span>
                         <span className="text-xs text-slate-500">
@@ -544,7 +544,7 @@ export default function AnomalyDetectionPage() {
 
             {/* Deep Analysis Result */}
             {analysisResult && analysisResult.anomaly_id === selectedAnomaly.anomaly_id && (
-              <div className="mt-6 pt-6 border-t border-slate-700">
+              <div className="mt-6 pt-6 border-t border-white/5">
                 <h4 className="text-sm font-medium text-slate-400 mb-3">Deep Analysis Result</h4>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {/* Root Cause */}
@@ -558,7 +558,7 @@ export default function AnomalyDetectionPage() {
                   </div>
 
                   {/* Contributing Factors */}
-                  <div className="p-4 bg-slate-900/50 border border-slate-700 rounded-lg">
+                  <div className="p-4 bg-slate-900/50 border border-white/5 rounded-lg">
                     <h5 className="text-sm font-medium text-slate-400 mb-2">Contributing Factors</h5>
                     <div className="space-y-1">
                       {analysisResult.contributing_factors?.map((factor, idx) => (

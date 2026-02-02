@@ -83,7 +83,7 @@ const SEVERITY_COLORS: Record<string, string> = {
   high: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
   medium: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
   low: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  info: 'bg-gray-500/20 text-gray-400 border-gray-500/30'
+  info: 'bg-slate-500/20 text-slate-400 border-slate-500/30'
 }
 
 const RULE_TYPE_ICONS: Record<string, React.ReactNode> = {
@@ -239,7 +239,7 @@ export default function AlertRulesPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">Alert Rules</h1>
-            <p className="text-gray-400 mt-1">Configure and manage alerting rules</p>
+            <p className="text-slate-400 mt-1">Configure and manage alerting rules</p>
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
@@ -253,46 +253,46 @@ export default function AlertRulesPage() {
         {/* Stats Cards */}
         {stats && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+            <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-blue-500/20 rounded-lg">
                   <Bell className="w-5 h-5 text-blue-400" />
                 </div>
                 <div>
-                  <p className="text-gray-400 text-sm">Total Rules</p>
+                  <p className="text-slate-400 text-sm">Total Rules</p>
                   <p className="text-2xl font-bold text-white">{stats.total_rules}</p>
                 </div>
               </div>
             </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+            <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-green-500/20 rounded-lg">
                   <CheckCircle className="w-5 h-5 text-green-400" />
                 </div>
                 <div>
-                  <p className="text-gray-400 text-sm">Enabled</p>
+                  <p className="text-slate-400 text-sm">Enabled</p>
                   <p className="text-2xl font-bold text-white">{stats.enabled_rules}</p>
                 </div>
               </div>
             </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+            <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-orange-500/20 rounded-lg">
                   <AlertTriangle className="w-5 h-5 text-orange-400" />
                 </div>
                 <div>
-                  <p className="text-gray-400 text-sm">Triggered (24h)</p>
+                  <p className="text-slate-400 text-sm">Triggered (24h)</p>
                   <p className="text-2xl font-bold text-white">{stats.triggered_24h}</p>
                 </div>
               </div>
             </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+            <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-red-500/20 rounded-lg">
                   <Zap className="w-5 h-5 text-red-400" />
                 </div>
                 <div>
-                  <p className="text-gray-400 text-sm">Critical Rules</p>
+                  <p className="text-slate-400 text-sm">Critical Rules</p>
                   <p className="text-2xl font-bold text-white">{stats.by_severity.critical || 0}</p>
                 </div>
               </div>
@@ -303,20 +303,20 @@ export default function AlertRulesPage() {
         {/* Filters */}
         <div className="flex flex-wrap gap-4 items-center">
           <div className="relative flex-1 min-w-[200px] max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
               placeholder="Search rules..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              className="w-full pl-10 pr-4 py-2 bg-slate-900 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
             />
           </div>
 
           <select
             value={filterSeverity}
             onChange={(e) => setFilterSeverity(e.target.value)}
-            className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+            className="px-3 py-2 bg-slate-900 border border-white/10 rounded-xl text-white focus:outline-none focus:border-blue-500"
           >
             <option value="all">All Severities</option>
             <option value="critical">Critical</option>
@@ -329,7 +329,7 @@ export default function AlertRulesPage() {
           <select
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
-            className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+            className="px-3 py-2 bg-slate-900 border border-white/10 rounded-xl text-white focus:outline-none focus:border-blue-500"
           >
             <option value="all">All Types</option>
             <option value="threshold">Threshold</option>
@@ -343,7 +343,7 @@ export default function AlertRulesPage() {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+            className="px-3 py-2 bg-slate-900 border border-white/10 rounded-xl text-white focus:outline-none focus:border-blue-500"
           >
             <option value="all">All Status</option>
             <option value="enabled">Enabled</option>
@@ -352,13 +352,13 @@ export default function AlertRulesPage() {
         </div>
 
         {/* Rules List */}
-        <div className="bg-gray-800/50 border border-gray-700 rounded-lg overflow-hidden">
+        <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 overflow-hidden">
           {isLoading ? (
             <div className="flex items-center justify-center h-48">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
             </div>
           ) : filteredRules.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-48 text-gray-400">
+            <div className="flex flex-col items-center justify-center h-48 text-slate-400">
               <Bell className="w-12 h-12 mb-4 opacity-50" />
               <p>No alert rules found</p>
               <button
@@ -370,28 +370,28 @@ export default function AlertRulesPage() {
             </div>
           ) : (
             <table className="w-full">
-              <thead className="bg-gray-900/50">
+              <thead className="bg-slate-900/50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Rule</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Severity</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Last Triggered</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">24h Count</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Channels</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Actions</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Rule</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Severity</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Last Triggered</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">24h Count</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Channels</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-700">
+              <tbody className="divide-y divide-white/5">
                 {filteredRules.map((rule) => (
-                  <tr key={rule.id} className="hover:bg-gray-700/30 transition-colors">
+                  <tr key={rule.id} className="hover:bg-white/[0.02] transition-colors">
                     <td className="px-4 py-4">
                       <button
                         onClick={() => toggleRuleEnabled(rule.id)}
                         className={`p-2 rounded-lg transition-colors ${
                           rule.enabled
                             ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                            : 'bg-gray-600/20 text-gray-500 hover:bg-gray-600/30'
+                            : 'bg-slate-600/20 text-slate-500 hover:bg-slate-600/30'
                         }`}
                         title={rule.enabled ? 'Disable rule' : 'Enable rule'}
                       >
@@ -401,11 +401,11 @@ export default function AlertRulesPage() {
                     <td className="px-4 py-4">
                       <div>
                         <p className="text-white font-medium">{rule.name}</p>
-                        <p className="text-gray-400 text-sm">{rule.description}</p>
+                        <p className="text-slate-400 text-sm">{rule.description}</p>
                       </div>
                     </td>
                     <td className="px-4 py-4">
-                      <div className="flex items-center gap-2 text-gray-300">
+                      <div className="flex items-center gap-2 text-slate-300">
                         {RULE_TYPE_ICONS[rule.rule_type]}
                         <span className="capitalize">{rule.rule_type}</span>
                       </div>
@@ -415,11 +415,11 @@ export default function AlertRulesPage() {
                         {rule.severity.toUpperCase()}
                       </span>
                     </td>
-                    <td className="px-4 py-4 text-gray-400">
+                    <td className="px-4 py-4 text-slate-400">
                       {formatTimeAgo(rule.last_triggered_at)}
                     </td>
                     <td className="px-4 py-4">
-                      <span className={`font-medium ${rule.trigger_count_24h > 10 ? 'text-orange-400' : 'text-gray-300'}`}>
+                      <span className={`font-medium ${rule.trigger_count_24h > 10 ? 'text-orange-400' : 'text-slate-300'}`}>
                         {rule.trigger_count_24h}
                       </span>
                     </td>
@@ -430,7 +430,7 @@ export default function AlertRulesPage() {
                           return (
                             <span
                               key={idx}
-                              className="px-2 py-1 bg-gray-700 rounded text-xs text-gray-300"
+                              className="px-2 py-1 bg-slate-700 rounded text-xs text-slate-300"
                               title={channel?.name || channelId}
                             >
                               {channel?.type || 'channel'}
@@ -438,7 +438,7 @@ export default function AlertRulesPage() {
                           )
                         })}
                         {rule.notification_channels.length > 2 && (
-                          <span className="px-2 py-1 bg-gray-700 rounded text-xs text-gray-400">
+                          <span className="px-2 py-1 bg-slate-700 rounded text-xs text-slate-400">
                             +{rule.notification_channels.length - 2}
                           </span>
                         )}
@@ -448,27 +448,27 @@ export default function AlertRulesPage() {
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => testRule(rule.id)}
-                          className="p-2 text-gray-400 hover:text-blue-400 hover:bg-gray-700 rounded transition-colors"
+                          className="p-2 text-slate-400 hover:text-blue-400 hover:bg-slate-700 rounded transition-colors"
                           title="Test rule"
                         >
                           <TestTube className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => setSelectedRule(rule)}
-                          className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+                          className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded transition-colors"
                           title="Edit rule"
                         >
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
-                          className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+                          className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded transition-colors"
                           title="Duplicate rule"
                         >
                           <Copy className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => deleteRule(rule.id)}
-                          className="p-2 text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded transition-colors"
+                          className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
                           title="Delete rule"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -485,12 +485,12 @@ export default function AlertRulesPage() {
         {/* Test Result Modal */}
         {showTestModal && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-            <div className="bg-gray-800 border border-gray-700 rounded-lg w-full max-w-lg mx-4">
-              <div className="flex items-center justify-between p-4 border-b border-gray-700">
+            <div className="bg-slate-900 border border-white/10 rounded-xl w-full max-w-lg mx-4">
+              <div className="flex items-center justify-between p-4 border-b border-white/5">
                 <h3 className="text-lg font-semibold text-white">Rule Test Result</h3>
                 <button
                   onClick={() => setShowTestModal(false)}
-                  className="text-gray-400 hover:text-white"
+                  className="text-slate-400 hover:text-white"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -499,7 +499,7 @@ export default function AlertRulesPage() {
                 {testResult === null ? (
                   <div className="flex items-center justify-center py-8">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-                    <span className="ml-3 text-gray-400">Testing rule...</span>
+                    <span className="ml-3 text-slate-400">Testing rule...</span>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -517,29 +517,29 @@ export default function AlertRulesPage() {
                         <p className={`font-medium ${testResult.would_trigger ? 'text-orange-400' : 'text-green-400'}`}>
                           {testResult.would_trigger ? 'Rule Would Trigger' : 'Rule Would Not Trigger'}
                         </p>
-                        <p className="text-sm text-gray-400">
+                        <p className="text-sm text-slate-400">
                           Based on current data
                         </p>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-gray-700/30 p-3 rounded-lg">
-                        <p className="text-gray-400 text-sm">Matched Events</p>
+                      <div className="bg-slate-700/30 p-3 rounded-lg">
+                        <p className="text-slate-400 text-sm">Matched Events</p>
                         <p className="text-xl font-bold text-white">{testResult.matched_count}</p>
                       </div>
-                      <div className="bg-gray-700/30 p-3 rounded-lg">
-                        <p className="text-gray-400 text-sm">Evaluation Time</p>
+                      <div className="bg-slate-700/30 p-3 rounded-lg">
+                        <p className="text-slate-400 text-sm">Evaluation Time</p>
                         <p className="text-xl font-bold text-white">{testResult.evaluation_time_ms}ms</p>
                       </div>
                     </div>
 
                     {testResult.sample_matches && testResult.sample_matches.length > 0 && (
                       <div>
-                        <p className="text-gray-400 text-sm mb-2">Sample Matches</p>
-                        <div className="bg-gray-900 rounded-lg p-3 max-h-32 overflow-y-auto">
+                        <p className="text-slate-400 text-sm mb-2">Sample Matches</p>
+                        <div className="bg-slate-900 rounded-lg p-3 max-h-32 overflow-y-auto">
                           {testResult.sample_matches.map((match: any, idx: number) => (
-                            <div key={idx} className="text-sm text-gray-300 font-mono">
+                            <div key={idx} className="text-sm text-slate-300 font-mono">
                               {match.message || JSON.stringify(match)}
                             </div>
                           ))}
@@ -549,10 +549,10 @@ export default function AlertRulesPage() {
                   </div>
                 )}
               </div>
-              <div className="flex justify-end gap-3 p-4 border-t border-gray-700">
+              <div className="flex justify-end gap-3 p-4 border-t border-white/5">
                 <button
                   onClick={() => setShowTestModal(false)}
-                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
                 >
                   Close
                 </button>
@@ -564,37 +564,37 @@ export default function AlertRulesPage() {
         {/* Create Rule Modal Placeholder */}
         {showCreateModal && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-            <div className="bg-gray-800 border border-gray-700 rounded-lg w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between p-4 border-b border-gray-700">
+            <div className="bg-slate-900 border border-white/10 rounded-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-4 border-b border-white/5">
                 <h3 className="text-lg font-semibold text-white">Create Alert Rule</h3>
                 <button
                   onClick={() => setShowCreateModal(false)}
-                  className="text-gray-400 hover:text-white"
+                  className="text-slate-400 hover:text-white"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
               <div className="p-4 space-y-4">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Rule Name</label>
+                  <label className="block text-sm text-slate-400 mb-1">Rule Name</label>
                   <input
                     type="text"
                     placeholder="e.g., High Error Rate Alert"
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Description</label>
+                  <label className="block text-sm text-slate-400 mb-1">Description</label>
                   <textarea
                     placeholder="Describe what this rule monitors..."
                     rows={2}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm text-gray-400 mb-1">Rule Type</label>
-                    <select className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500">
+                    <label className="block text-sm text-slate-400 mb-1">Rule Type</label>
+                    <select className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500">
                       <option value="threshold">Threshold</option>
                       <option value="anomaly">Anomaly Detection</option>
                       <option value="pattern">Pattern Match</option>
@@ -604,8 +604,8 @@ export default function AlertRulesPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-400 mb-1">Severity</label>
-                    <select className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500">
+                    <label className="block text-sm text-slate-400 mb-1">Severity</label>
+                    <select className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500">
                       <option value="critical">Critical</option>
                       <option value="high">High</option>
                       <option value="medium">Medium</option>
@@ -616,18 +616,18 @@ export default function AlertRulesPage() {
                 </div>
 
                 {/* Condition Builder */}
-                <div className="border border-gray-600 rounded-lg p-4">
+                <div className="border border-white/10 rounded-lg p-4">
                   <h4 className="text-white font-medium mb-3">Conditions</h4>
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
-                      <select className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm">
+                      <select className="px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white text-sm">
                         <option>error_rate</option>
                         <option>latency_p99</option>
                         <option>request_count</option>
                         <option>cpu_usage</option>
                         <option>memory_usage</option>
                       </select>
-                      <select className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm">
+                      <select className="px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white text-sm">
                         <option value="gt">&gt; Greater than</option>
                         <option value="gte">&gt;= Greater or equal</option>
                         <option value="lt">&lt; Less than</option>
@@ -638,10 +638,10 @@ export default function AlertRulesPage() {
                       <input
                         type="number"
                         placeholder="Value"
-                        className="w-24 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 text-sm"
+                        className="w-24 px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm"
                       />
-                      <span className="text-gray-400 text-sm">over</span>
-                      <select className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm">
+                      <span className="text-slate-400 text-sm">over</span>
+                      <select className="px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white text-sm">
                         <option value="1m">1 minute</option>
                         <option value="5m">5 minutes</option>
                         <option value="15m">15 minutes</option>
@@ -656,11 +656,11 @@ export default function AlertRulesPage() {
 
                 {/* Notification Channels */}
                 <div>
-                  <label className="block text-sm text-gray-400 mb-2">Notification Channels</label>
+                  <label className="block text-sm text-slate-400 mb-2">Notification Channels</label>
                   <div className="flex flex-wrap gap-2">
                     {channels.map(channel => (
-                      <label key={channel.id} className="flex items-center gap-2 px-3 py-2 bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-600 transition-colors">
-                        <input type="checkbox" className="rounded border-gray-500" />
+                      <label key={channel.id} className="flex items-center gap-2 px-3 py-2 bg-slate-700 rounded-lg cursor-pointer hover:bg-slate-600 transition-colors">
+                        <input type="checkbox" className="rounded border-slate-500" />
                         <span className="text-white text-sm">{channel.name}</span>
                       </label>
                     ))}
@@ -670,8 +670,8 @@ export default function AlertRulesPage() {
                 {/* Advanced Settings */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm text-gray-400 mb-1">Cooldown Period</label>
-                    <select className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white">
+                    <label className="block text-sm text-slate-400 mb-1">Cooldown Period</label>
+                    <select className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white">
                       <option value="60">1 minute</option>
                       <option value="300">5 minutes</option>
                       <option value="600">10 minutes</option>
@@ -680,19 +680,19 @@ export default function AlertRulesPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-400 mb-1">Max Alerts per Hour</label>
+                    <label className="block text-sm text-slate-400 mb-1">Max Alerts per Hour</label>
                     <input
                       type="number"
                       defaultValue={10}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                      className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white"
                     />
                   </div>
                 </div>
               </div>
-              <div className="flex justify-end gap-3 p-4 border-t border-gray-700">
+              <div className="flex justify-end gap-3 p-4 border-t border-white/5">
                 <button
                   onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
                 >
                   Cancel
                 </button>

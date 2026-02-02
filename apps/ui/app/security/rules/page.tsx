@@ -254,11 +254,11 @@ export default function SigmaRulesPage() {
 
   const getSeverityColor = (severity: string) => {
     switch (severity?.toLowerCase()) {
-      case 'critical': return 'bg-red-500/10 text-red-600 border-red-500/30'
-      case 'high': return 'bg-orange-500/10 text-orange-600 border-orange-500/30'
-      case 'medium': return 'bg-yellow-500/10 text-yellow-600 border-yellow-500/30'
-      case 'low': return 'bg-blue-500/10 text-blue-600 border-blue-500/30'
-      default: return 'bg-slate-500/10 text-slate-600 border-slate-500/30'
+      case 'critical': return 'bg-red-500/10 text-red-400 border-red-500/30'
+      case 'high': return 'bg-orange-500/10 text-orange-400 border-orange-500/30'
+      case 'medium': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
+      case 'low': return 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+      default: return 'bg-slate-800/500/10 text-slate-400 border-slate-500/30'
     }
   }
 
@@ -279,8 +279,8 @@ export default function SigmaRulesPage() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Sigma Detection Rules</h1>
-            <p className="text-slate-600 mt-1">
+            <h1 className="text-2xl font-bold text-white">Sigma Detection Rules</h1>
+            <p className="text-slate-400 mt-1">
               Manage Sigma rules for threat detection
             </p>
           </div>
@@ -295,23 +295,23 @@ export default function SigmaRulesPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-4 gap-4">
-          <div className="bg-white rounded-lg border border-slate-200 p-4">
-            <p className="text-sm text-slate-600">Total Rules</p>
-            <p className="text-2xl font-bold text-slate-900">{rules.length}</p>
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-lg border border-white/5 p-4">
+            <p className="text-sm text-slate-400">Total Rules</p>
+            <p className="text-2xl font-bold text-white">{rules.length}</p>
           </div>
-          <div className="bg-white rounded-lg border border-slate-200 p-4">
-            <p className="text-sm text-slate-600">Active</p>
-            <p className="text-2xl font-bold text-green-600">{rules.filter(r => r.enabled).length}</p>
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-lg border border-white/5 p-4">
+            <p className="text-sm text-slate-400">Active</p>
+            <p className="text-2xl font-bold text-green-400">{rules.filter(r => r.enabled).length}</p>
           </div>
-          <div className="bg-white rounded-lg border border-slate-200 p-4">
-            <p className="text-sm text-slate-600">Critical/High</p>
-            <p className="text-2xl font-bold text-red-600">
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-lg border border-white/5 p-4">
+            <p className="text-sm text-slate-400">Critical/High</p>
+            <p className="text-2xl font-bold text-red-400">
               {rules.filter(r => r.severity === 'critical' || r.severity === 'high').length}
             </p>
           </div>
-          <div className="bg-white rounded-lg border border-slate-200 p-4">
-            <p className="text-sm text-slate-600">ATT&CK Coverage</p>
-            <p className="text-2xl font-bold text-purple-600">
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-lg border border-white/5 p-4">
+            <p className="text-sm text-slate-400">ATT&CK Coverage</p>
+            <p className="text-2xl font-bold text-purple-400">
               {new Set(rules.flatMap(r => r.attack_techniques)).size}
             </p>
           </div>
@@ -326,13 +326,13 @@ export default function SigmaRulesPage() {
               placeholder="Search rules..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500"
+              className="w-full pl-10 pr-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
             />
           </div>
           <select
             value={severityFilter}
             onChange={(e) => setSeverityFilter(e.target.value)}
-            className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500"
+            className="px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
           >
             <option value="all">All Severities</option>
             <option value="critical">Critical</option>
@@ -343,24 +343,24 @@ export default function SigmaRulesPage() {
         </div>
 
         {/* Rules Table */}
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 overflow-hidden">
           <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-200">
+            <thead className="bg-slate-800/50 border-b border-white/5">
               <tr>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">Status</th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">Rule</th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">Severity</th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">ATT&CK</th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">Tags</th>
-                <th className="text-right px-6 py-3 text-xs font-semibold text-slate-600 uppercase">Actions</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase">Status</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase">Rule</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase">Severity</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase">ATT&CK</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase">Tags</th>
+                <th className="text-right px-6 py-3 text-xs font-semibold text-slate-400 uppercase">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-white/5">
               {isLoading ? (
                 [...Array(5)].map((_, i) => (
                   <tr key={i}>
                     <td colSpan={6} className="px-6 py-4">
-                      <div className="h-8 bg-slate-100 rounded animate-pulse" />
+                      <div className="h-8 bg-slate-800/30 rounded animate-pulse" />
                     </td>
                   </tr>
                 ))
@@ -368,12 +368,12 @@ export default function SigmaRulesPage() {
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center">
                     <Shield className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                    <p className="text-slate-500">No rules found</p>
+                    <p className="text-slate-400">No rules found</p>
                   </td>
                 </tr>
               ) : (
                 filteredRules.map(rule => (
-                  <tr key={rule.id} className="hover:bg-slate-50">
+                  <tr key={rule.id} className="hover:bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl/5">
                     <td className="px-6 py-4">
                       <button
                         onClick={() => handleToggleRule(rule)}
@@ -388,8 +388,8 @@ export default function SigmaRulesPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div>
-                        <p className="font-medium text-slate-900">{rule.title}</p>
-                        <p className="text-sm text-slate-500 truncate max-w-md">{rule.description}</p>
+                        <p className="font-medium text-white">{rule.title}</p>
+                        <p className="text-sm text-slate-400 truncate max-w-md">{rule.description}</p>
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -400,12 +400,12 @@ export default function SigmaRulesPage() {
                     <td className="px-6 py-4">
                       <div className="flex flex-wrap gap-1">
                         {rule.attack_techniques.slice(0, 2).map(tech => (
-                          <span key={tech} className="px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded">
+                          <span key={tech} className="px-2 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded">
                             {tech}
                           </span>
                         ))}
                         {rule.attack_techniques.length > 2 && (
-                          <span className="px-2 py-0.5 text-xs bg-slate-100 text-slate-600 rounded">
+                          <span className="px-2 py-0.5 text-xs bg-slate-800/30 text-slate-400 rounded">
                             +{rule.attack_techniques.length - 2}
                           </span>
                         )}
@@ -414,7 +414,7 @@ export default function SigmaRulesPage() {
                     <td className="px-6 py-4">
                       <div className="flex flex-wrap gap-1">
                         {rule.tags.slice(0, 2).map(tag => (
-                          <span key={tag} className="px-2 py-0.5 text-xs bg-slate-100 text-slate-600 rounded">
+                          <span key={tag} className="px-2 py-0.5 text-xs bg-slate-800/30 text-slate-400 rounded">
                             {tag}
                           </span>
                         ))}
@@ -424,21 +424,21 @@ export default function SigmaRulesPage() {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => handleTestRule(rule.id)}
-                          className="p-2 text-slate-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                          className="p-2 text-slate-400 hover:text-green-400 hover:bg-green-500/10 rounded-lg transition-colors"
                           title="Test Rule"
                         >
                           <Play className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => startEditing(rule)}
-                          className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          className="p-2 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
                           title="Edit Rule"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDeleteRule(rule.id)}
-                          className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                           title="Delete Rule"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -455,15 +455,15 @@ export default function SigmaRulesPage() {
         {/* Test Result Modal */}
         {testResult && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
+            <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl shadow-xl w-full max-w-lg p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-slate-900">Test Result</h3>
-                <button onClick={() => setTestResult(null)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <h3 className="text-lg font-semibold text-white">Test Result</h3>
+                <button onClick={() => setTestResult(null)} className="p-2 hover:bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl/5 rounded-lg">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className={`p-4 rounded-lg mb-4 ${testResult.matched ? 'bg-green-50' : 'bg-yellow-50'}`}>
+              <div className={`p-4 rounded-lg mb-4 ${testResult.matched ? 'bg-green-500/10' : 'bg-yellow-500/10'}`}>
                 <div className="flex items-center gap-3">
                   {testResult.matched ? (
                     <CheckCircle className="w-8 h-8 text-green-500" />
@@ -471,10 +471,10 @@ export default function SigmaRulesPage() {
                     <AlertTriangle className="w-8 h-8 text-yellow-500" />
                   )}
                   <div>
-                    <p className="font-medium text-slate-900">
+                    <p className="font-medium text-white">
                       {testResult.matched ? 'Rule Triggered' : 'No Match'}
                     </p>
-                    <p className="text-sm text-slate-600">
+                    <p className="text-sm text-slate-400">
                       Confidence: {testResult.confidence}%
                     </p>
                   </div>
@@ -483,7 +483,7 @@ export default function SigmaRulesPage() {
 
               {testResult.matched && Object.keys(testResult.matched_fields).length > 0 && (
                 <div>
-                  <p className="text-sm font-medium text-slate-700 mb-2">Matched Fields:</p>
+                  <p className="text-sm font-medium text-slate-300 mb-2">Matched Fields:</p>
                   <pre className="p-3 bg-slate-900 text-green-400 rounded-lg text-sm overflow-x-auto">
                     {JSON.stringify(testResult.matched_fields, null, 2)}
                   </pre>
@@ -503,14 +503,14 @@ export default function SigmaRulesPage() {
         {/* Create/Edit Modal */}
         {(isCreating || isEditing) && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto py-8">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 m-4">
+            <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl shadow-xl w-full max-w-2xl p-6 m-4">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold text-slate-900">
+                <h3 className="text-lg font-semibold text-white">
                   {isCreating ? 'Create New Rule' : 'Edit Rule'}
                 </h3>
                 <button
                   onClick={() => { setIsCreating(false); setIsEditing(false); resetForm(); }}
-                  className="p-2 hover:bg-slate-100 rounded-lg"
+                  className="p-2 hover:bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl/5 rounded-lg"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -519,7 +519,7 @@ export default function SigmaRulesPage() {
               <div className="space-y-4 max-h-[60vh] overflow-y-auto">
                 {/* Title */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-300 mb-1">
                     <FileText className="w-4 h-4 inline mr-1" />
                     Title *
                   </label>
@@ -528,33 +528,33 @@ export default function SigmaRulesPage() {
                     value={formData.title}
                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                     placeholder="Brute Force Attack Detection"
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500"
+                    className="w-full px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
                   />
                 </div>
 
                 {/* Description */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">Description</label>
                   <textarea
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     placeholder="Detects multiple failed login attempts from a single source..."
                     rows={3}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500 resize-none"
+                    className="w-full px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 resize-none"
                   />
                 </div>
 
                 {/* Severity and Status */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
                       <AlertTriangle className="w-4 h-4 inline mr-1" />
                       Severity
                     </label>
                     <select
                       value={formData.severity}
                       onChange={(e) => setFormData({ ...formData, severity: e.target.value as SigmaRule['severity'] })}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500"
+                      className="w-full px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
                     >
                       <option value="critical">Critical</option>
                       <option value="high">High</option>
@@ -564,20 +564,20 @@ export default function SigmaRulesPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Author</label>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">Author</label>
                     <input
                       type="text"
                       value={formData.author}
                       onChange={(e) => setFormData({ ...formData, author: e.target.value })}
                       placeholder="Logforge User"
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500"
+                      className="w-full px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
                     />
                   </div>
                 </div>
 
                 {/* Log Source */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-300 mb-1">
                     <Code className="w-4 h-4 inline mr-1" />
                     Log Source
                   </label>
@@ -590,7 +590,7 @@ export default function SigmaRulesPage() {
                         logsource: { ...formData.logsource, category: e.target.value }
                       })}
                       placeholder="Category"
-                      className="px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
+                      className="px-3 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
                     />
                     <input
                       type="text"
@@ -600,7 +600,7 @@ export default function SigmaRulesPage() {
                         logsource: { ...formData.logsource, product: e.target.value }
                       })}
                       placeholder="Product"
-                      className="px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
+                      className="px-3 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
                     />
                     <input
                       type="text"
@@ -610,14 +610,14 @@ export default function SigmaRulesPage() {
                         logsource: { ...formData.logsource, service: e.target.value }
                       })}
                       placeholder="Service"
-                      className="px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
+                      className="px-3 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
                     />
                   </div>
                 </div>
 
                 {/* MITRE ATT&CK Techniques */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-300 mb-1">
                     <Target className="w-4 h-4 inline mr-1" />
                     MITRE ATT&CK Techniques (comma-separated)
                   </label>
@@ -629,13 +629,13 @@ export default function SigmaRulesPage() {
                       attack_techniques: e.target.value.split(',').map(t => t.trim()).filter(Boolean)
                     })}
                     placeholder="T1110, T1078"
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500"
+                    className="w-full px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
                   />
                 </div>
 
                 {/* Tags */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-300 mb-1">
                     <Tag className="w-4 h-4 inline mr-1" />
                     Tags (comma-separated)
                   </label>
@@ -647,7 +647,7 @@ export default function SigmaRulesPage() {
                       tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean)
                     })}
                     placeholder="authentication, brute-force"
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500"
+                    className="w-full px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
                   />
                 </div>
 
@@ -664,17 +664,17 @@ export default function SigmaRulesPage() {
                       <ToggleLeft className="w-10 h-10 text-slate-400" />
                     )}
                   </button>
-                  <span className="text-sm text-slate-700">
+                  <span className="text-sm text-slate-300">
                     {formData.enabled ? 'Rule Enabled' : 'Rule Disabled'}
                   </span>
                 </div>
               </div>
 
               {/* Actions */}
-              <div className="flex gap-3 mt-6 pt-4 border-t border-slate-200">
+              <div className="flex gap-3 mt-6 pt-4 border-t border-white/5">
                 <button
                   onClick={() => { setIsCreating(false); setIsEditing(false); resetForm(); }}
-                  className="flex-1 px-4 py-2 border border-slate-300 rounded-lg font-medium text-slate-700 hover:bg-slate-50"
+                  className="flex-1 px-4 py-2 border border-white/10 rounded-lg font-medium text-slate-300 hover:bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl/5"
                 >
                   Cancel
                 </button>

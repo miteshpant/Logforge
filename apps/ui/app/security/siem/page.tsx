@@ -175,11 +175,11 @@ export default function SIEMDashboardPage() {
 
   const getSeverityColor = (severity: string) => {
     switch (severity?.toLowerCase()) {
-      case 'critical': return 'text-red-500 bg-red-500/10 border-red-500/30'
-      case 'high': return 'text-orange-500 bg-orange-500/10 border-orange-500/30'
-      case 'medium': return 'text-yellow-500 bg-yellow-500/10 border-yellow-500/30'
-      case 'low': return 'text-blue-500 bg-blue-500/10 border-blue-500/30'
-      default: return 'text-slate-500 bg-slate-500/10 border-slate-500/30'
+      case 'critical': return 'text-red-500 bg-red-500/100/10 border-red-500/30'
+      case 'high': return 'text-orange-500 bg-orange-500/100/10 border-orange-500/30'
+      case 'medium': return 'text-yellow-500 bg-yellow-500/100/10 border-yellow-500/30'
+      case 'low': return 'text-blue-500 bg-blue-500/100/10 border-blue-500/30'
+      default: return 'text-slate-500 bg-slate-500/100/10 border-slate-500/30'
     }
   }
 
@@ -187,15 +187,15 @@ export default function SIEMDashboardPage() {
     switch (status?.toLowerCase()) {
       case 'triggered':
       case 'new':
-        return 'bg-red-500/20 text-red-400 border-red-500/30'
+        return 'bg-red-500/100/20 text-red-400 border-red-500/30'
       case 'investigating':
-        return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
+        return 'bg-yellow-500/100/20 text-yellow-400 border-yellow-500/30'
       case 'resolved':
         return 'bg-green-500/20 text-green-400 border-green-500/30'
       case 'false_positive':
-        return 'bg-slate-500/20 text-slate-400 border-slate-500/30'
+        return 'bg-slate-500/100/20 text-slate-400 border-slate-500/30'
       default:
-        return 'bg-slate-500/20 text-slate-400 border-slate-500/30'
+        return 'bg-slate-500/100/20 text-slate-400 border-slate-500/30'
     }
   }
 
@@ -255,8 +255,8 @@ export default function SIEMDashboardPage() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900">Security Operations Center</h1>
-            <p className="text-slate-600 mt-1">
+            <h1 className="text-3xl font-bold text-white">Security Operations Center</h1>
+            <p className="text-slate-400 mt-1">
               SIEM dashboard with threat detection, MITRE ATT&CK coverage, and security analytics
             </p>
           </div>
@@ -265,7 +265,7 @@ export default function SIEMDashboardPage() {
             <select
               value={selectedSeverity}
               onChange={(e) => setSelectedSeverity(e.target.value)}
-              className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-blue-500"
+              className="px-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
             >
               <option value="all">All Severities</option>
               <option value="critical">Critical</option>
@@ -286,56 +286,56 @@ export default function SIEMDashboardPage() {
 
         {/* Summary Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-6">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-red-500/10 rounded-lg">
+              <div className="p-3 bg-red-500/100/10 rounded-lg">
                 <ShieldAlert className="w-6 h-6 text-red-500" />
               </div>
               <div>
-                <p className="text-sm text-slate-600">Critical Events</p>
-                <p className="text-2xl font-bold text-slate-900">
+                <p className="text-sm text-slate-400">Critical Events</p>
+                <p className="text-2xl font-bold text-white">
                   {dashboard?.events_by_severity?.critical || 0}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-6">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-orange-500/10 rounded-lg">
+              <div className="p-3 bg-orange-500/100/10 rounded-lg">
                 <AlertTriangle className="w-6 h-6 text-orange-500" />
               </div>
               <div>
-                <p className="text-sm text-slate-600">High Severity</p>
-                <p className="text-2xl font-bold text-slate-900">
+                <p className="text-sm text-slate-400">High Severity</p>
+                <p className="text-2xl font-bold text-white">
                   {dashboard?.events_by_severity?.high || 0}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-6">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-blue-500/10 rounded-lg">
+              <div className="p-3 bg-blue-500/100/10 rounded-lg">
                 <Shield className="w-6 h-6 text-blue-500" />
               </div>
               <div>
-                <p className="text-sm text-slate-600">Active Rules</p>
-                <p className="text-2xl font-bold text-slate-900">
+                <p className="text-sm text-slate-400">Active Rules</p>
+                <p className="text-2xl font-bold text-white">
                   {rules.filter(r => r.enabled).length}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-6">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-purple-500/10 rounded-lg">
+              <div className="p-3 bg-purple-500/100/10 rounded-lg">
                 <Target className="w-6 h-6 text-purple-500" />
               </div>
               <div>
-                <p className="text-sm text-slate-600">Threat Indicators</p>
-                <p className="text-2xl font-bold text-slate-900">
+                <p className="text-sm text-slate-400">Threat Indicators</p>
+                <p className="text-2xl font-bold text-white">
                   {dashboard?.threat_intel_stats?.total_indicators || 0}
                 </p>
               </div>
@@ -344,8 +344,8 @@ export default function SIEMDashboardPage() {
         </div>
 
         {/* MITRE ATT&CK Coverage */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+        <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-6">
+          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
             <Target className="w-5 h-5 text-purple-500" />
             MITRE ATT&CK Coverage
           </h2>
@@ -360,12 +360,12 @@ export default function SIEMDashboardPage() {
               return (
                 <div
                   key={tactic.id}
-                  className="flex-1 min-w-[80px] p-3 rounded-lg text-center border border-slate-200 hover:border-blue-400 transition-colors cursor-pointer"
+                  className="flex-1 min-w-[80px] p-3 rounded-lg text-center border border-white/5 hover:border-blue-400 transition-colors cursor-pointer"
                   style={{ backgroundColor: bgColor }}
                   title={`${tactic.name}: ${count} rules`}
                 >
-                  <p className="text-xs font-medium text-slate-700 truncate">{tactic.shortName}</p>
-                  <p className="text-lg font-bold text-slate-900">{count}</p>
+                  <p className="text-xs font-medium text-slate-300 truncate">{tactic.shortName}</p>
+                  <p className="text-lg font-bold text-white">{count}</p>
                 </div>
               )
             })}
@@ -374,8 +374,8 @@ export default function SIEMDashboardPage() {
 
         {/* Severity Distribution */}
         {dashboard?.events_by_severity && (
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-6">
+            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <ShieldAlert className="w-5 h-5 text-red-500" />
               Event Severity Distribution
             </h2>
@@ -385,16 +385,16 @@ export default function SIEMDashboardPage() {
                 const total = Object.values(dashboard.events_by_severity).reduce((s, v) => s + v, 0) || 1
                 const pct = ((count / total) * 100).toFixed(1)
                 const colors: Record<string, { bg: string; bar: string; text: string }> = {
-                  critical: { bg: 'bg-red-50', bar: 'bg-red-500', text: 'text-red-700' },
-                  high: { bg: 'bg-orange-50', bar: 'bg-orange-500', text: 'text-orange-700' },
-                  medium: { bg: 'bg-yellow-50', bar: 'bg-yellow-500', text: 'text-yellow-700' },
-                  low: { bg: 'bg-blue-50', bar: 'bg-blue-500', text: 'text-blue-700' }
+                  critical: { bg: 'bg-red-500/10', bar: 'bg-red-500/100', text: 'text-red-400' },
+                  high: { bg: 'bg-orange-500/10', bar: 'bg-orange-500/100', text: 'text-orange-400' },
+                  medium: { bg: 'bg-yellow-500/10', bar: 'bg-yellow-500/100', text: 'text-yellow-400' },
+                  low: { bg: 'bg-blue-500/10', bar: 'bg-blue-500/100', text: 'text-blue-400' }
                 }
                 const c = colors[sev]
                 return (
                   <div key={sev} className={`p-4 ${c.bg} rounded-lg`}>
                     <p className={`text-sm font-medium capitalize ${c.text}`}>{sev}</p>
-                    <p className="text-2xl font-bold text-slate-900 mt-1">{count}</p>
+                    <p className="text-2xl font-bold text-white mt-1">{count}</p>
                     <div className="mt-2 h-1.5 bg-white/60 rounded-full overflow-hidden">
                       <div className={`h-full ${c.bar} rounded-full`} style={{ width: `${pct}%` }} />
                     </div>
@@ -409,8 +409,8 @@ export default function SIEMDashboardPage() {
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Recent Security Events */}
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-6">
+            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <Activity className="w-5 h-5 text-red-500" />
               Recent Security Events
             </h2>
@@ -418,7 +418,7 @@ export default function SIEMDashboardPage() {
             {isLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3, 4, 5].map(i => (
-                  <div key={i} className="h-16 bg-slate-100 rounded-lg animate-pulse" />
+                  <div key={i} className="h-16 bg-slate-700 rounded-lg animate-pulse" />
                 ))}
               </div>
             ) : !dashboard?.recent_events?.length ? (
@@ -433,7 +433,7 @@ export default function SIEMDashboardPage() {
                   <div
                     key={event.id}
                     className={`p-4 border rounded-lg transition-colors cursor-pointer ${
-                      selectedEvent?.id === event.id ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-blue-400'
+                      selectedEvent?.id === event.id ? 'border-blue-500 bg-blue-500/10' : 'border-white/5 hover:border-blue-400'
                     }`}
                     onClick={() => setSelectedEvent(event)}
                   >
@@ -447,7 +447,7 @@ export default function SIEMDashboardPage() {
                             {event.status}
                           </span>
                         </div>
-                        <p className="font-medium text-slate-900 truncate">{event.rule_title}</p>
+                        <p className="font-medium text-white truncate">{event.rule_title}</p>
                         <div className="flex items-center gap-2 mt-1">
                           <Clock className="w-3 h-3 text-slate-400" />
                           <span className="text-xs text-slate-500">{formatTimestamp(event.timestamp)}</span>
@@ -458,7 +458,7 @@ export default function SIEMDashboardPage() {
                           {event.attack_techniques.slice(0, 2).map((tech) => (
                             <span
                               key={tech}
-                              className="px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded"
+                              className="px-2 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded"
                             >
                               {tech}
                             </span>
@@ -469,11 +469,11 @@ export default function SIEMDashboardPage() {
 
                     {/* Quick Action Buttons */}
                     {event.status !== 'resolved' && event.status !== 'false_positive' && (
-                      <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-100">
+                      <div className="flex items-center gap-2 mt-3 pt-2 border-t border-white/5">
                         <button
                           onClick={(e) => { e.stopPropagation(); handleEventAction(event.id, 'acknowledge') }}
                           disabled={actionLoading === `${event.id}-acknowledge`}
-                          className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 rounded transition-colors disabled:opacity-50"
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 rounded transition-colors disabled:opacity-50"
                         >
                           <Eye className="w-3 h-3" />
                           Ack
@@ -481,7 +481,7 @@ export default function SIEMDashboardPage() {
                         <button
                           onClick={(e) => { e.stopPropagation(); handleEventAction(event.id, 'investigate') }}
                           disabled={actionLoading === `${event.id}-investigate`}
-                          className="flex items-center gap-1 px-2 py-1 text-xs bg-yellow-50 text-yellow-700 hover:bg-yellow-100 rounded transition-colors disabled:opacity-50"
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 rounded transition-colors disabled:opacity-50"
                         >
                           <Search className="w-3 h-3" />
                           Investigate
@@ -489,7 +489,7 @@ export default function SIEMDashboardPage() {
                         <button
                           onClick={(e) => { e.stopPropagation(); handleEventAction(event.id, 'resolve') }}
                           disabled={actionLoading === `${event.id}-resolve`}
-                          className="flex items-center gap-1 px-2 py-1 text-xs bg-green-50 text-green-700 hover:bg-green-100 rounded transition-colors disabled:opacity-50"
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-green-500/10 text-green-400 hover:bg-green-500/20 rounded transition-colors disabled:opacity-50"
                         >
                           <CheckCircle className="w-3 h-3" />
                           Resolve
@@ -497,7 +497,7 @@ export default function SIEMDashboardPage() {
                         <button
                           onClick={(e) => { e.stopPropagation(); handleEventAction(event.id, 'false-positive') }}
                           disabled={actionLoading === `${event.id}-false-positive`}
-                          className="flex items-center gap-1 px-2 py-1 text-xs bg-slate-50 text-slate-600 hover:bg-slate-100 rounded transition-colors disabled:opacity-50"
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-slate-500/10 text-slate-400 hover:bg-slate-700 rounded transition-colors disabled:opacity-50"
                         >
                           <XCircle className="w-3 h-3" />
                           False +
@@ -511,8 +511,8 @@ export default function SIEMDashboardPage() {
           </div>
 
           {/* Top Triggered Rules */}
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-6">
+            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <Zap className="w-5 h-5 text-yellow-500" />
               Top Triggered Rules
             </h2>
@@ -520,7 +520,7 @@ export default function SIEMDashboardPage() {
             {isLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3, 4, 5].map(i => (
-                  <div key={i} className="h-12 bg-slate-100 rounded-lg animate-pulse" />
+                  <div key={i} className="h-12 bg-slate-700 rounded-lg animate-pulse" />
                 ))}
               </div>
             ) : !dashboard?.top_rules?.length ? (
@@ -540,7 +540,7 @@ export default function SIEMDashboardPage() {
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium text-slate-500">#{idx + 1}</span>
-                          <span className="text-sm font-medium text-slate-900 truncate max-w-[200px]">
+                          <span className="text-sm font-medium text-white truncate max-w-[200px]">
                             {rule.rule_title}
                           </span>
                         </div>
@@ -548,10 +548,10 @@ export default function SIEMDashboardPage() {
                           <span className={`px-2 py-0.5 text-xs font-medium rounded ${getSeverityColor(rule.severity)}`}>
                             {rule.severity}
                           </span>
-                          <span className="text-sm font-bold text-slate-700">{rule.event_count}</span>
+                          <span className="text-sm font-bold text-slate-300">{rule.event_count}</span>
                         </div>
                       </div>
-                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full transition-all"
                           style={{ width: `${percentage}%` }}
@@ -566,8 +566,8 @@ export default function SIEMDashboardPage() {
         </div>
 
         {/* Threat Timeline */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+        <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-6">
+          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-green-500" />
             24-Hour Threat Timeline
           </h2>
@@ -575,54 +575,54 @@ export default function SIEMDashboardPage() {
         </div>
 
         {/* Sigma Rules Status */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
               <Shield className="w-5 h-5 text-blue-500" />
               Detection Rules Status
             </h2>
             <a
               href="/security/rules"
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              className="text-sm text-blue-400 hover:text-blue-300 font-medium"
             >
               Manage Rules →
             </a>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-4 bg-slate-50 rounded-lg text-center">
-              <p className="text-2xl font-bold text-slate-900">{rules.length}</p>
-              <p className="text-sm text-slate-600">Total Rules</p>
+            <div className="p-4 bg-slate-500/10 rounded-lg text-center">
+              <p className="text-2xl font-bold text-white">{rules.length}</p>
+              <p className="text-sm text-slate-400">Total Rules</p>
             </div>
-            <div className="p-4 bg-green-50 rounded-lg text-center">
-              <p className="text-2xl font-bold text-green-600">{rules.filter(r => r.enabled).length}</p>
-              <p className="text-sm text-slate-600">Active</p>
+            <div className="p-4 bg-green-500/10 rounded-lg text-center">
+              <p className="text-2xl font-bold text-green-400">{rules.filter(r => r.enabled).length}</p>
+              <p className="text-sm text-slate-400">Active</p>
             </div>
-            <div className="p-4 bg-red-50 rounded-lg text-center">
-              <p className="text-2xl font-bold text-red-600">
+            <div className="p-4 bg-red-500/10 rounded-lg text-center">
+              <p className="text-2xl font-bold text-red-400">
                 {rules.filter(r => r.severity === 'critical').length}
               </p>
-              <p className="text-sm text-slate-600">Critical Rules</p>
+              <p className="text-sm text-slate-400">Critical Rules</p>
             </div>
-            <div className="p-4 bg-purple-50 rounded-lg text-center">
-              <p className="text-2xl font-bold text-purple-600">
+            <div className="p-4 bg-purple-500/10 rounded-lg text-center">
+              <p className="text-2xl font-bold text-purple-400">
                 {new Set(rules.flatMap(r => r.attack_techniques)).size}
               </p>
-              <p className="text-sm text-slate-600">ATT&CK Techniques</p>
+              <p className="text-sm text-slate-400">ATT&CK Techniques</p>
             </div>
           </div>
         </div>
         {/* Event Detail Panel */}
         {selectedEvent && (
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
                 <Eye className="w-5 h-5 text-blue-500" />
                 Event Detail
               </h2>
               <button
                 onClick={() => setSelectedEvent(null)}
-                className="p-1 hover:bg-slate-100 rounded-lg"
+                className="p-1 hover:bg-slate-700 rounded-lg"
               >
                 <X className="w-5 h-5 text-slate-400" />
               </button>
@@ -632,11 +632,11 @@ export default function SIEMDashboardPage() {
               <div className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-sm text-slate-500">Rule</span>
-                  <span className="text-sm font-medium text-slate-900">{selectedEvent.rule_title}</span>
+                  <span className="text-sm font-medium text-white">{selectedEvent.rule_title}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-slate-500">Event ID</span>
-                  <code className="text-xs bg-slate-100 px-2 py-1 rounded font-mono">{selectedEvent.id}</code>
+                  <code className="text-xs bg-slate-700 px-2 py-1 rounded font-mono">{selectedEvent.id}</code>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-slate-500">Severity</span>
@@ -652,18 +652,18 @@ export default function SIEMDashboardPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-slate-500">Timestamp</span>
-                  <span className="text-sm text-slate-900">{formatTimestamp(selectedEvent.timestamp)}</span>
+                  <span className="text-sm text-white">{formatTimestamp(selectedEvent.timestamp)}</span>
                 </div>
                 {selectedEvent.kill_chain_phase && (
                   <div className="flex justify-between">
                     <span className="text-sm text-slate-500">Kill Chain Phase</span>
-                    <span className="text-sm text-purple-700 bg-purple-50 px-2 py-0.5 rounded">{selectedEvent.kill_chain_phase}</span>
+                    <span className="text-sm text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded">{selectedEvent.kill_chain_phase}</span>
                   </div>
                 )}
                 {selectedEvent.assigned_to && (
                   <div className="flex justify-between">
                     <span className="text-sm text-slate-500">Assigned To</span>
-                    <span className="text-sm text-slate-900">{selectedEvent.assigned_to}</span>
+                    <span className="text-sm text-white">{selectedEvent.assigned_to}</span>
                   </div>
                 )}
               </div>
@@ -674,7 +674,7 @@ export default function SIEMDashboardPage() {
                     <p className="text-sm text-slate-500 mb-2">MITRE ATT&CK Techniques</p>
                     <div className="flex flex-wrap gap-2">
                       {selectedEvent.attack_techniques.map(tech => (
-                        <span key={tech} className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded font-mono">
+                        <span key={tech} className="px-2 py-1 text-xs bg-purple-500/20 text-purple-400 rounded font-mono">
                           {tech}
                         </span>
                       ))}
@@ -685,8 +685,8 @@ export default function SIEMDashboardPage() {
                 {selectedEvent.matched_fields && Object.keys(selectedEvent.matched_fields).length > 0 && (
                   <div>
                     <p className="text-sm text-slate-500 mb-2">Matched Fields</p>
-                    <div className="bg-slate-50 rounded-lg p-3 max-h-32 overflow-y-auto">
-                      <pre className="text-xs text-slate-700 whitespace-pre-wrap">
+                    <div className="bg-slate-500/10 rounded-lg p-3 max-h-32 overflow-y-auto">
+                      <pre className="text-xs text-slate-300 whitespace-pre-wrap">
                         {JSON.stringify(selectedEvent.matched_fields, null, 2)}
                       </pre>
                     </div>
@@ -698,7 +698,7 @@ export default function SIEMDashboardPage() {
                     <p className="text-sm text-slate-500 mb-2">Investigation Notes</p>
                     <div className="space-y-1">
                       {selectedEvent.investigation_notes.map((note, idx) => (
-                        <p key={idx} className="text-xs text-slate-700 bg-slate-50 px-3 py-2 rounded">{note}</p>
+                        <p key={idx} className="text-xs text-slate-300 bg-slate-500/10 px-3 py-2 rounded">{note}</p>
                       ))}
                     </div>
                   </div>
@@ -754,7 +754,7 @@ function ThreatTimeline({ events }: { events: SecurityEvent[] }) {
               style={{
                 height: `${Math.max(height, 4)}%`,
                 background: total === 0
-                  ? '#e2e8f0'
+                  ? '#334155'
                   : counts.critical > 0
                     ? 'linear-gradient(to top, #ef4444, #f87171)'
                     : counts.high > 0

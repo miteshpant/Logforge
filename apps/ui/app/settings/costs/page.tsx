@@ -186,13 +186,13 @@ export default function CostAnalyticsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">Cost Analytics</h1>
-            <p className="text-gray-400 mt-1">Monitor usage, control spending, and optimize costs</p>
+            <p className="text-slate-400 mt-1">Monitor usage, control spending, and optimize costs</p>
           </div>
           <div className="flex items-center gap-3">
             <select
               value={selectedPeriod}
               onChange={(e) => setSelectedPeriod(e.target.value)}
-              className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white"
+              className="px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white"
             >
               <option value="day">Today</option>
               <option value="week">This Week</option>
@@ -201,7 +201,7 @@ export default function CostAnalyticsPage() {
             </select>
             <button
               onClick={loadData}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
             >
               <RefreshCw className="w-4 h-4" />
               Refresh
@@ -227,7 +227,7 @@ export default function CostAnalyticsPage() {
                     <DollarSign className="w-6 h-6 text-blue-400" />
                   </div>
                   <div>
-                    <p className="text-gray-400 text-sm">Total Spend (MTD)</p>
+                    <p className="text-slate-400 text-sm">Total Spend (MTD)</p>
                     <p className="text-2xl font-bold text-white">
                       {totalCost > 0 ? formatCurrency(totalCost) : billingEstimate?.total ? formatCurrency(billingEstimate.total) : '$0'}
                     </p>
@@ -241,11 +241,11 @@ export default function CostAnalyticsPage() {
                     <Zap className="w-6 h-6 text-green-400" />
                   </div>
                   <div>
-                    <p className="text-gray-400 text-sm">Potential Savings</p>
+                    <p className="text-slate-400 text-sm">Potential Savings</p>
                     <p className="text-2xl font-bold text-white">
                       {totalSavings > 0 ? formatCurrency(totalSavings) : '$0'}
                     </p>
-                    <p className="text-xs text-gray-400 mt-1">
+                    <p className="text-xs text-slate-400 mt-1">
                       {recommendations.length} recommendations
                     </p>
                   </div>
@@ -258,7 +258,7 @@ export default function CostAnalyticsPage() {
                     <HardDrive className="w-6 h-6 text-purple-400" />
                   </div>
                   <div>
-                    <p className="text-gray-400 text-sm">Data Ingested</p>
+                    <p className="text-slate-400 text-sm">Data Ingested</p>
                     <p className="text-2xl font-bold text-white">
                       {currentUsage?.total_ingested_gb
                         ? `${currentUsage.total_ingested_gb.toFixed(1)} GB`
@@ -284,9 +284,9 @@ export default function CostAnalyticsPage() {
                     <AlertTriangle className="w-6 h-6 text-orange-400" />
                   </div>
                   <div>
-                    <p className="text-gray-400 text-sm">Budget Alerts</p>
+                    <p className="text-slate-400 text-sm">Budget Alerts</p>
                     <p className="text-2xl font-bold text-white">{alerts.length}</p>
-                    <p className="text-xs text-gray-400 mt-1">
+                    <p className="text-xs text-slate-400 mt-1">
                       {alerts.filter(a => a.type === 'critical').length} critical
                     </p>
                   </div>
@@ -297,16 +297,16 @@ export default function CostAnalyticsPage() {
             {/* Main Content Grid */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
               {/* Usage Breakdown */}
-              <div className="xl:col-span-2 bg-gray-800/50 border border-gray-700 rounded-lg p-5">
+              <div className="xl:col-span-2 rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-5">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-white">Usage Breakdown</h2>
                 </div>
 
                 {usageStats.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-48 text-gray-400">
+                  <div className="flex flex-col items-center justify-center h-48 text-slate-400">
                     <BarChart3 className="w-12 h-12 mb-4 opacity-50" />
                     <p className="text-sm">No usage data available</p>
-                    <p className="text-xs text-gray-500 mt-1">Usage data will appear as you ingest logs, traces, and metrics</p>
+                    <p className="text-xs text-slate-500 mt-1">Usage data will appear as you ingest logs, traces, and metrics</p>
                   </div>
                 ) : (
                   <>
@@ -319,11 +319,11 @@ export default function CostAnalyticsPage() {
                           className={`p-3 rounded-lg border cursor-pointer transition-all ${
                             expandedStat === stat.label
                               ? 'bg-blue-500/10 border-blue-500/30'
-                              : 'bg-gray-700/50 border-gray-600 hover:border-gray-500'
+                              : 'bg-slate-700/50 border-white/10 hover:border-white/20'
                           }`}
                         >
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm text-gray-400">{stat.label}</span>
+                            <span className="text-sm text-slate-400">{stat.label}</span>
                             {stat.trend !== 0 && (
                               <span className={`text-xs flex items-center gap-0.5 ${
                                 stat.trend > 0 ? 'text-red-400' : 'text-green-400'
@@ -335,7 +335,7 @@ export default function CostAnalyticsPage() {
                           </div>
                           <div className="flex items-baseline gap-1">
                             <span className="text-xl font-bold text-white">{formatValue(stat.value, stat.unit)}</span>
-                            <span className="text-sm text-gray-500">{stat.unit}</span>
+                            <span className="text-sm text-slate-500">{stat.unit}</span>
                           </div>
                           {stat.cost > 0 && (
                             <p className="text-sm text-blue-400 mt-1">{formatCurrency(stat.cost)}</p>
@@ -346,21 +346,21 @@ export default function CostAnalyticsPage() {
 
                     {/* Expanded Breakdown */}
                     {expandedStat && (
-                      <div className="mt-4 p-4 bg-gray-700/30 rounded-lg border border-gray-600">
+                      <div className="mt-4 p-4 bg-slate-700/30 rounded-lg border border-white/10">
                         <h4 className="text-sm font-medium text-white mb-3">
                           {expandedStat} - Top Contributors
                         </h4>
                         {(() => {
                           const breakdown = usageStats.find(s => s.label === expandedStat)?.breakdown
                           if (!breakdown || breakdown.length === 0) {
-                            return <p className="text-sm text-gray-500">No breakdown data available</p>
+                            return <p className="text-sm text-slate-500">No breakdown data available</p>
                           }
                           return (
                             <div className="space-y-2">
                               {breakdown.map((item, idx) => (
                                 <div key={idx} className="flex items-center gap-3">
-                                  <span className="text-sm text-gray-400 w-32 truncate">{item.name}</span>
-                                  <div className="flex-1 h-2 bg-gray-600 rounded-full overflow-hidden">
+                                  <span className="text-sm text-slate-400 w-32 truncate">{item.name}</span>
+                                  <div className="flex-1 h-2 bg-slate-600 rounded-full overflow-hidden">
                                     <div
                                       className="h-full bg-blue-500 rounded-full"
                                       style={{
@@ -383,7 +383,7 @@ export default function CostAnalyticsPage() {
               {/* Right Column */}
               <div className="space-y-6">
                 {/* Budget Alerts */}
-                <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-5">
+                <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-5">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-semibold text-white">Budget Alerts</h2>
                     {alerts.length > 0 && (
@@ -398,10 +398,10 @@ export default function CostAnalyticsPage() {
                   </div>
 
                   {alerts.length === 0 ? (
-                    <div className="text-center py-8 text-gray-400">
+                    <div className="text-center py-8 text-slate-400">
                       <AlertTriangle className="w-8 h-8 mx-auto mb-2 opacity-50" />
                       <p className="text-sm">No budget alerts</p>
-                      <p className="text-xs text-gray-500 mt-1">Configure cost alerts to get notified about spending</p>
+                      <p className="text-xs text-slate-500 mt-1">Configure cost alerts to get notified about spending</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -421,7 +421,7 @@ export default function CostAnalyticsPage() {
                             <div className="flex-1">
                               <p className="text-sm text-white">{alert.message}</p>
                               <div className="flex items-center gap-2 mt-2">
-                                <div className="flex-1 h-1.5 bg-gray-600 rounded-full overflow-hidden">
+                                <div className="flex-1 h-1.5 bg-slate-600 rounded-full overflow-hidden">
                                   <div
                                     className={`h-full rounded-full ${
                                       alert.type === 'critical' ? 'bg-red-500' : 'bg-yellow-500'
@@ -429,11 +429,11 @@ export default function CostAnalyticsPage() {
                                     style={{ width: `${Math.min((alert.current / alert.threshold) * 100, 100)}%` }}
                                   />
                                 </div>
-                                <span className="text-xs text-gray-400">
+                                <span className="text-xs text-slate-400">
                                   {((alert.current / alert.threshold) * 100).toFixed(0)}%
                                 </span>
                               </div>
-                              <p className="text-xs text-gray-500 mt-1">
+                              <p className="text-xs text-slate-500 mt-1">
                                 {formatTimeAgo(alert.triggered_at)}
                               </p>
                             </div>
@@ -445,7 +445,7 @@ export default function CostAnalyticsPage() {
                 </div>
 
                 {/* Cost Optimization Recommendations */}
-                <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-5">
+                <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-5">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-semibold text-white">Optimization Tips</h2>
                     {totalSavings > 0 && (
@@ -456,22 +456,22 @@ export default function CostAnalyticsPage() {
                   </div>
 
                   {recommendations.length === 0 ? (
-                    <div className="text-center py-8 text-gray-400">
+                    <div className="text-center py-8 text-slate-400">
                       <Zap className="w-8 h-8 mx-auto mb-2 opacity-50" />
                       <p className="text-sm">No optimization recommendations</p>
-                      <p className="text-xs text-gray-500 mt-1">Recommendations will appear based on your usage patterns</p>
+                      <p className="text-xs text-slate-500 mt-1">Recommendations will appear based on your usage patterns</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
                       {recommendations.map((rec) => (
                         <div
                           key={rec.id}
-                          className="p-3 bg-gray-700/50 border border-gray-600 rounded-lg hover:border-gray-500 transition-colors cursor-pointer"
+                          className="p-3 bg-slate-700/50 border border-white/10 rounded-lg hover:border-white/20 transition-colors cursor-pointer"
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1">
                               <p className="text-sm font-medium text-white">{rec.title}</p>
-                              <p className="text-xs text-gray-400 mt-1">{rec.description}</p>
+                              <p className="text-xs text-slate-400 mt-1">{rec.description}</p>
                             </div>
                             <div className="text-right">
                               <p className="text-sm font-bold text-green-400">
@@ -496,7 +496,7 @@ export default function CostAnalyticsPage() {
 
             {/* Cost Breakdown Table */}
             {costBreakdown && costBreakdown.teams && costBreakdown.teams.length > 0 && (
-              <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-5">
+              <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-5">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-white">Cost by Team</h2>
                 </div>
@@ -504,23 +504,23 @@ export default function CostAnalyticsPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b border-gray-700">
-                        <th className="text-left px-4 py-3 text-sm font-medium text-gray-400">Team</th>
-                        <th className="text-right px-4 py-3 text-sm font-medium text-gray-400">Logs</th>
-                        <th className="text-right px-4 py-3 text-sm font-medium text-gray-400">Traces</th>
-                        <th className="text-right px-4 py-3 text-sm font-medium text-gray-400">Metrics</th>
-                        <th className="text-right px-4 py-3 text-sm font-medium text-gray-400">Total</th>
+                      <tr className="border-b border-white/5">
+                        <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">Team</th>
+                        <th className="text-right px-4 py-3 text-sm font-medium text-slate-400">Logs</th>
+                        <th className="text-right px-4 py-3 text-sm font-medium text-slate-400">Traces</th>
+                        <th className="text-right px-4 py-3 text-sm font-medium text-slate-400">Metrics</th>
+                        <th className="text-right px-4 py-3 text-sm font-medium text-slate-400">Total</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-700">
+                    <tbody className="divide-y divide-white/5">
                       {costBreakdown.teams.map((team: any) => {
                         const total = (team.logs || 0) + (team.traces || 0) + (team.metrics || 0)
                         return (
-                          <tr key={team.name} className="hover:bg-gray-700/30">
+                          <tr key={team.name} className="hover:bg-white/[0.02]">
                             <td className="px-4 py-3 text-white font-medium">{team.name}</td>
-                            <td className="px-4 py-3 text-right text-sm text-gray-300">{formatCurrency(team.logs || 0)}</td>
-                            <td className="px-4 py-3 text-right text-sm text-gray-300">{formatCurrency(team.traces || 0)}</td>
-                            <td className="px-4 py-3 text-right text-sm text-gray-300">{formatCurrency(team.metrics || 0)}</td>
+                            <td className="px-4 py-3 text-right text-sm text-slate-300">{formatCurrency(team.logs || 0)}</td>
+                            <td className="px-4 py-3 text-right text-sm text-slate-300">{formatCurrency(team.traces || 0)}</td>
+                            <td className="px-4 py-3 text-right text-sm text-slate-300">{formatCurrency(team.metrics || 0)}</td>
                             <td className="px-4 py-3 text-right text-sm font-medium text-white">{formatCurrency(total)}</td>
                           </tr>
                         )

@@ -230,21 +230,21 @@ export default function SecurityEventsPage() {
 
   const getSeverityColor = (severity: string) => {
     switch (severity?.toLowerCase()) {
-      case 'critical': return 'bg-red-500/10 text-red-600 border-red-500/30'
-      case 'high': return 'bg-orange-500/10 text-orange-600 border-orange-500/30'
-      case 'medium': return 'bg-yellow-500/10 text-yellow-600 border-yellow-500/30'
-      case 'low': return 'bg-blue-500/10 text-blue-600 border-blue-500/30'
-      default: return 'bg-slate-500/10 text-slate-600 border-slate-500/30'
+      case 'critical': return 'bg-red-500/10 text-red-400 border-red-500/30'
+      case 'high': return 'bg-orange-500/10 text-orange-400 border-orange-500/30'
+      case 'medium': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
+      case 'low': return 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+      default: return 'bg-slate-500/10 text-slate-400 border-slate-500/30'
     }
   }
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
-      case 'triggered': return 'bg-red-500/10 text-red-600 border-red-500/30'
-      case 'investigating': return 'bg-yellow-500/10 text-yellow-600 border-yellow-500/30'
-      case 'resolved': return 'bg-green-500/10 text-green-600 border-green-500/30'
-      case 'false_positive': return 'bg-slate-500/10 text-slate-600 border-slate-500/30'
-      default: return 'bg-slate-500/10 text-slate-600 border-slate-500/30'
+      case 'triggered': return 'bg-red-500/10 text-red-400 border-red-500/30'
+      case 'investigating': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
+      case 'resolved': return 'bg-green-500/10 text-green-400 border-green-500/30'
+      case 'false_positive': return 'bg-slate-500/10 text-slate-400 border-slate-500/30'
+      default: return 'bg-slate-500/10 text-slate-400 border-slate-500/30'
     }
   }
 
@@ -286,13 +286,13 @@ export default function SecurityEventsPage() {
     <DashboardLayout>
       <div className="flex h-[calc(100vh-120px)]">
         {/* Events List */}
-        <div className={`${selectedEvent ? 'w-1/2' : 'w-full'} flex flex-col border-r border-slate-200`}>
+        <div className={`${selectedEvent ? 'w-1/2' : 'w-full'} flex flex-col border-r border-white/5`}>
           {/* Header */}
-          <div className="p-6 border-b border-slate-200 bg-white">
+          <div className="p-6 border-b border-white/5 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl">
             <div className="flex justify-between items-center mb-4">
               <div>
-                <h1 className="text-2xl font-bold text-slate-900">Security Events</h1>
-                <p className="text-slate-600 mt-1">
+                <h1 className="text-2xl font-bold text-white">Security Events</h1>
+                <p className="text-slate-400 mt-1">
                   Investigate and respond to security incidents
                 </p>
               </div>
@@ -312,7 +312,7 @@ export default function SecurityEventsPage() {
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                   statusFilter === 'all'
                     ? 'bg-slate-900 text-white'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    : 'bg-slate-800/30 text-slate-300 hover:bg-white/5'
                 }`}
               >
                 All ({events.length})
@@ -322,7 +322,7 @@ export default function SecurityEventsPage() {
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                   statusFilter === 'triggered'
                     ? 'bg-red-600 text-white'
-                    : 'bg-red-100 text-red-700 hover:bg-red-200'
+                    : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
                 }`}
               >
                 New ({eventCounts.triggered})
@@ -332,7 +332,7 @@ export default function SecurityEventsPage() {
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                   statusFilter === 'investigating'
                     ? 'bg-yellow-600 text-white'
-                    : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                    : 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30'
                 }`}
               >
                 Investigating ({eventCounts.investigating})
@@ -342,7 +342,7 @@ export default function SecurityEventsPage() {
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                   statusFilter === 'resolved'
                     ? 'bg-green-600 text-white'
-                    : 'bg-green-100 text-green-700 hover:bg-green-200'
+                    : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
                 }`}
               >
                 Resolved ({eventCounts.resolved})
@@ -358,13 +358,13 @@ export default function SecurityEventsPage() {
                   placeholder="Search events..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500"
+                  className="w-full pl-10 pr-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
                 />
               </div>
               <select
                 value={severityFilter}
                 onChange={(e) => setSeverityFilter(e.target.value)}
-                className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500"
+                className="px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
               >
                 <option value="all">All Severities</option>
                 <option value="critical">Critical</option>
@@ -376,8 +376,8 @@ export default function SecurityEventsPage() {
 
             {/* Bulk Actions Bar */}
             {selectedIds.size > 0 && (
-              <div className="flex items-center gap-3 mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <span className="text-sm font-medium text-blue-700">
+              <div className="flex items-center gap-3 mt-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                <span className="text-sm font-medium text-blue-400">
                   {selectedIds.size} selected
                 </span>
                 <div className="flex gap-2 ml-auto">
@@ -404,7 +404,7 @@ export default function SecurityEventsPage() {
                   </button>
                   <button
                     onClick={() => setSelectedIds(new Set())}
-                    className="px-3 py-1.5 text-slate-600 hover:bg-slate-200 rounded text-sm transition-colors"
+                    className="px-3 py-1.5 text-slate-400 hover:bg-white/5 rounded text-sm transition-colors"
                   >
                     Clear
                   </button>
@@ -414,18 +414,18 @@ export default function SecurityEventsPage() {
           </div>
 
           {/* Events List */}
-          <div className="flex-1 overflow-y-auto bg-slate-50">
+          <div className="flex-1 overflow-y-auto bg-slate-800/50">
             {isLoading ? (
               <div className="p-6 space-y-3">
                 {[1, 2, 3, 4, 5].map(i => (
-                  <div key={i} className="h-20 bg-white rounded-lg animate-pulse" />
+                  <div key={i} className="h-20 bg-slate-800/50 rounded-lg animate-pulse" />
                 ))}
               </div>
             ) : filteredEvents.length === 0 ? (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center">
                   <ShieldAlert className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                  <p className="text-slate-500">No security events found</p>
+                  <p className="text-slate-400">No security events found</p>
                 </div>
               </div>
             ) : (
@@ -434,12 +434,12 @@ export default function SecurityEventsPage() {
                   <div
                     key={event.id}
                     onClick={() => setSelectedEvent(event)}
-                    className={`p-4 bg-white rounded-lg border cursor-pointer transition-all ${
+                    className={`p-4 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-lg border cursor-pointer transition-all ${
                       selectedEvent?.id === event.id
                         ? 'border-blue-500 ring-2 ring-blue-500/20'
                         : selectedIds.has(event.id)
-                        ? 'border-blue-300 bg-blue-50/50'
-                        : 'border-slate-200 hover:border-blue-300'
+                        ? 'border-blue-500/30 bg-blue-500/10'
+                        : 'border-white/5 hover:border-blue-500/30'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-4">
@@ -462,8 +462,8 @@ export default function SecurityEventsPage() {
                             {event.status.replace('_', ' ')}
                           </span>
                         </div>
-                        <p className="font-medium text-slate-900 truncate">{event.rule_title}</p>
-                        <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
+                        <p className="font-medium text-white truncate">{event.rule_title}</p>
+                        <div className="flex items-center gap-4 mt-2 text-xs text-slate-400">
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
                             {formatTimestamp(event.timestamp)}
@@ -487,9 +487,9 @@ export default function SecurityEventsPage() {
 
         {/* Event Details Panel */}
         {selectedEvent && (
-          <div className="w-1/2 flex flex-col bg-white">
+          <div className="w-1/2 flex flex-col bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl">
             {/* Detail Header */}
-            <div className="p-6 border-b border-slate-200">
+            <div className="p-6 border-b border-white/5">
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2 mb-2">
@@ -501,14 +501,14 @@ export default function SecurityEventsPage() {
                       {selectedEvent.status.replace('_', ' ')}
                     </span>
                   </div>
-                  <h2 className="text-xl font-bold text-slate-900">{selectedEvent.rule_title}</h2>
-                  <p className="text-sm text-slate-500 mt-1">Event ID: {selectedEvent.id}</p>
+                  <h2 className="text-xl font-bold text-white">{selectedEvent.rule_title}</h2>
+                  <p className="text-sm text-slate-400 mt-1">Event ID: {selectedEvent.id}</p>
                 </div>
                 <button
                   onClick={() => setSelectedEvent(null)}
-                  className="p-2 hover:bg-slate-100 rounded-lg"
+                  className="p-2 hover:bg-white/5 rounded-lg"
                 >
-                  <X className="w-5 h-5 text-slate-500" />
+                  <X className="w-5 h-5 text-slate-400" />
                 </button>
               </div>
             </div>
@@ -517,8 +517,8 @@ export default function SecurityEventsPage() {
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
               {/* Quick Actions */}
               {selectedEvent.status !== 'resolved' && selectedEvent.status !== 'false_positive' && (
-                <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                  <h3 className="text-sm font-semibold text-slate-900 mb-3">Quick Actions</h3>
+                <div className="p-4 bg-slate-800/50 rounded-lg border border-white/5">
+                  <h3 className="text-sm font-semibold text-white mb-3">Quick Actions</h3>
                   <div className="flex gap-2">
                     {selectedEvent.status === 'triggered' && (
                       <>
@@ -559,9 +559,9 @@ export default function SecurityEventsPage() {
 
               {/* Investigation Results */}
               {investigationData[selectedEvent.id] && (
-                <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                  <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                    <Microscope className="w-4 h-4 text-purple-600" />
+                <div className="p-4 bg-purple-500/10 rounded-lg border border-purple-500/30">
+                  <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                    <Microscope className="w-4 h-4 text-purple-400" />
                     Investigation Results
                   </h3>
                   <pre className="p-3 bg-slate-900 text-green-400 rounded-lg text-xs overflow-x-auto max-h-48">
@@ -572,29 +572,29 @@ export default function SecurityEventsPage() {
 
               {/* Event Details */}
               <div>
-                <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
                   <FileText className="w-4 h-4" />
                   Event Details
                 </h3>
                 <div className="space-y-3">
-                  <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
-                    <span className="text-sm text-slate-600">Timestamp</span>
-                    <span className="text-sm font-medium text-slate-900">{formatTimestamp(selectedEvent.timestamp)}</span>
+                  <div className="flex justify-between p-3 bg-slate-800/50 rounded-lg">
+                    <span className="text-sm text-slate-400">Timestamp</span>
+                    <span className="text-sm font-medium text-white">{formatTimestamp(selectedEvent.timestamp)}</span>
                   </div>
-                  <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
-                    <span className="text-sm text-slate-600">Rule ID</span>
-                    <span className="text-sm font-medium text-slate-900">{selectedEvent.rule_id}</span>
+                  <div className="flex justify-between p-3 bg-slate-800/50 rounded-lg">
+                    <span className="text-sm text-slate-400">Rule ID</span>
+                    <span className="text-sm font-medium text-white">{selectedEvent.rule_id}</span>
                   </div>
                   {selectedEvent.kill_chain_phase && (
-                    <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
-                      <span className="text-sm text-slate-600">Kill Chain Phase</span>
-                      <span className="text-sm font-medium text-slate-900">{selectedEvent.kill_chain_phase}</span>
+                    <div className="flex justify-between p-3 bg-slate-800/50 rounded-lg">
+                      <span className="text-sm text-slate-400">Kill Chain Phase</span>
+                      <span className="text-sm font-medium text-white">{selectedEvent.kill_chain_phase}</span>
                     </div>
                   )}
                   {selectedEvent.assigned_to && (
-                    <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
-                      <span className="text-sm text-slate-600">Assigned To</span>
-                      <span className="text-sm font-medium text-slate-900">{selectedEvent.assigned_to}</span>
+                    <div className="flex justify-between p-3 bg-slate-800/50 rounded-lg">
+                      <span className="text-sm text-slate-400">Assigned To</span>
+                      <span className="text-sm font-medium text-white">{selectedEvent.assigned_to}</span>
                     </div>
                   )}
                 </div>
@@ -603,7 +603,7 @@ export default function SecurityEventsPage() {
               {/* MITRE ATT&CK Techniques */}
               {selectedEvent.attack_techniques?.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
                     <Target className="w-4 h-4" />
                     MITRE ATT&CK Techniques
                   </h3>
@@ -614,7 +614,7 @@ export default function SecurityEventsPage() {
                         href={`https://attack.mitre.org/techniques/${tech}/`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-sm font-medium hover:bg-purple-200 transition-colors"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-sm font-medium hover:bg-purple-500/30 transition-colors"
                       >
                         {tech}
                         <ExternalLink className="w-3 h-3" />
@@ -627,7 +627,7 @@ export default function SecurityEventsPage() {
               {/* Matched Fields */}
               {Object.keys(selectedEvent.matched_fields || {}).length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-900 mb-3">Matched Fields</h3>
+                  <h3 className="text-sm font-semibold text-white mb-3">Matched Fields</h3>
                   <pre className="p-4 bg-slate-900 text-green-400 rounded-lg text-sm overflow-x-auto">
                     {JSON.stringify(selectedEvent.matched_fields, null, 2)}
                   </pre>
@@ -637,7 +637,7 @@ export default function SecurityEventsPage() {
               {/* Event Data */}
               {Object.keys(selectedEvent.event_data || {}).length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-900 mb-3">Raw Event Data</h3>
+                  <h3 className="text-sm font-semibold text-white mb-3">Raw Event Data</h3>
                   <pre className="p-4 bg-slate-900 text-green-400 rounded-lg text-sm overflow-x-auto max-h-64">
                     {JSON.stringify(selectedEvent.event_data, null, 2)}
                   </pre>
@@ -646,19 +646,19 @@ export default function SecurityEventsPage() {
 
               {/* Investigation Notes */}
               <div>
-                <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
                   <MessageSquare className="w-4 h-4" />
                   Investigation Notes
                 </h3>
                 <div className="space-y-2">
                   {selectedEvent.investigation_notes?.length > 0 ? (
                     selectedEvent.investigation_notes.map((note, idx) => (
-                      <div key={idx} className="p-3 bg-slate-50 rounded-lg text-sm text-slate-700">
+                      <div key={idx} className="p-3 bg-slate-800/50 rounded-lg text-sm text-slate-300">
                         {note}
                       </div>
                     ))
                   ) : (
-                    <p className="text-sm text-slate-500 italic">No investigation notes yet</p>
+                    <p className="text-sm text-slate-400 italic">No investigation notes yet</p>
                   )}
                 </div>
 
@@ -668,7 +668,7 @@ export default function SecurityEventsPage() {
                     value={newNote}
                     onChange={(e) => setNewNote(e.target.value)}
                     placeholder="Add investigation note..."
-                    className="w-full p-3 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-blue-500 resize-none"
+                    className="w-full p-3 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-blue-500 resize-none"
                     rows={3}
                   />
                 </div>

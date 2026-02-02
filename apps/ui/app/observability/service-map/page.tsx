@@ -617,50 +617,50 @@ export default function ServiceMapPage() {
         </div>
 
         {/* Legend */}
-        <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
-          <h3 className="text-sm font-semibold text-slate-900 mb-3">Legend</h3>
+        <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-lg p-4 border border-white/5 shadow-xl">
+          <h3 className="text-sm font-semibold text-white mb-3">Legend</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 text-sm">
             {/* Health Status */}
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-full bg-emerald-500"></div>
-              <span className="text-slate-700">Healthy</span>
+              <span className="text-slate-300">Healthy</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-full bg-yellow-500"></div>
-              <span className="text-slate-700">Degraded</span>
+              <span className="text-slate-300">Degraded</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-full bg-red-500"></div>
-              <span className="text-slate-700">Unhealthy</span>
+              <span className="text-slate-300">Unhealthy</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-full bg-slate-400"></div>
-              <span className="text-slate-700">Unknown</span>
+              <span className="text-slate-300">Unknown</span>
             </div>
             {/* Service Types */}
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-cyan-500"></div>
-              <span className="text-slate-700">API</span>
+              <span className="text-slate-300">API</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-blue-500"></div>
-              <span className="text-slate-700">Application</span>
+              <span className="text-slate-300">Application</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-purple-500"></div>
-              <span className="text-slate-700">Database</span>
+              <span className="text-slate-300">Database</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-orange-500"></div>
-              <span className="text-slate-700">Cache</span>
+              <span className="text-slate-300">Cache</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-pink-500"></div>
-              <span className="text-slate-700">Queue</span>
+              <span className="text-slate-300">Queue</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-slate-500"></div>
-              <span className="text-slate-700">External</span>
+              <span className="text-slate-300">External</span>
             </div>
           </div>
         </div>
