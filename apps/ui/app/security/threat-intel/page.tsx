@@ -452,7 +452,7 @@ export default function ThreatIntelPage() {
                       formData.indicator_type === 'hash' ? 'd41d8cd98f00b204e9800998ecf8427e' :
                       'Enter indicator value'
                     }
-                    className="w-full px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 font-mono"
+                    className="w-full px-4 py-2 bg-slate-800/50 text-white border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 font-mono placeholder-slate-500"
                   />
                 </div>
 
@@ -534,7 +534,7 @@ export default function ThreatIntelPage() {
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     placeholder="Additional context about this indicator..."
                     rows={2}
-                    className="w-full px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 resize-none"
+                    className="w-full px-4 py-2 bg-slate-800/50 text-white border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 resize-none placeholder-slate-500"
                   />
                 </div>
               </div>

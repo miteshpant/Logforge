@@ -540,7 +540,7 @@ export default function SigmaRulesPage() {
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     placeholder="Detects multiple failed login attempts from a single source..."
                     rows={3}
-                    className="w-full px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 resize-none"
+                    className="w-full px-4 py-2 bg-slate-800/50 text-white border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 resize-none placeholder-slate-500"
                   />
                 </div>
 
@@ -590,7 +590,7 @@ export default function SigmaRulesPage() {
                         logsource: { ...formData.logsource, category: e.target.value }
                       })}
                       placeholder="Category"
-                      className="px-3 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
+                      className="px-3 py-2 bg-slate-800/50 text-white border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 text-sm placeholder-slate-500"
                     />
                     <input
                       type="text"
@@ -600,7 +600,7 @@ export default function SigmaRulesPage() {
                         logsource: { ...formData.logsource, product: e.target.value }
                       })}
                       placeholder="Product"
-                      className="px-3 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
+                      className="px-3 py-2 bg-slate-800/50 text-white border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 text-sm placeholder-slate-500"
                     />
                     <input
                       type="text"
@@ -610,7 +610,7 @@ export default function SigmaRulesPage() {
                         logsource: { ...formData.logsource, service: e.target.value }
                       })}
                       placeholder="Service"
-                      className="px-3 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
+                      className="px-3 py-2 bg-slate-800/50 text-white border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 text-sm placeholder-slate-500"
                     />
                   </div>
                 </div>
