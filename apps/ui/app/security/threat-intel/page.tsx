@@ -278,7 +278,7 @@ export default function ThreatIntelPage() {
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
+            className="px-4 py-2 bg-slate-800/50 text-white border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 placeholder-slate-500"
           >
             <option value="all">All Types</option>
             <option value="ip">IP Address</option>
@@ -290,7 +290,7 @@ export default function ThreatIntelPage() {
           <select
             value={severityFilter}
             onChange={(e) => setSeverityFilter(e.target.value)}
-            className="px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
+            className="px-4 py-2 bg-slate-800/50 text-white border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 placeholder-slate-500"
           >
             <option value="all">All Severities</option>
             <option value="critical">Critical</option>
@@ -428,7 +428,7 @@ export default function ThreatIntelPage() {
                   <select
                     value={formData.indicator_type}
                     onChange={(e) => setFormData({ ...formData, indicator_type: e.target.value as ThreatIndicator['indicator_type'] })}
-                    className="w-full px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
+                    className="w-full px-4 py-2 bg-slate-800/50 text-white border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 placeholder-slate-500"
                   >
                     <option value="ip">IP Address</option>
                     <option value="domain">Domain</option>
@@ -491,7 +491,7 @@ export default function ThreatIntelPage() {
                     <select
                       value={formData.severity}
                       onChange={(e) => setFormData({ ...formData, severity: e.target.value as ThreatIndicator['severity'] })}
-                      className="w-full px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
+                      className="w-full px-4 py-2 bg-slate-800/50 text-white border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 placeholder-slate-500"
                     >
                       <option value="critical">Critical</option>
                       <option value="high">High</option>
@@ -522,7 +522,7 @@ export default function ThreatIntelPage() {
                     value={formData.source}
                     onChange={(e) => setFormData({ ...formData, source: e.target.value })}
                     placeholder="VirusTotal, AlienVault, Manual, etc."
-                    className="w-full px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
+                    className="w-full px-4 py-2 bg-slate-800/50 text-white border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 placeholder-slate-500"
                   />
                 </div>
 

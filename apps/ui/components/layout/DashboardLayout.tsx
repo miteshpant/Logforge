@@ -376,7 +376,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Main content */}
       <div className="flex-1 lg:ml-64">
         {/* Top header */}
-        <header className="bg-slate-900/80 backdrop-blur-xl border-b border-white/5 px-4 lg:px-6 py-4">
+        <header className="sticky top-0 z-40 bg-slate-900/80 backdrop-blur-xl border-b border-white/5 px-4 lg:px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <Button

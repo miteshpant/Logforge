@@ -358,13 +358,13 @@ export default function SecurityEventsPage() {
                   placeholder="Search events..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
+                  className="w-full pl-10 pr-4 py-2 bg-slate-800/50 text-white border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 placeholder-slate-500"
                 />
               </div>
               <select
                 value={severityFilter}
                 onChange={(e) => setSeverityFilter(e.target.value)}
-                className="px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
+                className="px-4 py-2 bg-slate-800/50 text-white border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
               >
                 <option value="all">All Severities</option>
                 <option value="critical">Critical</option>
@@ -668,7 +668,7 @@ export default function SecurityEventsPage() {
                     value={newNote}
                     onChange={(e) => setNewNote(e.target.value)}
                     placeholder="Add investigation note..."
-                    className="w-full p-3 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-blue-500 resize-none"
+                    className="w-full p-3 bg-slate-800/50 text-white border border-white/10 rounded-lg text-sm focus:outline-none focus:border-blue-500 resize-none placeholder-slate-500"
                     rows={3}
                   />
                 </div>

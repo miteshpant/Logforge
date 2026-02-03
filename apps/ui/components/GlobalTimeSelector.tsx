@@ -117,7 +117,7 @@ const GlobalTimeSelector: React.FC<GlobalTimeSelectorProps> = ({
         </Button>
 
         {isOpen && (
-          <Card className="absolute top-full right-0 mt-16 w-80 shadow-xl border-white/10 bg-slate-800/95 backdrop-blur-md z-50 animate-in slide-in-from-top-2 duration-200">
+          <Card className="absolute top-full right-0 mt-2 w-80 shadow-xl border-white/10 bg-slate-800/95 backdrop-blur-md z-50 animate-in slide-in-from-top-2 duration-200">
             <CardContent className="p-3">
               {!showCustomPicker ? (
                 <div className="space-y-2">

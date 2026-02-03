@@ -326,13 +326,13 @@ export default function SigmaRulesPage() {
               placeholder="Search rules..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
+              className="w-full pl-10 pr-4 py-2 bg-slate-800/50 text-white border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 placeholder-slate-500"
             />
           </div>
           <select
             value={severityFilter}
             onChange={(e) => setSeverityFilter(e.target.value)}
-            className="px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
+            className="px-4 py-2 bg-slate-800/50 text-white border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 placeholder-slate-500"
           >
             <option value="all">All Severities</option>
             <option value="critical">Critical</option>
@@ -528,7 +528,7 @@ export default function SigmaRulesPage() {
                     value={formData.title}
                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                     placeholder="Brute Force Attack Detection"
-                    className="w-full px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
+                    className="w-full px-4 py-2 bg-slate-800/50 text-white border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 placeholder-slate-500"
                   />
                 </div>
 
@@ -554,7 +554,7 @@ export default function SigmaRulesPage() {
                     <select
                       value={formData.severity}
                       onChange={(e) => setFormData({ ...formData, severity: e.target.value as SigmaRule['severity'] })}
-                      className="w-full px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
+                      className="w-full px-4 py-2 bg-slate-800/50 text-white border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 placeholder-slate-500"
                     >
                       <option value="critical">Critical</option>
                       <option value="high">High</option>
@@ -570,7 +570,7 @@ export default function SigmaRulesPage() {
                       value={formData.author}
                       onChange={(e) => setFormData({ ...formData, author: e.target.value })}
                       placeholder="Logforge User"
-                      className="w-full px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
+                      className="w-full px-4 py-2 bg-slate-800/50 text-white border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 placeholder-slate-500"
                     />
                   </div>
                 </div>
@@ -629,7 +629,7 @@ export default function SigmaRulesPage() {
                       attack_techniques: e.target.value.split(',').map(t => t.trim()).filter(Boolean)
                     })}
                     placeholder="T1110, T1078"
-                    className="w-full px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
+                    className="w-full px-4 py-2 bg-slate-800/50 text-white border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 placeholder-slate-500"
                   />
                 </div>
 
@@ -647,7 +647,7 @@ export default function SigmaRulesPage() {
                       tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean)
                     })}
                     placeholder="authentication, brute-force"
-                    className="w-full px-4 py-2 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
+                    className="w-full px-4 py-2 bg-slate-800/50 text-white border border-white/10 rounded-lg focus:outline-none focus:border-blue-500 placeholder-slate-500"
                   />
                 </div>
 
