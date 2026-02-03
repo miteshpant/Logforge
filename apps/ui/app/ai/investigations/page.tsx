@@ -117,7 +117,7 @@ export default function AIInvestigationsPage() {
   }, [loadHistory])
 
   const handleQuery = async () => {
-    if (!queryInput.trim()) return
+    if (!String(queryInput || '').trim()) return
 
     setIsQuerying(true)
     setQueryResponse(null)
@@ -194,7 +194,7 @@ export default function AIInvestigationsPage() {
   }
 
   const handleHistoryClick = (item: QueryHistoryItem) => {
-    setQueryInput(item.question)
+    setQueryInput(String(item.question || ''))
     setActiveTab('query')
     if (item.answer) {
       setQueryResponse({
@@ -345,7 +345,7 @@ export default function AIInvestigationsPage() {
                     </div>
                     <button
                       onClick={handleQuery}
-                      disabled={isQuerying || !queryInput.trim()}
+                      disabled={isQuerying || !String(queryInput || '').trim()}
                       className="self-end px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
                       {isQuerying ? (
@@ -429,7 +429,7 @@ export default function AIInvestigationsPage() {
                           {queryResponse.suggestions.map((suggestion, idx) => (
                             <button
                               key={idx}
-                              onClick={() => setQueryInput(suggestion)}
+                              onClick={() => setQueryInput(String(suggestion || ''))}
                               className="w-full text-left p-3 bg-amber-900/20 hover:bg-amber-900/30 border border-amber-500/20 rounded-lg text-sm text-amber-400 transition-colors flex items-center gap-2"
                             >
                               <ArrowRight className="w-4 h-4 flex-shrink-0" />
