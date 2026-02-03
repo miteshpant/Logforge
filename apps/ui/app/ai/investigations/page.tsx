@@ -59,8 +59,8 @@ interface InvestigationResult {
     service?: string
     impact_score?: number
   }>
-  recommendations?: string[]
-  next_steps?: string[]
+  recommendations?: Array<string | { priority?: string; action?: string; details?: string; expected_resolution_time?: string; confidence?: number }>
+  next_steps?: Array<string | { priority?: string; action?: string; details?: string; expected_resolution_time?: string; confidence?: number }>
   confidence?: number
   confidence_score?: number
   status?: string
@@ -648,7 +648,30 @@ export default function AIInvestigationsPage() {
                           {(investigationResult.recommendations || investigationResult.next_steps || []).map((rec, idx) => (
                             <div key={idx} className="flex items-start gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
                               <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
-                              <p className="text-sm text-green-300">{rec}</p>
+                              {typeof rec === 'string' ? (
+                                <p className="text-sm text-green-300">{rec}</p>
+                              ) : (
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm text-green-300 font-medium">{rec.action || rec.details || 'Recommendation'}</p>
+                                  {rec.details && rec.action && (
+                                    <p className="text-xs text-green-400/70 mt-0.5">{rec.details}</p>
+                                  )}
+                                  <div className="flex items-center gap-3 mt-1">
+                                    {rec.priority && (
+                                      <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                        rec.priority === 'critical' ? 'bg-red-500/20 text-red-400' :
+                                        rec.priority === 'high' ? 'bg-orange-500/20 text-orange-400' :
+                                        'bg-slate-500/20 text-slate-400'
+                                      }`}>
+                                        {rec.priority}
+                                      </span>
+                                    )}
+                                    {rec.expected_resolution_time && (
+                                      <span className="text-xs text-green-400/60">{rec.expected_resolution_time}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
