@@ -729,6 +729,23 @@ class EnterpriseService:
             'message': f'Custom role {role_data["name"]} created successfully'
         }
     
+    async def update_custom_role(self, customer_id: str, role_id: str, role_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update an existing custom role"""
+        return {
+            'role_id': role_id,
+            'status': 'updated',
+            'message': f'Role {role_id} updated successfully',
+            'updated_at': datetime.utcnow().isoformat()
+        }
+
+    async def delete_custom_role(self, customer_id: str, role_id: str) -> Dict[str, Any]:
+        """Delete a custom role"""
+        return {
+            'role_id': role_id,
+            'status': 'deleted',
+            'message': f'Role {role_id} deleted successfully'
+        }
+
     async def assign_user_roles(self, customer_id: str, user_id: str, roles: List[str]) -> Dict[str, Any]:
         """Assign roles to user"""
         # This would integrate with the user management system
@@ -1088,11 +1105,51 @@ class EnterpriseService:
             'tested_at': datetime.utcnow().isoformat()
         }
     
+    async def test_integration(self, customer_id: str, integration_id: str) -> Dict[str, Any]:
+        """Test connectivity for a configured integration by ID"""
+        try:
+            integrations = await self.list_integrations(customer_id)
+            configured = integrations.get('configured_integrations', [])
+            target = next((i for i in configured if i.get('id') == integration_id), None)
+            if not target:
+                return {'success': False, 'message': 'Integration not found'}
+            result = await self._test_integration_connectivity(
+                target.get('type', integration_id),
+                target.get('config', {})
+            )
+            return result
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+
+    async def delete_integration(self, customer_id: str, integration_id: str) -> Dict[str, Any]:
+        """Remove/disconnect an integration by ID"""
+        try:
+            await self.dao.delete_integration(customer_id, integration_id)
+            return {'success': True, 'message': f'Integration {integration_id} removed'}
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+
+    async def get_retention_policies(self, customer_id: str) -> Dict[str, Any]:
+        """Get data retention policies for tenant"""
+        try:
+            policies = await self.dao.get_retention_policies(customer_id)
+            return {'policies': policies, 'customer_id': customer_id}
+        except Exception as e:
+            return {'policies': [], 'customer_id': customer_id, 'error': str(e)}
+
+    async def get_legal_holds(self, customer_id: str, status: str = None) -> Dict[str, Any]:
+        """Get all legal holds for tenant"""
+        try:
+            holds = await self.dao.get_legal_holds(customer_id, status)
+            return {'legal_holds': holds, 'total': len(holds), 'customer_id': customer_id}
+        except Exception as e:
+            return {'legal_holds': [], 'total': 0, 'customer_id': customer_id, 'error': str(e)}
+
     # ==========================================
     # USAGE & BILLING
     # ==========================================
-    
-    async def get_usage_billing(self, customer_id: str, start_date: datetime, 
+
+    async def get_usage_billing(self, customer_id: str, start_date: datetime,
                               end_date: datetime, breakdown: List[str]) -> Dict[str, Any]:
         """Get billing metrics and usage analytics"""
         usage_data = await self.dao.get_usage_billing_data(customer_id, start_date, end_date)

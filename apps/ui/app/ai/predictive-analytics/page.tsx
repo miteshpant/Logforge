@@ -28,12 +28,38 @@ import {
   Play
 } from 'lucide-react'
 
+// Matches backend prediction summary response (nested structure)
 interface PredictionSummary {
-  total_predictions?: number
-  services_at_risk?: number
-  capacity_trend?: string
-  avg_confidence?: number
-  high_risk_count?: number
+  overall_risk_score?: number
+  risk_level?: string
+  risk_factors?: string[]
+  forecast_summary?: {
+    metric?: string
+    data_points?: number
+    trend_direction?: string
+    slope?: number
+    r_squared?: number
+  }
+  capacity_summary?: {
+    current_daily_volume?: number
+    growth_rate_percent?: number
+    top_services_count?: number
+    projections?: Array<{
+      threshold?: string
+      limit?: number
+      estimated_days_until?: number | null
+      estimated_date?: string
+    }>
+  }
+  sla_summary?: {
+    total_services_analysed?: number
+    services_at_risk?: number
+    at_risk_services?: Array<{
+      service?: string
+      risk_level?: string
+      hours_to_breach?: number
+    }>
+  }
 }
 
 interface ForecastDataPoint {
@@ -58,36 +84,56 @@ interface ForecastResponse {
   predicted_value?: number
 }
 
+// Matches backend at_risk_services items
 interface SLABreachPrediction {
-  service_name: string
+  service: string
   current_error_rate?: number
   predicted_breach_time?: string
   confidence?: number
-  trend?: string
+  hours_to_breach?: number
   risk_level?: string
-  sla_target?: number
-  metric?: string
+  sla_threshold_pct?: number
+  trend_slope_per_hour?: number
+  projected_rate_72h?: number
+  r_squared?: number
 }
 
+// Matches backend CapacityResponse
 interface CapacityPrediction {
-  growth_rate?: number
-  days_until_limit?: number
-  current_usage_pct?: number
-  top_growing_services?: Array<{
+  growth_rate_percent?: number
+  growth_rate_per_day?: number
+  current_daily_volume?: number
+  average_daily_volume?: number
+  r_squared?: number
+  capacity_projections?: Array<{
+    threshold?: string
+    limit?: number
+    estimated_days_until?: number | null
+    estimated_date?: string
+  }>
+  top_services?: Array<{
     service: string
-    growth_rate: number
-    current_usage: number
-    projected_limit_date?: string
+    total_volume: number
+    daily_average: number
+    active_days: number
   }>
 }
 
+// Matches backend what-if response
 interface WhatIfResult {
   scenario_type: string
+  parameters?: Record<string, any>
   baseline?: Record<string, number>
   projected?: Record<string, number>
-  impact_summary?: string
-  risk_change?: string
-  details?: string[]
+  impact?: {
+    log_volume_change?: number
+    log_volume_change_pct?: number
+    error_rate_change?: number
+    service_count_change?: number
+    sla_risk?: boolean
+    capacity_risk?: boolean
+    notes?: string[]
+  }
 }
 
 export default function PredictiveAnalyticsPage() {
@@ -111,10 +157,9 @@ export default function PredictiveAnalyticsPage() {
   const [isLoadingCapacity, setIsLoadingCapacity] = useState(true)
 
   // What-If state
-  const [whatIfScenario, setWhatIfScenario] = useState('traffic_spike')
+  const [whatIfScenario, setWhatIfScenario] = useState('traffic_increase')
   const [whatIfParams, setWhatIfParams] = useState<Record<string, string>>({
-    multiplier: '2',
-    duration: '1h'
+    factor: '2'
   })
   const [whatIfResult, setWhatIfResult] = useState<WhatIfResult | null>(null)
   const [isRunningWhatIf, setIsRunningWhatIf] = useState(false)
@@ -158,12 +203,10 @@ export default function PredictiveAnalyticsPage() {
   const loadSLABreaches = useCallback(async () => {
     try {
       setIsLoadingSLA(true)
-      const response = await apiClient.get<{ predictions: SLABreachPrediction[]; services: SLABreachPrediction[] }>('/v1/ai/predictions/sla-breach')
+      const response = await apiClient.get<{ at_risk_services: SLABreachPrediction[] }>('/v1/ai/predictions/sla-breach')
       const data = response?.data || response
-      if (data?.predictions) {
-        setSlaBreaches(data.predictions)
-      } else if (data?.services) {
-        setSlaBreaches(data.services)
+      if (data?.at_risk_services) {
+        setSlaBreaches(data.at_risk_services)
       } else if (Array.isArray(data)) {
         setSlaBreaches(data)
       } else {
@@ -278,33 +321,39 @@ export default function PredictiveAnalyticsPage() {
             <>
               <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
                 <div className="flex items-center gap-2 text-slate-400 mb-2">
-                  <BarChart3 className="w-4 h-4 text-blue-500" />
-                  <span className="text-sm font-medium">Total Predictions</span>
+                  <Gauge className="w-4 h-4 text-blue-500" />
+                  <span className="text-sm font-medium">Risk Score</span>
                 </div>
-                <p className="text-3xl font-bold text-white">{summary?.total_predictions ?? 0}</p>
+                <p className={`text-3xl font-bold ${
+                  (summary?.overall_risk_score ?? 0) >= 70 ? 'text-red-600' :
+                  (summary?.overall_risk_score ?? 0) >= 40 ? 'text-yellow-600' :
+                  'text-green-600'
+                }`}>{summary?.overall_risk_score ?? 0}</p>
+                <p className="text-xs text-slate-400 capitalize">{summary?.risk_level || 'unknown'}</p>
               </div>
               <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
                 <div className="flex items-center gap-2 text-slate-400 mb-2">
                   <AlertTriangle className="w-4 h-4 text-orange-500" />
                   <span className="text-sm font-medium">Services at Risk</span>
                 </div>
-                <p className="text-3xl font-bold text-orange-600">{summary?.services_at_risk ?? 0}</p>
+                <p className="text-3xl font-bold text-orange-600">{summary?.sla_summary?.services_at_risk ?? 0}</p>
               </div>
               <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
                 <div className="flex items-center gap-2 text-slate-400 mb-2">
                   <TrendingUp className="w-4 h-4 text-purple-500" />
-                  <span className="text-sm font-medium">Capacity Trend</span>
+                  <span className="text-sm font-medium">Forecast Trend</span>
                 </div>
-                <p className="text-xl font-bold text-white capitalize">{summary?.capacity_trend || 'Stable'}</p>
+                <p className="text-xl font-bold text-white capitalize">{summary?.forecast_summary?.trend_direction || 'Stable'}</p>
               </div>
               <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
                 <div className="flex items-center gap-2 text-slate-400 mb-2">
-                  <Target className="w-4 h-4 text-green-500" />
-                  <span className="text-sm font-medium">Avg Confidence</span>
+                  <BarChart3 className="w-4 h-4 text-green-500" />
+                  <span className="text-sm font-medium">Growth Rate</span>
                 </div>
                 <p className="text-3xl font-bold text-white">
-                  {summary?.avg_confidence != null ? `${Math.round(summary.avg_confidence * 100)}%` : '--'}
+                  {summary?.capacity_summary?.growth_rate_percent != null ? `${summary.capacity_summary.growth_rate_percent.toFixed(1)}%` : '--'}
                 </p>
+                <p className="text-xs text-slate-400">per day</p>
               </div>
             </>
           )}
@@ -334,39 +383,50 @@ export default function PredictiveAnalyticsPage() {
             </div>
           ) : forecast ? (
             <div className="space-y-4">
-              {/* Trend Summary */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-slate-800/50 rounded-lg p-4">
-                  <p className="text-sm text-slate-400 mb-1">Current Value</p>
-                  <p className="text-2xl font-bold text-white">
-                    {forecast.current_value != null ? forecast.current_value.toFixed(2) : '--'}
-                  </p>
-                </div>
-                <div className="bg-slate-800/50 rounded-lg p-4">
-                  <p className="text-sm text-slate-400 mb-1">Predicted Value (7d)</p>
-                  <div className="flex items-center gap-2">
-                    <p className="text-2xl font-bold text-white">
-                      {forecast.predicted_value != null ? forecast.predicted_value.toFixed(2) : '--'}
-                    </p>
-                    {getTrendIcon(forecast.trend_direction)}
+              {/* Trend Summary - derived from response data */}
+              {(() => {
+                const lastHistorical = forecast.historical && forecast.historical.length > 0
+                  ? forecast.historical[forecast.historical.length - 1]?.value
+                  : null
+                const lastProjected = forecast.projected && forecast.projected.length > 0
+                  ? forecast.projected[forecast.projected.length - 1]?.value
+                  : null
+                const trendDir = forecast.regression?.slope != null
+                  ? (forecast.regression.slope > 0 ? 'increasing' : forecast.regression.slope < 0 ? 'decreasing' : 'stable')
+                  : null
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-slate-800/50 rounded-lg p-4">
+                      <p className="text-sm text-slate-400 mb-1">Current Value</p>
+                      <p className="text-2xl font-bold text-white">
+                        {lastHistorical != null ? lastHistorical.toFixed(2) : '--'}
+                      </p>
+                    </div>
+                    <div className="bg-slate-800/50 rounded-lg p-4">
+                      <p className="text-sm text-slate-400 mb-1">Predicted Value (7d)</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-2xl font-bold text-white">
+                          {lastProjected != null ? lastProjected.toFixed(2) : '--'}
+                        </p>
+                        {getTrendIcon(trendDir ?? undefined)}
+                      </div>
+                    </div>
+                    <div className="bg-slate-800/50 rounded-lg p-4">
+                      <p className="text-sm text-slate-400 mb-1">Trend</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-2xl font-bold text-white capitalize">
+                          {trendDir || 'Stable'}
+                        </p>
+                        {forecast.regression?.r_squared != null && (
+                          <span className="text-xs text-slate-400">
+                            R²={forecast.regression.r_squared.toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="bg-slate-800/50 rounded-lg p-4">
-                  <p className="text-sm text-slate-400 mb-1">Trend</p>
-                  <div className="flex items-center gap-2">
-                    <p className="text-2xl font-bold text-white capitalize">
-                      {forecast.trend_direction || 'Stable'}
-                    </p>
-                    {forecast.trend_percentage != null && (
-                      <span className={`text-sm font-medium ${
-                        forecast.trend_percentage > 0 ? 'text-red-500' : 'text-green-500'
-                      }`}>
-                        {forecast.trend_percentage > 0 ? '+' : ''}{forecast.trend_percentage.toFixed(1)}%
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
+                )
+              })()}
 
               {/* Data Points Table */}
               {(Array.isArray(forecast.historical) || Array.isArray(forecast.projected) || Array.isArray(forecast.forecast)) && (
@@ -458,14 +518,14 @@ export default function PredictiveAnalyticsPage() {
                         <td className="py-2.5 px-2">
                           <div className="flex items-center gap-2">
                             <Server className="w-4 h-4 text-slate-400" />
-                            <span className="font-medium text-white">{item.service_name}</span>
+                            <span className="font-medium text-white">{item.service}</span>
                           </div>
                         </td>
                         <td className="py-2.5 px-2 text-right font-mono text-slate-300">
-                          {item.current_error_rate != null ? `${(item.current_error_rate * 100).toFixed(2)}%` : '--'}
+                          {item.current_error_rate != null ? `${item.current_error_rate.toFixed(2)}%` : '--'}
                         </td>
                         <td className="py-2.5 px-2 text-right text-slate-300">
-                          {item.predicted_breach_time || '--'}
+                          {item.hours_to_breach != null ? `${item.hours_to_breach.toFixed(1)}h` : item.predicted_breach_time || '--'}
                         </td>
                         <td className="py-2.5 px-2 text-center">
                           {item.confidence != null && (
@@ -476,7 +536,7 @@ export default function PredictiveAnalyticsPage() {
                         </td>
                         <td className="py-2.5 px-2 text-center">
                           <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${getRiskColor(item.risk_level)}`}>
-                            {item.risk_level || item.trend || 'unknown'}
+                            {item.risk_level || 'unknown'}
                           </span>
                         </td>
                       </tr>
@@ -504,58 +564,62 @@ export default function PredictiveAnalyticsPage() {
                   <div className="bg-slate-800/50 rounded-lg p-3">
                     <p className="text-xs text-slate-400 mb-1">Growth Rate</p>
                     <p className="text-xl font-bold text-white">
-                      {capacity.growth_rate != null ? `${capacity.growth_rate.toFixed(1)}%` : '--'}
+                      {capacity.growth_rate_percent != null ? `${capacity.growth_rate_percent.toFixed(1)}%` : '--'}
                     </p>
                     <p className="text-xs text-slate-400">per day</p>
                   </div>
                   <div className="bg-slate-800/50 rounded-lg p-3">
                     <p className="text-xs text-slate-400 mb-1">Days Until Limit</p>
-                    <p className={`text-xl font-bold ${
-                      capacity.days_until_limit != null && capacity.days_until_limit < 30
-                        ? 'text-red-600'
-                        : 'text-white'
-                    }`}>
-                      {capacity.days_until_limit ?? '--'}
-                    </p>
-                    <p className="text-xs text-slate-400">estimated</p>
+                    {(() => {
+                      const firstProjection = capacity.capacity_projections?.[0]
+                      const daysUntil = firstProjection?.estimated_days_until
+                      return (
+                        <>
+                          <p className={`text-xl font-bold ${
+                            daysUntil != null && daysUntil < 30
+                              ? 'text-red-600'
+                              : 'text-white'
+                          }`}>
+                            {daysUntil ?? '--'}
+                          </p>
+                          {firstProjection?.threshold && (
+                            <p className="text-xs text-slate-400">{firstProjection.threshold}</p>
+                          )}
+                        </>
+                      )
+                    })()}
                   </div>
                 </div>
 
-                {capacity.current_usage_pct != null && (
-                  <div>
-                    <div className="flex justify-between text-xs text-slate-400 mb-1">
-                      <span>Current Usage</span>
-                      <span>{capacity.current_usage_pct.toFixed(1)}%</span>
-                    </div>
-                    <div className="h-2.5 bg-slate-700 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${
-                          capacity.current_usage_pct > 80 ? 'bg-red-500' :
-                          capacity.current_usage_pct > 60 ? 'bg-yellow-500' :
-                          'bg-green-500'
-                        }`}
-                        style={{ width: `${Math.min(capacity.current_usage_pct, 100)}%` }}
-                      />
-                    </div>
+                {capacity.current_daily_volume != null && (
+                  <div className="bg-slate-800/50 rounded-lg p-3">
+                    <p className="text-xs text-slate-400 mb-1">Current Daily Volume</p>
+                    <p className="text-lg font-bold text-white">
+                      {capacity.current_daily_volume.toLocaleString()} logs/day
+                    </p>
+                    {capacity.average_daily_volume != null && (
+                      <p className="text-xs text-slate-400">
+                        Avg: {capacity.average_daily_volume.toLocaleString()} logs/day
+                      </p>
+                    )}
                   </div>
                 )}
 
-                {/* Top Growing Services */}
-                {capacity.top_growing_services && capacity.top_growing_services.length > 0 && (
+                {/* Top Services by Volume */}
+                {capacity.top_services && capacity.top_services.length > 0 && (
                   <div>
-                    <h3 className="text-sm font-medium text-slate-300 mb-2">Top Growing Services</h3>
+                    <h3 className="text-sm font-medium text-slate-300 mb-2">Top Services by Volume</h3>
                     <div className="space-y-2">
-                      {capacity.top_growing_services.map((svc, idx) => (
+                      {capacity.top_services.slice(0, 5).map((svc, idx) => (
                         <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-800/50 rounded-lg">
                           <div className="flex items-center gap-2">
                             <Server className="w-4 h-4 text-slate-400" />
                             <span className="text-sm font-medium text-white">{svc.service}</span>
                           </div>
                           <div className="flex items-center gap-3">
-                            <span className="text-xs text-slate-400">{svc.current_usage.toFixed(1)}% used</span>
-                            <span className="text-xs font-medium text-red-600 flex items-center gap-0.5">
-                              <ArrowUpRight className="w-3 h-3" />
-                              {svc.growth_rate.toFixed(1)}%/d
+                            <span className="text-xs text-slate-400">{svc.daily_average.toLocaleString()}/day</span>
+                            <span className="text-xs font-medium text-slate-300">
+                              {svc.total_volume.toLocaleString()} total
                             </span>
                           </div>
                         </div>
@@ -590,32 +654,28 @@ export default function PredictiveAnalyticsPage() {
                   onChange={(e) => setWhatIfScenario(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-300 focus:outline-none focus:border-blue-500"
                 >
-                  <option value="traffic_spike">Traffic Spike</option>
-                  <option value="service_failure">Service Failure</option>
-                  <option value="capacity_increase">Capacity Increase</option>
-                  <option value="deployment_rollback">Deployment Rollback</option>
-                  <option value="load_redistribution">Load Redistribution</option>
+                  <option value="traffic_increase">Traffic Increase</option>
+                  <option value="error_rate_change">Error Rate Change</option>
+                  <option value="add_services">Add Services</option>
+                  <option value="combined">Combined Scenario</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Multiplier</label>
+                <label className="block text-sm font-medium text-slate-300 mb-1">
+                  {whatIfScenario === 'add_services' ? 'Service Count' : 'Factor'}
+                </label>
                 <input
                   type="text"
-                  value={whatIfParams.multiplier || ''}
-                  onChange={(e) => setWhatIfParams({ ...whatIfParams, multiplier: e.target.value })}
-                  placeholder="e.g., 2"
-                  className="w-full px-3 py-2 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-300 focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Duration</label>
-                <input
-                  type="text"
-                  value={whatIfParams.duration || ''}
-                  onChange={(e) => setWhatIfParams({ ...whatIfParams, duration: e.target.value })}
-                  placeholder="e.g., 1h, 30m, 2d"
+                  value={whatIfScenario === 'add_services' ? (whatIfParams.count || '') : (whatIfParams.factor || '')}
+                  onChange={(e) => {
+                    if (whatIfScenario === 'add_services') {
+                      setWhatIfParams({ ...whatIfParams, count: e.target.value })
+                    } else {
+                      setWhatIfParams({ ...whatIfParams, factor: e.target.value })
+                    }
+                  }}
+                  placeholder={whatIfScenario === 'add_services' ? 'e.g., 5' : 'e.g., 2.0'}
                   className="w-full px-3 py-2 bg-slate-800/50 border border-white/10 rounded-lg text-sm text-slate-300 focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -650,11 +710,15 @@ export default function PredictiveAnalyticsPage() {
                 </div>
               ) : whatIfResult ? (
                 <div className="space-y-4">
-                  {/* Impact Summary */}
-                  {whatIfResult.impact_summary && (
+                  {/* Impact Notes */}
+                  {whatIfResult.impact?.notes && whatIfResult.impact.notes.length > 0 && (
                     <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
                       <h4 className="text-sm font-semibold text-amber-400 mb-1">Impact Summary</h4>
-                      <p className="text-sm text-amber-300">{whatIfResult.impact_summary}</p>
+                      <div className="space-y-1">
+                        {whatIfResult.impact.notes.map((note, idx) => (
+                          <p key={idx} className="text-sm text-amber-300">{note}</p>
+                        ))}
+                      </div>
                     </div>
                   )}
 
@@ -703,23 +767,19 @@ export default function PredictiveAnalyticsPage() {
                     </div>
                   )}
 
-                  {/* Risk Change */}
-                  {whatIfResult.risk_change && (
-                    <div className="bg-slate-800/50 rounded-lg p-3">
-                      <p className="text-xs text-slate-400 mb-0.5">Risk Level Change</p>
-                      <p className="text-sm font-medium text-white">{whatIfResult.risk_change}</p>
-                    </div>
-                  )}
-
-                  {/* Details */}
-                  {whatIfResult.details && whatIfResult.details.length > 0 && (
-                    <div className="space-y-1">
-                      {whatIfResult.details.map((detail, idx) => (
-                        <div key={idx} className="flex items-start gap-2 text-sm text-slate-400">
-                          <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
-                          <span>{detail}</span>
-                        </div>
-                      ))}
+                  {/* Risk Indicators */}
+                  {whatIfResult.impact && (whatIfResult.impact.sla_risk || whatIfResult.impact.capacity_risk) && (
+                    <div className="flex gap-2">
+                      {whatIfResult.impact.sla_risk && (
+                        <span className="text-xs px-2.5 py-1 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg font-medium">
+                          SLA Risk
+                        </span>
+                      )}
+                      {whatIfResult.impact.capacity_risk && (
+                        <span className="text-xs px-2.5 py-1 bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-lg font-medium">
+                          Capacity Risk
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>

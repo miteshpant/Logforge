@@ -32,79 +32,98 @@ import {
   Filter
 } from 'lucide-react'
 
+// Matches backend CorrelationSummaryResponse (nested structure)
 interface CorrelationSummary {
-  fatigue_score?: number
-  correlated_groups_count?: number
-  duplicate_percentage?: number
-  noise_reduction?: number
-  total_alerts?: number
-  suppressed_count?: number
+  fatigue?: {
+    fatigue_score?: number
+    rating?: string
+  }
+  groups?: {
+    total_groups?: number
+  }
+  duplicates?: {
+    noise_reduction_percent?: number
+    total_suppressible?: number
+    total_alerts?: number
+  }
 }
 
+// Matches backend FatigueScoreResponse
 interface FatigueScoreResponse {
-  score: number
-  level?: string
+  fatigue_score: number
+  rating?: string
   contributing_factors?: Array<{
     factor: string
-    impact: number
+    score_contribution: number
     description?: string
   }>
   recommendations?: string[]
-  trend?: string
 }
 
+// Matches backend AlertGroup / RootAlertDetail / MemberAlertDetail
 interface CorrelatedGroup {
   group_id: string
   root_alert?: {
-    id: string
-    name: string
+    alert_id: string
+    rule_name: string
     severity: string
     triggered_at: string
-    service?: string
   }
   member_alerts?: Array<{
-    id: string
-    name: string
+    alert_id: string
+    rule_name: string
     severity: string
+    status?: string
     triggered_at: string
-    service?: string
   }>
   correlation_score?: number
   common_services?: string[]
-  pattern_type?: string
-  alert_count?: number
+  suggested_root_cause?: string
+  group_size?: number
 }
 
+// Matches backend DuplicateGroupDetail
 interface DuplicateGroup {
-  pattern?: string
+  rule_id?: string
   rule_name?: string
-  count: number
-  suppressible?: number
-  sample_alert_id?: string
-  services?: string[]
+  severity?: string
+  total_count: number
+  suppressible_count?: number
+  first_fired?: string
+  last_fired?: string
+  span_minutes?: number
 }
 
+// Matches backend DuplicateDetectionResponse
 interface DuplicatesResponse {
-  groups?: DuplicateGroup[]
-  duplicates?: DuplicateGroup[]
-  total_duplicates?: number
-  noise_reduction_pct?: number
+  duplicate_groups?: DuplicateGroup[]
+  total_duplicate_groups?: number
+  total_alerts?: number
+  total_suppressible?: number
+  noise_reduction_percent?: number
 }
 
+// Matches backend TimeBucket
 interface AlertTrend {
   timestamp: string
   total?: number
-  critical?: number
-  high?: number
-  medium?: number
-  low?: number
+  by_severity?: Record<string, number>
+  by_status?: Record<string, number>
 }
 
+// Matches backend AlertTrendResponse
 interface TrendsResponse {
-  data_points?: AlertTrend[]
-  trends?: AlertTrend[]
-  overall_trend?: string
-  change_percentage?: number
+  time_series?: AlertTrend[]
+  trend?: {
+    direction?: string
+    change_percent?: number
+  }
+  summary?: {
+    total_alerts?: number
+    total_buckets?: number
+    peak_bucket?: string
+    peak_count?: number
+  }
 }
 
 export default function AlertCorrelationPage() {
@@ -305,11 +324,11 @@ export default function AlertCorrelationPage() {
                   <span className="text-sm font-medium">Fatigue Score</span>
                 </div>
                 <p className={`text-3xl font-bold ${
-                  (summary?.fatigue_score ?? 0) >= 60 ? 'text-red-600' :
-                  (summary?.fatigue_score ?? 0) >= 30 ? 'text-yellow-600' :
+                  (summary?.fatigue?.fatigue_score ?? 0) >= 60 ? 'text-red-600' :
+                  (summary?.fatigue?.fatigue_score ?? 0) >= 30 ? 'text-yellow-600' :
                   'text-green-600'
                 }`}>
-                  {summary?.fatigue_score ?? '--'}
+                  {summary?.fatigue?.fatigue_score ?? '--'}
                 </p>
               </div>
               <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
@@ -317,7 +336,7 @@ export default function AlertCorrelationPage() {
                   <Layers className="w-4 h-4 text-indigo-500" />
                   <span className="text-sm font-medium">Correlated Groups</span>
                 </div>
-                <p className="text-3xl font-bold text-white">{summary?.correlated_groups_count ?? 0}</p>
+                <p className="text-3xl font-bold text-white">{summary?.groups?.total_groups ?? 0}</p>
               </div>
               <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
                 <div className="flex items-center gap-2 text-slate-400 mb-2">
@@ -325,7 +344,9 @@ export default function AlertCorrelationPage() {
                   <span className="text-sm font-medium">Duplicate %</span>
                 </div>
                 <p className="text-3xl font-bold text-white">
-                  {summary?.duplicate_percentage != null ? `${summary.duplicate_percentage.toFixed(1)}%` : '--'}
+                  {summary?.duplicates?.total_alerts && summary.duplicates.total_suppressible != null
+                    ? `${((summary.duplicates.total_suppressible / summary.duplicates.total_alerts) * 100).toFixed(1)}%`
+                    : '--'}
                 </p>
               </div>
               <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-5">
@@ -334,7 +355,7 @@ export default function AlertCorrelationPage() {
                   <span className="text-sm font-medium">Noise Reduction</span>
                 </div>
                 <p className="text-3xl font-bold text-green-600">
-                  {summary?.noise_reduction != null ? `${summary.noise_reduction.toFixed(1)}%` : '--'}
+                  {summary?.duplicates?.noise_reduction_percent != null ? `${summary.duplicates.noise_reduction_percent.toFixed(1)}%` : '--'}
                 </p>
               </div>
             </>
@@ -357,21 +378,21 @@ export default function AlertCorrelationPage() {
               <div className="space-y-5">
                 {/* Large Score Display */}
                 <div className="flex items-center justify-center">
-                  <div className={`relative w-32 h-32 rounded-full flex items-center justify-center ring-8 ${getFatigueColor(fatigueScore.score).ring}`}>
+                  <div className={`relative w-32 h-32 rounded-full flex items-center justify-center ring-8 ${getFatigueColor(fatigueScore.fatigue_score).ring}`}>
                     <div className={`w-28 h-28 rounded-full flex flex-col items-center justify-center ${
-                      fatigueScore.score < 30 ? 'bg-green-500/10' :
-                      fatigueScore.score < 60 ? 'bg-yellow-500/10' :
+                      fatigueScore.fatigue_score < 30 ? 'bg-green-500/10' :
+                      fatigueScore.fatigue_score < 60 ? 'bg-yellow-500/10' :
                       'bg-red-500/10'
                     }`}>
-                      <span className={`text-4xl font-bold ${getFatigueColor(fatigueScore.score).text}`}>
-                        {fatigueScore.score}
+                      <span className={`text-4xl font-bold ${getFatigueColor(fatigueScore.fatigue_score).text}`}>
+                        {fatigueScore.fatigue_score}
                       </span>
                       <span className="text-xs text-slate-400">/ 100</span>
                     </div>
                   </div>
                 </div>
-                <p className={`text-center text-sm font-semibold ${getFatigueColor(fatigueScore.score).text}`}>
-                  {getFatigueColor(fatigueScore.score).label}
+                <p className={`text-center text-sm font-semibold ${getFatigueColor(fatigueScore.fatigue_score).text}`}>
+                  {getFatigueColor(fatigueScore.fatigue_score).label}
                 </p>
 
                 {/* Contributing Factors */}
@@ -386,15 +407,15 @@ export default function AlertCorrelationPage() {
                             <div className="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full ${
-                                  factor.impact > 0.7 ? 'bg-red-500' :
-                                  factor.impact > 0.4 ? 'bg-yellow-500' :
+                                  factor.score_contribution > 0.7 ? 'bg-red-500' :
+                                  factor.score_contribution > 0.4 ? 'bg-yellow-500' :
                                   'bg-green-500'
                                 }`}
-                                style={{ width: `${factor.impact * 100}%` }}
+                                style={{ width: `${factor.score_contribution * 100}%` }}
                               />
                             </div>
                             <span className="text-xs text-slate-400 w-8 text-right">
-                              {Math.round(factor.impact * 100)}%
+                              {Math.round(factor.score_contribution * 100)}%
                             </span>
                           </div>
                         </div>
@@ -445,47 +466,41 @@ export default function AlertCorrelationPage() {
             ) : duplicates ? (
               <div className="space-y-4">
                 {/* Noise Reduction Stat */}
-                {duplicates.noise_reduction_pct != null && (
+                {duplicates.noise_reduction_percent != null && (
                   <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <BellOff className="w-5 h-5 text-green-400" />
                       <span className="text-sm font-medium text-green-300">Noise Reduction</span>
                     </div>
-                    <span className="text-xl font-bold text-green-400">{duplicates.noise_reduction_pct.toFixed(1)}%</span>
+                    <span className="text-xl font-bold text-green-400">{duplicates.noise_reduction_percent.toFixed(1)}%</span>
                   </div>
                 )}
 
                 {/* Duplicate Groups */}
-                {(duplicates.groups || duplicates.duplicates) && (duplicates.groups || duplicates.duplicates)!.length > 0 ? (
+                {duplicates.duplicate_groups && duplicates.duplicate_groups.length > 0 ? (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-white/5">
-                          <th className="text-left py-2 px-2 text-slate-400 font-medium">Pattern / Rule</th>
+                          <th className="text-left py-2 px-2 text-slate-400 font-medium">Rule</th>
                           <th className="text-right py-2 px-2 text-slate-400 font-medium">Count</th>
                           <th className="text-right py-2 px-2 text-slate-400 font-medium">Suppressible</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {(duplicates.groups || duplicates.duplicates || []).map((group, idx) => (
+                        {duplicates.duplicate_groups.map((group, idx) => (
                           <tr key={idx} className="border-b border-white/5 hover:bg-slate-800/50/5">
                             <td className="py-2.5 px-2">
                               <span className="font-medium text-white">
-                                {group.rule_name || group.pattern || `Group ${idx + 1}`}
+                                {group.rule_name || `Group ${idx + 1}`}
                               </span>
-                              {group.services && group.services.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mt-1">
-                                  {group.services.map((svc, i) => (
-                                    <span key={i} className="text-xs px-1.5 py-0.5 bg-slate-800/30 text-slate-400 rounded">
-                                      {svc}
-                                    </span>
-                                  ))}
-                                </div>
+                              {group.severity && (
+                                <span className="ml-2 text-xs text-slate-400">{group.severity}</span>
                               )}
                             </td>
-                            <td className="py-2.5 px-2 text-right font-mono text-slate-300">{group.count}</td>
+                            <td className="py-2.5 px-2 text-right font-mono text-slate-300">{group.total_count}</td>
                             <td className="py-2.5 px-2 text-right">
-                              <span className="font-mono text-orange-400 font-medium">{group.suppressible ?? 0}</span>
+                              <span className="font-mono text-orange-400 font-medium">{group.suppressible_count ?? 0}</span>
                             </td>
                           </tr>
                         ))}
@@ -545,12 +560,12 @@ export default function AlertCorrelationPage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           {group.root_alert && (
                             <span className="font-medium text-white truncate">
-                              {group.root_alert.name}
+                              {group.root_alert.rule_name}
                             </span>
                           )}
-                          {group.pattern_type && (
+                          {group.suggested_root_cause && (
                             <span className="text-xs px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded-full">
-                              {group.pattern_type}
+                              {group.suggested_root_cause}
                             </span>
                           )}
                           {group.root_alert?.severity && (
@@ -572,15 +587,15 @@ export default function AlertCorrelationPage() {
                     <div className="flex items-center gap-3 flex-shrink-0">
                       {group.correlation_score != null && (
                         <span className={`text-xs px-2.5 py-1 rounded-lg font-medium ${
-                          group.correlation_score >= 0.8 ? 'bg-green-500/20 text-green-400' :
-                          group.correlation_score >= 0.5 ? 'bg-yellow-500/20 text-yellow-400' :
+                          group.correlation_score >= 80 ? 'bg-green-500/20 text-green-400' :
+                          group.correlation_score >= 50 ? 'bg-yellow-500/20 text-yellow-400' :
                           'bg-slate-800/30 text-slate-400'
                         }`}>
-                          {Math.round(group.correlation_score * 100)}% correlated
+                          {group.correlation_score}% correlated
                         </span>
                       )}
                       <span className="text-sm text-slate-400">
-                        {group.alert_count ?? (group.member_alerts?.length ?? 0) + 1} alerts
+                        {group.group_size ?? (group.member_alerts?.length ?? 0) + 1} alerts
                       </span>
                     </div>
                   </button>
@@ -595,10 +610,10 @@ export default function AlertCorrelationPage() {
                           <div className="flex items-center gap-3 p-3 bg-slate-800/50 border border-indigo-500/20 rounded-lg">
                             <AlertTriangle className="w-4 h-4 text-indigo-400 flex-shrink-0" />
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-white">{group.root_alert.name}</p>
+                              <p className="text-sm font-medium text-white">{group.root_alert.rule_name}</p>
                               <div className="flex items-center gap-2 mt-0.5">
-                                {group.root_alert.service && (
-                                  <span className="text-xs text-slate-400">{group.root_alert.service}</span>
+                                {group.common_services && group.common_services.length > 0 && (
+                                  <span className="text-xs text-slate-400">{group.common_services.join(', ')}</span>
                                 )}
                                 <span className="text-xs text-slate-400">
                                   {formatTimestamp(group.root_alert.triggered_at)}
@@ -620,14 +635,11 @@ export default function AlertCorrelationPage() {
                           </p>
                           <div className="space-y-2">
                             {group.member_alerts.map(alert => (
-                              <div key={alert.id} className="flex items-center gap-3 p-2.5 bg-slate-800/50 border border-white/5 rounded-lg">
+                              <div key={alert.alert_id} className="flex items-center gap-3 p-2.5 bg-slate-800/50 border border-white/5 rounded-lg">
                                 <Bell className="w-4 h-4 text-slate-400 flex-shrink-0" />
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-sm text-white">{alert.name}</p>
+                                  <p className="text-sm text-white">{alert.rule_name}</p>
                                   <div className="flex items-center gap-2 mt-0.5">
-                                    {alert.service && (
-                                      <span className="text-xs text-slate-400">{alert.service}</span>
-                                    )}
                                     <span className="text-xs text-slate-400">
                                       {formatTimestamp(alert.triggered_at)}
                                     </span>
@@ -657,15 +669,15 @@ export default function AlertCorrelationPage() {
               Alert Trends (7 Day)
             </h2>
             <div className="flex items-center gap-2">
-              {trends?.overall_trend && (
+              {trends?.trend?.direction && (
                 <span className="flex items-center gap-1 text-sm text-slate-400">
-                  {getTrendIndicator(trends.overall_trend)}
-                  <span className="capitalize">{trends.overall_trend}</span>
-                  {trends.change_percentage != null && (
+                  {getTrendIndicator(trends.trend.direction)}
+                  <span className="capitalize">{trends.trend.direction}</span>
+                  {trends.trend.change_percent != null && (
                     <span className={`text-xs font-medium ${
-                      trends.change_percentage > 0 ? 'text-red-500' : 'text-green-500'
+                      trends.trend.change_percent > 0 ? 'text-red-500' : 'text-green-500'
                     }`}>
-                      ({trends.change_percentage > 0 ? '+' : ''}{trends.change_percentage.toFixed(1)}%)
+                      ({trends.trend.change_percent > 0 ? '+' : ''}{trends.trend.change_percent.toFixed(1)}%)
                     </span>
                   )}
                 </span>
@@ -677,7 +689,7 @@ export default function AlertCorrelationPage() {
             <div className="flex items-center justify-center h-48">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
             </div>
-          ) : (trends?.data_points || trends?.trends) ? (
+          ) : trends?.time_series && trends.time_series.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -711,14 +723,14 @@ export default function AlertCorrelationPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(trends.data_points || trends.trends || []).map((point, idx) => (
+                  {trends.time_series.map((point, idx) => (
                     <tr key={idx} className="border-b border-white/5 hover:bg-slate-800/50/5">
                       <td className="py-2 px-3 text-slate-300">{formatTimestamp(point.timestamp)}</td>
                       <td className="py-2 px-3 text-right font-mono font-medium text-white">{point.total ?? '--'}</td>
-                      <td className="py-2 px-3 text-right font-mono text-red-600">{point.critical ?? 0}</td>
-                      <td className="py-2 px-3 text-right font-mono text-orange-600">{point.high ?? 0}</td>
-                      <td className="py-2 px-3 text-right font-mono text-yellow-600">{point.medium ?? 0}</td>
-                      <td className="py-2 px-3 text-right font-mono text-blue-600">{point.low ?? 0}</td>
+                      <td className="py-2 px-3 text-right font-mono text-red-600">{point.by_severity?.critical ?? 0}</td>
+                      <td className="py-2 px-3 text-right font-mono text-orange-600">{point.by_severity?.high ?? 0}</td>
+                      <td className="py-2 px-3 text-right font-mono text-yellow-600">{point.by_severity?.medium ?? 0}</td>
+                      <td className="py-2 px-3 text-right font-mono text-blue-600">{point.by_severity?.low ?? 0}</td>
                     </tr>
                   ))}
                 </tbody>

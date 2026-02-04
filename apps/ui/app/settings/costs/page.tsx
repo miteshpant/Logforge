@@ -81,53 +81,38 @@ export default function CostAnalyticsPage() {
         apiClient.get('/v1/analytics/usage-trends', { start_time, end_time })
       ])
 
-      // Process current usage
+      // Process current usage - backend returns {api_calls, feature_breakdown, cost_estimate, billing_period}
       if (usageRes.status === 'fulfilled' && usageRes.value?.data) {
         setCurrentUsage(usageRes.value.data)
         const usage = usageRes.value.data
         const stats: UsageStat[] = []
 
-        if (usage.logs_ingested_bytes || usage.logs_ingested_gb) {
-          stats.push({
-            label: 'Log Ingestion',
-            value: usage.logs_ingested_gb || (usage.logs_ingested_bytes / (1024 * 1024 * 1024)),
-            unit: 'GB',
-            cost: usage.logs_cost || 0,
-            trend: usage.logs_trend || 0,
-            breakdown: usage.logs_breakdown || []
+        // Build stats from feature_breakdown dict if available
+        if (usage.feature_breakdown && typeof usage.feature_breakdown === 'object') {
+          const breakdown = usage.feature_breakdown
+          const featureCosts = billingRes.status === 'fulfilled' ? billingRes.value?.data?.feature_costs || {} : {}
+
+          Object.entries(breakdown).forEach(([feature, count]) => {
+            stats.push({
+              label: feature.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+              value: count as number,
+              unit: 'calls',
+              cost: featureCosts[feature] || 0,
+              trend: 0,
+              breakdown: []
+            })
           })
         }
 
-        if (usage.traces_stored_bytes || usage.traces_stored_gb) {
+        // Also add total API calls as a stat
+        if (usage.api_calls && stats.length === 0) {
           stats.push({
-            label: 'Trace Storage',
-            value: usage.traces_stored_gb || (usage.traces_stored_bytes / (1024 * 1024 * 1024)),
-            unit: 'GB',
-            cost: usage.traces_cost || 0,
-            trend: usage.traces_trend || 0,
-            breakdown: usage.traces_breakdown || []
-          })
-        }
-
-        if (usage.metrics_count || usage.metrics_series) {
-          stats.push({
-            label: 'Metrics',
-            value: usage.metrics_series || usage.metrics_count || 0,
-            unit: 'series',
-            cost: usage.metrics_cost || 0,
-            trend: usage.metrics_trend || 0,
-            breakdown: usage.metrics_breakdown || []
-          })
-        }
-
-        if (usage.security_events_count) {
-          stats.push({
-            label: 'Security Events',
-            value: usage.security_events_count,
-            unit: 'events',
-            cost: usage.security_cost || 0,
-            trend: usage.security_trend || 0,
-            breakdown: usage.security_breakdown || []
+            label: 'API Calls',
+            value: usage.api_calls,
+            unit: 'calls',
+            cost: usage.cost_estimate || 0,
+            trend: 0,
+            breakdown: []
           })
         }
 
@@ -229,7 +214,7 @@ export default function CostAnalyticsPage() {
                   <div>
                     <p className="text-slate-400 text-sm">Total Spend (MTD)</p>
                     <p className="text-2xl font-bold text-white">
-                      {totalCost > 0 ? formatCurrency(totalCost) : billingEstimate?.total ? formatCurrency(billingEstimate.total) : '$0'}
+                      {totalCost > 0 ? formatCurrency(totalCost) : billingEstimate?.total_estimated_cost ? formatCurrency(billingEstimate.total) : '$0'}
                     </p>
                   </div>
                 </div>

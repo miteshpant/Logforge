@@ -140,8 +140,8 @@ export default function DashboardsPage() {
     try {
       setIsSharing(true)
       await apiClient.post(`/v1/dashboards/${dashboardId}/share`, {
-        email: shareEmail,
-        permission: sharePermission
+        shared_with_email: shareEmail,
+        permission_level: sharePermission
       })
       setShareEmail('')
       setShareSuccess(true)

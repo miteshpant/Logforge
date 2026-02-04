@@ -206,6 +206,33 @@ async def create_custom_role(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.put("/rbac/roles/{role_id}")
+async def update_role(
+    role_id: str,
+    request: CustomRoleRequest,
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Update an existing custom role"""
+    try:
+        enterprise_service = EnterpriseService()
+        result = await enterprise_service.update_custom_role(customer_id, role_id, request.model_dump())
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/rbac/roles/{role_id}")
+async def delete_role(
+    role_id: str,
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Delete a custom role"""
+    try:
+        enterprise_service = EnterpriseService()
+        result = await enterprise_service.delete_custom_role(customer_id, role_id)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.put("/rbac/users/{user_id}/roles")
 async def assign_user_roles(
     user_id: str,
@@ -292,6 +319,31 @@ async def generate_compliance_report(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/compliance/retention-policies")
+async def get_retention_policies(
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Get data retention policies for tenant"""
+    try:
+        enterprise_service = EnterpriseService()
+        result = await enterprise_service.get_retention_policies(customer_id)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/compliance/legal-holds")
+async def get_legal_holds(
+    status: Optional[str] = Query(None, description="Filter by status: active, released"),
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Get all legal holds for tenant"""
+    try:
+        enterprise_service = EnterpriseService()
+        result = await enterprise_service.get_legal_holds(customer_id, status)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/compliance/legal-hold")
 async def create_legal_hold(
     request: LegalHoldRequest,
@@ -368,6 +420,32 @@ async def get_integration_health(
     try:
         enterprise_service = EnterpriseService()
         result = await enterprise_service.get_integration_health(customer_id, integration_type)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/integrations/{integration_id}/test")
+async def test_integration(
+    integration_id: str,
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Test connectivity for a configured integration"""
+    try:
+        enterprise_service = EnterpriseService()
+        result = await enterprise_service.test_integration(customer_id, integration_id)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/integrations/{integration_id}")
+async def delete_integration(
+    integration_id: str,
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Remove/disconnect an integration"""
+    try:
+        enterprise_service = EnterpriseService()
+        result = await enterprise_service.delete_integration(customer_id, integration_id)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

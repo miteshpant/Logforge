@@ -1114,3 +1114,50 @@ class EnterpriseDAO:
             "customer_id": customer_id, "start_date": start_date, "end_date": end_date
         })
         return result[0]["audit_events"] if result else 0
+
+    async def delete_integration(self, customer_id: str, integration_id: str) -> bool:
+        """Remove an integration configuration"""
+        query = """
+            ALTER TABLE enterprise_integrations_mt
+            DELETE WHERE customer_id = %(customer_id)s AND id = %(integration_id)s
+        """
+        try:
+            await self.db.execute_query(query, {
+                "customer_id": customer_id, "integration_id": integration_id
+            })
+            return True
+        except Exception as e:
+            logger.error("delete_integration failed", error=str(e))
+            raise
+
+    async def get_retention_policies(self, customer_id: str) -> List[Dict[str, Any]]:
+        """Get data retention policies for tenant"""
+        query = """
+            SELECT *
+            FROM enterprise_retention_policies_mt
+            WHERE customer_id = %(customer_id)s
+            ORDER BY created_at DESC
+        """
+        try:
+            result = await self.db.execute_query(query, {"customer_id": customer_id})
+            return result if result else []
+        except Exception:
+            return []
+
+    async def get_legal_holds(self, customer_id: str, status: str = None) -> List[Dict[str, Any]]:
+        """Get all legal holds for tenant"""
+        query = """
+            SELECT *
+            FROM enterprise_legal_holds_mt
+            WHERE customer_id = %(customer_id)s
+        """
+        params: Dict[str, Any] = {"customer_id": customer_id}
+        if status:
+            query += " AND status = %(status)s"
+            params["status"] = status
+        query += " ORDER BY created_at DESC"
+        try:
+            result = await self.db.execute_query(query, params)
+            return result if result else []
+        except Exception:
+            return []

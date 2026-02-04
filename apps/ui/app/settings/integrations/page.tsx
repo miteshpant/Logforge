@@ -73,9 +73,14 @@ export default function IntegrationsPage() {
   const loadIntegrations = async () => {
     try {
       setIsLoading(true)
-      const response = await apiClient.get<{ integrations: Integration[] }>('/v1/enterprise/integrations')
-      if (response?.data?.integrations) {
-        setIntegrations(response.data.integrations)
+      const response = await apiClient.get<{ configured_integrations: Integration[]; integrations: Integration[] }>('/v1/enterprise/integrations')
+      const data = response?.data || response
+      if (data?.configured_integrations) {
+        setIntegrations(data.configured_integrations)
+      } else if (data?.integrations) {
+        setIntegrations(data.integrations)
+      } else if (Array.isArray(data)) {
+        setIntegrations(data)
       } else {
         setIntegrations([])
       }

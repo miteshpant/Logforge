@@ -28,13 +28,17 @@ import {
   Loader2
 } from 'lucide-react'
 
+// Matches backend query history items
 interface QueryHistoryItem {
-  id: string
-  question: string
-  answer?: string
+  query_id: string
+  natural_query: string
+  generated_sql?: string
   created_at: string
   confidence_score?: number
-  status?: string
+  execution_status?: string
+  result_count?: number
+  execution_time_ms?: number
+  intent_type?: string
 }
 
 interface AIQueryResponse {
@@ -91,13 +95,11 @@ export default function AIInvestigationsPage() {
   const loadHistory = useCallback(async () => {
     try {
       setIsLoadingHistory(true)
-      const response = await apiClient.get<{ queries: QueryHistoryItem[]; history: QueryHistoryItem[] }>('/v1/ai/query/history', {
+      const response = await apiClient.get<{ history: QueryHistoryItem[] }>('/v1/ai/query/history', {
         limit: 20
       })
       const data = response?.data || response
-      if (data?.queries) {
-        setHistory(data.queries)
-      } else if (data?.history) {
+      if (data?.history) {
         setHistory(data.history)
       } else if (Array.isArray(data)) {
         setHistory(data)
@@ -185,7 +187,8 @@ export default function AIInvestigationsPage() {
     try {
       await apiClient.post('/v1/ai/query/feedback', {
         query_id: queryId,
-        feedback: feedback === 'up' ? 'positive' : 'negative'
+        feedback_score: feedback === 'up' ? 1 : -1,
+        feedback_notes: ''
       })
       setFeedbackGiven(prev => ({ ...prev, [queryId]: feedback }))
     } catch (error) {
@@ -194,14 +197,8 @@ export default function AIInvestigationsPage() {
   }
 
   const handleHistoryClick = (item: QueryHistoryItem) => {
-    setQueryInput(String(item.question || ''))
+    setQueryInput(String(item.natural_query || ''))
     setActiveTab('query')
-    if (item.answer) {
-      setQueryResponse({
-        answer: item.answer,
-        confidence_score: item.confidence_score
-      })
-    }
   }
 
   const getConfidenceColor = (score: number) => {
@@ -263,13 +260,13 @@ export default function AIInvestigationsPage() {
               <div className="space-y-2 max-h-[600px] overflow-y-auto">
                 {history.map(item => (
                   <button
-                    key={item.id}
+                    key={item.query_id}
                     onClick={() => handleHistoryClick(item)}
                     className="w-full text-left p-3 bg-slate-800/50 hover:bg-white/5 rounded-lg transition-colors group"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-sm text-white font-medium line-clamp-2">
-                        {item.question}
+                        {item.natural_query}
                       </p>
                       <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-400 flex-shrink-0 mt-0.5" />
                     </div>
