@@ -386,10 +386,10 @@ async def bulk_update_alert_instances_by_rule(
 
 @router.post("/{alert_id}/acknowledge")
 async def acknowledge_alert(
-    alert_id: str, 
-    status_update: AlertStatusUpdate, 
+    alert_id: str,
     request: Request,
-    customer_id: str = MiddlewareTenant
+    customer_id: str = MiddlewareTenant,
+    status_update: Optional[AlertStatusUpdate] = None
 ):
     """Acknowledge an active alert"""
     try:
@@ -408,9 +408,9 @@ async def acknowledge_alert(
             "customer_id": customer_id,
             "acknowledged_by": user_identifier,
             "acknowledged_at": datetime.now(timezone.utc),
-            "notes": status_update.notes
+            "notes": status_update.notes if status_update else None
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -418,10 +418,10 @@ async def acknowledge_alert(
 
 @router.post("/{alert_id}/resolve")
 async def resolve_alert(
-    alert_id: str, 
-    status_update: AlertStatusUpdate, 
+    alert_id: str,
     request: Request,
-    customer_id: str = MiddlewareTenant
+    customer_id: str = MiddlewareTenant,
+    status_update: Optional[AlertStatusUpdate] = None
 ):
     """Resolve an active or acknowledged alert"""
     try:
@@ -429,11 +429,12 @@ async def resolve_alert(
         user = getattr(request.state, 'user', None)
         user_identifier = user.email if user and user.email else user.id if user else "api-user"
         
+        notes = (status_update.notes if status_update else None) or "Resolved via API"
         success = await alert_service.resolve_alert(
             alert_id,
             customer_id,
             user_identifier,
-            status_update.notes or "Resolved via API"
+            notes
         )
         
         if not success:
@@ -489,6 +490,56 @@ async def create_notification_channel(channel_request: Dict[str, Any], customer_
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create notification channel: {str(e)}")
+
+@router.put("/notifications/channels/{channel_id}")
+async def update_notification_channel(
+    channel_id: str,
+    channel_update: Dict[str, Any],
+    customer_id: str = MiddlewareTenant
+):
+    """Update a notification channel (enable/disable, config changes)"""
+    try:
+        channel_update["customer_id"] = customer_id
+        result = await alert_service.update_notification_channel(channel_id, customer_id, channel_update)
+        if not result:
+            raise HTTPException(status_code=404, detail=f"Channel {channel_id} not found")
+        return {"status": "updated", "channel_id": channel_id, "customer_id": customer_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update notification channel: {str(e)}")
+
+@router.delete("/notifications/channels/{channel_id}")
+async def delete_notification_channel(
+    channel_id: str,
+    customer_id: str = MiddlewareTenant
+):
+    """Delete a notification channel"""
+    try:
+        result = await alert_service.delete_notification_channel(channel_id, customer_id)
+        if not result:
+            raise HTTPException(status_code=404, detail=f"Channel {channel_id} not found")
+        return {"status": "deleted", "channel_id": channel_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete notification channel: {str(e)}")
+
+@router.post("/notifications/channels/{channel_id}/test")
+async def test_notification_channel(
+    channel_id: str,
+    customer_id: str = MiddlewareTenant
+):
+    """Send a test notification through a channel"""
+    try:
+        result = await alert_service.test_notification_channel(channel_id, customer_id)
+        if not result:
+            raise HTTPException(status_code=404, detail=f"Channel {channel_id} not found")
+        return {"status": "test_sent", "channel_id": channel_id, "success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to test notification channel: {str(e)}")
 
 # Webhook Integrations (M3)
 

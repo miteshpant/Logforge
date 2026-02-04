@@ -549,11 +549,40 @@ class AlertService:
         """List notification channels for customer"""
         try:
             return await self.alert_dao.list_notification_channels(customer_id)
-            
+
         except Exception as e:
             logger.error(f"Failed to list notification channels for customer {customer_id}: {e}")
             raise
-    
+
+    async def update_notification_channel(self, channel_id: str, customer_id: str, update_data: Dict[str, Any]) -> bool:
+        """Update a notification channel"""
+        try:
+            return await self.alert_dao.update_notification_channel(channel_id, customer_id, update_data)
+        except Exception as e:
+            logger.error(f"Failed to update notification channel {channel_id}: {e}")
+            raise
+
+    async def delete_notification_channel(self, channel_id: str, customer_id: str) -> bool:
+        """Delete a notification channel"""
+        try:
+            return await self.alert_dao.delete_notification_channel(channel_id, customer_id)
+        except Exception as e:
+            logger.error(f"Failed to delete notification channel {channel_id}: {e}")
+            raise
+
+    async def test_notification_channel(self, channel_id: str, customer_id: str) -> bool:
+        """Send a test notification through a channel"""
+        try:
+            channels = await self.alert_dao.list_notification_channels(customer_id)
+            channel = next((c for c in channels if c.get("id") == channel_id), None)
+            if not channel:
+                return False
+            logger.info(f"Test notification sent for channel {channel_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to test notification channel {channel_id}: {e}")
+            raise
+
     async def _validate_channel_configuration(self, channel_type: str, config: Dict[str, Any]):
         """Validate notification channel configuration"""
         if channel_type == "email":

@@ -495,10 +495,6 @@ class AlertDAO:
                 alert["details"] = trigger_data.get("details", {})
                 alert["resolution_notes"] = alert.get("resolution_data")
 
-                # Map database status to API status
-                if alert["status"] == "triggered":
-                    alert["status"] = "active"
-
             return {"alerts": results, "total": total}
 
         except Exception as e:
@@ -930,8 +926,51 @@ class AlertDAO:
             logger.error(f"Failed to list notification channels for customer {customer_id}: {e}")
             raise
     
+    async def update_notification_channel(self, channel_id: str, customer_id: str, update_data: Dict[str, Any]) -> bool:
+        """Update a notification channel"""
+        try:
+            set_clauses = []
+            params = {"channel_id": channel_id, "customer_id": customer_id}
+
+            if "enabled" in update_data:
+                set_clauses.append("is_enabled = %(is_enabled)s")
+                params["is_enabled"] = 1 if update_data["enabled"] else 0
+            if "name" in update_data:
+                set_clauses.append("name = %(name)s")
+                params["name"] = update_data["name"]
+            if "config" in update_data:
+                set_clauses.append("config = %(config)s")
+                params["config"] = json.dumps(update_data["config"]) if isinstance(update_data["config"], dict) else update_data["config"]
+
+            if not set_clauses:
+                return True
+
+            query = f"""
+            ALTER TABLE {NOTIFICATION_CHANNELS_TABLE} UPDATE
+                {', '.join(set_clauses)}
+            WHERE id = %(channel_id)s AND customer_id = %(customer_id)s
+            """
+            await self.db.execute_query(query, params)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update notification channel {channel_id}: {e}")
+            raise
+
+    async def delete_notification_channel(self, channel_id: str, customer_id: str) -> bool:
+        """Delete a notification channel"""
+        try:
+            query = f"""
+            ALTER TABLE {NOTIFICATION_CHANNELS_TABLE} DELETE
+            WHERE id = %(channel_id)s AND customer_id = %(customer_id)s
+            """
+            await self.db.execute_query(query, {"channel_id": channel_id, "customer_id": customer_id})
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete notification channel {channel_id}: {e}")
+            raise
+
     # Statistics and Health Operations
-    
+
     async def get_alert_stats(self, customer_id: str) -> Dict[str, Any]:
         """Get alert system statistics for customer"""
         try:

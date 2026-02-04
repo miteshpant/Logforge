@@ -817,6 +817,23 @@ class SecurityDAO:
             logger.error(f"Failed to get threat intel indicators: {e}")
             raise
     
+    async def delete_threat_intel_indicator(self, customer_id: str, indicator_id: str):
+        """Delete a threat intelligence indicator from database"""
+        try:
+            query = """
+            ALTER TABLE threat_intel_mt DELETE
+            WHERE id = %(indicator_id)s
+              AND (customer_id = %(customer_id)s OR customer_id = 'default')
+            """
+            await self.db.execute_query(query, {
+                "indicator_id": indicator_id,
+                "customer_id": customer_id
+            })
+            logger.debug(f"Threat intel indicator deleted: {indicator_id}")
+        except Exception as e:
+            logger.error(f"Failed to delete threat intel indicator {indicator_id}: {e}")
+            raise
+
     # =================================================================
     # MIGRATION HELPER METHODS
     # =================================================================

@@ -183,7 +183,7 @@ export default function LogExplorerPage() {
       setIsLoading(true)
       const { start_time, end_time } = getApiTimeRange()
 
-      const response = await apiClient.get<{ logs: LogEntry[]; stats: LogStats }>('/v1/query/logs', {
+      const response = await apiClient.get<{ logs: LogEntry[]; stats: LogStats }>('/v1/logs', {
         start_time,
         end_time,
         search: searchQuery || undefined,

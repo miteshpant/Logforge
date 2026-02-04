@@ -166,7 +166,7 @@ export default function AlertRulesPage() {
     if (!rule) return
 
     try {
-      await apiClient.patch(`/v1/alerts/rules/${ruleId}`, {
+      await apiClient.put(`/v1/alerts/rules/${ruleId}`, {
         enabled: !rule.enabled
       })
       setRules(rules.map(r =>

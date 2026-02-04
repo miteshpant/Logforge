@@ -86,7 +86,7 @@ export default function NotificationChannelsPage() {
     if (!channel) return
 
     try {
-      await apiClient.patch(`/v1/alerts/notifications/channels/${channelId}`, { enabled: !channel.enabled })
+      await apiClient.put(`/v1/alerts/notifications/channels/${channelId}`, { enabled: !channel.enabled })
     } catch (error) {
       console.error('Failed to toggle channel:', error)
     }

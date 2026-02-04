@@ -836,6 +836,15 @@ class SecurityService:
             logger.error(f"Failed to get threat indicators: {e}")
             raise
 
+    async def delete_threat_indicator(self, customer_id: str, indicator_id: str):
+        """Delete a threat intelligence indicator"""
+        try:
+            await self.security_dao.delete_threat_intel_indicator(customer_id, indicator_id)
+            logger.info(f"Threat indicator deleted: {indicator_id}")
+        except Exception as e:
+            logger.error(f"Failed to delete threat indicator {indicator_id}: {e}")
+            raise
+
     # Advanced Security Analytics
 
     async def start_threat_hunting_campaign(self, campaign_data: Dict[str, Any]) -> Dict[str, Any]:

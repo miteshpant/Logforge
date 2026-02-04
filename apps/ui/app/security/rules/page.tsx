@@ -76,7 +76,7 @@ export default function SigmaRulesPage() {
   const loadRules = async () => {
     try {
       setIsLoading(true)
-      const response = await apiClient.get<SigmaRule[]>('/v1/security/rules')
+      const response = await apiClient.get<SigmaRule[]>('/v1/security/sigma-rules')
       const data = response?.data || response
       if (Array.isArray(data)) {
         setRules(data)

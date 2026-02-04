@@ -416,7 +416,9 @@ async def list_security_events(
     customer_id: str = Header(..., alias="X-Customer-ID"),
     limit: int = Query(100, ge=1, le=1000),
     severity: Optional[str] = Query(None),
-    status: Optional[str] = Query(None)
+    status: Optional[str] = Query(None),
+    start_time: Optional[str] = Query(None),
+    end_time: Optional[str] = Query(None)
 ) -> List[SecurityEventResponse]:
     """List security events"""
     try:
@@ -424,7 +426,9 @@ async def list_security_events(
             customer_id=customer_id,
             limit=limit,
             severity=severity,
-            status=status
+            status=status,
+            start_time=start_time,
+            end_time=end_time
         )
         
         return [
@@ -815,7 +819,60 @@ async def list_threat_intel(
         logger.error(f"Failed to list threat intelligence: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get indicators: {str(e)}")
 
+@router.post("/threat-intel", status_code=201)
+async def add_threat_indicator(
+    indicator: ThreatIntelRequest,
+    customer_id: str = Header(..., alias="X-Customer-ID")
+) -> ThreatIntelResponse:
+    """Add a new threat intelligence indicator"""
+    try:
+        indicator_id = await security_service.add_threat_indicator(
+            indicator_data={
+                "customer_id": customer_id,
+                "indicator_type": indicator.indicator_type,
+                "value": indicator.value,
+                "threat_type": indicator.threat_type,
+                "severity": indicator.severity,
+                "confidence": indicator.confidence,
+                "source": indicator.source,
+                "description": indicator.description,
+                "tags": indicator.tags
+            }
+        )
 
+        now = datetime.now().isoformat()
+        return ThreatIntelResponse(
+            id=indicator_id if isinstance(indicator_id, str) else str(indicator_id),
+            indicator_type=indicator.indicator_type,
+            value=indicator.value,
+            threat_type=indicator.threat_type,
+            severity=indicator.severity,
+            confidence=indicator.confidence,
+            source=indicator.source,
+            description=indicator.description,
+            tags=indicator.tags,
+            first_seen=now,
+            last_seen=now
+        )
+    except Exception as e:
+        logger.error(f"Failed to add threat indicator: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to add indicator: {str(e)}")
+
+@router.delete("/threat-intel/{indicator_id}")
+async def delete_threat_indicator(
+    indicator_id: str,
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """Delete a threat intelligence indicator"""
+    try:
+        await security_service.delete_threat_indicator(
+            customer_id=customer_id,
+            indicator_id=indicator_id
+        )
+        return {"message": "Indicator deleted successfully", "id": indicator_id}
+    except Exception as e:
+        logger.error(f"Failed to delete threat indicator {indicator_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete indicator: {str(e)}")
 
 
 def format_sse_message(event_type: str, data: Any, event_id: Optional[str] = None) -> str:
