@@ -57,6 +57,11 @@ export default function NotificationChannelsPage() {
   const [selectedChannel, setSelectedChannel] = useState<NotificationChannel | null>(null)
   const [testingChannel, setTestingChannel] = useState<string | null>(null)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [newChannelType, setNewChannelType] = useState('slack')
+  const [newChannelName, setNewChannelName] = useState('')
+  const [newChannelWebhook, setNewChannelWebhook] = useState('')
+  const [newChannelTarget, setNewChannelTarget] = useState('')
+  const [isCreating, setIsCreating] = useState(false)
 
   useEffect(() => {
     loadChannels()
@@ -104,6 +109,41 @@ export default function NotificationChannelsPage() {
       console.error('Failed to delete channel:', error)
     }
     setChannels(channels.filter(c => c.id !== channelId))
+  }
+
+  const createChannel = async () => {
+    if (!newChannelName.trim()) return
+    try {
+      setIsCreating(true)
+      const config: Record<string, any> = {}
+      if (newChannelType === 'slack') {
+        config.webhook_url = newChannelWebhook
+        config.channel = newChannelTarget
+      } else if (newChannelType === 'email') {
+        config.recipients = newChannelTarget.split(',').map((e: string) => e.trim()).filter(Boolean)
+      } else if (newChannelType === 'webhook') {
+        config.url = newChannelWebhook
+      } else if (newChannelType === 'pagerduty') {
+        config.integration_key = newChannelWebhook
+      } else if (newChannelType === 'teams') {
+        config.webhook_url = newChannelWebhook
+      }
+      await apiClient.post('/v1/alerts/notifications/channels', {
+        name: newChannelName,
+        channel_type: newChannelType,
+        config
+      })
+      setShowCreateModal(false)
+      setNewChannelName('')
+      setNewChannelWebhook('')
+      setNewChannelTarget('')
+      setNewChannelType('slack')
+      await loadChannels()
+    } catch (error) {
+      console.error('Failed to create channel:', error)
+    } finally {
+      setIsCreating(false)
+    }
   }
 
   const testChannel = async (channelId: string) => {
@@ -329,7 +369,10 @@ export default function NotificationChannelsPage() {
                     {Object.entries(CHANNEL_ICONS).map(([type, icon]) => (
                       <button
                         key={type}
-                        className={`flex items-center gap-2 p-3 rounded-lg border border-white/10 hover:border-blue-500 transition-colors ${CHANNEL_COLORS[type]}`}
+                        onClick={() => setNewChannelType(type)}
+                        className={`flex items-center gap-2 p-3 rounded-lg border transition-colors ${
+                          newChannelType === type ? 'border-blue-500 ring-1 ring-blue-500' : 'border-white/10 hover:border-blue-500'
+                        } ${CHANNEL_COLORS[type]}`}
                       >
                         {icon}
                         <span className="capitalize text-sm">{type}</span>
@@ -343,26 +386,38 @@ export default function NotificationChannelsPage() {
                   <input
                     type="text"
                     placeholder="e.g., Ops Team Slack"
+                    value={newChannelName}
+                    onChange={(e) => setNewChannelName(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   />
                 </div>
 
                 <div className="bg-slate-700/50 border border-white/10 rounded-lg p-4">
-                  <h4 className="text-white text-sm font-medium mb-3">Slack Configuration</h4>
+                  <h4 className="text-white text-sm font-medium mb-3 capitalize">{newChannelType} Configuration</h4>
                   <div className="space-y-3">
+                    {(newChannelType === 'slack' || newChannelType === 'webhook' || newChannelType === 'teams' || newChannelType === 'pagerduty') && (
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">
+                          {newChannelType === 'pagerduty' ? 'Integration Key' : 'Webhook URL'}
+                        </label>
+                        <input
+                          type="text"
+                          placeholder={newChannelType === 'pagerduty' ? 'PagerDuty integration key...' : 'https://hooks.example.com/...'}
+                          value={newChannelWebhook}
+                          onChange={(e) => setNewChannelWebhook(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 text-sm"
+                        />
+                      </div>
+                    )}
                     <div>
-                      <label className="block text-sm text-slate-400 mb-1">Webhook URL</label>
+                      <label className="block text-sm text-slate-400 mb-1">
+                        {newChannelType === 'slack' ? 'Channel' : newChannelType === 'email' ? 'Recipients (comma-separated)' : 'Target'}
+                      </label>
                       <input
                         type="text"
-                        placeholder="https://hooks.slack.com/services/..."
-                        className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-slate-400 mb-1">Channel</label>
-                      <input
-                        type="text"
-                        placeholder="#alerts"
+                        placeholder={newChannelType === 'slack' ? '#alerts' : newChannelType === 'email' ? 'team@company.com, ops@company.com' : 'Target identifier'}
+                        value={newChannelTarget}
+                        onChange={(e) => setNewChannelTarget(e.target.value)}
                         className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 text-sm"
                       />
                     </div>
@@ -383,8 +438,12 @@ export default function NotificationChannelsPage() {
                 >
                   Cancel
                 </button>
-                <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
-                  Create Channel
+                <button
+                  onClick={createChannel}
+                  disabled={isCreating || !newChannelName.trim()}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg transition-colors"
+                >
+                  {isCreating ? 'Creating...' : 'Create Channel'}
                 </button>
               </div>
             </div>

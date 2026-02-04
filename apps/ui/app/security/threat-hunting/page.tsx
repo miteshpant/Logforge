@@ -33,6 +33,26 @@ interface ThreatHuntCampaign {
   logs_scanned: number
   time_range: string
   severity_filter?: string[]
+  progress_percentage?: number
+  indicators_detected?: number
+}
+
+// Map backend campaign fields to frontend interface
+function normalizeCampaign(raw: any): ThreatHuntCampaign {
+  return {
+    campaign_id: raw.campaign_id || raw.id,
+    description: raw.description || '',
+    status: raw.status || 'pending',
+    started_at: raw.started_at || raw.created_at || '',
+    completed_at: raw.completed_at,
+    findings_count: raw.findings_count ?? raw.events_found ?? 0,
+    rules_tested: raw.rules_tested ?? raw.rules_evaluated ?? 0,
+    logs_scanned: raw.logs_scanned ?? 0,
+    time_range: raw.time_range || '',
+    severity_filter: raw.severity_filter,
+    progress_percentage: raw.progress_percentage ?? 0,
+    indicators_detected: raw.indicators_detected ?? 0,
+  }
 }
 
 interface HuntingRule {
@@ -83,8 +103,8 @@ export default function ThreatHuntingPage() {
 
       if (campaignsRes.status === 'fulfilled') {
         const data = campaignsRes.value?.data || campaignsRes.value
-        if (data?.campaigns) {
-          setCampaigns(data.campaigns)
+        if (data?.campaigns && Array.isArray(data.campaigns)) {
+          setCampaigns(data.campaigns.map(normalizeCampaign))
         } else {
           setCampaigns([])
         }
@@ -184,7 +204,7 @@ export default function ThreatHuntingPage() {
         const data = response?.data || response
 
         if (data) {
-          const campaign = data as ThreatHuntCampaign
+          const campaign = normalizeCampaign(data)
           setCampaigns(prev => prev.map(c =>
             c.campaign_id === campaignId ? campaign : c
           ))

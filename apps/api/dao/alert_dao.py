@@ -917,7 +917,7 @@ class AlertDAO:
             for channel in results:
                 channel["channel_id"] = channel["id"]
                 channel["type"] = channel["channel_type"]
-                channel["configuration"] = json.loads(channel.get("config", "{}"))
+                channel["config"] = json.loads(channel.get("config", "{}"))
                 channel["enabled"] = bool(channel.get("is_enabled", 0))
             
             return results

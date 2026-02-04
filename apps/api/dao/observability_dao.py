@@ -1075,7 +1075,8 @@ class ObservabilityDAO:
         start_time: datetime,
         end_time: datetime,
         aggregation: str = "avg",
-        granularity: str = "1m"
+        granularity: str = "1m",
+        service_name: str = None
     ) -> List[Dict[str, Any]]:
         """
         Get time series metric data with aggregation at specified granularity.
@@ -1085,8 +1086,9 @@ class ObservabilityDAO:
             metric_name: Name of the metric to query
             start_time: Start of time range
             end_time: End of time range
-            aggregation: Aggregation function (avg, sum, max, min, count)
+            aggregation: Aggregation function (avg, sum, max, min, count, p50, p95, p99)
             granularity: Time bucket size (1m, 5m, 15m, 1h, etc.)
+            service_name: Optional service name filter
 
         Returns:
             List of {timestamp, value} dicts
@@ -1101,14 +1103,35 @@ class ObservabilityDAO:
             elif granularity.endswith('s'):
                 interval_seconds = int(granularity[:-1])
 
-            # Map aggregation function
+            # Map aggregation function (including percentiles via ClickHouse quantile)
             agg_function = {
                 "avg": "AVG",
                 "sum": "SUM",
                 "max": "MAX",
                 "min": "MIN",
-                "count": "COUNT"
+                "count": "COUNT",
+                "p50": "quantile(0.5)",
+                "p95": "quantile(0.95)",
+                "p99": "quantile(0.99)",
             }.get(aggregation.lower(), "AVG")
+
+            # Build WHERE clauses
+            where_clauses = [
+                "customer_id = %(customer_id)s",
+                "metric_name = %(metric_name)s",
+                "timestamp >= %(start_time)s",
+                "timestamp <= %(end_time)s",
+            ]
+            params = {
+                "customer_id": customer_id,
+                "metric_name": metric_name,
+                "start_time": start_time,
+                "end_time": end_time,
+            }
+
+            if service_name:
+                where_clauses.append("service_name = %(service_name)s")
+                params["service_name"] = service_name
 
             query = f"""
             SELECT
@@ -1116,20 +1139,12 @@ class ObservabilityDAO:
                 {agg_function}(value) as aggregated_value,
                 COUNT(*) as data_points
             FROM metrics_mt
-            WHERE customer_id = %(customer_id)s
-              AND metric_name = %(metric_name)s
-              AND timestamp >= %(start_time)s
-              AND timestamp <= %(end_time)s
+            WHERE {' AND '.join(where_clauses)}
             GROUP BY bucket_ts
             ORDER BY bucket_ts ASC
             """
 
-            results = await self.db.execute_query(query, {
-                "customer_id": customer_id,
-                "metric_name": metric_name,
-                "start_time": start_time,
-                "end_time": end_time
-            })
+            results = await self.db.execute_query(query, params)
 
             if not results:
                 return []

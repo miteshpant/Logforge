@@ -776,7 +776,8 @@ async def query_metrics(
                 start_time=query.start_time,
                 end_time=query.end_time,
                 aggregation=query.aggregation or "avg",
-                granularity=query.granularity
+                granularity=query.granularity,
+                service_name=query.service_name
             )
 
             if not time_series:

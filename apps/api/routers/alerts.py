@@ -151,10 +151,10 @@ async def test_alert_rule(rule_id: str, test_data: Optional[Dict[str, Any]] = No
         
         return {
             "rule_id": rule_id,
-            "triggered": test_result.get("would_trigger", False),
-            "query_result": test_result.get("query_result_count", 0),
+            "would_trigger": test_result.get("would_trigger", False),
+            "matched_count": test_result.get("query_result_count", 0),
             "evaluation_time_ms": test_result.get("evaluation_time_ms", 0),
-            "test_result": test_result,
+            "sample_matches": test_result.get("sample_matches", []),
             "customer_id": customer_id
         }
         

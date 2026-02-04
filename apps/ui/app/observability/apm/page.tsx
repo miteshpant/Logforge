@@ -298,7 +298,16 @@ export default function APMPage() {
 
       const data = response?.data?.data || response?.data || response
       if (data) {
-        setTrends(data)
+        // Backend returns nested structure: { trends: { trends: { traces_trend, performance_trend, ... } } }
+        // Extract and flatten to { latency_trend, throughput_trend, error_rate_trend, apdex_trend }
+        const inner = data?.trends?.trends || data?.trends || {}
+        const flattened: Record<string, number | null> = {
+          latency_trend: inner.performance_trend?.percentage ?? null,
+          throughput_trend: inner.traces_trend?.percentage ?? null,
+          error_rate_trend: inner.error_trend?.percentage ?? null,
+          apdex_trend: inner.services_trend?.percentage ?? null,
+        }
+        setTrends(flattened)
       }
     } catch (error: any) {
       if (error.name !== 'AbortError' && error.name !== 'CanceledError') {

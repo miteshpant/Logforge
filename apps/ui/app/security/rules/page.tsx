@@ -475,7 +475,7 @@ export default function SigmaRulesPage() {
                       {testResult.matched ? 'Rule Triggered' : 'No Match'}
                     </p>
                     <p className="text-sm text-slate-400">
-                      Confidence: {testResult.confidence}%
+                      Confidence: {typeof testResult.confidence === 'number' && testResult.confidence <= 1 ? Math.round(testResult.confidence * 100) : testResult.confidence}%
                     </p>
                   </div>
                 </div>

@@ -383,11 +383,10 @@ class SecurityDAO:
             """
             
             # Map status to ClickHouse enum
-            status_value = event_data.get("status", "triggered")
-            if status_value == "triggered":
-                status_enum = "new"  # Map triggered to new
-            else:
-                status_enum = status_value
+            # Map frontend status names to ClickHouse enum values
+            status_value = event_data.get("status", "new")
+            status_map_to_db = {"triggered": "new"}
+            status_enum = status_map_to_db.get(status_value, status_value)
             
             params = {
                 "id": event_id,
@@ -437,8 +436,10 @@ class SecurityDAO:
                 params["severity"] = severity
 
             if status:
+                # Map frontend status to DB enum (triggered → new)
+                db_status = "new" if status == "triggered" else status
                 where_clauses.append("status = %(status)s")
-                params["status"] = status
+                params["status"] = db_status
 
             # Add time filtering (convert ISO timestamps to ClickHouse format)
             if start_time:
@@ -471,8 +472,12 @@ class SecurityDAO:
                         except (json.JSONDecodeError, TypeError):
                             processed_event[json_field] = [] if json_field in ["investigation_notes", "artifacts", "source_logs", "attack_techniques"] else {}
                 
+                # Map DB status back to frontend names (new → triggered)
+                if processed_event.get("status") == "new":
+                    processed_event["status"] = "triggered"
+
                 processed_events.append(processed_event)
-            
+
             return processed_events
             
         except Exception as e:

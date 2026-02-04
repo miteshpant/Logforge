@@ -302,9 +302,36 @@ async def export_query_results(export_request: Dict[str, Any], customer_id: str 
         if not query_engine:
             raise HTTPException(status_code=500, detail="Query engine not initialized")
         
-        query_data = export_request.get("query", {})
+        raw_query = export_request.get("query", {})
         export_format = export_request.get("format", "json")
-        
+
+        # Handle string query (from log explorer search) vs dict query object
+        if isinstance(raw_query, str):
+            query_data = {
+                "query_type": "search",
+                "search": raw_query,
+                "filters": [],
+                "start_time": export_request.get("start_time"),
+                "end_time": export_request.get("end_time"),
+            }
+            # Include top-level filters from the request
+            req_filters = export_request.get("filters", {})
+            if isinstance(req_filters, dict):
+                if req_filters.get("levels"):
+                    query_data["filters"].append({
+                        "field": "level",
+                        "operator": "in",
+                        "value": req_filters["levels"]
+                    })
+                if req_filters.get("service"):
+                    query_data["filters"].append({
+                        "field": "service",
+                        "operator": "eq",
+                        "value": req_filters["service"]
+                    })
+        else:
+            query_data = raw_query if isinstance(raw_query, dict) else {}
+
         # Add customer_id filter to ensure multi-tenant isolation
         if "filters" not in query_data:
             query_data["filters"] = []

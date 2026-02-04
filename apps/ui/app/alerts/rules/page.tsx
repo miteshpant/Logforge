@@ -110,6 +110,11 @@ export default function AlertRulesPage() {
   const [showTestModal, setShowTestModal] = useState(false)
   const [testingRuleId, setTestingRuleId] = useState<string | null>(null)
   const [testResult, setTestResult] = useState<any>(null)
+  const [newRuleName, setNewRuleName] = useState('')
+  const [newRuleDescription, setNewRuleDescription] = useState('')
+  const [newRuleType, setNewRuleType] = useState('threshold')
+  const [newRuleSeverity, setNewRuleSeverity] = useState('medium')
+  const [isCreating, setIsCreating] = useState(false)
 
   const loadData = useCallback(async () => {
     try {
@@ -174,6 +179,36 @@ export default function AlertRulesPage() {
       ))
     } catch (error) {
       console.error('Failed to toggle rule:', error)
+    }
+  }
+
+  const createRule = async () => {
+    if (!newRuleName.trim()) return
+    try {
+      setIsCreating(true)
+      await apiClient.post('/v1/alerts/rules', {
+        name: newRuleName,
+        description: newRuleDescription,
+        rule_type: newRuleType,
+        severity: newRuleSeverity,
+        enabled: true,
+        conditions: [],
+        filters: [],
+        notification_channels: [],
+        cooldown_period: 300,
+        max_alerts_per_hour: 10,
+        evaluation_interval: 60
+      })
+      setShowCreateModal(false)
+      setNewRuleName('')
+      setNewRuleDescription('')
+      setNewRuleType('threshold')
+      setNewRuleSeverity('medium')
+      await loadData()
+    } catch (error) {
+      console.error('Failed to create rule:', error)
+    } finally {
+      setIsCreating(false)
     }
   }
 
@@ -580,6 +615,8 @@ export default function AlertRulesPage() {
                   <input
                     type="text"
                     placeholder="e.g., High Error Rate Alert"
+                    value={newRuleName}
+                    onChange={(e) => setNewRuleName(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   />
                 </div>
@@ -588,13 +625,15 @@ export default function AlertRulesPage() {
                   <textarea
                     placeholder="Describe what this rule monitors..."
                     rows={2}
+                    value={newRuleDescription}
+                    onChange={(e) => setNewRuleDescription(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm text-slate-400 mb-1">Rule Type</label>
-                    <select className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500">
+                    <select value={newRuleType} onChange={(e) => setNewRuleType(e.target.value)} className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500">
                       <option value="threshold">Threshold</option>
                       <option value="anomaly">Anomaly Detection</option>
                       <option value="pattern">Pattern Match</option>
@@ -605,7 +644,7 @@ export default function AlertRulesPage() {
                   </div>
                   <div>
                     <label className="block text-sm text-slate-400 mb-1">Severity</label>
-                    <select className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500">
+                    <select value={newRuleSeverity} onChange={(e) => setNewRuleSeverity(e.target.value)} className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500">
                       <option value="critical">Critical</option>
                       <option value="high">High</option>
                       <option value="medium">Medium</option>
@@ -696,8 +735,12 @@ export default function AlertRulesPage() {
                 >
                   Cancel
                 </button>
-                <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
-                  Create Rule
+                <button
+                  onClick={createRule}
+                  disabled={isCreating || !newRuleName.trim()}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg transition-colors"
+                >
+                  {isCreating ? 'Creating...' : 'Create Rule'}
                 </button>
               </div>
             </div>

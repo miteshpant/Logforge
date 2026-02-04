@@ -247,11 +247,13 @@ class ObservabilityService:
         start_time: datetime,
         end_time: datetime,
         aggregation: str = "avg",
-        granularity: str = "1m"
+        granularity: str = "1m",
+        service_name: str = None
     ) -> List[Dict[str, Any]]:
         """Get time series metric data with aggregation at specified granularity"""
         return await self.dao.get_metric_time_series(
-            customer_id, metric_name, start_time, end_time, aggregation, granularity
+            customer_id, metric_name, start_time, end_time, aggregation, granularity,
+            service_name=service_name
         )
 
     # ==========================================

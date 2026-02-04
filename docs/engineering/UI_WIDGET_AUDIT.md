@@ -26,18 +26,18 @@ Status legend: PASS | FIXED | PARTIAL | DEAD-END (API exists but service not imp
 | # | Page | Widgets | Status |
 |---|------|---------|--------|
 | 1 | `/centrum` | 6 | FIXED |
-| 2 | `/observability/logs` | 4 | FIXED (path) |
-| 3 | `/observability/metrics` | 2 | PARTIAL (SSE issues remain) |
+| 2 | `/observability/logs` | 4 | FIXED (path + export) |
+| 3 | `/observability/metrics` | 2 | FIXED (SSE auth + service filter + percentiles) |
 | 4 | `/observability/traces` | 2 | PASS |
-| 5 | `/observability/apm` | 5 | PARTIAL (trends shape) |
+| 5 | `/observability/apm` | 5 | FIXED (trends shape flattened) |
 | 6 | `/observability/service-map` | 1 | PASS |
-| 7 | `/alerts/rules` | 3 | FIXED (PATCH→PUT) |
+| 7 | `/alerts/rules` | 3 | FIXED (PATCH→PUT, test shape, create modal) |
 | 8 | `/alerts/instances` | 3 | FIXED (body optional) |
-| 9 | `/alerts/channels` | 2 | FIXED (PATCH→PUT, +endpoints) |
+| 9 | `/alerts/channels` | 2 | FIXED (PATCH→PUT, +endpoints, config parse, create modal) |
 | 10 | `/security/siem` | 4 | PASS |
-| 11 | `/security/events` | 4 | FIXED (time params) |
-| 12 | `/security/rules` | 4 | FIXED (path) |
-| 13 | `/security/threat-hunting` | 5 | PARTIAL (campaign fields) |
+| 11 | `/security/events` | 4 | FIXED (time params + status mapping) |
+| 12 | `/security/rules` | 4 | FIXED (path + confidence scale) |
+| 13 | `/security/threat-hunting` | 5 | FIXED (campaign fields + findings endpoint) |
 | 14 | `/security/threat-intel` | 4 | FIXED (+POST/DELETE) |
 | 15 | `/ai/investigations` | 6 | FIXED |
 | 16 | `/ai/ml-models` | 6 | PASS |
@@ -205,16 +205,23 @@ Aggregate endpoint accepts `Dict[str, Any]`, flexible enough for frontend querie
 
 ---
 
-## Remaining Known Issues (Not Yet Fixed)
+## Previously Remaining Issues (Now Fixed)
 
-These are lower-priority issues that were identified but not fixed in this audit pass:
+These lower-priority issues were identified in the first audit pass and fixed in a follow-up pass:
 
-1. `/observability/logs` — Export endpoint crashes on string `query` field
-2. `/observability/metrics` — SSE streaming non-functional (3 independent issues)
-3. `/observability/metrics` — Service filter dead code, percentile aggregations return AVG
-4. `/observability/apm` — Performance trends response shape mismatch
-5. `/alerts/rules` — Test rule response shape mismatch, create modal no onClick handler
-6. `/alerts/channels` — config is JSON string not parsed object, create modal no onClick
-7. `/security/events` — Status `new` vs `triggered` mismatch
-8. `/security/rules` — Test confidence scale 0-1 displayed as percentage
-9. `/security/threat-hunting` — Campaign field name mismatches (6+), findings endpoint missing
+1. `/observability/logs` — **FIXED**: Export endpoint crashed on string `query` field. Backend now handles both string and dict query formats, and extracts `start_time`, `end_time`, and `filters` from the request body.
+2. `/observability/metrics` — **FIXED**: SSE streaming missing `customer_id` query param (EventSource can't send headers). Added `customer_id` to URL. Service filter was dead code — now passes `service_name` through router → service → DAO. Percentile aggregations (p50/p95/p99) now use ClickHouse `quantile()` instead of falling back to AVG.
+3. `/observability/apm` — **FIXED**: Performance trends response shape mismatch. Frontend now extracts nested `trends.trends.{performance_trend,traces_trend,error_trend,services_trend}` and flattens to `{latency_trend,throughput_trend,error_rate_trend,apdex_trend}`.
+4. `/alerts/rules` — **FIXED**: Test rule router returned `triggered`/`query_result` instead of `would_trigger`/`matched_count`. Also added `sample_matches` to response. Create modal now has state-managed form fields and a working `createRule` onClick handler.
+5. `/alerts/channels` — **FIXED**: DAO parsed config JSON to `configuration` field instead of `config`. Changed to overwrite `config` field correctly. Create modal now has state-managed form fields, dynamic type-specific configuration, and a working `createChannel` onClick handler.
+6. `/security/events` — **FIXED**: DAO mapped `triggered` → `new` on save but never mapped back on read. Now maps `new` → `triggered` on read, and translates `triggered` filter to `new` for DB queries.
+7. `/security/rules` — **FIXED**: Test confidence 0-1 float displayed as percentage (showed "0.85%" instead of "85%"). Frontend now checks if value ≤ 1 and multiplies by 100.
+8. `/security/threat-hunting` — **FIXED**: Campaign field mismatches (`events_found` vs `findings_count`, `rules_evaluated` vs `rules_tested`). Added `normalizeCampaign()` frontend mapper. Added `GET /threat-hunting/{id}/findings` backend endpoint that extracts normalized findings from campaign enhanced_results.
+
+## Remaining Known Issues
+
+All major issues from the audit have been addressed. Minor remaining items:
+
+1. `/observability/metrics` — SSE named events: backend sends `event: metrics_event` but frontend listens on generic `onmessage`. Works but could be more precise.
+2. `/alerts/rules` — Condition builder in create modal is UI-only (not wired to form state). Rules are created with empty conditions array.
+3. `/alerts/channels` — Channel notification config fields are basic. Could benefit from validation per channel type.

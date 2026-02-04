@@ -281,7 +281,7 @@ export default function MetricsExplorerPage() {
         start_time,
         end_time,
         aggregation,
-        service: selectedService !== 'all' ? selectedService : undefined,
+        service_name: selectedService !== 'all' ? selectedService : undefined,
         granularity
       })
 
@@ -326,7 +326,7 @@ export default function MetricsExplorerPage() {
           start_time,
           end_time,
           aggregation,
-          service: selectedService !== 'all' ? selectedService : undefined,
+          service_name: selectedService !== 'all' ? selectedService : undefined,
           granularity
         }).then(response => ({ metric, response }))
       )
@@ -396,8 +396,10 @@ export default function MetricsExplorerPage() {
     setIsStreaming(true)
 
     try {
+      // SSE doesn't support custom headers, pass customer_id as query param
+      const customerId = localStorage.getItem('customer_id') || 'default'
       const eventSource = new EventSource(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7080'}/v1/stream/metrics`
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7080'}/v1/stream/metrics?customer_id=${encodeURIComponent(customerId)}`
       )
 
       eventSource.onmessage = (event) => {

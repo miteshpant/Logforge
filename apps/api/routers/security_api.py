@@ -771,6 +771,43 @@ async def get_threat_hunting_status(
         logger.error(f"Failed to get campaign status: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get status: {str(e)}")
 
+@router.get("/threat-hunting/{campaign_id}/findings")
+async def get_campaign_findings(
+    campaign_id: str,
+    customer_id: str = Header(..., alias="X-Customer-ID")
+) -> Dict[str, Any]:
+    """Get findings from a threat hunting campaign"""
+    try:
+        status = await security_service.get_campaign_status(campaign_id, customer_id)
+
+        if not status:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+
+        # Extract findings from enhanced results or return empty list
+        findings = status.get("unique_findings", [])
+
+        # Normalize findings to the shape the frontend expects
+        normalized = []
+        for i, finding in enumerate(findings):
+            if isinstance(finding, dict):
+                normalized.append({
+                    "id": finding.get("id", f"{campaign_id}-finding-{i}"),
+                    "title": finding.get("title", finding.get("rule_name", "Unknown Finding")),
+                    "severity": finding.get("severity", "medium"),
+                    "rule_id": finding.get("rule_id", ""),
+                    "technique": finding.get("technique", finding.get("mitre_technique", "")),
+                    "description": finding.get("description", ""),
+                    "timestamp": finding.get("timestamp", finding.get("detected_at", "")),
+                })
+
+        return {"findings": normalized, "total": len(normalized)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get campaign findings: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get findings: {str(e)}")
+
+
 @router.get("/threat-hunting")
 async def list_threat_hunting_campaigns(
     customer_id: str = Header(..., alias="X-Customer-ID"),
