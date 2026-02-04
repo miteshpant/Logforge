@@ -1048,7 +1048,7 @@ class UsageDAO:
                 },
                 "active_users": users_result[0].get("active_users", 0) if users_result else 0,
                 "api_rate": {
-                    "requests_last_hour": rate_result[0].get("requests_last_hour", 0) if rate_result else 0,
+                    "requests_last_hour": rate_result[0].get("total_requests", 0) if rate_result else 0,
                     "requests_per_minute": rate_result[0].get("requests_per_minute", 0) if rate_result else 0
                 }
             }

@@ -8,7 +8,6 @@ import AlertsOverviewWidget from '@/components/centrum/AlertsOverviewWidget'
 import SecurityEventsWidget from '@/components/centrum/SecurityEventsWidget'
 import ObservabilityStatsWidgets from '@/components/centrum/ObservabilityStatsWidgets'
 import UsageStatsWidgets from '@/components/centrum/UsageStatsWidgets'
-import APMPerformanceWidgets from '@/components/centrum/APMPerformanceWidgets'
 import IncidentCommandCenter from '@/components/centrum/IncidentCommandCenter'
 import AIInsightsWidget from '@/components/centrum/AIInsightsWidget'
 import AnomalyStatsWidget from '@/components/centrum/AnomalyStatsWidget'
@@ -20,7 +19,6 @@ const LiveStreamingPanel = lazy(() => import('@/components/centrum/LiveStreaming
 // Memoized widget components to prevent unnecessary re-renders
 const MemoizedUsageStats = memo(UsageStatsWidgets)
 const MemoizedObservabilityStats = memo(ObservabilityStatsWidgets)
-const MemoizedAPMPerformance = memo(APMPerformanceWidgets)
 const MemoizedLogsOverview = memo(LogsOverviewWidget)
 const MemoizedAlertsOverview = memo(AlertsOverviewWidget)
 const MemoizedSecurityEvents = memo(SecurityEventsWidget)
@@ -39,23 +37,18 @@ export default function CentrumPage() {
   const [isLoadingObservability, setIsLoadingObservability] = useState(true)
   const [usageData, setUsageData] = useState<any>(null)
   const [isLoadingUsage, setIsLoadingUsage] = useState(true)
-  const [apmData, setApmData] = useState<any>(null)
-  const [isLoadingApm, setIsLoadingApm] = useState(true)
-
   // Progressive loading flags - enable widgets one by one
   const [enableUsage, setEnableUsage] = useState(false)
   const [enableLogs, setEnableLogs] = useState(false)
   const [enableAlerts, setEnableAlerts] = useState(false)
   const [enableObservability, setEnableObservability] = useState(false)
   const [enableSecurity, setEnableSecurity] = useState(false)
-  const [enableAPM, setEnableAPM] = useState(false)
 
   const abortControllerRef = useRef<AbortController | null>(null)
   const alertsAbortControllerRef = useRef<AbortController | null>(null)
   const securityAbortControllerRef = useRef<AbortController | null>(null)
   const observabilityAbortControllerRef = useRef<AbortController | null>(null)
   const usageAbortControllerRef = useRef<AbortController | null>(null)
-  const apmAbortControllerRef = useRef<AbortController | null>(null)
 
   const loadLogsOverview = async () => {
     try {
@@ -250,41 +243,6 @@ export default function CentrumPage() {
     }
   }
 
-  const loadAPMOverview = async () => {
-    try {
-      // Cancel any pending request
-      if (apmAbortControllerRef.current) {
-        apmAbortControllerRef.current.abort()
-      }
-
-      // Create new abort controller for this request
-      apmAbortControllerRef.current = new AbortController()
-
-      setIsLoadingApm(true)
-      const { start_time, end_time } = getApiTimeRange()
-
-      // Call the APM overview stats endpoint
-      const response = await apiClient.get('/v1/observability/apm/overview/stats', {
-        start_time: start_time,
-        end_time: end_time
-      })
-
-      // Handle both wrapped and unwrapped response formats
-      const data = response?.data || response
-
-      if (data) {
-        setApmData(data)
-      }
-    } catch (error: any) {
-      // Don't log aborted requests as errors
-      if (error.name !== 'AbortError' && error.name !== 'CanceledError') {
-        console.error('Failed to load APM overview:', error)
-      }
-    } finally {
-      setIsLoadingApm(false)
-    }
-  }
-
   // Progressive loading - Enable widgets one by one for better performance
   useEffect(() => {
     console.log('🚀 Progressive loading started')
@@ -295,7 +253,6 @@ export default function CentrumPage() {
     setEnableAlerts(false)
     setEnableObservability(false)
     setEnableSecurity(false)
-    setEnableAPM(false)
 
     // Priority 1: Usage (immediate)
     setEnableUsage(true)
@@ -324,19 +281,12 @@ export default function CentrumPage() {
       setEnableSecurity(true)
     }, 1200)
 
-    // Priority 6: APM (1500ms delay)
-    const timer5 = setTimeout(() => {
-      console.log('✅ Enabling APM widget')
-      setEnableAPM(true)
-    }, 1500)
-
     // Cleanup function
     return () => {
       clearTimeout(timer1)
       clearTimeout(timer2)
       clearTimeout(timer3)
       clearTimeout(timer4)
-      clearTimeout(timer5)
 
       // Abort all pending requests
       if (abortControllerRef.current) abortControllerRef.current.abort()
@@ -344,7 +294,6 @@ export default function CentrumPage() {
       if (securityAbortControllerRef.current) securityAbortControllerRef.current.abort()
       if (observabilityAbortControllerRef.current) observabilityAbortControllerRef.current.abort()
       if (usageAbortControllerRef.current) usageAbortControllerRef.current.abort()
-      if (apmAbortControllerRef.current) apmAbortControllerRef.current.abort()
     }
   }, [currentTimeRange.value])
 
@@ -399,17 +348,6 @@ export default function CentrumPage() {
       return () => clearTimeout(timer)
     }
   }, [enableSecurity, currentTimeRange.value])
-
-  // Load APM when enabled - 500ms delay
-  useEffect(() => {
-    if (enableAPM) {
-      const timer = setTimeout(() => {
-        console.log('⚡ Loading APM data...')
-        loadAPMOverview()
-      }, 500)
-      return () => clearTimeout(timer)
-    }
-  }, [enableAPM, currentTimeRange.value])
 
   return (
     <DashboardLayout>
