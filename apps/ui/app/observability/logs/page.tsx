@@ -39,7 +39,7 @@ interface LogEntry {
   message: string
   trace_id?: string
   span_id?: string
-  metadata: Record<string, unknown>
+  metadata?: Record<string, unknown>
 }
 
 interface LogStats {
@@ -303,7 +303,7 @@ export default function LogExplorerPage() {
         log.message.toLowerCase().includes(query) ||
         log.service.toLowerCase().includes(query) ||
         log.trace_id?.toLowerCase().includes(query) ||
-        JSON.stringify(log.metadata).toLowerCase().includes(query)
+        JSON.stringify(log.metadata || {}).toLowerCase().includes(query)
       )
     }
     return true
@@ -555,7 +555,7 @@ export default function LogExplorerPage() {
                         onClick={() => toggleLogExpansion(log.id)}
                       >
                         <div className="w-8">
-                          {Object.keys(log.metadata).length > 0 && (
+                          {Object.keys(log.metadata || {}).length > 0 && (
                             isExpanded
                               ? <ChevronDown className="w-4 h-4 text-slate-400" />
                               : <ChevronRight className="w-4 h-4 text-slate-400" />
@@ -596,13 +596,13 @@ export default function LogExplorerPage() {
                       </div>
 
                       {/* Expanded Details */}
-                      {isExpanded && Object.keys(log.metadata).length > 0 && (
+                      {isExpanded && Object.keys(log.metadata || {}).length > 0 && (
                         <div className="px-4 pb-4 pl-12">
                           <div className="p-4 bg-slate-900 rounded-lg">
                             <div className="flex items-center justify-between mb-2">
                               <span className="text-xs text-slate-400">Metadata</span>
                               <button
-                                onClick={() => copyToClipboard(JSON.stringify(log.metadata, null, 2))}
+                                onClick={() => copyToClipboard(JSON.stringify(log.metadata || {}, null, 2))}
                                 className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
                               >
                                 <Copy className="w-3 h-3" />
@@ -610,7 +610,7 @@ export default function LogExplorerPage() {
                               </button>
                             </div>
                             <pre className="text-xs text-green-400 overflow-x-auto">
-                              {JSON.stringify(log.metadata, null, 2)}
+                              {JSON.stringify(log.metadata || {}, null, 2)}
                             </pre>
                           </div>
 
