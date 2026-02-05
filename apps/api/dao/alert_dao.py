@@ -444,11 +444,11 @@ class AlertDAO:
                 params["severity"] = severity
 
             if start_time:
-                where_clauses.append("ai.triggered_at >= %(start_time)s")
+                where_clauses.append("ai.triggered_at >= parseDateTimeBestEffort(%(start_time)s)")
                 params["start_time"] = start_time
 
             if end_time:
-                where_clauses.append("ai.triggered_at <= %(end_time)s")
+                where_clauses.append("ai.triggered_at <= parseDateTimeBestEffort(%(end_time)s)")
                 params["end_time"] = end_time
 
             where_clause = ' AND '.join(where_clauses)
@@ -1144,8 +1144,8 @@ class AlertDAO:
             FROM {ALERT_INSTANCES_TABLE} ai
             LEFT JOIN {ALERT_RULES_TABLE} ar ON ai.rule_id = ar.id
             WHERE ai.customer_id = %(customer_id)s
-              AND ai.triggered_at >= %(start_time)s
-              AND ai.triggered_at <= %(end_time)s
+              AND ai.triggered_at >= parseDateTimeBestEffort(%(start_time)s)
+              AND ai.triggered_at <= parseDateTimeBestEffort(%(end_time)s)
             GROUP BY ar.severity, ai.status
             """
 
