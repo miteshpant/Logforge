@@ -12,6 +12,9 @@ interface StreamEvent {
   data: any
 }
 
+// Counter for generating unique IDs when data has none
+let eventIdCounter = 0
+
 export default function LiveStreamingPanel() {
   const [activeStream, setActiveStream] = useState<StreamType>('alerts')
   const [events, setEvents] = useState<StreamEvent[]>([])
@@ -88,8 +91,12 @@ export default function LiveStreamingPanel() {
             return
           }
 
+          // Generate unique ID: prefer data.id, then alert_id, then generate unique fallback
+          // Use counter + random suffix to avoid duplicate keys when events arrive same millisecond
+          const uniqueId = data.id || data.alert_id || `evt-${Date.now()}-${++eventIdCounter}-${Math.random().toString(36).slice(2, 7)}`
+
           const newEvent: StreamEvent = {
-            id: data.id || data.alert_id || Date.now().toString(),
+            id: uniqueId,
             timestamp: data.timestamp || data.triggered_at || new Date().toISOString(),
             type: data.event_type || data.type || 'message',
             data: data
@@ -425,38 +432,41 @@ export default function LiveStreamingPanel() {
 
       {/* Events Stream - Collapsible */}
       {isExpanded && (
-        <div className="overflow-y-auto px-6 py-4 max-h-96" style={{ height: '400px' }}>
-          {events.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-slate-500">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-4 opacity-50">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-              </svg>
-              <p className="text-sm">
-                {isConnected ? 'Waiting for events...' : 'Connecting to stream...'}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {events.map((event, index) => (
-                <div
-                  key={event.id}
-                  className="p-3 rounded-lg bg-slate-800/50 border border-white/5 hover:border-white/10 transition-all duration-200"
-                  style={{
-                    opacity: 1 - (index * 0.02),
-                    animation: index === 0 ? 'slideIn 0.3s ease-out' : 'none'
-                  }}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`mt-1 flex-shrink-0 ${getEventColor(event.type)}`}>
-                      {getEventIcon(event.type)}
+        <div className="overflow-hidden">
+          <div className="overflow-y-auto px-6 py-4 max-h-[400px]">
+            {events.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-[300px] text-slate-500">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-4 opacity-50">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
+                <p className="text-sm">
+                  {isConnected ? 'Waiting for events...' : 'Connecting to stream...'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {events.map((event, index) => (
+                  <div
+                    key={event.id}
+                    className="p-3 rounded-lg bg-slate-800/50 border border-white/5 hover:border-white/10 transition-all duration-200"
+                    style={{
+                      // Cap minimum opacity at 0.5 to keep items visible
+                      opacity: Math.max(0.5, 1 - (index * 0.015)),
+                      animation: index === 0 ? 'slideIn 0.3s ease-out' : 'none'
+                    }}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`mt-1 flex-shrink-0 ${getEventColor(event.type)}`}>
+                        {getEventIcon(event.type)}
+                      </div>
+                      {renderEventCard(event)}
                     </div>
-                    {renderEventCard(event)}
                   </div>
-                </div>
-              ))}
-              <div ref={eventsEndRef} />
-            </div>
-          )}
+                ))}
+                <div ref={eventsEndRef} />
+              </div>
+            )}
+          </div>
         </div>
       )}
 
