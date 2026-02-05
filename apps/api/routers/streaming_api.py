@@ -865,198 +865,251 @@ async def stream_security_events(
 async def stream_alerts(
     customer_id: str = Depends(get_customer_id_for_sse)
 ):
-    """Stream real-time alert events - Pure event-driven, no polling"""
+    """Stream real-time alert events - Uses Kafka when available, falls back to DB polling"""
     try:
-        from events.subscribers import KafkaEventSubscriber
-        from events.constants import EVENT_UI_ALERT_TRIGGERED, EVENT_UI_ALERT_ACKNOWLEDGED, EVENT_UI_ALERT_RESOLVED, TOPIC_UI_REALTIME_EVENTS
+        # Try Kafka-based streaming first
+        kafka_mode = False
+        try:
+            from events.subscribers import KafkaEventSubscriber
+            from events.constants import EVENT_UI_ALERT_TRIGGERED, EVENT_UI_ALERT_ACKNOWLEDGED, EVENT_UI_ALERT_RESOLVED, TOPIC_UI_REALTIME_EVENTS
+            kafka_mode = True
+        except (ImportError, Exception) as e:
+            logger.info(f"Kafka not available for alert streaming, using DB polling fallback: {e}")
 
-        # Event types we want to stream to UI
-        ui_alert_events = [
-            EVENT_UI_ALERT_TRIGGERED,
-            EVENT_UI_ALERT_ACKNOWLEDGED,
-            EVENT_UI_ALERT_RESOLVED
-        ]
+        if kafka_mode:
+            # Event types we want to stream to UI
+            ui_alert_events = [
+                EVENT_UI_ALERT_TRIGGERED,
+                EVENT_UI_ALERT_ACKNOWLEDGED,
+                EVENT_UI_ALERT_RESOLVED
+            ]
 
-        # Create a queue to receive events from the custom handler
-        event_queue = asyncio.Queue()
+            # Create a queue to receive events from the custom handler
+            event_queue = asyncio.Queue()
 
-        # Custom handler class to capture UI events for this streaming session
-        class StreamingAlertHandler:
-            """Custom handler to capture UI alert events for streaming"""
+            # Custom handler class to capture UI events for this streaming session
+            class StreamingAlertHandler:
+                """Custom handler to capture UI alert events for streaming"""
 
-            def __init__(self, target_customer_id: str, event_queue: asyncio.Queue):
-                self.target_customer_id = target_customer_id
-                self.event_queue = event_queue
-                self.events_received = 0
-                self.events_queued = 0
+                def __init__(self, target_customer_id: str, event_queue: asyncio.Queue):
+                    self.target_customer_id = target_customer_id
+                    self.event_queue = event_queue
+                    self.events_received = 0
+                    self.events_queued = 0
 
-            async def handle(self, event) -> bool:
-                """Handle events and put relevant ones in the queue"""
-                try:
-                    self.events_received += 1
-
-                    event_type = getattr(event, 'event_type', 'NONE')
-                    event_customer = getattr(event, 'customer_id', 'NONE')
-
-                    alert_id = event.data.get('alert_id') if hasattr(event, 'data') else None
-                    logger.info(
-                        f"🔔 StreamingAlertHandler received event from Kafka "
-                        f"(event_type={event_type}, customer={event_customer}, "
-                        f"target={self.target_customer_id}, received={self.events_received}, alert_id={alert_id})"
-                    )
-
-                    # Only handle events for our target customer and UI alert types
-                    customer_match = hasattr(event, 'customer_id') and event.customer_id == self.target_customer_id
-                    type_match = hasattr(event, 'event_type') and event.event_type in ui_alert_events
-
-                    if customer_match and type_match:
-                        # Put event in queue for streaming
-                        await self.event_queue.put(event)
-                        self.events_queued += 1
-
-                        logger.info(
-                            f"✅ Alert event queued for SSE streaming "
-                            f"(alert_id={alert_id}, customer_id={self.target_customer_id}, queued={self.events_queued})"
-                        )
-                        return True
-                    else:
-                        logger.debug(
-                            f"Event filtered out - not for this customer or wrong type "
-                            f"(customer_match={customer_match}, type_match={type_match}, event_type={event_type})"
-                        )
-
-                    return True
-
-                except Exception as e:
-                    logger.error(f"Error in streaming alert handler: {e}", exc_info=True)
-                    return False
-
-            def get_handler_name(self) -> str:
-                return f"streaming_alert_handler_{self.target_customer_id}"
-
-            def get_supported_event_types(self) -> List[str]:
-                return ui_alert_events
-
-        async def generate_real_time_alerts():
-            """Generate real-time alert events as they occur"""
-            subscriber = None
-            connection_manager = get_streaming_connection_manager()
-            connection_id = connection_manager.register_connection("alerts", customer_id)
-            try:
-                from events.subscribers import SubscriberConfig
-
-                # Check if already shutting down
-                if connection_manager.is_shutting_down:
-                    yield format_sse_message("error", {"message": "Server is shutting down"})
-                    return
-
-                # Create subscriber config for UI events
-                config = SubscriberConfig(
-                    name=f"streaming_alerts_{customer_id}",
-                    consumer_group=f"streaming_alerts_{customer_id}",
-                    topics=[TOPIC_UI_REALTIME_EVENTS],
-                    event_types=ui_alert_events,
-                    enabled=True,
-                    max_batch_size=10,
-                    max_parallel_workers=1
-                )
-
-                # Create Kafka subscriber for UI events
-                logger.info(
-                    f"🔌 Creating Kafka subscriber for alert streaming "
-                    f"(customer_id={customer_id}, topics={config.topics}, consumer_group={config.consumer_group})"
-                )
-
-                subscriber = KafkaEventSubscriber(config)
-
-                # Create and register our custom streaming handler
-                streaming_handler = StreamingAlertHandler(customer_id, event_queue)
-                subscriber.register_handler(streaming_handler)
-
-                logger.info(
-                    f"📡 Starting real-time alert stream for customer {customer_id} "
-                    f"(topic={TOPIC_UI_REALTIME_EVENTS}, consumer_group={config.consumer_group})"
-                )
-
-                # Send initial connection confirmation
-                yield format_sse_message("connected", {
-                    "status": "streaming_started",
-                    "customer_id": customer_id,
-                    "event_types": ui_alert_events,
-                    "timestamp": datetime.now().isoformat()
-                })
-
-                # Start the subscriber
-                await subscriber.start()
-
-                # Listen for events from our queue
-                while not connection_manager.is_shutting_down:
+                async def handle(self, event) -> bool:
+                    """Handle events and put relevant ones in the queue"""
                     try:
-                        # Wait for events with a timeout to allow for graceful shutdown
-                        event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
+                        self.events_received += 1
 
-                        # Format UI event for streaming
-                        stream_data = {
-                            "alert_id": event.data.get("alert_id"),
-                            "rule_id": event.data.get("rule_id"),
-                            "rule_name": event.data.get("rule_name"),
-                            "severity": event.data.get("severity"),
-                            "status": event.data.get("status"),
-                            "triggered_at": event.data.get("triggered_at"),
-                            "message": event.data.get("message"),
-                            "event_type": event.event_type,
-                            "timestamp": event.metadata.created_at if hasattr(event, 'metadata') and event.metadata else datetime.now().isoformat(),
-                            "ui_metadata": event.data.get("ui_metadata", {})
-                        }
+                        event_type = getattr(event, 'event_type', 'NONE')
+                        event_customer = getattr(event, 'customer_id', 'NONE')
 
-                        # Stream the event immediately
-                        yield format_sse_message("alert_event", stream_data, getattr(event.metadata, 'event_id', None) if hasattr(event, 'metadata') else None)
-
-                        logger.debug(
-                            "Alert event streamed to UI",
-                            customer_id=customer_id,
-                            alert_id=stream_data.get("alert_id"),
-                            event_type=event.event_type
+                        alert_id = event.data.get('alert_id') if hasattr(event, 'data') else None
+                        logger.info(
+                            f"StreamingAlertHandler received event from Kafka "
+                            f"(event_type={event_type}, customer={event_customer}, "
+                            f"target={self.target_customer_id}, received={self.events_received}, alert_id={alert_id})"
                         )
 
-                    except asyncio.TimeoutError:
-                        # Send keepalive message
-                        yield format_sse_message("keepalive", {
-                            "timestamp": datetime.now().isoformat(),
-                            "status": "listening"
-                        })
+                        # Only handle events for our target customer and UI alert types
+                        customer_match = hasattr(event, 'customer_id') and event.customer_id == self.target_customer_id
+                        type_match = hasattr(event, 'event_type') and event.event_type in ui_alert_events
+
+                        if customer_match and type_match:
+                            # Put event in queue for streaming
+                            await self.event_queue.put(event)
+                            self.events_queued += 1
+
+                            logger.info(
+                                f"Alert event queued for SSE streaming "
+                                f"(alert_id={alert_id}, customer_id={self.target_customer_id}, queued={self.events_queued})"
+                            )
+                            return True
+                        else:
+                            logger.debug(
+                                f"Event filtered out - not for this customer or wrong type "
+                                f"(customer_match={customer_match}, type_match={type_match}, event_type={event_type})"
+                            )
+
+                        return True
 
                     except Exception as e:
-                        logger.error(f"Error processing alert event for streaming: {e}")
-                        yield format_sse_message("error", {"message": f"Event processing error: {str(e)}"})
+                        logger.error(f"Error in streaming alert handler: {e}", exc_info=True)
+                        return False
 
-            except Exception as e:
-                logger.error(f"Error in real-time alert stream for customer {customer_id}: {e}")
-                yield format_sse_message("error", {
-                    "message": f"Stream error: {str(e)}",
-                    "timestamp": datetime.now().isoformat()
-                })
-            finally:
-                # Send shutdown message if shutting down
-                if connection_manager.is_shutting_down:
-                    yield format_sse_message("shutdown", {
-                        "message": "Server is shutting down",
+                def get_handler_name(self) -> str:
+                    return f"streaming_alert_handler_{self.target_customer_id}"
+
+                def get_supported_event_types(self) -> List[str]:
+                    return ui_alert_events
+
+            async def generate_real_time_alerts():
+                """Generate real-time alert events as they occur"""
+                subscriber = None
+                connection_manager = get_streaming_connection_manager()
+                connection_id = connection_manager.register_connection("alerts", customer_id)
+                try:
+                    from events.subscribers import SubscriberConfig
+
+                    # Check if already shutting down
+                    if connection_manager.is_shutting_down:
+                        yield format_sse_message("error", {"message": "Server is shutting down"})
+                        return
+
+                    # Create subscriber config for UI events
+                    config = SubscriberConfig(
+                        name=f"streaming_alerts_{customer_id}",
+                        consumer_group=f"streaming_alerts_{customer_id}",
+                        topics=[TOPIC_UI_REALTIME_EVENTS],
+                        event_types=ui_alert_events,
+                        enabled=True,
+                        max_batch_size=10,
+                        max_parallel_workers=1
+                    )
+
+                    subscriber = KafkaEventSubscriber(config)
+
+                    # Create and register our custom streaming handler
+                    streaming_handler = StreamingAlertHandler(customer_id, event_queue)
+                    subscriber.register_handler(streaming_handler)
+
+                    logger.info(f"Starting real-time alert stream for customer {customer_id}")
+
+                    # Send initial connection confirmation
+                    yield format_sse_message("connected", {
+                        "status": "streaming_started",
+                        "mode": "kafka",
+                        "customer_id": customer_id,
+                        "event_types": ui_alert_events,
                         "timestamp": datetime.now().isoformat()
                     })
 
-                # Clean up subscriber
-                if subscriber:
-                    try:
-                        await subscriber.stop()
-                        logger.info(f"Stopped subscriber for customer {customer_id}")
-                    except Exception as e:
-                        logger.error(f"Error stopping subscriber: {e}")
+                    # Start the subscriber
+                    await subscriber.start()
 
-                # Unregister connection
+                    # Listen for events from our queue
+                    while not connection_manager.is_shutting_down:
+                        try:
+                            event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
+
+                            stream_data = {
+                                "alert_id": event.data.get("alert_id"),
+                                "rule_id": event.data.get("rule_id"),
+                                "rule_name": event.data.get("rule_name"),
+                                "severity": event.data.get("severity"),
+                                "status": event.data.get("status"),
+                                "triggered_at": event.data.get("triggered_at"),
+                                "message": event.data.get("message"),
+                                "event_type": event.event_type,
+                                "timestamp": event.metadata.created_at if hasattr(event, 'metadata') and event.metadata else datetime.now().isoformat(),
+                                "ui_metadata": event.data.get("ui_metadata", {})
+                            }
+
+                            yield format_sse_message("alert_event", stream_data, getattr(event.metadata, 'event_id', None) if hasattr(event, 'metadata') else None)
+
+                        except asyncio.TimeoutError:
+                            yield format_sse_message("keepalive", {
+                                "timestamp": datetime.now().isoformat(),
+                                "status": "listening"
+                            })
+
+                        except Exception as e:
+                            logger.error(f"Error processing alert event for streaming: {e}")
+                            yield format_sse_message("error", {"message": f"Event processing error: {str(e)}"})
+
+                except Exception as e:
+                    logger.error(f"Error in real-time alert stream for customer {customer_id}: {e}")
+                    yield format_sse_message("error", {
+                        "message": f"Stream error: {str(e)}",
+                        "timestamp": datetime.now().isoformat()
+                    })
+                finally:
+                    if connection_manager.is_shutting_down:
+                        yield format_sse_message("shutdown", {
+                            "message": "Server is shutting down",
+                            "timestamp": datetime.now().isoformat()
+                        })
+                    if subscriber:
+                        try:
+                            await subscriber.stop()
+                        except Exception as e:
+                            logger.error(f"Error stopping subscriber: {e}")
+                    connection_manager.unregister_connection(connection_id)
+
+            return StreamingResponse(
+                generate_real_time_alerts(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+                }
+            )
+
+        # Fallback: DB-polling mode when Kafka is not available
+        async def generate_polling_alerts():
+            """Poll database for recent alerts when Kafka is unavailable"""
+            connection_manager = get_streaming_connection_manager()
+            connection_id = connection_manager.register_connection("alerts", customer_id)
+            last_seen_ts = datetime.now()
+            try:
+                yield format_sse_message("connected", {
+                    "status": "streaming_started",
+                    "mode": "polling",
+                    "customer_id": customer_id,
+                    "timestamp": datetime.now().isoformat()
+                })
+
+                alert_svc = AlertService()
+
+                while not connection_manager.is_shutting_down:
+                    try:
+                        # Poll for alerts triggered since last check
+                        result = await alert_svc.list_alert_instances(
+                            customer_id=customer_id,
+                            status=None,
+                            severity=None,
+                            limit=20,
+                            offset=0,
+                            start_time=last_seen_ts.isoformat(),
+                            end_time=None
+                        )
+                        alerts = result.get("alerts", [])
+                        if alerts:
+                            for alert in alerts:
+                                yield format_sse_message("alert", {
+                                    "alert_id": alert.get("id", ""),
+                                    "rule_name": alert.get("rule_name", ""),
+                                    "severity": alert.get("severity", alert.get("rule_severity", "medium")),
+                                    "status": alert.get("status", "triggered"),
+                                    "triggered_at": alert.get("triggered_at", ""),
+                                    "customer_id": customer_id,
+                                })
+                            last_seen_ts = datetime.now()
+
+                        # Poll interval
+                        await asyncio.sleep(5)
+
+                        # Send keepalive every cycle when no alerts
+                        if not alerts:
+                            yield format_sse_message("keepalive", {
+                                "timestamp": datetime.now().isoformat(),
+                                "status": "listening"
+                            })
+
+                    except asyncio.CancelledError:
+                        break
+                    except Exception as e:
+                        logger.error(f"Error polling alerts: {e}")
+                        yield format_sse_message("error", {"message": str(e)})
+                        await asyncio.sleep(5)
+            finally:
                 connection_manager.unregister_connection(connection_id)
 
         return StreamingResponse(
-            generate_real_time_alerts(),
+            generate_polling_alerts(),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -1067,7 +1120,7 @@ async def stream_alerts(
         )
 
     except Exception as e:
-        logger.error("Failed to start real-time alerts stream", error=str(e), customer_id=customer_id)
+        logger.error("Failed to start alerts stream", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to start alerts stream: {str(e)}")
 
 
