@@ -11,6 +11,23 @@ export interface TimeRange {
   description?: string
 }
 
+export interface AutoRefreshInterval {
+  label: string
+  value: string
+  ms: number
+}
+
+export const AUTO_REFRESH_INTERVALS: AutoRefreshInterval[] = [
+  { label: 'Off', value: 'off', ms: 0 },
+  { label: '15 seconds', value: '15s', ms: 15 * 1000 },
+  { label: '30 seconds', value: '30s', ms: 30 * 1000 },
+  { label: '1 minute', value: '1m', ms: 60 * 1000 },
+  { label: '5 minutes', value: '5m', ms: 5 * 60 * 1000 },
+  { label: '10 minutes', value: '10m', ms: 10 * 60 * 1000 },
+  { label: '30 minutes', value: '30m', ms: 30 * 60 * 1000 },
+  { label: '1 hour', value: '1h', ms: 60 * 60 * 1000 },
+]
+
 export interface TimeRangeContextType {
   currentTimeRange: TimeRange
   setTimeRange: (timeRange: TimeRange) => void
@@ -22,6 +39,11 @@ export interface TimeRangeContextType {
   createCustomRange: (start: Date, end: Date) => TimeRange
   // New centralized auto-refresh functionality
   useAutoRefresh: (refreshFn: (newTimeRange: TimeRange) => void | Promise<void>, dependencies?: any[]) => void
+  // Auto-refresh with sliding window
+  autoRefreshInterval: AutoRefreshInterval
+  setAutoRefreshInterval: (interval: AutoRefreshInterval) => void
+  autoRefreshIntervals: AutoRefreshInterval[]
+  setCustomAutoRefreshInterval: (seconds: number) => void
 }
 
 const TimeRangeContext = createContext<TimeRangeContextType | undefined>(undefined)
@@ -109,9 +131,9 @@ interface TimeRangeProviderProps {
   defaultRange?: string
 }
 
-export const TimeRangeProvider: React.FC<TimeRangeProviderProps> = ({ 
-  children, 
-  defaultRange = '24h' 
+export const TimeRangeProvider: React.FC<TimeRangeProviderProps> = ({
+  children,
+  defaultRange = '24h'
 }) => {
   const [availableRanges] = useState<TimeRange[]>(createTimeRanges())
   const [currentTimeRange, setCurrentTimeRange] = useState<TimeRange>(() => {
@@ -121,21 +143,71 @@ export const TimeRangeProvider: React.FC<TimeRangeProviderProps> = ({
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [refreshCallbacks, setRefreshCallbacks] = useState<Set<(newTimeRange: TimeRange) => void | Promise<void>>>(new Set())
+  const [autoRefreshInterval, setAutoRefreshIntervalState] = useState<AutoRefreshInterval>(AUTO_REFRESH_INTERVALS[0]) // Off by default
+  const [autoRefreshIntervals, setAutoRefreshIntervals] = useState<AutoRefreshInterval[]>(AUTO_REFRESH_INTERVALS)
 
-  // Update time ranges every minute to keep "now" current
+  // Auto-refresh with sliding window - slides the time window forward at the specified interval
   useEffect(() => {
+    // If auto-refresh is off or no interval, do nothing
+    if (autoRefreshInterval.ms === 0) {
+      return
+    }
+
     const interval = setInterval(() => {
+      setIsRefreshing(true)
+
+      // Slide the time window forward
       if (!currentTimeRange.isCustom) {
+        // For preset ranges, recalculate based on current time
         const updatedRanges = createTimeRanges()
         const updatedCurrent = updatedRanges.find(range => range.value === currentTimeRange.value)
         if (updatedCurrent) {
           setCurrentTimeRange(updatedCurrent)
+          setLastRefresh(new Date())
+
+          // Trigger all registered refresh callbacks with the updated time range
+          Array.from(refreshCallbacks).forEach(callback => {
+            try {
+              const result = callback(updatedCurrent)
+              if (result instanceof Promise) {
+                result.catch(console.error)
+              }
+            } catch (error) {
+              console.error('Error in auto-refresh callback:', error)
+            }
+          })
         }
+      } else {
+        // For custom ranges, slide by the auto-refresh interval
+        const slideDuration = currentTimeRange.endTime.getTime() - currentTimeRange.startTime.getTime()
+        const now = new Date()
+        const newRange: TimeRange = {
+          ...currentTimeRange,
+          startTime: new Date(now.getTime() - slideDuration),
+          endTime: now,
+          description: `${new Date(now.getTime() - slideDuration).toLocaleString()} - ${now.toLocaleString()}`
+        }
+        setCurrentTimeRange(newRange)
+        setLastRefresh(new Date())
+
+        // Trigger all registered refresh callbacks
+        Array.from(refreshCallbacks).forEach(callback => {
+          try {
+            const result = callback(newRange)
+            if (result instanceof Promise) {
+              result.catch(console.error)
+            }
+          } catch (error) {
+            console.error('Error in auto-refresh callback:', error)
+          }
+        })
       }
-    }, 60000) // Update every minute
+
+      setTimeout(() => setIsRefreshing(false), 300)
+    }, autoRefreshInterval.ms)
 
     return () => clearInterval(interval)
-  }, [currentTimeRange])
+  }, [autoRefreshInterval, currentTimeRange.value, currentTimeRange.isCustom, refreshCallbacks])
 
   const setTimeRange = useCallback((timeRange: TimeRange) => {
     setCurrentTimeRange(timeRange)
@@ -201,7 +273,7 @@ export const TimeRangeProvider: React.FC<TimeRangeProviderProps> = ({
     useEffect(() => {
       // Register this refresh function
       setRefreshCallbacks(prev => new Set([...Array.from(prev), refreshFn]))
-      
+
       // Cleanup: unregister when component unmounts or dependencies change
       return () => {
         setRefreshCallbacks(prev => {
@@ -213,6 +285,39 @@ export const TimeRangeProvider: React.FC<TimeRangeProviderProps> = ({
     }, dependencies) // eslint-disable-line react-hooks/exhaustive-deps
   }, [])
 
+  // Set auto-refresh interval
+  const setAutoRefreshInterval = useCallback((interval: AutoRefreshInterval) => {
+    setAutoRefreshIntervalState(interval)
+  }, [])
+
+  // Set custom auto-refresh interval in seconds
+  const setCustomAutoRefreshInterval = useCallback((seconds: number) => {
+    if (seconds <= 0) {
+      setAutoRefreshIntervalState(AUTO_REFRESH_INTERVALS[0]) // Off
+      return
+    }
+
+    // Format label based on duration
+    let label: string
+    if (seconds < 60) {
+      label = `${seconds} seconds`
+    } else if (seconds < 3600) {
+      const minutes = Math.floor(seconds / 60)
+      label = `${minutes} minute${minutes > 1 ? 's' : ''}`
+    } else {
+      const hours = Math.floor(seconds / 3600)
+      label = `${hours} hour${hours > 1 ? 's' : ''}`
+    }
+
+    const customInterval: AutoRefreshInterval = {
+      label: `Custom (${label})`,
+      value: 'custom',
+      ms: seconds * 1000
+    }
+
+    setAutoRefreshIntervalState(customInterval)
+  }, [])
+
   const value: TimeRangeContextType = {
     currentTimeRange,
     setTimeRange,
@@ -222,7 +327,11 @@ export const TimeRangeProvider: React.FC<TimeRangeProviderProps> = ({
     availableRanges,
     getApiTimeRange,
     createCustomRange,
-    useAutoRefresh
+    useAutoRefresh,
+    autoRefreshInterval,
+    setAutoRefreshInterval,
+    autoRefreshIntervals,
+    setCustomAutoRefreshInterval
   }
 
   return (
