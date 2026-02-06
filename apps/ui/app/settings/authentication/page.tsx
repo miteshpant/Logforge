@@ -503,51 +503,53 @@ export default function AuthenticationPage() {
                       <div
                         key={key.id}
                         className={`rounded-xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border p-4 ${
-                          key.status === 'revoked' ? 'opacity-60 border-white/5' : 'border-white/5'
+                          (key.status || 'active') === 'revoked' ? 'opacity-60 border-white/5' : 'border-white/5'
                         }`}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-start gap-4">
                             <div className={`p-2 rounded-lg ${
-                              key.status === 'active' ? 'bg-blue-500/20' : 'bg-slate-500/20'
+                              (key.status || 'active') === 'active' ? 'bg-blue-500/20' : 'bg-slate-500/20'
                             }`}>
                               <Key className={`w-5 h-5 ${
-                                key.status === 'active' ? 'text-blue-400' : 'text-slate-400'
+                                (key.status || 'active') === 'active' ? 'text-blue-400' : 'text-slate-400'
                               }`} />
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
                                 <h3 className="text-white font-semibold">{key.name}</h3>
-                                <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getKeyStatusColor(key.status)}`}>
-                                  {key.status.toUpperCase()}
+                                <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getKeyStatusColor(key.status || 'active')}`}>
+                                  {(key.status || 'active').toUpperCase()}
                                 </span>
                               </div>
                               <p className="text-slate-400 text-sm mt-1">{key.description || 'No description'}</p>
 
                               {/* Key prefix */}
-                              <div className="flex items-center gap-2 mt-2">
-                                <code className="px-2 py-1 bg-slate-700/50 rounded text-sm text-slate-300 font-mono">
-                                  {key.key_prefix}
-                                </code>
-                                <button
-                                  onClick={() => copyToClipboard(key.key_prefix)}
-                                  className="p-1 text-slate-400 hover:text-white"
-                                  title="Copy key prefix"
-                                >
-                                  <Copy className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
+                              {key.key_prefix && (
+                                <div className="flex items-center gap-2 mt-2">
+                                  <code className="px-2 py-1 bg-slate-700/50 rounded text-sm text-slate-300 font-mono">
+                                    {key.key_prefix}
+                                  </code>
+                                  <button
+                                    onClick={() => copyToClipboard(key.key_prefix)}
+                                    className="p-1 text-slate-400 hover:text-white"
+                                    title="Copy key prefix"
+                                  >
+                                    <Copy className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
 
                               {/* Permissions */}
                               <div className="flex flex-wrap gap-1 mt-3">
-                                {key.permissions.slice(0, 4).map((perm) => (
+                                {(key.permissions || []).slice(0, 4).map((perm) => (
                                   <span key={perm} className="px-2 py-0.5 bg-slate-700 text-slate-300 text-xs rounded">
                                     {perm}
                                   </span>
                                 ))}
-                                {key.permissions.length > 4 && (
+                                {(key.permissions || []).length > 4 && (
                                   <span className="px-2 py-0.5 bg-slate-700 text-slate-400 text-xs rounded">
-                                    +{key.permissions.length - 4} more
+                                    +{(key.permissions || []).length - 4} more
                                   </span>
                                 )}
                               </div>
@@ -564,7 +566,7 @@ export default function AuthenticationPage() {
                                 </span>
                                 <span className="flex items-center gap-1">
                                   <Zap className="w-3 h-3" />
-                                  {key.rate_limit.toLocaleString()} req/hr
+                                  {(key.rate_limit || 1000).toLocaleString()} req/hr
                                 </span>
                                 {key.last_used_at && (
                                   <span className="flex items-center gap-1">
@@ -575,16 +577,16 @@ export default function AuthenticationPage() {
                               </div>
 
                               {/* IP Whitelist */}
-                              {key.ip_whitelist.length > 0 && (
+                              {(key.ip_whitelist || []).length > 0 && (
                                 <div className="flex items-center gap-2 mt-2 text-xs text-slate-500">
                                   <Globe className="w-3 h-3" />
-                                  <span>IP Restricted: {key.ip_whitelist.join(', ')}</span>
+                                  <span>IP Restricted: {(key.ip_whitelist || []).join(', ')}</span>
                                 </div>
                               )}
                             </div>
                           </div>
 
-                          {key.status === 'active' && (
+                          {(key.status || 'active') === 'active' && (
                             <button
                               onClick={() => handleRevokeKey(key.id)}
                               className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
