@@ -367,48 +367,48 @@ export default function AuthenticationPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4 min-w-0">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-500/20 rounded-lg">
+              <div className="p-2 bg-blue-500/20 rounded-lg flex-shrink-0">
                 <Key className="w-5 h-5 text-blue-400" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-slate-400 text-sm">Active API Keys</p>
                 <p className="text-2xl font-bold text-white">{activeKeys}</p>
               </div>
             </div>
           </div>
-          <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4">
+          <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4 min-w-0">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-500/20 rounded-lg">
+              <div className="p-2 bg-purple-500/20 rounded-lg flex-shrink-0">
                 <Shield className="w-5 h-5 text-purple-400" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-slate-400 text-sm">SSO Providers</p>
                 <p className="text-2xl font-bold text-white">{enabledProviders}</p>
               </div>
             </div>
           </div>
-          <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4">
+          <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4 min-w-0">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-500/20 rounded-lg">
+              <div className="p-2 bg-green-500/20 rounded-lg flex-shrink-0">
                 <Smartphone className="w-5 h-5 text-green-400" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-slate-400 text-sm">MFA Enrolled</p>
                 <p className="text-2xl font-bold text-white">
-                  {mfaStatus ? `${mfaStatus.enrolled_users}/${mfaStatus.total_users}` : '0/0'}
+                  {mfaStatus?.enrolled_users ?? 0}/{mfaStatus?.total_users ?? 0}
                 </p>
               </div>
             </div>
           </div>
-          <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4">
+          <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4 min-w-0">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-500/20 rounded-lg">
+              <div className="p-2 bg-orange-500/20 rounded-lg flex-shrink-0">
                 <Lock className="w-5 h-5 text-orange-400" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-slate-400 text-sm">MFA Status</p>
                 <p className="text-2xl font-bold text-white">
                   {mfaStatus?.enforced ? 'Enforced' : mfaStatus?.enabled ? 'Optional' : 'Disabled'}
