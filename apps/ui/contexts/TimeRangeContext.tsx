@@ -44,6 +44,8 @@ export interface TimeRangeContextType {
   setAutoRefreshInterval: (interval: AutoRefreshInterval) => void
   autoRefreshIntervals: AutoRefreshInterval[]
   setCustomAutoRefreshInterval: (seconds: number) => void
+  // Refresh trigger counter - increments on every auto-refresh or manual refresh
+  refreshTrigger: number
 }
 
 const TimeRangeContext = createContext<TimeRangeContextType | undefined>(undefined)
@@ -144,16 +146,21 @@ export const TimeRangeProvider: React.FC<TimeRangeProviderProps> = ({
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [refreshCallbacks, setRefreshCallbacks] = useState<Set<(newTimeRange: TimeRange) => void | Promise<void>>>(new Set())
   const [autoRefreshInterval, setAutoRefreshIntervalState] = useState<AutoRefreshInterval>(AUTO_REFRESH_INTERVALS[0]) // Off by default
-  const [autoRefreshIntervals, setAutoRefreshIntervals] = useState<AutoRefreshInterval[]>(AUTO_REFRESH_INTERVALS)
+  const [autoRefreshIntervals] = useState<AutoRefreshInterval[]>(AUTO_REFRESH_INTERVALS)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   // Auto-refresh with sliding window - slides the time window forward at the specified interval
   useEffect(() => {
     // If auto-refresh is off or no interval, do nothing
     if (autoRefreshInterval.ms === 0) {
+      console.log('🔄 Auto-refresh: OFF')
       return
     }
 
-    const interval = setInterval(() => {
+    console.log(`🔄 Auto-refresh: Starting with interval ${autoRefreshInterval.label} (${autoRefreshInterval.ms}ms)`)
+
+    const intervalId = setInterval(() => {
+      console.log('🔄 Auto-refresh: Triggering refresh...')
       setIsRefreshing(true)
 
       // Slide the time window forward
@@ -162,20 +169,13 @@ export const TimeRangeProvider: React.FC<TimeRangeProviderProps> = ({
         const updatedRanges = createTimeRanges()
         const updatedCurrent = updatedRanges.find(range => range.value === currentTimeRange.value)
         if (updatedCurrent) {
+          console.log('🔄 Auto-refresh: Sliding time window', {
+            from: currentTimeRange.startTime.toISOString(),
+            to: updatedCurrent.startTime.toISOString()
+          })
           setCurrentTimeRange(updatedCurrent)
           setLastRefresh(new Date())
-
-          // Trigger all registered refresh callbacks with the updated time range
-          Array.from(refreshCallbacks).forEach(callback => {
-            try {
-              const result = callback(updatedCurrent)
-              if (result instanceof Promise) {
-                result.catch(console.error)
-              }
-            } catch (error) {
-              console.error('Error in auto-refresh callback:', error)
-            }
-          })
+          setRefreshTrigger(prev => prev + 1) // Increment trigger to notify components
         }
       } else {
         // For custom ranges, slide by the auto-refresh interval
@@ -187,27 +187,23 @@ export const TimeRangeProvider: React.FC<TimeRangeProviderProps> = ({
           endTime: now,
           description: `${new Date(now.getTime() - slideDuration).toLocaleString()} - ${now.toLocaleString()}`
         }
+        console.log('🔄 Auto-refresh: Sliding custom time window', {
+          from: currentTimeRange.startTime.toISOString(),
+          to: newRange.startTime.toISOString()
+        })
         setCurrentTimeRange(newRange)
         setLastRefresh(new Date())
-
-        // Trigger all registered refresh callbacks
-        Array.from(refreshCallbacks).forEach(callback => {
-          try {
-            const result = callback(newRange)
-            if (result instanceof Promise) {
-              result.catch(console.error)
-            }
-          } catch (error) {
-            console.error('Error in auto-refresh callback:', error)
-          }
-        })
+        setRefreshTrigger(prev => prev + 1) // Increment trigger to notify components
       }
 
       setTimeout(() => setIsRefreshing(false), 300)
     }, autoRefreshInterval.ms)
 
-    return () => clearInterval(interval)
-  }, [autoRefreshInterval, currentTimeRange.value, currentTimeRange.isCustom, refreshCallbacks])
+    return () => {
+      console.log('🔄 Auto-refresh: Clearing interval')
+      clearInterval(intervalId)
+    }
+  }, [autoRefreshInterval.ms, currentTimeRange.value, currentTimeRange.isCustom])
 
   const setTimeRange = useCallback((timeRange: TimeRange) => {
     setCurrentTimeRange(timeRange)
@@ -331,7 +327,8 @@ export const TimeRangeProvider: React.FC<TimeRangeProviderProps> = ({
     autoRefreshInterval,
     setAutoRefreshInterval,
     autoRefreshIntervals,
-    setCustomAutoRefreshInterval
+    setCustomAutoRefreshInterval,
+    refreshTrigger
   }
 
   return (

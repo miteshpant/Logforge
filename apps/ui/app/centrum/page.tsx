@@ -26,7 +26,7 @@ const MemoizedAIInsights = memo(AIInsightsWidget)
 const MemoizedAnomalyStats = memo(AnomalyStatsWidget)
 
 export default function CentrumPage() {
-  const { getApiTimeRange, currentTimeRange } = useTimeRange()
+  const { getApiTimeRange, currentTimeRange, refreshTrigger } = useTimeRange()
   const [logsData, setLogsData] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [alertsData, setAlertsData] = useState<any>(null)
@@ -303,7 +303,7 @@ export default function CentrumPage() {
       console.log('📊 Loading Usage data...')
       loadUsageOverview()
     }
-  }, [enableUsage, currentTimeRange.value])
+  }, [enableUsage, currentTimeRange.value, refreshTrigger])
 
   // Load Logs when enabled - 100ms delay to stagger API calls
   useEffect(() => {
@@ -314,7 +314,7 @@ export default function CentrumPage() {
       }, 100)
       return () => clearTimeout(timer)
     }
-  }, [enableLogs, currentTimeRange.value])
+  }, [enableLogs, currentTimeRange.value, refreshTrigger])
 
   // Load Alerts when enabled - 200ms delay
   useEffect(() => {
@@ -325,7 +325,7 @@ export default function CentrumPage() {
       }, 200)
       return () => clearTimeout(timer)
     }
-  }, [enableAlerts, currentTimeRange.value])
+  }, [enableAlerts, currentTimeRange.value, refreshTrigger])
 
   // Load Observability when enabled - 300ms delay
   useEffect(() => {
@@ -336,7 +336,7 @@ export default function CentrumPage() {
       }, 300)
       return () => clearTimeout(timer)
     }
-  }, [enableObservability, currentTimeRange.value])
+  }, [enableObservability, currentTimeRange.value, refreshTrigger])
 
   // Load Security when enabled - 400ms delay
   useEffect(() => {
@@ -347,7 +347,7 @@ export default function CentrumPage() {
       }, 400)
       return () => clearTimeout(timer)
     }
-  }, [enableSecurity, currentTimeRange.value])
+  }, [enableSecurity, currentTimeRange.value, refreshTrigger])
 
   return (
     <DashboardLayout>
