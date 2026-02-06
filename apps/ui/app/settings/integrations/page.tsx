@@ -65,6 +65,8 @@ export default function IntegrationsPage() {
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null)
   const [showConfigModal, setShowConfigModal] = useState(false)
+  const [configForm, setConfigForm] = useState<Record<string, string>>({})
+  const [isConnecting, setIsConnecting] = useState(false)
 
   useEffect(() => {
     loadIntegrations()
@@ -118,6 +120,32 @@ export default function IntegrationsPage() {
         i.id === integrationId ? { ...i, status: 'available' as const, config: undefined } : i
       ))
     }
+  }
+
+  const connectIntegration = async (integration: Integration) => {
+    if (!configForm || Object.keys(configForm).length === 0) {
+      alert('Please fill in the configuration fields')
+      return
+    }
+
+    setIsConnecting(true)
+    try {
+      await apiClient.post(`/v1/enterprise/integrations/${integration.id}/configure`, configForm)
+      setIntegrations(integrations.map(i =>
+        i.id === integration.id ? { ...i, status: 'connected' as const, config: configForm, lastSync: new Date().toISOString() } : i
+      ))
+      setShowConfigModal(false)
+      setConfigForm({})
+    } catch (error) {
+      console.error('Failed to connect integration:', error)
+      alert('Failed to connect integration. Please check your configuration.')
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+
+  const updateConfigField = (field: string, value: string) => {
+    setConfigForm(prev => ({ ...prev, [field]: value }))
   }
 
   const filteredIntegrations = integrations.filter(integration => {
@@ -327,6 +355,7 @@ export default function IntegrationsPage() {
                 className={`bg-slate-800/50 border rounded-lg p-4 cursor-pointer transition-all hover:bg-slate-800/70 ${getStatusColor(integration.status)}`}
                 onClick={() => {
                   setSelectedIntegration(integration)
+                  setConfigForm({})
                   setShowConfigModal(true)
                 }}
               >
@@ -446,6 +475,8 @@ export default function IntegrationsPage() {
                           <input
                             type="text"
                             placeholder="https://hooks.slack.com/services/..."
+                            value={configForm.webhook_url || ''}
+                            onChange={(e) => updateConfigField('webhook_url', e.target.value)}
                             className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm"
                           />
                         </div>
@@ -454,6 +485,8 @@ export default function IntegrationsPage() {
                           <input
                             type="text"
                             placeholder="#alerts"
+                            value={configForm.channel || ''}
+                            onChange={(e) => updateConfigField('channel', e.target.value)}
                             className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm"
                           />
                         </div>
@@ -466,6 +499,8 @@ export default function IntegrationsPage() {
                           <input
                             type="password"
                             placeholder="Enter your PagerDuty API key"
+                            value={configForm.api_key || ''}
+                            onChange={(e) => updateConfigField('api_key', e.target.value)}
                             className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm"
                           />
                         </div>
@@ -474,6 +509,8 @@ export default function IntegrationsPage() {
                           <input
                             type="text"
                             placeholder="PXXXXXX"
+                            value={configForm.service_id || ''}
+                            onChange={(e) => updateConfigField('service_id', e.target.value)}
                             className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm"
                           />
                         </div>
@@ -486,6 +523,8 @@ export default function IntegrationsPage() {
                           <input
                             type="password"
                             placeholder="Enter your API key"
+                            value={configForm.api_key || ''}
+                            onChange={(e) => updateConfigField('api_key', e.target.value)}
                             className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm"
                           />
                         </div>
@@ -494,6 +533,8 @@ export default function IntegrationsPage() {
                           <input
                             type="text"
                             placeholder="https://api.example.com"
+                            value={configForm.endpoint_url || ''}
+                            onChange={(e) => updateConfigField('endpoint_url', e.target.value)}
                             className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm"
                           />
                         </div>
@@ -555,8 +596,12 @@ export default function IntegrationsPage() {
                   </>
                 )}
                 {selectedIntegration.status === 'available' && (
-                  <button className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors">
-                    Connect
+                  <button
+                    onClick={() => connectIntegration(selectedIntegration)}
+                    disabled={isConnecting}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-800 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                  >
+                    {isConnecting ? 'Connecting...' : 'Connect'}
                   </button>
                 )}
                 {selectedIntegration.status === 'error' && (
