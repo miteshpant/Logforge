@@ -18,7 +18,7 @@ def load_config() -> Dict[str, Any]:
         "redis_port": int(os.getenv("REDIS_PORT", "6379")),
         "redis_db": int(os.getenv("REDIS_DB", "0")),
         "log_level": os.getenv("LOG_LEVEL", "INFO"),
-        "cors_origins": os.getenv("CORS_ORIGINS", "http://localhost:3001,http://localhost:3000,http://localhost:3002").split(","),
+        "cors_origins": [origin.strip() for origin in os.getenv("CORS_ORIGINS", "http://localhost:3001,http://localhost:3000,http://localhost:3002").split(",")],
         "max_workers": int(os.getenv("MAX_WORKERS", "4")),
         "environment": os.getenv("ENVIRONMENT", "development")
     }

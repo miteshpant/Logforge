@@ -193,6 +193,38 @@ async def get_user_profile(current_user: User = Depends(get_current_user)):
         email_verified_at=current_user.email_verified_at
     )
 
+@router.get("/me/roles")
+async def get_current_user_roles(
+    current_user: User = Depends(get_current_user),
+    request: Request = None
+):
+    """Get current user's role assignments"""
+    try:
+        from services.role_service import RoleService
+        role_service = RoleService()
+
+        # Get all roles for current user
+        user_roles = await role_service.get_user_roles(current_user.id)
+
+        roles_response = []
+        for role in user_roles:
+            roles_response.append({
+                "id": role.id,
+                "tenant_id": role.tenant_id,
+                "role": role.role.value if hasattr(role.role, 'value') else role.role,
+                "granted_at": role.granted_at.isoformat() if role.granted_at else None,
+                "status": role.status.value if hasattr(role.status, 'value') else role.status
+            })
+
+        return {
+            "user_id": current_user.id,
+            "roles": roles_response
+        }
+
+    except Exception as e:
+        logger.error("Failed to get user roles", user_id=current_user.id, error=str(e))
+        raise HTTPException(500, "Failed to retrieve user roles")
+
 # =================================================================
 # PLATFORM SETUP ENDPOINTS
 # =================================================================
