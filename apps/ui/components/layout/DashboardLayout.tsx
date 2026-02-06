@@ -57,6 +57,7 @@ import {
   Link2,
   TrendingUp,
   MessageSquare,
+  Key,
 } from 'lucide-react'
 import { TenantSelector } from '@/components/TenantSelector'
 import PWASupport from '@/components/PWASupport'
@@ -129,6 +130,7 @@ const navSections: NavSection[] = [
     label: 'Settings',
     icon: Settings,
     items: [
+      { name: 'Authentication', href: '/settings/authentication', icon: Key },
       { name: 'Integrations', href: '/settings/integrations', icon: Puzzle },
       { name: 'Roles & Access', href: '/settings/roles', icon: UserCog },
       { name: 'Cost Analytics', href: '/settings/costs', icon: DollarSign },
