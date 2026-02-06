@@ -41,7 +41,7 @@ interface SecurityEvent {
 }
 
 export default function SecurityEventsPage() {
-  const { getApiTimeRange } = useTimeRange()
+  const { getApiTimeRange, refreshTrigger } = useTimeRange()
   const [events, setEvents] = useState<SecurityEvent[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedEvent, setSelectedEvent] = useState<SecurityEvent | null>(null)
@@ -85,7 +85,7 @@ export default function SecurityEventsPage() {
 
   useEffect(() => {
     loadEvents()
-  }, [severityFilter, statusFilter])
+  }, [severityFilter, statusFilter, refreshTrigger])
 
   const handleAcknowledge = async (eventId: string) => {
     setIsActionLoading(true)

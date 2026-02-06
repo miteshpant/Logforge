@@ -127,7 +127,7 @@ interface TrendsResponse {
 }
 
 export default function AlertCorrelationPage() {
-  const { getApiTimeRange } = useTimeRange()
+  const { getApiTimeRange, refreshTrigger } = useTimeRange()
 
   // Summary
   const [summary, setSummary] = useState<CorrelationSummary | null>(null)
@@ -168,7 +168,7 @@ export default function AlertCorrelationPage() {
     } finally {
       setIsLoadingSummary(false)
     }
-  }, [getApiTimeRange])
+  }, [getApiTimeRange, refreshTrigger])
 
   const loadFatigueScore = useCallback(async () => {
     try {

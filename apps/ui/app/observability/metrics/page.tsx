@@ -207,7 +207,7 @@ const formatValue = (value: number, unit: string): { value: string; unit: string
 }
 
 export default function MetricsExplorerPage() {
-  const { getApiTimeRange, currentTimeRange } = useTimeRange()
+  const { getApiTimeRange, currentTimeRange, refreshTrigger } = useTimeRange()
 
   // Selected metrics and options
   const [selectedMetrics, setSelectedMetrics] = useState<MetricType[]>(['response_time', 'throughput'])
@@ -367,7 +367,7 @@ export default function MetricsExplorerPage() {
     if (selectedMetrics.length > 0) {
       queryMetrics()
     }
-  }, [aggregation, selectedService, currentTimeRange.value])
+  }, [aggregation, selectedService, currentTimeRange.value, refreshTrigger])
 
   // Initial load
   useEffect(() => {

@@ -56,7 +56,7 @@ interface CostRecommendation {
 
 export default function CostAnalyticsPage() {
   const { tenant } = useAuth()
-  const { getApiTimeRange } = useTimeRange()
+  const { getApiTimeRange, refreshTrigger } = useTimeRange()
   const [usageStats, setUsageStats] = useState<UsageStat[]>([])
   const [alerts, setAlerts] = useState<CostAlert[]>([])
   const [recommendations, setRecommendations] = useState<CostRecommendation[]>([])
@@ -136,7 +136,7 @@ export default function CostAnalyticsPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [tenant?.id, getApiTimeRange])
+  }, [tenant?.id, getApiTimeRange, refreshTrigger])
 
   useEffect(() => {
     loadData()

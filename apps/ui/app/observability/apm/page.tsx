@@ -110,7 +110,7 @@ function getComparisonTimeRange(
 }
 
 export default function APMPage() {
-  const { getApiTimeRange, currentTimeRange } = useTimeRange()
+  const { getApiTimeRange, currentTimeRange, refreshTrigger } = useTimeRange()
 
   // Separate state for each component
   const [services, setServices] = useState<ServicePerformance[]>([])
@@ -364,7 +364,7 @@ export default function APMPage() {
     } else {
       setComparisonServices([])
     }
-  }, [comparisonPeriod, currentTimeRange.value])
+  }, [comparisonPeriod, currentTimeRange.value, refreshTrigger])
 
   // Progressive loading - Enable components one by one
   useEffect(() => {
@@ -397,12 +397,12 @@ export default function APMPage() {
       if (errorRatesAbortRef.current) errorRatesAbortRef.current.abort()
       if (transactionsAbortRef.current) transactionsAbortRef.current.abort()
     }
-  }, [currentTimeRange.value])
+  }, [currentTimeRange.value, refreshTrigger])
 
   // Load Services when enabled
   useEffect(() => {
     if (enableServices) loadServices()
-  }, [enableServices, currentTimeRange.value])
+  }, [enableServices, currentTimeRange.value, refreshTrigger])
 
   // Load Endpoints when enabled
   useEffect(() => {
@@ -410,7 +410,7 @@ export default function APMPage() {
       const timer = setTimeout(() => loadEndpoints(), 100)
       return () => clearTimeout(timer)
     }
-  }, [enableEndpoints, currentTimeRange.value])
+  }, [enableEndpoints, currentTimeRange.value, refreshTrigger])
 
   // Load Error Rates when enabled
   useEffect(() => {
@@ -418,7 +418,7 @@ export default function APMPage() {
       const timer = setTimeout(() => loadErrorRates(), 200)
       return () => clearTimeout(timer)
     }
-  }, [enableErrorRates, currentTimeRange.value])
+  }, [enableErrorRates, currentTimeRange.value, refreshTrigger])
 
   // Load Transactions when enabled
   useEffect(() => {
@@ -426,7 +426,7 @@ export default function APMPage() {
       const timer = setTimeout(() => loadTransactions(), 300)
       return () => clearTimeout(timer)
     }
-  }, [enableTransactions, currentTimeRange.value])
+  }, [enableTransactions, currentTimeRange.value, refreshTrigger])
 
   // Load trends when services finish loading
   useEffect(() => {
@@ -434,7 +434,7 @@ export default function APMPage() {
       const timer = setTimeout(() => loadTrends(), 400)
       return () => clearTimeout(timer)
     }
-  }, [isLoadingServices, currentTimeRange.value])
+  }, [isLoadingServices, currentTimeRange.value, refreshTrigger])
 
   // Manual refresh
   const handleRefresh = () => {

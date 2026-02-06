@@ -57,7 +57,7 @@ const LOG_LEVEL_STYLES: Record<string, { bg: string; text: string; icon: React.R
 }
 
 export default function LogExplorerPage() {
-  const { getApiTimeRange } = useTimeRange()
+  const { getApiTimeRange, refreshTrigger } = useTimeRange()
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [stats, setStats] = useState<LogStats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -220,7 +220,7 @@ export default function LogExplorerPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [getApiTimeRange, searchQuery, levelFilter, serviceFilter])
+  }, [getApiTimeRange, searchQuery, levelFilter, serviceFilter, refreshTrigger])
 
   useEffect(() => {
     loadLogs()

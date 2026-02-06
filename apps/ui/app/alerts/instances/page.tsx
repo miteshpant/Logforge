@@ -71,7 +71,7 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
 }
 
 export default function AlertInstancesPage() {
-  const { getApiTimeRange } = useTimeRange()
+  const { getApiTimeRange, refreshTrigger } = useTimeRange()
   const [instances, setInstances] = useState<AlertInstance[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedInstance, setSelectedInstance] = useState<AlertInstance | null>(null)
@@ -103,7 +103,7 @@ export default function AlertInstancesPage() {
     } finally {
       setIsLoadingStats(false)
     }
-  }, [getApiTimeRange])
+  }, [getApiTimeRange, refreshTrigger])
 
   const loadAlertDetail = useCallback(async (alertId: string) => {
     try {
@@ -160,7 +160,7 @@ export default function AlertInstancesPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [getApiTimeRange, filterStatus, filterSeverity])
+  }, [getApiTimeRange, filterStatus, filterSeverity, refreshTrigger])
 
   useEffect(() => {
     loadInstances()

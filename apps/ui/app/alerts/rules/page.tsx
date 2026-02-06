@@ -96,7 +96,7 @@ const RULE_TYPE_ICONS: Record<string, React.ReactNode> = {
 }
 
 export default function AlertRulesPage() {
-  const { getApiTimeRange } = useTimeRange()
+  const { getApiTimeRange, refreshTrigger } = useTimeRange()
   const [rules, setRules] = useState<AlertRule[]>([])
   const [channels, setChannels] = useState<NotificationChannel[]>([])
   const [stats, setStats] = useState<AlertStats | null>(null)
@@ -160,7 +160,7 @@ export default function AlertRulesPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [getApiTimeRange])
+  }, [getApiTimeRange, refreshTrigger])
 
   useEffect(() => {
     loadData()
