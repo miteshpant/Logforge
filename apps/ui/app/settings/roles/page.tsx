@@ -40,9 +40,11 @@ interface Role {
   is_system: boolean
   is_default: boolean
   permissions: string[]
-  user_count: number
-  created_at: string
-  updated_at: string
+  // Optional — only rendered when the server actually reports them
+  user_count?: number
+  created_at?: string
+  updated_at?: string
+  scope?: string
 }
 
 interface User {
@@ -118,30 +120,91 @@ export default function RolesPage() {
   const [showUserModal, setShowUserModal] = useState(false)
   const [expandedCategories, setExpandedCategories] = useState<string[]>(PERMISSION_CATEGORIES.map(c => c.id))
   const [editingRole, setEditingRole] = useState<Partial<Role> | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
     loadData()
   }, [])
 
+  // /v1/enterprise/rbac/roles returns {platform_roles: {...}, tenant_roles: {...}, custom_roles: [...]}
+  // where platform/tenant roles are dicts keyed by role id. Map that shape to Role[].
+  const mapRolesResponse = (data: any): Role[] => {
+    const mapped: Role[] = []
+    const mapDict = (dict: Record<string, any> | undefined, isSystem: boolean) => {
+      if (!dict || typeof dict !== 'object') return
+      Object.entries(dict).forEach(([id, r]: [string, any]) => {
+        mapped.push({
+          id: r.id || id,
+          name: r.name || id,
+          description: r.description || '',
+          is_system: isSystem,
+          is_default: r.is_default || false,
+          permissions: Array.isArray(r.permissions) ? r.permissions : [],
+          user_count: r.user_count,
+          created_at: r.created_at,
+          updated_at: r.updated_at,
+          scope: r.scope
+        })
+      })
+    }
+    mapDict(data?.platform_roles, true)
+    mapDict(data?.tenant_roles, true)
+    if (Array.isArray(data?.custom_roles)) {
+      data.custom_roles.forEach((r: any) => {
+        mapped.push({
+          id: r.id || r.role_id || r.name,
+          name: r.name || r.role_id || 'Custom role',
+          description: r.description || '',
+          is_system: false,
+          is_default: r.is_default || false,
+          permissions: Array.isArray(r.permissions) ? r.permissions : [],
+          user_count: r.user_count,
+          created_at: r.created_at,
+          updated_at: r.updated_at,
+          scope: r.scope
+        })
+      })
+    }
+    // Legacy shapes: {roles: [...]} or a bare array
+    if (mapped.length === 0) {
+      const legacy = data?.roles || (Array.isArray(data) ? data : [])
+      if (Array.isArray(legacy)) return legacy
+    }
+    return mapped
+  }
+
   const loadData = async () => {
     try {
       setIsLoading(true)
+      setLoadError(null)
       const [rolesRes, usersRes] = await Promise.allSettled([
         apiClient.get('/v1/enterprise/rbac/roles'),
         apiClient.get('/v1/users')
       ])
 
       if (rolesRes.status === 'fulfilled' && rolesRes.value?.data) {
-        const data = rolesRes.value.data
-        setRoles(data.roles || (Array.isArray(data) ? data : []))
+        setRoles(mapRolesResponse(rolesRes.value.data))
+      } else if (rolesRes.status === 'rejected') {
+        const err: any = rolesRes.reason
+        setLoadError(`Failed to load roles: GET /v1/enterprise/rbac/roles returned ${err?.status ?? 'a network error'}`)
       }
 
       if (usersRes.status === 'fulfilled' && usersRes.value?.data) {
         const data = usersRes.value.data
         setUsers(data.users || (Array.isArray(data) ? data : []))
+      } else if (usersRes.status === 'rejected') {
+        const err: any = usersRes.reason
+        setLoadError(prev => {
+          const msg = `Failed to load users: GET /v1/users returned ${err?.status ?? 'a network error'}`
+          return prev ? `${prev}; ${msg}` : msg
+        })
       }
     } catch (error) {
       console.error('Failed to load data:', error)
+      setLoadError('Failed to load role management data')
     } finally {
       setIsLoading(false)
     }
@@ -164,6 +227,7 @@ export default function RolesPage() {
   }
 
   const handleCreateRole = () => {
+    setSaveError(null)
     setEditingRole({
       name: '',
       description: '',
@@ -179,6 +243,7 @@ export default function RolesPage() {
       alert('System roles cannot be edited. Create a custom role instead.')
       return
     }
+    setSaveError(null)
     setEditingRole({ ...role })
     setShowRoleModal(true)
   }
@@ -186,53 +251,32 @@ export default function RolesPage() {
   const handleSaveRole = async () => {
     if (!editingRole?.name) return
 
+    setIsSaving(true)
+    setSaveError(null)
     try {
       if (editingRole.id) {
         await apiClient.put(`/v1/enterprise/rbac/roles/${editingRole.id}`, editingRole)
       } else {
         await apiClient.post('/v1/enterprise/rbac/roles', editingRole)
       }
-      // Refresh or mock update
-      setRoles(prev => {
-        if (editingRole.id) {
-          return prev.map(r => r.id === editingRole.id ? { ...r, ...editingRole } as Role : r)
-        }
-        const newRole: Role = {
-          id: `custom_${Date.now()}`,
-          name: editingRole.name || '',
-          description: editingRole.description || '',
-          is_system: false,
-          is_default: false,
-          permissions: editingRole.permissions || [],
-          user_count: 0,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }
-        return [...prev, newRole]
-      })
-    } catch (error) {
+      // Persisted — refetch so the list reflects the server state (and the
+      // server-assigned role id), instead of synthesising a row locally.
+      await loadData()
+      setShowRoleModal(false)
+      setEditingRole(null)
+    } catch (error: any) {
       console.error('Failed to save role:', error)
-      // Mock update anyway for demo
-      setRoles(prev => {
-        if (editingRole.id) {
-          return prev.map(r => r.id === editingRole.id ? { ...r, ...editingRole } as Role : r)
-        }
-        const newRole: Role = {
-          id: `custom_${Date.now()}`,
-          name: editingRole.name || '',
-          description: editingRole.description || '',
-          is_system: false,
-          is_default: false,
-          permissions: editingRole.permissions || [],
-          user_count: 0,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }
-        return [...prev, newRole]
-      })
+      // The role was NOT saved. Keep the dialog open with the user's input
+      // intact and surface the failure — never pretend it succeeded.
+      const endpoint = editingRole.id
+        ? `PUT /v1/enterprise/rbac/roles/${editingRole.id}`
+        : 'POST /v1/enterprise/rbac/roles'
+      setSaveError(
+        `Role was not saved: ${endpoint} returned ${error?.status ?? 'a network error'}${error?.message ? ` — ${error.message}` : ''}`
+      )
+    } finally {
+      setIsSaving(false)
     }
-    setShowRoleModal(false)
-    setEditingRole(null)
   }
 
   const handleDeleteRole = async (roleId: string) => {
@@ -248,12 +292,18 @@ export default function RolesPage() {
     }
     if (!confirm('Are you sure you want to delete this role?')) return
 
+    setActionError(null)
     try {
       await apiClient.delete(`/v1/enterprise/rbac/roles/${roleId}`)
-    } catch (error) {
+      // Deleted on the server — refetch so the list reflects server state
+      await loadData()
+    } catch (error: any) {
       console.error('Failed to delete role:', error)
+      // The role was NOT deleted — keep it in the list and surface the failure
+      setActionError(
+        `Role was not deleted: DELETE /v1/enterprise/rbac/roles/${roleId} returned ${error?.status ?? 'a network error'}${error?.message ? ` — ${error.message}` : ''}`
+      )
     }
-    setRoles(prev => prev.filter(r => r.id !== roleId))
   }
 
   const filteredRoles = roles.filter(role =>
@@ -338,6 +388,25 @@ export default function RolesPage() {
           />
         </div>
 
+        {/* Load / action errors */}
+        {loadError && (
+          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+            <p className="text-sm text-red-400">{loadError}</p>
+          </div>
+        )}
+        {actionError && (
+          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start justify-between gap-2">
+            <div className="flex items-start gap-2">
+              <XCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+              <p className="text-sm text-red-400">{actionError}</p>
+            </div>
+            <button onClick={() => setActionError(null)} className="text-red-400 hover:text-red-300">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* Content */}
         {isLoading ? (
           <div className="flex items-center justify-center h-48">
@@ -378,18 +447,22 @@ export default function RolesPage() {
                       </div>
                       <p className="text-slate-400 text-sm mt-1">{role.description}</p>
                       <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
-                        <span className="flex items-center gap-1">
-                          <Users className="w-3 h-3" />
-                          {role.user_count} users
-                        </span>
+                        {role.user_count !== undefined && (
+                          <span className="flex items-center gap-1">
+                            <Users className="w-3 h-3" />
+                            {role.user_count} users
+                          </span>
+                        )}
                         <span className="flex items-center gap-1">
                           <Lock className="w-3 h-3" />
                           {role.permissions.length} permissions
                         </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          Updated {formatTimeAgo(role.updated_at)}
-                        </span>
+                        {role.updated_at && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            Updated {formatTimeAgo(role.updated_at)}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -454,11 +527,11 @@ export default function RolesPage() {
                     <div className="flex flex-wrap gap-1.5 mt-3">
                       {role.permissions.map(pId => {
                         const perm = ALL_PERMISSIONS.find(p => p.id === pId)
-                        return perm ? (
+                        return (
                           <span key={pId} className="px-2 py-1 bg-green-500/10 text-green-400 text-xs rounded border border-green-500/20">
-                            {perm.name}
+                            {perm ? perm.name : pId}
                           </span>
-                        ) : null
+                        )
                       })}
                     </div>
                   </div>
@@ -534,6 +607,7 @@ export default function RolesPage() {
                   onClick={() => {
                     setShowRoleModal(false)
                     setEditingRole(null)
+                    setSaveError(null)
                   }}
                   className="text-slate-400 hover:text-white"
                 >
@@ -636,11 +710,19 @@ export default function RolesPage() {
                 </div>
               </div>
 
+              {saveError && (
+                <div className="mx-4 mb-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-2">
+                  <XCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+                  <p className="text-sm text-red-400">{saveError}</p>
+                </div>
+              )}
+
               <div className="flex justify-end gap-3 p-4 border-t border-white/5">
                 <button
                   onClick={() => {
                     setShowRoleModal(false)
                     setEditingRole(null)
+                    setSaveError(null)
                   }}
                   className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
                 >
@@ -648,11 +730,11 @@ export default function RolesPage() {
                 </button>
                 <button
                   onClick={handleSaveRole}
-                  disabled={!editingRole.name}
+                  disabled={!editingRole.name || isSaving}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
                 >
                   <Save className="w-4 h-4" />
-                  {editingRole.id ? 'Save Changes' : 'Create Role'}
+                  {isSaving ? 'Saving...' : editingRole.id ? 'Save Changes' : 'Create Role'}
                 </button>
               </div>
             </div>

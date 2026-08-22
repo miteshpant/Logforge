@@ -760,8 +760,18 @@ class UserRouterTestSuite(BaseTestSuite):
                 status=UserStatus.ACTIVE
             )
             
+            # ENH-032: `tenant_id`/`user_role` are required by the service
+            # signature. This user is intentionally UNPRIVILEGED -- the test
+            # asserts that a 'viewer' cannot create users -- so it is scoped to
+            # the test tenant with the lowest-privilege role.
             user_service = UserService()
-            regular_session = await user_service.create_session(regular_user, '127.0.0.1', 'test-client')
+            regular_session = await user_service.create_session(
+                user=regular_user,
+                ip_address='127.0.0.1',
+                user_agent='test-client',
+                tenant_id=self.test_tenant_id,
+                user_role='viewer',
+            )
             regular_token = regular_session["access_token"]
 
             # Try to create user with regular user credentials (should fail)

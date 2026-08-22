@@ -7,13 +7,87 @@ Significantly reduces connection overhead and improves performance.
 
 import os
 import asyncio
+import threading
 from typing import Optional, Dict, Any
 from contextlib import asynccontextmanager
 import clickhouse_connect
+import clickhouse_connect.common
 import httpx
 import structlog
 
 logger = structlog.get_logger(__name__)
+
+
+def _clickhouse_config() -> Dict[str, Any]:
+    """Connection parameters, read once per client construction."""
+    return {
+        'host': os.getenv('CLICKHOUSE_HOST', 'clickhouse'),
+        'port': int(os.getenv('CLICKHOUSE_PORT', '8123')),
+        'username': os.getenv('CLICKHOUSE_USER', 'logforge'),
+        'password': os.getenv('CLICKHOUSE_PASSWORD', 'logforge123'),
+        'database': os.getenv('CLICKHOUSE_DATABASE', 'logforge'),
+    }
+
+
+# ---------------------------------------------------------------------------
+# LF-002: process-wide shared ClickHouse client (synchronous accessor)
+#
+# `DatabaseLayer.__init__` is synchronous and is constructed by DAOs on every
+# request, so it cannot await `ClickHousePool.get_instance()`. This accessor
+# gives it the same shared client through a plain function guarded by a
+# threading lock. `ClickHousePool` reuses it too, so there is exactly ONE
+# underlying client per process regardless of which path initialized first.
+# ---------------------------------------------------------------------------
+_shared_client: Optional[Any] = None
+_shared_client_lock = threading.Lock()
+
+
+def get_shared_client() -> Any:
+    """
+    Get the process-wide shared ClickHouse client, creating it on first use.
+
+    clickhouse-connect clients are safe to share: queries go over a pooled
+    urllib3 HTTP connection. Session-id autogeneration is disabled so that
+    concurrent queries through the one client never collide on a server-side
+    session lock.
+
+    Raises on failure -- callers must surface a real connection error, never
+    fabricate a working client.
+    """
+    global _shared_client
+    if _shared_client is not None:
+        return _shared_client
+
+    with _shared_client_lock:
+        if _shared_client is None:
+            # Concurrent queries within one ClickHouse session are rejected
+            # by the server; a shared client must not pin one session.
+            clickhouse_connect.common.set_setting('autogenerate_session_id', False)
+            config = _clickhouse_config()
+            client = clickhouse_connect.get_client(
+                **config,
+                compress=True,
+                send_receive_timeout=120,
+            )
+            logger.info(
+                "Shared ClickHouse client initialized",
+                host=config['host'],
+                database=config['database'],
+            )
+            _shared_client = client
+    return _shared_client
+
+
+def reset_shared_client():
+    """Close and drop the shared client (shutdown / tests)."""
+    global _shared_client
+    with _shared_client_lock:
+        if _shared_client is not None:
+            try:
+                _shared_client.close()
+            except Exception as e:
+                logger.warning("Error closing shared ClickHouse client", error=str(e))
+            _shared_client = None
 
 
 class ClickHousePool:
@@ -30,13 +104,7 @@ class ClickHousePool:
     def __init__(self):
         self._clients: Dict[str, Any] = {}
         self._default_client: Optional[Any] = None
-        self._config = {
-            'host': os.getenv('CLICKHOUSE_HOST', 'clickhouse'),
-            'port': int(os.getenv('CLICKHOUSE_PORT', '8123')),
-            'username': os.getenv('CLICKHOUSE_USER', 'logforge'),
-            'password': os.getenv('CLICKHOUSE_PASSWORD', 'logforge123'),
-            'database': os.getenv('CLICKHOUSE_DATABASE', 'logforge'),
-        }
+        self._config = _clickhouse_config()
         self._initialized = False
 
     @classmethod
@@ -55,12 +123,9 @@ class ClickHousePool:
             return
 
         try:
-            self._default_client = clickhouse_connect.get_client(
-                **self._config,
-                # Connection pool settings
-                compress=True,  # Enable compression
-                send_receive_timeout=30,  # 30 second timeout
-            )
+            # LF-002: reuse the process-wide shared client so the async pool
+            # and the synchronous `DatabaseLayer` path hold the SAME client.
+            self._default_client = get_shared_client()
             self._initialized = True
             logger.info(
                 "ClickHouse connection pool initialized",
@@ -108,11 +173,10 @@ class ClickHousePool:
     async def close(self):
         """Close all connections in the pool."""
         if self._default_client:
-            try:
-                self._default_client.close()
-                logger.info("ClickHouse connection pool closed")
-            except Exception as e:
-                logger.error("Error closing ClickHouse pool", error=str(e))
+            # The default client IS the process-wide shared client; close it
+            # through the shared accessor so both handles are invalidated.
+            reset_shared_client()
+            logger.info("ClickHouse connection pool closed")
 
         self._default_client = None
         self._initialized = False

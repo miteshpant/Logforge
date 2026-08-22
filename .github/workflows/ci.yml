@@ -1,0 +1,168 @@
+name: CI
+
+# ENH-011: before this workflow existed, `.github/workflows/` was empty --
+# nothing prevented a broken or vulnerable change from merging. Every gain from
+# ENH-001 through ENH-033 (SQL-injection guards, fail-closed auth, delivery
+# confirmation, buffer bounds) is enforced by tests that nothing was running.
+#
+# Jobs are deliberately independent so one slow/flaky area cannot mask another.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref -- CI minutes are a real cost.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+
+jobs:
+  api-tests:
+    name: API tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r apps/api/requirements.txt
+
+      - name: Run tests
+        # The routes_tests suite needs live ClickHouse/Kafka/Redis, which this
+        # job does not provision. It is excluded here rather than allowed to
+        # fail, so a red run always means a real regression.
+        # Wiring up service containers for it is tracked as follow-up.
+        run: |
+          pytest tests/ \
+            --ignore=tests/routes_tests \
+            -v \
+            --junitxml=junit-api.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-test-results
+          path: junit-api.xml
+
+  api-lint:
+    name: API lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install linters
+        run: pip install ruff
+
+      - name: Ruff
+        # Advisory for now: the existing codebase has a large backlog of style
+        # findings and failing the build on them would block every PR. Errors
+        # that indicate real bugs (F821 undefined name, F811 redefinition) are
+        # enforced below.
+        continue-on-error: true
+        run: ruff check apps/api --output-format=github
+
+      - name: Ruff (blocking correctness rules)
+        # F821 (undefined name) and F811 (redefinition) catch real crashes, not
+        # style. Adding this gate immediately surfaced three live bugs:
+        #   - storage_dao.py used `timedelta` without importing it (NameError)
+        #   - parsers.py referenced `kwargs` it never accepted (NameError on
+        #     every JSON-format nginx log)
+        #   - ai_api.py registered two handlers on the same route, the first of
+        #     which imported a non-existent module (500 on every call)
+        # All three are fixed; this gate keeps them fixed.
+        #
+        # F402 (import shadowed by loop variable) is NOT blocking: the four
+        # occurrences in high_performance_normalizer.py are latent hazards
+        # rather than current bugs, and that file is a hot path not worth
+        # churning here. It is reported by the advisory step above.
+        run: |
+          ruff check apps/api \
+            --select F821,F811 \
+            --output-format=github
+
+  security-scan:
+    name: Security scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # gitleaks needs history to scan commits, not just the tip.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install scanners
+        run: pip install pip-audit bandit
+
+      - name: Dependency vulnerabilities
+        continue-on-error: true
+        run: pip-audit -r apps/api/requirements.txt
+
+      - name: Static security analysis
+        # -ll: report medium and high severity only, to keep signal high.
+        continue-on-error: true
+        run: bandit -r apps/api -ll -f screen
+
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  ui-build:
+    name: UI build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [ui, admin-ui]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/${{ matrix.app }}/package-lock.json
+
+      - name: Install
+        working-directory: apps/${{ matrix.app }}
+        run: npm ci
+
+      - name: Type check
+        working-directory: apps/${{ matrix.app }}
+        continue-on-error: true
+        run: npx tsc --noEmit
+
+      - name: Build
+        working-directory: apps/${{ matrix.app }}
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: npm run build

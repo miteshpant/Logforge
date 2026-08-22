@@ -1,0 +1,50 @@
+title: Security Event Log Clearing
+id: de002-event-log-clearing
+status: stable
+description: >
+  Detects clearing or deletion of security event logs. Log destruction is a
+  near-unambiguous indicator of intrusion: legitimate administration almost
+  never clears the security log, and attackers do it to remove evidence of
+  their activity. A hit here should be treated as an active incident.
+author: Logforge Security Team
+date: 2026/08/13
+references:
+    - https://attack.mitre.org/techniques/T1070/001/
+    - https://attack.mitre.org/techniques/T1070/002/
+tags:
+    - attack.defense_evasion
+    - attack.t1070.001
+    - anti_forensics
+    - log_tampering
+logsource:
+    category: process_creation
+detection:
+    selection_wevtutil:
+        command_line|contains:
+            - "wevtutil cl"
+            - "wevtutil clear-log"
+    selection_powershell:
+        command_line|contains:
+            - "Clear-EventLog"
+            - "Remove-EventLog"
+    selection_linux:
+        command_line|contains:
+            - "rm /var/log/auth.log"
+            - "rm -rf /var/log"
+            - "truncate -s 0 /var/log"
+    selection_event:
+        # Windows records log clearing as its own audit event.
+        event_id:
+            - 1102
+            - 104
+    condition: 1 of selection_*
+fields:
+    - command_line
+    - user
+    - host
+    - event_id
+falsepositives:
+    - Scheduled log rotation scripts that truncate rather than rotate
+    - Golden-image preparation before cloning a workstation
+    - Deliberate log hygiene during decommissioning (should be change-managed)
+level: critical

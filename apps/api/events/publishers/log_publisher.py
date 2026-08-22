@@ -4,6 +4,7 @@ Specialized publisher for log lifecycle events
 """
 
 import asyncio
+import json
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 import structlog
@@ -27,9 +28,57 @@ logger = structlog.get_logger(__name__)
 class LogEventPublisher:
     """Publisher for log lifecycle events"""
 
+    # ENH-024: Kafka's max_request_size is 1 MiB (config/events.yml:9). The
+    # budget below leaves headroom for event envelope, metadata and protocol
+    # overhead, so a chunk that fits here fits on the wire.
+    MAX_PAYLOAD_BYTES = 700 * 1024
+
     def __init__(self, publisher_manager):
         self.publisher_manager = publisher_manager
         self.logger = logger.bind(component="log_event_publisher")
+
+    def _chunk_logs(self, logs: List[Any]) -> List[List[Any]]:
+        """
+        Split a log list into chunks that each fit within the Kafka message cap.
+
+        Sized by ACTUAL serialized bytes rather than a fixed record count,
+        because log size varies by orders of magnitude between formats -- a
+        count-based split would still produce oversized messages for verbose
+        records.
+
+        A single record larger than the budget is emitted alone: it will very
+        likely be rejected by the broker, but that failure is now visible
+        (ENH-006) instead of taking an entire batch down with it.
+        """
+        if not logs:
+            # One empty chunk, so a batch with no logs still publishes its
+            # metadata event exactly as before.
+            return [[]]
+
+        chunks: List[List[Any]] = []
+        current: List[Any] = []
+        current_bytes = 0
+
+        for record in logs:
+            try:
+                size = len(json.dumps(record, default=str).encode("utf-8"))
+            except (TypeError, ValueError):
+                # Unserialisable record: assume worst case rather than
+                # under-counting and producing an oversized message.
+                size = self.MAX_PAYLOAD_BYTES
+
+            if current and current_bytes + size > self.MAX_PAYLOAD_BYTES:
+                chunks.append(current)
+                current = []
+                current_bytes = 0
+
+            current.append(record)
+            current_bytes += size
+
+        if current:
+            chunks.append(current)
+
+        return chunks
 
     async def publish_batch_ingested(
         self,
@@ -52,48 +101,74 @@ class LogEventPublisher:
             trace_id: Distributed tracing ID
         """
         try:
-            # Debug logging to trace endpoint value
             endpoint_from_batch = batch_info.get("endpoint", "unknown")
+            all_logs = batch_info.get("logs", []) or []
+
+            # ENH-024: split oversized batches.
+            #
+            # The whole log payload travels inside the event. Kafka's
+            # `max_request_size` is 1 MiB (config/events.yml:9), so a large
+            # ingest batch produced a message the broker rejects -- and until
+            # ENH-006 that rejection was silent, so the logs simply vanished.
+            #
+            # Chunking keeps each message under the cap. Chunks carry
+            # `chunk_index`/`chunk_count` so a consumer can tell a split batch
+            # from a whole one.
+            chunks = self._chunk_logs(all_logs)
+            total_chunks = len(chunks)
+
             self.logger.info(
-                f"LOG_PUBLISHER DEBUG: Creating event data with endpoint",
+                "Publishing log batch",
                 customer_id=customer_id,
-                endpoint_from_batch=endpoint_from_batch,
-                batch_info_keys=list(batch_info.keys()),
-                source_format=source_format
-            )
-            
-            event_data = {
-                "batch_id": batch_info.get("batch_id"),
-                "log_count": batch_info.get("log_count", 0),
-                "source_format": source_format,
-                "processing_time_ms": processing_time_ms,
-                "bytes_processed": batch_info.get("bytes_processed", 0),
-                "ingestion_endpoint": endpoint_from_batch,
-                "timestamp": batch_info.get("timestamp"),
-                "success_count": batch_info.get("success_count", 0),
-                "error_count": batch_info.get("error_count", 0),
-                "logs": batch_info.get("logs", [])  # Include actual log data for event processing
-            }
-
-            metadata = EventMetadata(
-                source_service="ingestion-service",
-                correlation_id=correlation_id,
-                trace_id=trace_id,
-                priority=EventPriority.MEDIUM
+                endpoint=endpoint_from_batch,
+                source_format=source_format,
+                log_count=len(all_logs),
+                chunks=total_chunks,
             )
 
-            event = BaseEvent(
-                event_type=EVENT_LOGS_BATCH_INGESTED,
-                customer_id=customer_id,
-                data=event_data,
-                metadata=metadata
-            )
+            results = {}
+            success_count = 0
+            total_publishers = 0
 
-            results = await self.publisher_manager.publish(event)
-            
-            # Check if any publisher succeeded
-            success_count = sum(1 for result in results.values() if result)
-            total_publishers = len(results)
+            for index, chunk in enumerate(chunks):
+                event_data = {
+                    "batch_id": batch_info.get("batch_id"),
+                    # Counts describe THIS chunk, so downstream metering is not
+                    # multiplied by the chunk count.
+                    "log_count": len(chunk),
+                    "source_format": source_format,
+                    "processing_time_ms": processing_time_ms,
+                    "bytes_processed": batch_info.get("bytes_processed", 0)
+                    if total_chunks == 1 else 0,
+                    "ingestion_endpoint": endpoint_from_batch,
+                    "timestamp": batch_info.get("timestamp"),
+                    "success_count": len(chunk),
+                    "error_count": batch_info.get("error_count", 0)
+                    if total_chunks == 1 else 0,
+                    "logs": chunk,
+                    "chunk_index": index,
+                    "chunk_count": total_chunks,
+                }
+
+                metadata = EventMetadata(
+                    source_service="ingestion-service",
+                    correlation_id=correlation_id,
+                    trace_id=trace_id,
+                    priority=EventPriority.MEDIUM
+                )
+
+                event = BaseEvent(
+                    event_type=EVENT_LOGS_BATCH_INGESTED,
+                    customer_id=customer_id,
+                    data=event_data,
+                    metadata=metadata
+                )
+
+                chunk_results = await self.publisher_manager.publish(event)
+                results.update(chunk_results)
+                success_count += sum(1 for r in chunk_results.values() if r)
+                total_publishers += len(chunk_results)
+
             success = success_count > 0
 
             if success:

@@ -1,9 +1,19 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { apiClient } from '@/lib/api'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
+import QueryBar from '@/components/query/QueryBar'
+import { useLiveTail } from '@/components/query/useLiveTail'
+import {
+  fetchLogs,
+  fetchServiceNames,
+  runLogQL,
+  LogQLError,
+  NormalizedLog,
+  LogQLResult,
+} from '@/components/query/logsApi'
 import {
   Search,
   Filter,
@@ -18,29 +28,18 @@ import {
   FileText,
   Clock,
   Server,
-  Tag,
   X,
   Copy,
   ExternalLink,
-  Columns,
-  BarChart3,
   Save,
   FolderOpen,
   Trash2,
-  CheckCircle,
-  Loader2
+  Loader2,
+  Radio,
+  ArrowUp,
+  SlidersHorizontal,
+  Terminal,
 } from 'lucide-react'
-
-interface LogEntry {
-  id: string
-  timestamp: string
-  level: 'debug' | 'info' | 'warning' | 'error' | 'critical'
-  service: string
-  message: string
-  trace_id?: string
-  span_id?: string
-  metadata?: Record<string, unknown>
-}
 
 interface LogStats {
   total: number
@@ -53,33 +52,175 @@ const LOG_LEVEL_STYLES: Record<string, { bg: string; text: string; icon: React.R
   info: { bg: 'bg-blue-500/20', text: 'text-blue-400', icon: <Info className="w-3 h-3" /> },
   warning: { bg: 'bg-yellow-500/20', text: 'text-yellow-400', icon: <AlertTriangle className="w-3 h-3" /> },
   error: { bg: 'bg-red-500/20', text: 'text-red-400', icon: <AlertCircle className="w-3 h-3" /> },
-  critical: { bg: 'bg-red-500/30', text: 'text-red-400', icon: <AlertCircle className="w-3 h-3" /> }
+  critical: { bg: 'bg-red-500/30', text: 'text-red-400', icon: <AlertCircle className="w-3 h-3" /> },
+}
+
+/** Initial page size — smaller than the old 500 for faster first paint (LF-025). */
+const PAGE_SIZE = 100
+
+type SearchMode = 'filters' | 'logql'
+
+const TAIL_STATUS_LABELS: Record<string, { label: string; dot: string }> = {
+  connecting: { label: 'Connecting…', dot: 'bg-yellow-400 animate-pulse' },
+  reconnecting: { label: 'Reconnecting…', dot: 'bg-yellow-400 animate-pulse' },
+  live: { label: 'Live', dot: 'bg-green-400 animate-pulse' },
+  unavailable: { label: 'Stream unavailable — retrying', dot: 'bg-red-400' },
 }
 
 export default function LogExplorerPage() {
   const { getApiTimeRange, refreshTrigger } = useTimeRange()
-  const [logs, setLogs] = useState<LogEntry[]>([])
-  const [stats, setStats] = useState<LogStats | null>(null)
+
+  // --- Mode -----------------------------------------------------------------
+  const [mode, setMode] = useState<SearchMode>('filters')
+
+  // --- Simple filter mode (LF-025 pagination) -------------------------------
+  const [logs, setLogs] = useState<NormalizedLog[]>([])
+  const [total, setTotal] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [levelFilter, setLevelFilter] = useState<string[]>([])
   const [serviceFilter, setServiceFilter] = useState<string>('all')
-  const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set())
-  const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null)
-  const [isLiveMode, setIsLiveMode] = useState(false)
+
+  // --- LogQL mode (LF-023) --------------------------------------------------
+  const [logqlQuery, setLogqlQuery] = useState('')
+  const [logqlResult, setLogqlResult] = useState<LogQLResult | null>(null)
+  const [logqlSyntaxError, setLogqlSyntaxError] = useState<string | null>(null)
+  const [logqlRunError, setLogqlRunError] = useState<string | null>(null)
+  const [isRunningQuery, setIsRunningQuery] = useState(false)
+
+  // --- Live tail (LF-024) ---------------------------------------------------
+  const [isTailing, setIsTailing] = useState(false)
+  const [pausedTailLogs, setPausedTailLogs] = useState<NormalizedLog[] | null>(null)
+  const tail = useLiveTail({
+    service: serviceFilter !== 'all' ? serviceFilter : undefined,
+    level: levelFilter.length === 1 ? levelFilter[0] : undefined,
+  })
+
+  // --- Shared ---------------------------------------------------------------
   const [services, setServices] = useState<string[]>([])
+  const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set())
+  const [selectedLog, setSelectedLog] = useState<NormalizedLog | null>(null)
   const [savedQueries, setSavedQueries] = useState<any[]>([])
   const [showSavedQueries, setShowSavedQueries] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveQueryName, setSaveQueryName] = useState('')
   const [showSaveDialog, setShowSaveDialog] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
-  const [queryValidation, setQueryValidation] = useState<{ valid: boolean; message?: string } | null>(null)
+
+  const listRef = useRef<HTMLDivElement>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const logqlRunRef = useRef<() => void>(() => {})
+
+  // ---------------------------------------------------------------------------
+  // Data loading — simple filter mode
+  // ---------------------------------------------------------------------------
+
+  const buildLogsParams = useCallback(
+    (offset: number) => {
+      const { start_time, end_time } = getApiTimeRange()
+      return {
+        start_time,
+        end_time,
+        // /v1/logs matches `level` exactly, so only send it when a single
+        // level is selected; multi-level selections filter client-side.
+        level: levelFilter.length === 1 ? levelFilter[0] : undefined,
+        service: serviceFilter !== 'all' ? serviceFilter : undefined,
+        limit: PAGE_SIZE,
+        offset,
+      }
+    },
+    [getApiTimeRange, levelFilter, serviceFilter]
+  )
+
+  const loadLogs = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      setLoadError(null)
+      const page = await fetchLogs(buildLogsParams(0))
+      setLogs(page.logs)
+      setTotal(page.total)
+      setHasMore(page.hasMore)
+    } catch (error: any) {
+      console.error('Failed to load logs:', error)
+      setLogs([])
+      setTotal(null)
+      setHasMore(false)
+      setLoadError(error?.response?.data?.detail || error?.message || 'Failed to load logs')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [buildLogsParams])
+
+  const loadMore = useCallback(async () => {
+    if (isLoadingMore || isLoading || !hasMore) return
+    try {
+      setIsLoadingMore(true)
+      const page = await fetchLogs(buildLogsParams(logs.length))
+      // Appending below the fold preserves the scroll position naturally.
+      setLogs(prev => [...prev, ...page.logs])
+      setTotal(page.total)
+      setHasMore(page.total !== null ? logs.length + page.logs.length < page.total : page.logs.length >= PAGE_SIZE)
+    } catch (error: any) {
+      console.error('Failed to load more logs:', error)
+      setLoadError(error?.response?.data?.detail || error?.message || 'Failed to load more logs')
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }, [buildLogsParams, logs.length, hasMore, isLoading, isLoadingMore])
+
+  // Infinite scroll: fetch the next page when the sentinel becomes visible.
+  useEffect(() => {
+    if (mode !== 'filters' || isTailing) return
+    const sentinel = sentinelRef.current
+    const rootEl = listRef.current
+    if (!sentinel || !rootEl) return
+
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0]?.isIntersecting) loadMore()
+      },
+      { root: rootEl, rootMargin: '200px' }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [mode, isTailing, loadMore])
+
+  // ---------------------------------------------------------------------------
+  // LogQL execution
+  // ---------------------------------------------------------------------------
+
+  const runQuery = useCallback(async () => {
+    if (!logqlQuery.trim() || isRunningQuery) return
+    try {
+      setIsRunningQuery(true)
+      setLogqlSyntaxError(null)
+      setLogqlRunError(null)
+      const result = await runLogQL(logqlQuery, getApiTimeRange())
+      setLogqlResult(result)
+    } catch (error: any) {
+      if (error instanceof LogQLError && error.isSyntaxError) {
+        // Render the parser message verbatim, keeping the input intact.
+        setLogqlSyntaxError(error.message)
+      } else {
+        setLogqlRunError(error?.message || 'Query failed')
+      }
+    } finally {
+      setIsRunningQuery(false)
+    }
+  }, [logqlQuery, isRunningQuery, getApiTimeRange])
+  logqlRunRef.current = runQuery
+
+  // ---------------------------------------------------------------------------
+  // Saved queries (existing API, extended with mode + LogQL text)
+  // ---------------------------------------------------------------------------
 
   const loadSavedQueries = useCallback(async () => {
     try {
       const response = await apiClient.get('/v1/query/saved')
-      const data = response?.data || response
+      const data = (response as any)?.data ?? response
       if (Array.isArray(data)) {
         setSavedQueries(data)
       } else if (data?.queries && Array.isArray(data.queries)) {
@@ -96,11 +237,12 @@ export default function LogExplorerPage() {
       setIsSaving(true)
       await apiClient.post('/v1/query/saved', {
         name: saveQueryName,
-        query: searchQuery,
+        query: mode === 'logql' ? logqlQuery : searchQuery,
         filters: {
+          mode,
           levels: levelFilter,
-          service: serviceFilter
-        }
+          service: serviceFilter,
+        },
       })
       await loadSavedQueries()
       setShowSaveDialog(false)
@@ -122,151 +264,184 @@ export default function LogExplorerPage() {
   }
 
   const applySavedQuery = (query: any) => {
-    if (query.query) setSearchQuery(query.query)
-    if (query.filters?.levels) setLevelFilter(query.filters.levels)
-    if (query.filters?.service) setServiceFilter(query.filters.service)
+    if (query.filters?.mode === 'logql') {
+      setMode('logql')
+      setLogqlQuery(query.query || '')
+      setLogqlSyntaxError(null)
+      setLogqlRunError(null)
+      // Run after state settles so the bar shows the query being executed.
+      requestAnimationFrame(() => logqlRunRef.current())
+    } else {
+      setMode('filters')
+      if (query.query) setSearchQuery(query.query)
+      if (query.filters?.levels) setLevelFilter(query.filters.levels)
+      if (query.filters?.service) setServiceFilter(query.filters.service)
+    }
     setShowSavedQueries(false)
   }
 
-  const validateQuery = async () => {
-    if (!searchQuery.trim()) {
-      setQueryValidation(null)
-      return
-    }
-    try {
-      const response = await apiClient.post('/v1/query/validate', {
-        query: searchQuery
-      })
-      const data = response?.data || response
-      setQueryValidation(data)
-    } catch (error) {
-      setQueryValidation({ valid: false, message: 'Validation failed' })
-    }
-  }
+  // ---------------------------------------------------------------------------
+  // Export
+  // ---------------------------------------------------------------------------
 
-  const exportViaAPI = async () => {
-    try {
-      setIsExporting(true)
-      const { start_time, end_time } = getApiTimeRange()
-      const response = await apiClient.post('/v1/export', {
-        start_time,
-        end_time,
-        format: 'csv',
-        query: searchQuery || undefined,
-        filters: {
-          levels: levelFilter.length > 0 ? levelFilter : undefined,
-          service: serviceFilter !== 'all' ? serviceFilter : undefined
-        }
-      })
-      const data = response?.data || response
-      if (data?.download_url) {
-        window.open(data.download_url, '_blank')
-      } else if (typeof data === 'string') {
-        const blob = new Blob([data], { type: 'text/csv' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `logs-export-${new Date().toISOString()}.csv`
-        a.click()
-        URL.revokeObjectURL(url)
-      }
-    } catch (error) {
-      console.error('API export failed, falling back to client export:', error)
-      exportLogs()
-    } finally {
-      setIsExporting(false)
-    }
-  }
+  const exportLogs = useCallback((rows: NormalizedLog[]) => {
+    const csvContent = [
+      ['Timestamp', 'Level', 'Service', 'Message', 'Trace ID'].join(','),
+      ...rows.map(log =>
+        [
+          log.timestamp,
+          log.level,
+          log.service,
+          `"${log.message.replace(/"/g, '""')}"`,
+          log.trace_id || '',
+        ].join(',')
+      ),
+    ].join('\n')
 
-  const loadLogs = useCallback(async () => {
-    try {
-      setIsLoading(true)
-      const { start_time, end_time } = getApiTimeRange()
+    const blob = new Blob([csvContent], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `logs-${new Date().toISOString()}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [])
 
-      const response = await apiClient.get<{ logs: LogEntry[]; stats: LogStats }>('/v1/logs', {
-        start_time,
-        end_time,
-        search: searchQuery || undefined,
-        level: levelFilter.length > 0 ? levelFilter.join(',') : undefined,
-        service: serviceFilter !== 'all' ? serviceFilter : undefined,
-        limit: 500
-      })
-
-      const data = response?.data || response
-      if (data?.logs) {
-        setLogs(data.logs)
-        if (data.stats) {
-          setStats(data.stats)
-        } else {
-          setStats(calculateStats(data.logs))
-        }
-        const uniqueServices = new Set<string>()
-        data.logs.forEach((log: LogEntry) => uniqueServices.add(log.service))
-        setServices(Array.from(uniqueServices))
-      } else if (Array.isArray(data)) {
-        setLogs(data)
-        setStats(calculateStats(data))
-        const uniqueServices = new Set<string>()
-        data.forEach((log: LogEntry) => uniqueServices.add(log.service))
-        setServices(Array.from(uniqueServices))
-      } else {
-        setLogs([])
-        setStats({ total: 0, by_level: {}, by_service: {} })
-      }
-    } catch (error) {
-      console.error('Failed to load logs:', error)
-      setLogs([])
-      setStats({ total: 0, by_level: {}, by_service: {} })
-    } finally {
-      setIsLoading(false)
-    }
-  }, [getApiTimeRange, searchQuery, levelFilter, serviceFilter, refreshTrigger])
+  // ---------------------------------------------------------------------------
+  // Effects
+  // ---------------------------------------------------------------------------
 
   useEffect(() => {
-    loadLogs()
+    if (mode === 'filters' && !isTailing) loadLogs()
+  }, [mode, isTailing, loadLogs, refreshTrigger])
+
+  useEffect(() => {
     loadSavedQueries()
-  }, [loadLogs, loadSavedQueries])
+  }, [loadSavedQueries])
 
-  // Live mode polling
+  // Service names for the dropdown and LogQL autocomplete — fetched live.
   useEffect(() => {
-    if (!isLiveMode) return
+    let cancelled = false
+    fetchServiceNames()
+      .then(names => {
+        if (!cancelled && names.length > 0) setServices(names)
+      })
+      .catch(error => console.error('Failed to load service names:', error))
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
-    const interval = setInterval(() => {
-      loadLogs()
-    }, 5000)
+  // Live tail lifecycle.
+  const toggleTail = () => {
+    if (isTailing) {
+      tail.stop()
+      setIsTailing(false)
+      setPausedTailLogs(null)
+    } else {
+      setPausedTailLogs(null)
+      tail.start()
+      setIsTailing(true)
+      listRef.current?.scrollTo({ top: 0 })
+    }
+  }
 
-    return () => clearInterval(interval)
-  }, [isLiveMode, loadLogs])
+  // Pause-on-scroll: freeze the visible tail when the user scrolls down.
+  const handleListScroll = () => {
+    if (!isTailing) return
+    const el = listRef.current
+    if (!el) return
+    if (el.scrollTop > 40 && pausedTailLogs === null) {
+      setPausedTailLogs(tail.logs)
+    } else if (el.scrollTop <= 40 && pausedTailLogs !== null) {
+      setPausedTailLogs(null)
+    }
+  }
+
+  const resumeTail = () => {
+    setPausedTailLogs(null)
+    listRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  // ---------------------------------------------------------------------------
+  // Derived display data
+  // ---------------------------------------------------------------------------
+
+  const sourceLogs: NormalizedLog[] = isTailing
+    ? pausedTailLogs ?? tail.logs
+    : mode === 'logql'
+      ? logqlResult?.logs ?? []
+      : logs
+
+  const displayedLogs = useMemo(() => {
+    let result = sourceLogs
+    if (mode === 'filters' || isTailing) {
+      if (levelFilter.length > 0) {
+        result = result.filter(log => levelFilter.includes(log.level))
+      }
+      if (isTailing && serviceFilter !== 'all') {
+        result = result.filter(log => log.service === serviceFilter)
+      }
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase()
+        result = result.filter(
+          log =>
+            log.message.toLowerCase().includes(query) ||
+            log.service.toLowerCase().includes(query) ||
+            log.trace_id?.toLowerCase().includes(query) ||
+            JSON.stringify(log.metadata || {}).toLowerCase().includes(query)
+        )
+      }
+    }
+    return result
+  }, [sourceLogs, mode, isTailing, levelFilter, serviceFilter, searchQuery])
+
+  const stats: LogStats = useMemo(() => {
+    const computed: LogStats = { total: 0, by_level: {}, by_service: {} }
+    displayedLogs.forEach(log => {
+      computed.by_level[log.level] = (computed.by_level[log.level] || 0) + 1
+      computed.by_service[log.service] = (computed.by_service[log.service] || 0) + 1
+    })
+    computed.total =
+      !isTailing && mode === 'filters' && total !== null
+        ? total
+        : !isTailing && mode === 'logql' && logqlResult
+          ? logqlResult.totalCount
+          : displayedLogs.length
+    return computed
+  }, [displayedLogs, isTailing, mode, total, logqlResult])
+
+  const newWhilePaused =
+    pausedTailLogs !== null ? Math.max(0, tail.logs.length - pausedTailLogs.length) : 0
+
+  const aggregationEntries =
+    mode === 'logql' && !isTailing && logqlResult
+      ? Object.entries(logqlResult.aggregations)
+      : []
+
+  const showListLoading = !isTailing && mode === 'filters' && isLoading
+  const tailStatus = TAIL_STATUS_LABELS[tail.status]
 
   const toggleLogExpansion = (logId: string) => {
     setExpandedLogs(prev => {
       const next = new Set(prev)
-      if (next.has(logId)) {
-        next.delete(logId)
-      } else {
-        next.add(logId)
-      }
+      if (next.has(logId)) next.delete(logId)
+      else next.add(logId)
       return next
     })
   }
 
   const toggleLevelFilter = (level: string) => {
-    setLevelFilter(prev => {
-      if (prev.includes(level)) {
-        return prev.filter(l => l !== level)
-      }
-      return [...prev, level]
-    })
+    setLevelFilter(prev =>
+      prev.includes(level) ? prev.filter(l => l !== level) : [...prev, level]
+    )
   }
 
-  const formatTimestamp = (ts: string) => {
-    const date = new Date(ts)
-    return date.toLocaleString()
-  }
+  const formatTimestamp = (ts: string) => new Date(ts).toLocaleString()
 
   const formatRelativeTime = (ts: string) => {
     const diff = Date.now() - new Date(ts).getTime()
-    if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`
+    if (diff < 60000) return `${Math.max(0, Math.floor(diff / 1000))}s ago`
     if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
     if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
     return `${Math.floor(diff / 86400000)}d ago`
@@ -276,54 +451,49 @@ export default function LogExplorerPage() {
     navigator.clipboard.writeText(text)
   }
 
-  const exportLogs = () => {
-    const csvContent = [
-      ['Timestamp', 'Level', 'Service', 'Message', 'Trace ID'].join(','),
-      ...logs.map(log => [
-        log.timestamp,
-        log.level,
-        log.service,
-        `"${log.message.replace(/"/g, '""')}"`,
-        log.trace_id || ''
-      ].join(','))
-    ].join('\n')
-
-    const blob = new Blob([csvContent], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `logs-${new Date().toISOString()}.csv`
-    a.click()
-  }
-
-  const filteredLogs = logs.filter(log => {
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
-      return (
-        log.message.toLowerCase().includes(query) ||
-        log.service.toLowerCase().includes(query) ||
-        log.trace_id?.toLowerCase().includes(query) ||
-        JSON.stringify(log.metadata || {}).toLowerCase().includes(query)
-      )
-    }
-    return true
-  })
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
 
   return (
     <DashboardLayout>
       <div className="h-[calc(100vh-120px)] flex flex-col">
         {/* Controls Bar */}
         <div className="flex items-center gap-3 mb-4">
+          {/* Mode toggle: simple filters <-> LogforgeQL (LF-023 item 5) */}
+          <div className="flex items-center bg-slate-800/30 rounded-lg p-1">
+            <button
+              onClick={() => setMode('filters')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                mode === 'filters' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-white/5'
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              Filters
+            </button>
+            <button
+              onClick={() => setMode('logql')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                mode === 'logql' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-white/5'
+              }`}
+            >
+              <Terminal className="w-3.5 h-3.5" />
+              LogQL
+            </button>
+          </div>
+
+          {/* Live tail toggle (LF-024) */}
           <button
-            onClick={() => setIsLiveMode(!isLiveMode)}
+            onClick={toggleTail}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-              isLiveMode
+              isTailing
                 ? 'bg-green-500 text-white'
                 : 'bg-slate-800/30 text-slate-300 hover:bg-white/10'
             }`}
+            title="Stream newly ingested logs in real time"
           >
-            <span className={`w-2 h-2 rounded-full ${isLiveMode ? 'bg-white animate-pulse' : 'bg-slate-400'}`} />
-            {isLiveMode ? 'Live' : 'Live Mode'}
+            <Radio className={`w-4 h-4 ${isTailing ? 'animate-pulse' : ''}`} />
+            Live tail
           </button>
 
           {/* Saved Queries */}
@@ -352,15 +522,20 @@ export default function LogExplorerPage() {
                       key={q.id}
                       className="flex items-center justify-between px-4 py-2.5 hover:bg-white/5 cursor-pointer border-b border-white/5 last:border-0"
                     >
-                      <button
-                        onClick={() => applySavedQuery(q)}
-                        className="flex-1 text-left"
-                      >
-                        <p className="text-sm font-medium text-white">{q.name}</p>
-                        {q.query && <p className="text-xs text-slate-400 truncate">{q.query}</p>}
+                      <button onClick={() => applySavedQuery(q)} className="flex-1 text-left">
+                        <p className="text-sm font-medium text-white flex items-center gap-1.5">
+                          {q.filters?.mode === 'logql' && (
+                            <Terminal className="w-3 h-3 text-blue-400" />
+                          )}
+                          {q.name}
+                        </p>
+                        {q.query && <p className="text-xs text-slate-400 truncate font-mono">{q.query}</p>}
                       </button>
                       <button
-                        onClick={(e) => { e.stopPropagation(); deleteSavedQuery(q.id) }}
+                        onClick={e => {
+                          e.stopPropagation()
+                          deleteSavedQuery(q.id)
+                        }}
                         className="p-1 text-slate-400 hover:text-red-500 ml-2"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -373,7 +548,7 @@ export default function LogExplorerPage() {
           </div>
 
           {/* Save Current Query */}
-          {searchQuery && (
+          {(mode === 'logql' ? logqlQuery : searchQuery) && (
             <div className="relative">
               <button
                 onClick={() => setShowSaveDialog(!showSaveDialog)}
@@ -388,10 +563,10 @@ export default function LogExplorerPage() {
                     type="text"
                     placeholder="Query name..."
                     value={saveQueryName}
-                    onChange={(e) => setSaveQueryName(e.target.value)}
+                    onChange={e => setSaveQueryName(e.target.value)}
                     className="w-full px-3 py-2 border border-white/10 rounded-lg text-sm bg-slate-800/50 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 mb-2"
                     autoFocus
-                    onKeyDown={(e) => e.key === 'Enter' && saveCurrentQuery()}
+                    onKeyDown={e => e.key === 'Enter' && saveCurrentQuery()}
                   />
                   <div className="flex gap-2">
                     <button
@@ -414,110 +589,207 @@ export default function LogExplorerPage() {
           )}
 
           <button
-            onClick={exportViaAPI}
-            disabled={isExporting}
+            onClick={() => {
+              setIsExporting(true)
+              try {
+                exportLogs(displayedLogs)
+              } finally {
+                setIsExporting(false)
+              }
+            }}
+            disabled={isExporting || displayedLogs.length === 0}
             className="flex items-center gap-2 px-4 py-2 border border-white/10 rounded-lg text-slate-300 hover:bg-white/5 disabled:opacity-50"
           >
-            {isExporting
-              ? <Loader2 className="w-4 h-4 animate-spin" />
-              : <Download className="w-4 h-4" />
-            }
+            {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             Export
           </button>
+
           <button
-            onClick={loadLogs}
-            disabled={isLoading}
+            onClick={() => (mode === 'logql' ? runQuery() : loadLogs())}
+            disabled={isTailing || (mode === 'logql' ? isRunningQuery : isLoading)}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium disabled:opacity-50 ml-auto"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw
+              className={`w-4 h-4 ${(mode === 'logql' ? isRunningQuery : isLoading) ? 'animate-spin' : ''}`}
+            />
             Refresh
           </button>
         </div>
 
-        {/* Query Validation Feedback */}
-        {queryValidation && (
-          <div className={`flex items-center gap-2 px-3 py-2 rounded-lg mb-4 text-sm ${
-            queryValidation.valid
-              ? 'bg-green-500/10 text-green-400 border border-green-500/30'
-              : 'bg-red-500/10 text-red-400 border border-red-500/30'
-          }`}>
-            {queryValidation.valid
-              ? <CheckCircle className="w-4 h-4" />
-              : <AlertCircle className="w-4 h-4" />
-            }
-            {queryValidation.message || (queryValidation.valid ? 'Query is valid' : 'Invalid query')}
+        {/* Live tail status banner */}
+        {isTailing && tailStatus && (
+          <div
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg mb-4 text-sm border ${
+              tail.status === 'unavailable'
+                ? 'bg-red-500/10 text-red-400 border-red-500/30'
+                : tail.status === 'live'
+                  ? 'bg-green-500/10 text-green-400 border-green-500/30'
+                  : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${tailStatus.dot}`} />
+            <span>{tailStatus.label}</span>
+            {tail.status === 'unavailable' && tail.error && (
+              <span className="text-xs opacity-75 font-mono truncate">({tail.error})</span>
+            )}
+            <span className="ml-auto text-xs opacity-75">
+              {tail.logs.length.toLocaleString()} lines buffered (cap 2,000)
+            </span>
+          </div>
+        )}
+
+        {/* Query input area */}
+        {mode === 'logql' ? (
+          <div className="mb-4">
+            <QueryBar
+              value={logqlQuery}
+              onChange={value => {
+                setLogqlQuery(value)
+                setLogqlSyntaxError(null)
+              }}
+              onRun={runQuery}
+              isRunning={isRunningQuery}
+              syntaxError={logqlSyntaxError}
+              services={services}
+            />
+            {logqlRunError && (
+              <div className="flex items-center gap-2 px-3 py-2 mt-2 rounded-lg text-sm bg-red-500/10 text-red-400 border border-red-500/30">
+                <AlertCircle className="w-4 h-4" />
+                {logqlRunError}
+              </div>
+            )}
+            {logqlResult && !logqlSyntaxError && !logqlRunError && (
+              <div className="flex items-center gap-3 mt-2 text-xs text-slate-400">
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {logqlResult.executionTimeMs !== null
+                    ? `${logqlResult.executionTimeMs.toFixed(1)} ms`
+                    : 'completed'}
+                </span>
+                <span>{logqlResult.totalCount.toLocaleString()} matching</span>
+                {logqlResult.hasMore && (
+                  <span className="text-yellow-400">
+                    Results truncated — narrow the range or add `| limit`
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex gap-4 mb-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Filter loaded logs by message, service, trace ID, or metadata..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-white/10 rounded-lg bg-slate-800/50 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            {/* Level Filter */}
+            <div className="flex items-center gap-1 px-2 py-1 bg-slate-800/30 rounded-lg">
+              {Object.entries(LOG_LEVEL_STYLES).map(([level, style]) => (
+                <button
+                  key={level}
+                  onClick={() => toggleLevelFilter(level)}
+                  className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    levelFilter.length === 0 || levelFilter.includes(level)
+                      ? `${style.bg} ${style.text}`
+                      : 'bg-transparent text-slate-400'
+                  }`}
+                >
+                  {style.icon}
+                  {level}
+                </button>
+              ))}
+            </div>
+
+            {/* Service Filter */}
+            <select
+              value={serviceFilter}
+              onChange={e => setServiceFilter(e.target.value)}
+              className="px-4 py-2 border border-white/10 rounded-lg bg-slate-800/50 text-white focus:outline-none focus:border-blue-500"
+            >
+              <option value="all">All Services</option>
+              {services.map(service => (
+                <option key={service} value={service}>
+                  {service}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Load error (honest failure state, never silent) */}
+        {loadError && mode === 'filters' && !isTailing && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg mb-4 text-sm bg-red-500/10 text-red-400 border border-red-500/30">
+            <AlertCircle className="w-4 h-4" />
+            {loadError}
+            <button onClick={loadLogs} className="ml-auto underline hover:text-red-300">
+              Retry
+            </button>
           </div>
         )}
 
         {/* Stats Bar */}
-        {stats && (
-          <div className="flex gap-4 mb-4">
+        <div className="flex gap-4 mb-4">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/30 rounded-lg">
+            <FileText className="w-4 h-4 text-slate-400" />
+            <span className="text-sm font-medium text-slate-300">
+              {stats.total.toLocaleString()} logs
+            </span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/20 rounded-lg">
+            <AlertCircle className="w-4 h-4 text-red-500" />
+            <span className="text-sm font-medium text-red-400">
+              {(stats.by_level.error || 0) + (stats.by_level.critical || 0)} errors
+            </span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500/20 rounded-lg">
+            <AlertTriangle className="w-4 h-4 text-yellow-600" />
+            <span className="text-sm font-medium text-yellow-400">
+              {stats.by_level.warning || 0} warnings
+            </span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/20 rounded-lg">
+            <Server className="w-4 h-4 text-blue-500" />
+            <span className="text-sm font-medium text-blue-400">
+              {Object.keys(stats.by_service).length} services
+            </span>
+          </div>
+          {/* Truncation indicator (LF-025: never silent) */}
+          {!isTailing && mode === 'filters' && total !== null && logs.length < total && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/30 rounded-lg">
-              <FileText className="w-4 h-4 text-slate-400" />
-              <span className="text-sm font-medium text-slate-300">{stats.total.toLocaleString()} logs</span>
+              <span className="text-sm text-slate-400">
+                Showing {logs.length.toLocaleString()} of {total.toLocaleString()}
+              </span>
             </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/20 rounded-lg">
-              <AlertCircle className="w-4 h-4 text-red-500" />
-              <span className="text-sm font-medium text-red-400">{(stats.by_level.error || 0) + (stats.by_level.critical || 0)} errors</span>
-            </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500/20 rounded-lg">
-              <AlertTriangle className="w-4 h-4 text-yellow-600" />
-              <span className="text-sm font-medium text-yellow-400">{stats.by_level.warning || 0} warnings</span>
-            </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/20 rounded-lg">
-              <Server className="w-4 h-4 text-blue-500" />
-              <span className="text-sm font-medium text-blue-400">{Object.keys(stats.by_service).length} services</span>
+          )}
+        </div>
+
+        {/* Aggregation results (LogQL `stats` queries) */}
+        {aggregationEntries.length > 0 && (
+          <div className="mb-4 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-2xl border border-white/5 shadow-xl p-4">
+            <h4 className="text-xs font-semibold text-slate-400 uppercase mb-2">Aggregations</h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {aggregationEntries.map(([key, value]) => (
+                <div key={key} className="p-3 bg-slate-800/50 rounded-lg">
+                  <p className="text-xs text-slate-400 font-mono truncate">{key}</p>
+                  <p className="text-lg font-semibold text-white font-mono">
+                    {typeof value === 'number' || typeof value === 'string'
+                      ? String(value)
+                      : JSON.stringify(value)}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
-        {/* Search and Filters */}
-        <div className="flex gap-4 mb-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search logs by message, service, trace ID, or metadata..."
-              value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setQueryValidation(null) }}
-              onBlur={validateQuery}
-              className="w-full pl-10 pr-4 py-2 border border-white/10 rounded-lg bg-slate-800/50 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-            />
-          </div>
-
-          {/* Level Filter */}
-          <div className="flex items-center gap-1 px-2 py-1 bg-slate-800/30 rounded-lg">
-            {Object.entries(LOG_LEVEL_STYLES).map(([level, style]) => (
-              <button
-                key={level}
-                onClick={() => toggleLevelFilter(level)}
-                className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
-                  levelFilter.length === 0 || levelFilter.includes(level)
-                    ? `${style.bg} ${style.text}`
-                    : 'bg-transparent text-slate-400'
-                }`}
-              >
-                {style.icon}
-                {level}
-              </button>
-            ))}
-          </div>
-
-          {/* Service Filter */}
-          <select
-            value={serviceFilter}
-            onChange={(e) => setServiceFilter(e.target.value)}
-            className="px-4 py-2 border border-white/10 rounded-lg bg-slate-800/50 text-white focus:outline-none focus:border-blue-500"
-          >
-            <option value="all">All Services</option>
-            {services.map(service => (
-              <option key={service} value={service}>{service}</option>
-            ))}
-          </select>
-        </div>
-
         {/* Log List */}
-        <div className="flex-1 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-2xl border border-white/5 shadow-xl overflow-hidden flex flex-col">
+        <div className="flex-1 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-2xl border border-white/5 shadow-xl overflow-hidden flex flex-col relative">
           {/* Table Header */}
           <div className="flex items-center gap-4 px-4 py-2 bg-slate-800/50 border-b border-white/5 text-xs font-semibold text-slate-400 uppercase">
             <div className="w-8" />
@@ -528,117 +800,189 @@ export default function LogExplorerPage() {
             <div className="w-24">Trace</div>
           </div>
 
+          {/* New-lines-while-paused affordance */}
+          {isTailing && newWhilePaused > 0 && (
+            <button
+              onClick={resumeTail}
+              className="absolute top-12 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full text-sm font-medium shadow-lg"
+            >
+              <ArrowUp className="w-4 h-4" />
+              {newWhilePaused.toLocaleString()} new — resume
+            </button>
+          )}
+
           {/* Log Entries */}
-          <div className="flex-1 overflow-y-auto">
-            {isLoading ? (
+          <div ref={listRef} onScroll={handleListScroll} className="flex-1 overflow-y-auto">
+            {showListLoading ? (
               <div className="p-8 text-center">
                 <RefreshCw className="w-8 h-8 text-slate-300 animate-spin mx-auto mb-3" />
                 <p className="text-slate-400">Loading logs...</p>
               </div>
-            ) : filteredLogs.length === 0 ? (
+            ) : displayedLogs.length === 0 ? (
               <div className="p-8 text-center">
                 <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                <p className="text-slate-400">No logs found</p>
-                <p className="text-sm text-slate-400 mt-1">Try adjusting your filters</p>
+                <p className="text-slate-400">
+                  {isTailing
+                    ? tail.status === 'live'
+                      ? 'Waiting for new logs...'
+                      : 'No logs streamed yet'
+                    : mode === 'logql' && !logqlResult
+                      ? 'Run a LogforgeQL query to see results'
+                      : 'No logs found'}
+                </p>
+                {!isTailing && (
+                  <p className="text-sm text-slate-400 mt-1">
+                    {mode === 'logql'
+                      ? 'Try an example from the syntax reference (? button)'
+                      : 'Try adjusting your filters'}
+                  </p>
+                )}
               </div>
             ) : (
-              <div className="divide-y divide-white/5">
-                {filteredLogs.map(log => {
-                  const isExpanded = expandedLogs.has(log.id)
-                  const levelStyle = LOG_LEVEL_STYLES[log.level] || LOG_LEVEL_STYLES.info
+              <>
+                <div className="divide-y divide-white/5">
+                  {displayedLogs.map(log => {
+                    const isExpanded = expandedLogs.has(log.id)
+                    const levelStyle = LOG_LEVEL_STYLES[log.level] || LOG_LEVEL_STYLES.info
 
-                  return (
-                    <div key={log.id} className="hover:bg-white/5">
-                      {/* Log Row */}
-                      <div
-                        className="flex items-center gap-4 px-4 py-2 cursor-pointer"
-                        onClick={() => toggleLogExpansion(log.id)}
-                      >
-                        <div className="w-8">
-                          {Object.keys(log.metadata || {}).length > 0 && (
-                            isExpanded
-                              ? <ChevronDown className="w-4 h-4 text-slate-400" />
-                              : <ChevronRight className="w-4 h-4 text-slate-400" />
-                          )}
-                        </div>
-                        <div className="w-40 text-xs text-slate-400 font-mono">
-                          <div>{formatTimestamp(log.timestamp)}</div>
-                          <div className="text-slate-400">{formatRelativeTime(log.timestamp)}</div>
-                        </div>
-                        <div className="w-20">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${levelStyle.bg} ${levelStyle.text}`}>
-                            {levelStyle.icon}
-                            {log.level}
-                          </span>
-                        </div>
-                        <div className="w-32">
-                          <span className="text-sm text-slate-300 truncate block">{log.service}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-sm truncate ${log.level === 'error' || log.level === 'critical' ? 'text-red-400' : 'text-slate-300'}`}>
-                            {log.message}
-                          </p>
-                        </div>
-                        <div className="w-24">
-                          {log.trace_id && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                copyToClipboard(log.trace_id!)
-                              }}
-                              className="text-xs font-mono text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                    return (
+                      <div key={log.id} className="hover:bg-white/5">
+                        {/* Log Row */}
+                        <div
+                          className="flex items-center gap-4 px-4 py-2 cursor-pointer"
+                          onClick={() => toggleLogExpansion(log.id)}
+                        >
+                          <div className="w-8">
+                            {Object.keys(log.metadata || {}).length > 0 &&
+                              (isExpanded ? (
+                                <ChevronDown className="w-4 h-4 text-slate-400" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4 text-slate-400" />
+                              ))}
+                          </div>
+                          <div className="w-40 text-xs text-slate-400 font-mono">
+                            <div>{formatTimestamp(log.timestamp)}</div>
+                            <div className="text-slate-400">{formatRelativeTime(log.timestamp)}</div>
+                          </div>
+                          <div className="w-20">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${levelStyle.bg} ${levelStyle.text}`}
                             >
-                              {log.trace_id.slice(0, 8)}...
-                              <Copy className="w-3 h-3" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Expanded Details */}
-                      {isExpanded && Object.keys(log.metadata || {}).length > 0 && (
-                        <div className="px-4 pb-4 pl-12">
-                          <div className="p-4 bg-slate-900 rounded-lg">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs text-slate-400">Metadata</span>
+                              {levelStyle.icon}
+                              {log.level}
+                            </span>
+                          </div>
+                          <div className="w-32">
+                            <span className="text-sm text-slate-300 truncate block">{log.service}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p
+                              className={`text-sm truncate ${
+                                log.level === 'error' || log.level === 'critical'
+                                  ? 'text-red-400'
+                                  : 'text-slate-300'
+                              }`}
+                            >
+                              {log.message}
+                            </p>
+                          </div>
+                          <div className="w-24">
+                            {log.trace_id && (
                               <button
-                                onClick={() => copyToClipboard(JSON.stringify(log.metadata || {}, null, 2))}
-                                className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                                onClick={e => {
+                                  e.stopPropagation()
+                                  copyToClipboard(log.trace_id!)
+                                }}
+                                className="text-xs font-mono text-blue-400 hover:text-blue-300 flex items-center gap-1"
                               >
+                                {log.trace_id.slice(0, 8)}...
                                 <Copy className="w-3 h-3" />
-                                Copy
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Expanded Details */}
+                        {isExpanded && Object.keys(log.metadata || {}).length > 0 && (
+                          <div className="px-4 pb-4 pl-12">
+                            <div className="p-4 bg-slate-900 rounded-lg">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs text-slate-400">Metadata</span>
+                                <button
+                                  onClick={() =>
+                                    copyToClipboard(JSON.stringify(log.metadata || {}, null, 2))
+                                  }
+                                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                                >
+                                  <Copy className="w-3 h-3" />
+                                  Copy
+                                </button>
+                              </div>
+                              <pre className="text-xs text-green-400 overflow-x-auto">
+                                {JSON.stringify(log.metadata || {}, null, 2)}
+                              </pre>
+                            </div>
+
+                            {/* Quick Actions */}
+                            <div className="flex gap-2 mt-3">
+                              {log.trace_id && (
+                                <a
+                                  href={`/observability/traces?trace_id=${log.trace_id}`}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-xs font-medium hover:bg-purple-500/30"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                  View Trace
+                                </a>
+                              )}
+                              <button
+                                onClick={() => {
+                                  if (mode === 'logql') {
+                                    setLogqlQuery(`| where service = "${log.service}"`)
+                                  } else {
+                                    setServiceFilter(log.service)
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-800/30 text-slate-300 rounded-lg text-xs font-medium hover:bg-white/10"
+                              >
+                                <Filter className="w-3 h-3" />
+                                Filter by Service
                               </button>
                             </div>
-                            <pre className="text-xs text-green-400 overflow-x-auto">
-                              {JSON.stringify(log.metadata || {}, null, 2)}
-                            </pre>
                           </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
 
-                          {/* Quick Actions */}
-                          <div className="flex gap-2 mt-3">
-                            {log.trace_id && (
-                              <a
-                                href={`/observability/traces?trace_id=${log.trace_id}`}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-xs font-medium hover:bg-purple-500/30"
-                              >
-                                <ExternalLink className="w-3 h-3" />
-                                View Trace
-                              </a>
-                            )}
-                            <button
-                              onClick={() => setSearchQuery(`service:${log.service}`)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-800/30 text-slate-300 rounded-lg text-xs font-medium hover:bg-white/10"
-                            >
-                              <Filter className="w-3 h-3" />
-                              Filter by Service
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
+                {/* Pagination footer (LF-025) */}
+                {!isTailing && mode === 'filters' && (
+                  <div className="py-3 text-center">
+                    {isLoadingMore ? (
+                      <div className="flex items-center justify-center gap-2 text-sm text-slate-400">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Loading more...
+                      </div>
+                    ) : hasMore ? (
+                      <button
+                        onClick={loadMore}
+                        className="px-4 py-1.5 text-sm text-blue-400 hover:text-blue-300 border border-white/10 rounded-lg hover:bg-white/5"
+                      >
+                        Load more
+                        {total !== null &&
+                          ` (${(total - logs.length).toLocaleString()} remaining)`}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-500">
+                        End of results
+                        {total !== null && ` — ${total.toLocaleString()} total`}
+                      </span>
+                    )}
+                    {/* Infinite-scroll sentinel */}
+                    <div ref={sentinelRef} className="h-px" />
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -649,10 +993,7 @@ export default function LogExplorerPage() {
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold text-white">Log Details</h3>
-                <button
-                  onClick={() => setSelectedLog(null)}
-                  className="p-2 hover:bg-white/5 rounded-lg"
-                >
+                <button onClick={() => setSelectedLog(null)} className="p-2 hover:bg-white/5 rounded-lg">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -696,20 +1037,4 @@ export default function LogExplorerPage() {
       </div>
     </DashboardLayout>
   )
-}
-
-// Mock data generators
-function calculateStats(logs: LogEntry[]): LogStats {
-  const stats: LogStats = {
-    total: logs.length,
-    by_level: {},
-    by_service: {}
-  }
-
-  logs.forEach(log => {
-    stats.by_level[log.level] = (stats.by_level[log.level] || 0) + 1
-    stats.by_service[log.service] = (stats.by_service[log.service] || 0) + 1
-  })
-
-  return stats
 }

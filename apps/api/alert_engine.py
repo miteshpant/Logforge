@@ -5,9 +5,11 @@ Comprehensive alerting with multi-channel notifications and enterprise integrati
 
 import asyncio
 import json
+import os
 import time
 import uuid
-from datetime import datetime, timedelta
+from collections import deque
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Optional, Union, Literal
 from dataclasses import dataclass, asdict
 from enum import Enum
@@ -169,6 +171,17 @@ class AlertEngine:
         self.evaluation_tasks: Dict[str, asyncio.Task] = {}
         self.is_running = False
 
+        # Real delivery/evaluation telemetry (LF-035): counters reflect what
+        # actually happened -- nothing is fabricated.
+        self.notifications_sent = 0
+        self.notifications_failed = 0
+        self._evaluation_durations_ms: deque = deque(maxlen=200)
+        self._last_evaluation_at: Optional[datetime] = None
+
+        # LF-038: saved-search (LogQL) rule scheduler state
+        self._logql_task: Optional[asyncio.Task] = None
+        self._logql_last_eval: Dict[str, datetime] = {}
+
     async def start(self):
         """Start the alert engine"""
         logger.info("Starting M3 Alert Engine...")
@@ -181,6 +194,17 @@ class AlertEngine:
         for rule in self.rules.values():
             if rule.enabled:
                 await self._start_rule_evaluation(rule)
+
+        # LF-035: start the notification outbox dispatcher (gated behind
+        # LOGFORGE_NOTIFICATIONS_ENABLED, default off).
+        try:
+            from services.notification_service import get_notification_service
+            await get_notification_service().start_dispatcher()
+        except Exception as e:
+            logger.error(f"Failed to start notification dispatcher: {e}")
+
+        # LF-038: start the LogQL saved-search rule scheduler
+        self._logql_task = asyncio.create_task(self._logql_scheduler_loop())
 
         logger.info("M3 Alert Engine started successfully")
 
@@ -198,49 +222,37 @@ class AlertEngine:
             await asyncio.gather(*self.evaluation_tasks.values(), return_exceptions=True)
 
         self.evaluation_tasks.clear()
+
+        if self._logql_task is not None:
+            self._logql_task.cancel()
+            try:
+                await self._logql_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._logql_task = None
+
+        try:
+            from services.notification_service import get_notification_service
+            await get_notification_service().stop_dispatcher()
+        except Exception as e:
+            logger.error(f"Failed to stop notification dispatcher: {e}")
+
         logger.info("M3 Alert Engine stopped")
 
     async def _load_configuration(self):
-        """Load notification channels only - rules loaded on-demand per customer"""
-        # Initialize with default notification channels
-        await self._create_default_channels()
-        
+        """Load configuration - rules and channels are loaded on-demand per customer.
+
+        LF-035: this used to seed fabricated "default" channels pointing at
+        placeholder endpoints (hooks.logforge.io etc.). Those were mock data:
+        deliveries to them could never succeed, and their presence made the
+        channel list lie. Channels now come exclusively from
+        notification_channels_mt (per customer).
+        """
         # Initialize alert rule cache for on-demand loading
         from events.management.cache.alert_rule_cache import AlertRuleCache
         self.alert_rule_cache = AlertRuleCache()
-        
+
         logger.info("AlertEngine configured for on-demand rule loading per customer")
-
-    async def _create_default_channels(self):
-        """Create default notification channels"""
-        default_channels = [
-            NotificationChannelConfig(
-                channel_id="default-email",
-                type=NotificationChannel.EMAIL,
-                name="Default Email Notifications",
-                config={
-                    "smtp_host": "localhost",
-                    "smtp_port": 587,
-                    "from_address": "alerts@logforge.io",
-                    "recipients": ["admin@logforge.io"]
-                }
-            ),
-            NotificationChannelConfig(
-                channel_id="default-webhook",
-                type=NotificationChannel.WEBHOOK,
-                name="Default Webhook",
-                config={
-                    "url": "https://hooks.logforge.io/alerts",
-                    "method": "POST",
-                    "headers": {"Content-Type": "application/json"}
-                }
-            )
-        ]
-
-        for channel in default_channels:
-            self.notification_channels[channel.channel_id] = channel
-
-        logger.info(f"Created {len(default_channels)} default notification channels")
 
     async def get_customer_rules(self, customer_id: str) -> List[AlertRule]:
         """Get alert rules for a customer using Redis cache with database fallback"""
@@ -479,6 +491,7 @@ class AlertEngine:
 
     async def _evaluate_rule(self, rule: AlertRule):
         """Evaluate a single alert rule"""
+        evaluation_started = time.monotonic()
         try:
             # Initialize query engine if needed
             if not self.query_engine:
@@ -501,6 +514,11 @@ class AlertEngine:
 
         except Exception as e:
             logger.error(f"Failed to evaluate rule {rule.name}: {e}")
+        finally:
+            self._evaluation_durations_ms.append(
+                (time.monotonic() - evaluation_started) * 1000
+            )
+            self._last_evaluation_at = datetime.utcnow()
 
     async def _build_query_from_rule(self, rule: AlertRule) -> AdvancedQueryRequest:
         """Build query request from alert rule"""
@@ -709,33 +727,89 @@ class AlertEngine:
         return context
 
     async def _send_notifications(self, alert: AlertInstance, rule: AlertRule):
-        """Send notifications for an alert"""
-        for channel_id in rule.notification_channels:
-            channel = self.notification_channels.get(channel_id)
-            if not channel or not channel.enabled:
-                continue
+        """Send real notifications for an alert (LF-035).
 
-            try:
-                await self._send_notification(alert, channel)
+        Channels are resolved from notification_channels_mt for the alert's
+        customer and delivered through the NotificationService (retries,
+        backoff, circuit breaker). Every attempt cycle is recorded in
+        alert_notifications_mt; a notification is only ever counted as sent
+        when the provider actually confirmed it.
+        """
+        if not rule.notification_channels:
+            return
+
+        from services.notification_service import get_notification_service
+        from dao.alert_dao import AlertDAO
+
+        service = get_notification_service()
+
+        try:
+            channels = await AlertDAO().list_notification_channels(alert.customer_id)
+        except Exception as e:
+            logger.error(
+                f"Cannot deliver notifications for alert {alert.alert_id}: "
+                f"failed to load channels: {e}"
+            )
+            self.notifications_failed += len(rule.notification_channels)
+            return
+
+        channels_by_id = {c.get("id"): c for c in channels}
+        payload = self._build_notification_payload(alert)
+
+        for channel_id in rule.notification_channels:
+            channel = channels_by_id.get(channel_id)
+            if channel is None:
+                logger.error(
+                    f"Alert {alert.alert_id} references unknown notification "
+                    f"channel {channel_id} - nothing was delivered to it"
+                )
+                self.notifications_failed += 1
+                continue
+            if not channel.get("enabled", False):
+                continue  # explicitly disabled by the user
+
+            result = await service.send_to_channel(channel, payload)
+            await service.record_delivery(
+                alert.customer_id,
+                alert.alert_id,
+                channel_id,
+                str(channel.get("channel_type") or channel.get("type") or "webhook"),
+                result,
+            )
+
+            if result.success:
                 alert.notification_count += 1
                 alert.last_notification_at = datetime.utcnow()
-            except Exception as e:
-                logger.error(f"Failed to send notification via {channel.name}: {e}")
+                self.notifications_sent += 1
+                logger.info(
+                    f"Notification delivered for alert {alert.alert_id} via "
+                    f"{channel.get('name')} ({result.attempts} attempt(s))"
+                )
+            else:
+                self.notifications_failed += 1
+                logger.error(
+                    f"Notification FAILED for alert {alert.alert_id} via "
+                    f"{channel.get('name')} after {result.attempts} attempt(s): "
+                    f"{result.error}"
+                )
 
-    async def _send_notification(self, alert: AlertInstance, channel: NotificationChannelConfig):
-        """Send notification via specific channel"""
-        message = self._format_alert_message(alert)
-
-        if channel.type == NotificationChannel.EMAIL:
-            await self._send_email_notification(alert, channel, message)
-        elif channel.type == NotificationChannel.SLACK:
-            await self._send_slack_notification(alert, channel, message)
-        elif channel.type == NotificationChannel.WEBHOOK:
-            await self._send_webhook_notification(alert, channel, message)
-        elif channel.type == NotificationChannel.PAGERDUTY:
-            await self._send_pagerduty_notification(alert, channel, message)
-        else:
-            logger.warning(f"Unsupported notification channel: {channel.type}")
+    def _build_notification_payload(self, alert: AlertInstance) -> Dict[str, Any]:
+        """Build the JSON payload delivered to notification channels."""
+        return {
+            "event": "alert.triggered",
+            "alert_id": alert.alert_id,
+            "rule_id": alert.rule_id,
+            "rule_name": alert.name,
+            "title": alert.name,
+            "description": alert.description,
+            "severity": alert.severity.value,
+            "status": alert.status.value,
+            "customer_id": alert.customer_id,
+            "triggered_at": alert.triggered_at.isoformat(),
+            "trigger_data": alert.trigger_data,
+            "tags": alert.tags,
+            "source": "logforge",
+        }
 
     def _format_alert_message(self, alert: AlertInstance) -> str:
         """Format alert message for notifications"""
@@ -754,26 +828,6 @@ Rule ID: {alert.rule_id}
 
 Context: {json.dumps(alert.trigger_data, indent=2)}
 """
-
-    async def _send_email_notification(self, alert: AlertInstance, channel: NotificationChannelConfig, message: str):
-        """Send email notification (placeholder implementation)"""
-        # In a real implementation, this would use SMTP
-        logger.info(f"EMAIL notification sent for alert {alert.alert_id} via {channel.name}")
-
-    async def _send_slack_notification(self, alert: AlertInstance, channel: NotificationChannelConfig, message: str):
-        """Send Slack notification (placeholder implementation)"""
-        # In a real implementation, this would use Slack API
-        logger.info(f"SLACK notification sent for alert {alert.alert_id} via {channel.name}")
-
-    async def _send_webhook_notification(self, alert: AlertInstance, channel: NotificationChannelConfig, message: str):
-        """Send webhook notification (placeholder implementation)"""
-        # In a real implementation, this would make HTTP requests
-        logger.info(f"WEBHOOK notification sent for alert {alert.alert_id} via {channel.name}")
-
-    async def _send_pagerduty_notification(self, alert: AlertInstance, channel: NotificationChannelConfig, message: str):
-        """Send PagerDuty notification (placeholder implementation)"""
-        # In a real implementation, this would use PagerDuty Events API
-        logger.info(f"PAGERDUTY notification sent for alert {alert.alert_id} via {channel.name}")
 
     async def _check_alert_resolution(self, rule: AlertRule):
         """Check if any active alerts for this rule should be resolved"""
@@ -800,6 +854,217 @@ Context: {json.dumps(alert.trigger_data, indent=2)}
         alert.trigger_data['resolution_reason'] = resolution_reason
 
         logger.info(f"Alert resolved: {alert.name} (ID: {alert_id}) - {resolution_reason}")
+
+    # ------------------------------------------------------------------
+    # LF-038: saved-search (LogQL) alert rules - scheduled evaluation
+    # ------------------------------------------------------------------
+
+    async def _logql_scheduler_loop(self):
+        """Periodically evaluate LogQL saved-search alert rules.
+
+        These rules carry `query_type: "logql"` in their condition_config and a
+        LogforgeQL query in the rules table's `query` column. They are
+        evaluated on a schedule against the query engine (the ingest-path
+        matchers cannot evaluate them - they see a batch, not a window).
+        """
+        tick_seconds = max(10, int(os.getenv("LOGFORGE_LOGQL_EVAL_SECONDS", "30")))
+        while self.is_running:
+            try:
+                await self._evaluate_logql_rules()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"LogQL rule scheduler cycle failed: {e}")
+            await asyncio.sleep(tick_seconds)
+
+    async def _evaluate_logql_rules(self):
+        """One scheduler pass over every enabled LogQL rule."""
+        from dao.alert_dao import AlertDAO
+
+        dao = AlertDAO()
+        rules = await dao.get_all_alert_rules(enabled_only=True)
+
+        # ENH-017-style cost guard: cap scheduled evaluations per tenant.
+        per_tenant_cap = int(os.getenv("LOGFORGE_LOGQL_RULES_PER_TENANT", "25"))
+        evaluated_per_tenant: Dict[str, int] = {}
+        now = datetime.now(timezone.utc)
+
+        for rule in rules:
+            try:
+                condition_config = rule.get("condition_config")
+                if isinstance(condition_config, str):
+                    condition_config = json.loads(condition_config or "{}")
+                if not isinstance(condition_config, dict):
+                    continue
+                if condition_config.get("query_type") != "logql":
+                    continue
+                if not rule.get("query"):
+                    continue
+
+                customer_id = rule["customer_id"]
+                evaluated = evaluated_per_tenant.get(customer_id, 0)
+                if evaluated >= per_tenant_cap:
+                    logger.warning(
+                        f"Tenant {customer_id} exceeds the LogQL rule evaluation "
+                        f"cap ({per_tenant_cap}); rule {rule['id']} skipped this cycle"
+                    )
+                    continue
+
+                # Per-rule evaluation interval (min 60s - cost guard)
+                interval_seconds = max(
+                    60, int(condition_config.get("evaluation_interval", 300))
+                )
+                last_eval = self._logql_last_eval.get(rule["id"])
+                if last_eval and (now - last_eval).total_seconds() < interval_seconds:
+                    continue
+
+                # Cooldown between firings
+                cooldown_minutes = int(rule.get("cooldown_minutes", 5) or 5)
+                if await dao.is_rule_in_cooldown(rule["id"], customer_id, cooldown_minutes):
+                    self._logql_last_eval[rule["id"]] = now
+                    continue
+
+                evaluated_per_tenant[customer_id] = evaluated + 1
+                self._logql_last_eval[rule["id"]] = now
+                await self._evaluate_logql_rule(dao, rule, condition_config)
+
+            except Exception as e:
+                logger.error(f"Failed to evaluate LogQL rule {rule.get('id')}: {e}")
+
+    async def _evaluate_logql_rule(
+        self, dao, rule: Dict[str, Any], condition_config: Dict[str, Any]
+    ):
+        """Evaluate a single LogQL rule and create an alert instance if it fires."""
+        import logql
+
+        if not self.query_engine:
+            from query_engine import get_query_engine
+            self.query_engine = get_query_engine()
+
+        customer_id = rule["customer_id"]
+        query_text = rule["query"]
+        trigger = condition_config.get("trigger") or {}
+        kind = str(trigger.get("kind", "count")).lower()
+        operator = str(trigger.get("operator", "gt")).lower()
+        threshold = float(trigger.get("threshold", 0))
+        window_minutes = max(1, int(trigger.get("time_window_minutes", 5)))
+
+        payload = logql.compile_to_request_payload(query_text)
+
+        end_time = datetime.utcnow()
+        start_time = end_time - timedelta(minutes=window_minutes)
+
+        filters = [
+            QueryFilter(
+                field=f["field"],
+                operator=QueryOperator(f["operator"]),
+                value=f["value"],
+            )
+            for f in payload.get("filters", [])
+        ]
+        filters.append(
+            QueryFilter(field="customer_id", operator=QueryOperator.EQ, value=customer_id)
+        )
+
+        request = AdvancedQueryRequest(
+            start_time=start_time,
+            end_time=end_time,
+            filters=filters,
+            text_search=payload.get("text_search"),
+            aggregations=[QueryAggregation(type=AggregationType.COUNT, field="*")],
+            limit=1,
+            timeout_seconds=15,
+        )
+
+        # If the query fails we must NOT treat it as "no results": that would
+        # fire false absence alerts. Exceptions propagate to the caller's
+        # error handler and the rule is simply retried next cycle.
+        result = await self.query_engine.execute_query(request)
+        match_count = self._extract_count(result)
+
+        fired = False
+        actual_value: float = float(match_count)
+        if kind == "absence":
+            fired = match_count == 0
+        elif kind == "ratio":
+            # Ratio of matching logs to all logs in the same window
+            total_request = AdvancedQueryRequest(
+                start_time=start_time,
+                end_time=end_time,
+                filters=[
+                    QueryFilter(
+                        field="customer_id", operator=QueryOperator.EQ, value=customer_id
+                    )
+                ],
+                aggregations=[QueryAggregation(type=AggregationType.COUNT, field="*")],
+                limit=1,
+                timeout_seconds=15,
+            )
+            total_result = await self.query_engine.execute_query(total_request)
+            total_count = self._extract_count(total_result)
+            actual_value = (match_count / total_count) if total_count else 0.0
+            fired = self._compare_values(actual_value, ThresholdOperator(operator), threshold)
+        else:  # count
+            fired = self._compare_values(actual_value, ThresholdOperator(operator), threshold)
+
+        if not fired:
+            return
+
+        human_readable = {
+            "count": f"count({query_text}) {operator} {threshold} over {window_minutes}m "
+                     f"(actual: {match_count})",
+            "ratio": f"ratio({query_text}) {operator} {threshold} over {window_minutes}m "
+                     f"(actual: {actual_value:.4f})",
+            "absence": f"no results for ({query_text}) in {window_minutes}m",
+        }[kind if kind in ("count", "ratio", "absence") else "count"]
+
+        alert_id = str(uuid.uuid4())
+        triggered_at = datetime.now(timezone.utc)
+        await dao.save_alert_instance({
+            "id": alert_id,
+            "rule_id": rule["id"],
+            "status": "triggered",
+            "triggered_at": triggered_at,
+            "trigger_data": json.dumps({
+                "query_type": "logql",
+                "query": query_text,
+                "trigger_kind": kind,
+                "operator": operator,
+                "threshold": threshold,
+                "time_window_minutes": window_minutes,
+                "match_count": match_count,
+                "actual_value": actual_value,
+                "condition_evaluation": {"human_readable": human_readable},
+                "window_start": start_time.isoformat(),
+                "window_end": end_time.isoformat(),
+            }),
+            "customer_id": customer_id,
+        })
+        await dao.update_rule_state({
+            "rule_id": rule["id"],
+            "customer_id": customer_id,
+            "last_trigger": triggered_at,
+        })
+
+        logger.warning(
+            f"LogQL alert rule fired: {rule.get('name')} ({rule['id']}) - {human_readable}; "
+            f"alert instance {alert_id} created"
+        )
+
+    def _extract_count(self, query_result: Any) -> int:
+        """Read the count(*) result from a query response."""
+        aggs = getattr(query_result, "aggregations", None) or {}
+        if isinstance(aggs, dict):
+            if "count_all" in aggs:
+                return int(aggs["count_all"])
+            for key, value in aggs.items():
+                if key.startswith("count"):
+                    try:
+                        return int(value)
+                    except (TypeError, ValueError):
+                        continue
+        total = getattr(query_result, "total_count", None)
+        return int(total or 0)
 
     def _parse_interval(self, interval: str) -> int:
         """Parse interval string to seconds"""
@@ -967,8 +1232,10 @@ Context: {json.dumps(alert.trigger_data, indent=2)}
             "active_rules": len([r for r in self.rules.values() if r.enabled]),
             "active_alerts": len(self.active_alerts),
             "total_rules": len(self.rules),
-            "last_evaluation": datetime.now().isoformat(),
-            "engine_uptime": "healthy"
+            "last_evaluation": (
+                self._last_evaluation_at.isoformat() if self._last_evaluation_at else None
+            ),
+            "engine_uptime": "healthy" if self.is_running else "stopped"
         }
 
     def get_stats(self, customer_id: Optional[str] = None) -> Dict[str, Any]:
@@ -984,6 +1251,14 @@ Context: {json.dumps(alert.trigger_data, indent=2)}
         acknowledged_alerts = len([a for a in customer_alerts if a.status == AlertStatus.ACKNOWLEDGED])
         resolved_alerts = len([a for a in customer_alerts if a.status == AlertStatus.RESOLVED])
 
+        # Real telemetry (LF-035): counters are incremented only by genuine
+        # delivery outcomes and measured evaluations - never fabricated.
+        avg_evaluation_ms = (
+            round(sum(self._evaluation_durations_ms) / len(self._evaluation_durations_ms), 1)
+            if self._evaluation_durations_ms
+            else None
+        )
+
         return {
             "total_rules": len(customer_rules),
             "enabled_rules": enabled_rules,
@@ -992,10 +1267,12 @@ Context: {json.dumps(alert.trigger_data, indent=2)}
             "acknowledged_alerts": acknowledged_alerts,
             "resolved_alerts": resolved_alerts,
             "total_alerts_fired": len(customer_alerts),
-            "notifications_sent": sum(a.notification_count for a in customer_alerts),
-            "notifications_failed": 0,  # Would track failures in real implementation
-            "avg_evaluation_time_ms": 45.2,  # Would calculate from actual metrics
-            "last_evaluation": datetime.now().isoformat()
+            "notifications_sent": self.notifications_sent,
+            "notifications_failed": self.notifications_failed,
+            "avg_evaluation_time_ms": avg_evaluation_ms,
+            "last_evaluation": (
+                self._last_evaluation_at.isoformat() if self._last_evaluation_at else None
+            )
         }
 
 

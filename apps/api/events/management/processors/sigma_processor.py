@@ -18,6 +18,27 @@ from sigma_engine import SigmaRuleEngine
 logger = logging.getLogger(__name__)
 
 
+def _as_string_list(value: Any) -> List[str]:
+    """
+    Coerce a value into the list-of-strings shape required by ClickHouse
+    `Array(String)` columns (ENH-004).
+
+    `attack_techniques` and `kill_chain_phases` arrive as enums, strings, or
+    lists depending on the rule source. Anything already iterable is mapped to
+    strings; a bare scalar becomes a single-element list; None becomes empty.
+    """
+    if value is None:
+        return []
+    if isinstance(value, (str, bytes)):
+        return [value.decode() if isinstance(value, bytes) else value]
+    if isinstance(value, (list, tuple, set)):
+        return [
+            item.value if hasattr(item, "value") else str(item)
+            for item in value
+        ]
+    return [value.value if hasattr(value, "value") else str(value)]
+
+
 class SigmaProcessor:
     """
     Main sigma rule processing engine that coordinates rule matching and security event generation.
@@ -184,20 +205,54 @@ class SigmaProcessor:
             # Create security event ID
             event_id = str(uuid.uuid4())
             
-            # Prepare event data
+            # Prepare event data.
+            #
+            # ENH-004: `artifact_data` and `matched_fields` are derived from
+            # INGESTED LOG CONTENT and are therefore attacker-controlled. They
+            # are carried as plain Python values here and bound by the driver in
+            # `_insert_security_event()`. They must never be formatted into SQL
+            # text -- see the regression tests in
+            # tests/test_sigma_processor_sql_injection.py.
+            #
+            # `attack_techniques` / `kill_chain_phases` are Array(String) columns
+            # (migrations/003_seed_mitre_rules.sql), so they are passed as lists,
+            # not json.dumps() strings, which previously produced a type error.
+            # ENH-021: columns follow `init_simple.sql:636`, which is the schema
+            # actually mounted by infra/docker/compose.yml and the shape
+            # `dao/security_dao.py` reads and writes.
+            #
+            # This previously used the columns from
+            # migrations/003_seed_mitre_rules.sql (`attack_techniques`,
+            # `kill_chain_phases`, `artifact_data`, `matched_fields`) and the
+            # enum values 'sigma_detection'/'open', none of which exist in the
+            # live table -- so every detection insert failed.
             event_data = {
                 'id': event_id,
                 'customer_id': customer_id,
                 'rule_id': match.rule_id,
-                'event_type': 'sigma_detection',
+                # `event_type` is Enum8('detection','alert','incident')
+                'event_type': 'detection',
                 'severity': match.severity.value if hasattr(match.severity, 'value') else str(match.severity),
                 'title': f"Security Detection: {match.rule_title}",
                 'description': f"Sigma rule {match.rule_id} triggered by log activity",
-                'attack_techniques': json.dumps(match.attack_techniques),
-                'kill_chain_phases': json.dumps(match.kill_chain_phases),
-                'artifact_data': json.dumps(match.log_entry),
-                'matched_fields': json.dumps(match.matched_fields),
-                'status': 'open',
+                # `raw_log_data` / `enrichment_data` are String columns holding
+                # JSON. These carry attacker-controlled log content and are
+                # bound by the driver, never formatted into SQL (ENH-004).
+                'raw_log_data': json.dumps(match.log_entry, default=str),
+                # ENH-022: threat-intel enrichment is merged into
+                # `enrichment_data` alongside the matched fields, so an analyst
+                # sees "this rule fired AND the source IP is known C2" in one
+                # place rather than having to correlate manually.
+                'enrichment_data': json.dumps(
+                    await self._build_enrichment(match), default=str
+                ),
+                # Array(String) columns -- lists, not JSON strings.
+                'mitre_techniques': _as_string_list(match.attack_techniques),
+                'assigned_to': None,
+                'investigation_notes': [],
+                'artifacts': _as_string_list(match.kill_chain_phases),
+                # `status` is Enum8('new','investigating','resolved','false_positive')
+                'status': 'new',
                 'created_at': match.timestamp,
                 'updated_at': match.timestamp
             }
@@ -215,43 +270,58 @@ class SigmaProcessor:
             logger.error(f"Failed to create security event for rule {match.rule_id}: {e}")
             return False
 
-    async def _insert_security_event(self, event_data: Dict[str, Any]) -> bool:
-        """Insert security event into database"""
+    async def _build_enrichment(self, match) -> Dict[str, Any]:
+        """
+        Build the enrichment payload for a detection (ENH-022).
+
+        Always includes the Sigma matched fields. Adds threat-intel IOC matches
+        when enrichment is enabled and the log contains a known indicator.
+
+        Enrichment failure NEVER fails the detection: a threat-intel outage must
+        not stop security events from being written. A missing enrichment is a
+        degraded signal; a missing detection is a security incident.
+        """
+        enrichment: Dict[str, Any] = {"matched_fields": match.matched_fields}
+
         try:
-            from database_layer import DatabaseLayer
-            import os
-            service_key = os.getenv('SIGMA_PROCESSOR_KEY', 'sigma-processor-service-key')
-            database = DatabaseLayer("SigmaProcessor", service_key)
+            from threat_intel import get_threat_intel_enricher, is_enabled
 
-            await database.execute_update(
-                f"""
-                INSERT INTO security_events_mt (
-                    id, customer_id, rule_id, event_type, severity, title, description,
-                    attack_techniques, kill_chain_phases, artifact_data, matched_fields,
-                    status, created_at, updated_at
-                ) VALUES (
-                    '{event_data["id"]}',
-                    '{event_data["customer_id"]}',
-                    '{event_data["rule_id"]}',
-                    '{event_data["event_type"]}',
-                    '{event_data["severity"]}',
-                    '{event_data["title"].replace("'", "''")}',
-                    '{event_data["description"].replace("'", "''")}',
-                    '{event_data["attack_techniques"]}',
-                    '{event_data["kill_chain_phases"]}',
-                    '{event_data["artifact_data"]}',
-                    '{event_data["matched_fields"]}',
-                    '{event_data["status"]}',
-                    '{event_data["created_at"].isoformat()}',
-                    '{event_data["updated_at"].isoformat()}'
+            if is_enabled():
+                enrichment["threat_intel"] = await get_threat_intel_enricher().enrich(
+                    match.log_entry
                 )
-                """
-            )
-            return True
+        except Exception as exc:
+            logger.warning(f"Threat intel enrichment skipped: {exc}")
 
-        except Exception as e:
-            logger.error(f"Error inserting security event {event_data['id']}: {e}")
-            return False
+        return enrichment
+
+    async def _insert_security_event(self, event_data: Dict[str, Any]) -> bool:
+        """
+        Insert security event into the database.
+
+        ENH-004: this previously built an INSERT with f-string interpolation of
+        `artifact_data` and `matched_fields`, both of which are derived from
+        ingested log content. Any actor able to ship a log into any tenant could
+        therefore execute arbitrary ClickHouse statements as the detection
+        service -- no platform credentials required.
+
+        The statement is now built by the driver from a column list and a value
+        row (`DatabaseLayer.execute_insert`), so log content is transported as
+        DATA and can never be parsed as SQL.
+
+        Raises on failure rather than returning False: a detection that cannot
+        be persisted is a lost detection and must be surfaced, not swallowed.
+        """
+        from database_layer import DatabaseLayer
+        import os
+
+        service_key = os.getenv('SIGMA_PROCESSOR_KEY', 'sigma-processor-service-key')
+        database = DatabaseLayer("SigmaProcessor", service_key)
+
+        # No SQL text is constructed here. Column names are a fixed literal list
+        # inside DatabaseLayer; values are bound by the ClickHouse driver.
+        await database.execute_insert('security_events_mt', [event_data])
+        return True
 
     async def _publish_security_event(self, event_data: Dict[str, Any]) -> bool:
         """Publish security event for streaming API"""
@@ -342,5 +412,30 @@ class SigmaProcessor:
             return {"error": str(e)}
 
 
-# Singleton instance for use across the application
-sigma_processor = SigmaProcessor()
+# Singleton instance for use across the application.
+#
+# ENH-004/ENH-010: constructing this at import time opened a database
+# connection during `import sigma_processor`, which made the module -- and the
+# detection path it owns -- impossible to test without live infrastructure.
+# It is now built on first use. The only consumer
+# (`events/management/processors/event_handler.py:117`) already imports it
+# lazily inside a function, so behaviour is unchanged.
+_sigma_processor_instance: Optional["SigmaProcessor"] = None
+
+
+def get_sigma_processor() -> "SigmaProcessor":
+    """Get the shared SigmaProcessor, constructing it on first use."""
+    global _sigma_processor_instance
+    if _sigma_processor_instance is None:
+        _sigma_processor_instance = SigmaProcessor()
+    return _sigma_processor_instance
+
+
+def __getattr__(name: str):
+    """
+    Preserve the historical `from ... import sigma_processor` spelling without
+    reintroducing an import-time connection (PEP 562 module __getattr__).
+    """
+    if name == "sigma_processor":
+        return get_sigma_processor()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

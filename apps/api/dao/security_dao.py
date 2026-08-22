@@ -117,20 +117,74 @@ class SecurityDAO:
             logger.error(f"Failed to save Sigma rule: {e}")
             raise
     
-    async def get_sigma_rules(self, customer_id: str = None) -> List[Dict[str, Any]]:
+    @staticmethod
+    def _sigma_rule_predicates(
+        customer_id: str = None,
+        enabled: bool = None,
+        severity: str = None,
+    ) -> tuple:
+        """Build the shared WHERE clause for sigma rule list/count queries (LF-016)."""
+        where_clauses = []
+        params: Dict[str, Any] = {}
+
+        if customer_id:
+            # Tenant rules plus the platform-default library (LF-003: the
+            # single sentinel for platform rules is the string 'default').
+            where_clauses.append("(customer_id = %(customer_id)s OR customer_id = 'default')")
+            params["customer_id"] = customer_id
+
+        if enabled is not None:
+            where_clauses.append("is_enabled = %(is_enabled)s")
+            params["is_enabled"] = 1 if enabled else 0
+
+        if severity:
+            where_clauses.append("severity = %(severity)s")
+            params["severity"] = severity
+
+        where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+        return where_sql, params
+
+    async def count_sigma_rules(
+        self,
+        customer_id: str = None,
+        enabled: bool = None,
+        severity: str = None,
+    ) -> int:
+        """Count Sigma rules matching the same predicate as get_sigma_rules (LF-016)."""
+        try:
+            where_sql, params = self._sigma_rule_predicates(customer_id, enabled, severity)
+            query = f"SELECT count() as count FROM sigma_rules_mt {where_sql}"
+            result = await self.db.fetch_one(query, params)
+            return int(result["count"]) if result else 0
+        except Exception as e:
+            logger.error(f"Failed to count Sigma rules: {e}")
+            raise
+
+    async def get_sigma_rules(
+        self,
+        customer_id: str = None,
+        limit: int = None,
+        offset: int = 0,
+        enabled: bool = None,
+        severity: str = None,
+    ) -> List[Dict[str, Any]]:
         """Get Sigma rules from database"""
         try:
-            if customer_id:
-                query = """
-                SELECT * FROM sigma_rules_mt 
-                WHERE customer_id = %(customer_id)s OR customer_id = 'default'
-                ORDER BY created_at DESC
-                """
-                params = {"customer_id": customer_id}
-            else:
-                query = "SELECT * FROM sigma_rules_mt ORDER BY created_at DESC"
-                params = {}
-            
+            where_sql, params = self._sigma_rule_predicates(customer_id, enabled, severity)
+
+            pagination_sql = ""
+            if limit is not None:
+                pagination_sql = "LIMIT %(limit)s OFFSET %(offset)s"
+                params["limit"] = int(limit)
+                params["offset"] = int(offset)
+
+            query = f"""
+            SELECT * FROM sigma_rules_mt
+            {where_sql}
+            ORDER BY created_at DESC
+            {pagination_sql}
+            """
+
             results = await self.db.fetch_all(query, params)
             
             # Process results to map to expected API format
@@ -163,9 +217,13 @@ class SecurityDAO:
                     "falsepositives": rule_content.get("falsepositives", []),
                     "created_at": rule["created_at"],
                     "updated_at": rule["updated_at"],
-                    "customer_id": rule["customer_id"]
+                    # Platform-default rules ('default' sentinel, LF-003) have
+                    # no owning tenant; expose an empty owner so consumers
+                    # (e.g. the sigma rule cache) bucket them as defaults.
+                    "customer_id": "" if rule["customer_id"] == "default" else rule["customer_id"],
+                    "is_default": rule["customer_id"] == "default"
                 }
-                
+
                 processed_rules.append(processed_rule)
             
             return processed_rules
@@ -217,9 +275,12 @@ class SecurityDAO:
                     "falsepositives": rule_content.get("falsepositives", []),
                     "created_at": result["created_at"],
                     "updated_at": result["updated_at"],
-                    "customer_id": result["customer_id"]
+                    # See get_sigma_rules: 'default' is a storage sentinel
+                    # (LF-003), not a tenant.
+                    "customer_id": "" if result["customer_id"] == "default" else result["customer_id"],
+                    "is_default": result["customer_id"] == "default"
                 }
-                
+
                 return processed_rule
             
             return None
@@ -858,21 +919,20 @@ class SecurityDAO:
                 # Migration marker doesn't exist - don't load
                 logger.debug("MITRE migration marker not found")
                 return False
-            
-            # Check if MITRE rules are already loaded
-            rules_query = """
-                SELECT count() as count FROM sigma_rules_mt 
-                WHERE customer_id IS NULL AND id LIKE 'mitre_default_%'
-            """
-            
-            rules_result = await self.db.execute_query(rules_query)
-            existing_rules = rules_result[0]["count"] if rules_result else 0
-            
-            # Load rules if marker exists but rules are not loaded (or incomplete)
-            should_load = existing_rules < 286
-            
-            logger.info(f"Migration check: marker exists, {existing_rules}/286 rules loaded, should_load={should_load}")
-            return should_load
+
+            # LF-004: the loader reconciles idempotently (it fetches existing
+            # default rule ids and inserts only what is missing), so running it
+            # on every startup is cheap and picks up new vendored content. The
+            # old guard here compared against a hard-coded 286 using an
+            # `IS NULL` predicate that could never match the non-nullable
+            # `customer_id` column, which made every startup re-insert the
+            # full set.
+            existing_rules = await self.get_mitre_rules_count()
+            logger.info(
+                f"Migration check: marker exists, {existing_rules} default rules present; "
+                "running idempotent loader reconciliation"
+            )
+            return True
             
         except Exception as e:
             logger.error(f"Error checking MITRE migration status: {e}")
@@ -915,19 +975,66 @@ class SecurityDAO:
             return False
     
     async def get_mitre_rules_count(self) -> int:
-        """Get count of loaded MITRE default rules"""
+        """Get count of loaded platform-default rules (LF-003: 'default' sentinel)"""
         try:
             query = """
-                SELECT count() as count FROM sigma_rules_mt 
-                WHERE customer_id IS NULL AND id LIKE 'mitre_default_%'
+                SELECT count() as count FROM sigma_rules_mt
+                WHERE customer_id = 'default' AND created_by = 'system'
             """
-            
+
             result = await self.db.execute_query(query)
             return result[0]["count"] if result else 0
-            
+
         except Exception as e:
             logger.error(f"Error getting MITRE rules count: {e}")
             return 0
+
+    # =================================================================
+    # MITRE ATT&CK COVERAGE (LF-040)
+    # =================================================================
+
+    async def get_rule_technique_stats(self, customer_id: str) -> List[Dict[str, Any]]:
+        """
+        Per-technique rule statistics for the tenant's effective rule set
+        (tenant rules + platform defaults).
+
+        `fixture_rule_count` counts rules whose rule_content carries verified
+        true-positive/true-negative fixtures (LF-005) — only those count as
+        real coverage.
+        """
+        try:
+            query = """
+            SELECT technique,
+                   count() AS rule_count,
+                   countIf(is_enabled = 1) AS enabled_rule_count,
+                   countIf(JSONHas(rule_content, 'fixtures')) AS fixture_rule_count
+            FROM sigma_rules_mt
+            ARRAY JOIN mitre_techniques AS technique
+            WHERE customer_id = %(customer_id)s OR customer_id = 'default'
+            GROUP BY technique
+            """
+            return await self.db.fetch_all(query, {"customer_id": customer_id})
+
+        except Exception as e:
+            logger.error(f"Failed to get rule technique stats for {customer_id}: {e}")
+            raise
+
+    async def get_last_detection_times(self, customer_id: str) -> List[Dict[str, Any]]:
+        """Most recent security event per MITRE technique for this tenant."""
+        try:
+            query = """
+            SELECT technique,
+                   max(created_at) AS last_detection_at
+            FROM security_events_mt
+            ARRAY JOIN mitre_techniques AS technique
+            WHERE customer_id = %(customer_id)s
+            GROUP BY technique
+            """
+            return await self.db.fetch_all(query, {"customer_id": customer_id})
+
+        except Exception as e:
+            logger.error(f"Failed to get last detection times for {customer_id}: {e}")
+            raise
     
     # Threat Hunting Campaign Operations
     

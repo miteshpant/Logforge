@@ -21,7 +21,26 @@ logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/v1/security", tags=["security-analytics"])
 
 # Global security service instance
-security_service = SecurityService()
+# ENH-010: `SecurityService()` opens a database connection in its constructor, so
+# building it at import time made this router un-importable -- and untestable --
+# without live infrastructure. Built on first use; the PEP 562 hook below
+# preserves the bare `security_service` name at every call site.
+_security_service_instance: Optional[SecurityService] = None
+
+
+def get_security_service() -> SecurityService:
+    """Get the shared SecurityService, constructing it on first use."""
+    global _security_service_instance
+    if _security_service_instance is None:
+        _security_service_instance = SecurityService()
+    return _security_service_instance
+
+
+def __getattr__(name: str):
+    """Resolve `security_service` lazily (PEP 562)."""
+    if name == "security_service":
+        return get_security_service()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 # Pydantic models for API requests/responses
 
@@ -126,7 +145,7 @@ async def execute_threat_hunting_background(campaign_id: str, customer_id: str):
     try:
         logger.info(f"Starting background execution of campaign {campaign_id} for customer {customer_id}")
         
-        success = await security_service.execute_threat_hunting_campaign(campaign_id, customer_id)
+        success = await get_security_service().execute_threat_hunting_campaign(campaign_id, customer_id)
         
         if success:
             logger.info(f"Campaign {campaign_id} completed successfully")
@@ -149,8 +168,8 @@ async def run_background_threat_hunting():
                 "description": "Background threat hunting campaign"
             }
             # Use new async implementation
-            campaign_status = await security_service.start_threat_hunting_campaign(campaign_data)
-            await security_service.execute_threat_hunting_campaign(
+            campaign_status = await get_security_service().start_threat_hunting_campaign(campaign_data)
+            await get_security_service().execute_threat_hunting_campaign(
                 campaign_status["campaign_id"], 
                 customer_id
             )
@@ -165,9 +184,9 @@ async def security_health(customer_id: str = Header(..., alias="X-Customer-ID"))
     """Security analytics health check"""
     try:
         # Get counts from database
-        rules = await security_service.get_sigma_rules(customer_id)
-        events = await security_service.get_security_events(customer_id, limit=1)  # Just for count
-        indicators = await security_service.get_threat_indicators(customer_id)
+        rules = await get_security_service().get_sigma_rules(customer_id)
+        events = await get_security_service().get_security_events(customer_id, limit=1)  # Just for count
+        indicators = await get_security_service().get_threat_indicators(customer_id)
         
         return {
             "status": "healthy",
@@ -196,7 +215,7 @@ async def get_security_dashboard(
     """Get security dashboard overview"""
     try:
         # Get dashboard data from SecurityService with time filter
-        dashboard_data = await security_service.get_security_dashboard_data(
+        dashboard_data = await get_security_service().get_security_dashboard_data(
             customer_id,
             start_time=start_time,
             end_time=end_time
@@ -240,7 +259,7 @@ async def list_sigma_rules(
 ) -> List[SigmaRuleResponse]:
     """List all Sigma detection rules"""
     try:
-        rules = await security_service.get_sigma_rules(customer_id)
+        rules = await get_security_service().get_sigma_rules(customer_id)
         
         return [
             SigmaRuleResponse(
@@ -284,7 +303,7 @@ async def create_sigma_rule(
             "customer_id": customer_id
         }
         
-        rule_id = await security_service.create_sigma_rule(rule_data)
+        rule_id = await get_security_service().create_sigma_rule(rule_data)
         
         return {"message": "Sigma rule created", "rule_id": rule_id}
     except Exception as e:
@@ -298,7 +317,7 @@ async def get_sigma_rule(
 ) -> SigmaRuleResponse:
     """Get a specific Sigma rule"""
     try:
-        rule = await security_service.get_sigma_rule_by_id(rule_id, customer_id)
+        rule = await get_security_service().get_sigma_rule_by_id(rule_id, customer_id)
         
         if not rule:
             raise HTTPException(status_code=404, detail="Sigma rule not found")
@@ -337,7 +356,7 @@ async def test_sigma_rule(
             "timestamp": datetime.now().isoformat()
         }
         
-        result = await security_service.test_sigma_rule(rule_id, test_data)
+        result = await get_security_service().test_sigma_rule(rule_id, test_data)
         
         return {
             "result": "triggered" if result["matched"] else "no_match",
@@ -378,7 +397,7 @@ async def update_sigma_rule(
             "enabled": rule_request.enabled
         }
         
-        success = await security_service.update_sigma_rule(rule_id, rule_data, customer_id)
+        success = await get_security_service().update_sigma_rule(rule_id, rule_data, customer_id)
         
         if success:
             return {"message": "Sigma rule updated", "rule_id": rule_id}
@@ -398,7 +417,7 @@ async def delete_sigma_rule(
 ) -> Dict[str, str]:
     """Delete a Sigma detection rule"""
     try:
-        success = await security_service.delete_sigma_rule(rule_id, customer_id)
+        success = await get_security_service().delete_sigma_rule(rule_id, customer_id)
         
         if success:
             return {"message": "Sigma rule deleted", "rule_id": rule_id}
@@ -422,7 +441,7 @@ async def list_security_events(
 ) -> List[SecurityEventResponse]:
     """List security events"""
     try:
-        events = await security_service.get_security_events(
+        events = await get_security_service().get_security_events(
             customer_id=customer_id,
             limit=limit,
             severity=severity,
@@ -464,7 +483,7 @@ async def acknowledge_security_event(
 ) -> Dict[str, str]:
     """Acknowledge security event - assign to user and mark as investigating"""
     try:
-        success = await security_service.acknowledge_security_event(
+        success = await get_security_service().acknowledge_security_event(
             detection_id=detection_id,
             customer_id=customer_id,
             user_id=current_user.id,
@@ -490,7 +509,7 @@ async def investigate_security_event(
 ) -> Dict[str, str]:
     """Mark security event as under investigation"""
     try:
-        success = await security_service.investigate_security_event(
+        success = await get_security_service().investigate_security_event(
             detection_id=detection_id,
             customer_id=customer_id,
             user_id=current_user.id,
@@ -516,7 +535,7 @@ async def resolve_security_event(
 ) -> Dict[str, str]:
     """Resolve security event"""
     try:
-        success = await security_service.resolve_security_event(
+        success = await get_security_service().resolve_security_event(
             detection_id=detection_id,
             customer_id=customer_id,
             user_id=current_user.id,
@@ -542,7 +561,7 @@ async def mark_false_positive(
 ) -> Dict[str, str]:
     """Mark security event as false positive"""
     try:
-        success = await security_service.mark_false_positive(
+        success = await get_security_service().mark_false_positive(
             detection_id=detection_id,
             customer_id=customer_id,
             user_id=current_user.id,
@@ -569,7 +588,7 @@ async def bulk_acknowledge_by_rule(
 ) -> Dict[str, Any]:
     """Acknowledge all new events for a specific rule"""
     try:
-        updated_count = await security_service.bulk_acknowledge_by_rule(
+        updated_count = await get_security_service().bulk_acknowledge_by_rule(
             rule_id=rule_id,
             customer_id=customer_id,
             user_id=current_user.id,
@@ -594,7 +613,7 @@ async def bulk_investigate_by_rule(
 ) -> Dict[str, Any]:
     """Mark all new events for a rule as investigating"""
     try:
-        updated_count = await security_service.bulk_acknowledge_by_rule(  # Same as acknowledge
+        updated_count = await get_security_service().bulk_acknowledge_by_rule(  # Same as acknowledge
             rule_id=rule_id,
             customer_id=customer_id,
             user_id=current_user.id,
@@ -619,7 +638,7 @@ async def bulk_resolve_by_rule(
 ) -> Dict[str, Any]:
     """Resolve all new events for a specific rule"""
     try:
-        updated_count = await security_service.bulk_resolve_by_rule(
+        updated_count = await get_security_service().bulk_resolve_by_rule(
             rule_id=rule_id,
             customer_id=customer_id,
             user_id=current_user.id,
@@ -644,7 +663,7 @@ async def bulk_false_positive_by_rule(
 ) -> Dict[str, Any]:
     """Mark all new events for a rule as false positive"""
     try:
-        updated_count = await security_service.bulk_false_positive_by_rule(
+        updated_count = await get_security_service().bulk_false_positive_by_rule(
             rule_id=rule_id,
             customer_id=customer_id,
             user_id=current_user.id,
@@ -671,7 +690,7 @@ async def get_events_by_rule(
 ) -> Dict[str, Any]:
     """Get events for a specific rule"""
     try:
-        events = await security_service.get_events_by_rule(
+        events = await get_security_service().get_events_by_rule(
             rule_id=rule_id,
             customer_id=customer_id,
             status_filter=status,
@@ -696,7 +715,7 @@ async def get_security_event_status(
 ) -> Dict[str, Any]:
     """Get detailed security event status and investigation history"""
     try:
-        event = await security_service.get_security_event_details(detection_id, customer_id)
+        event = await get_security_service().get_security_event_details(detection_id, customer_id)
         
         if not event:
             raise HTTPException(status_code=404, detail="Security event not found")
@@ -738,7 +757,7 @@ async def start_threat_hunting(
         }
         
         # Start campaign (returns immediately)
-        campaign_status = await security_service.start_threat_hunting_campaign(campaign_data)
+        campaign_status = await get_security_service().start_threat_hunting_campaign(campaign_data)
         
         # Schedule background execution
         background_tasks.add_task(
@@ -759,7 +778,7 @@ async def get_threat_hunting_status(
 ) -> Dict[str, Any]:
     """Get threat hunting campaign status"""
     try:
-        status = await security_service.get_campaign_status(campaign_id, customer_id)
+        status = await get_security_service().get_campaign_status(campaign_id, customer_id)
         
         if not status:
             raise HTTPException(status_code=404, detail="Campaign not found")
@@ -778,7 +797,7 @@ async def get_campaign_findings(
 ) -> Dict[str, Any]:
     """Get findings from a threat hunting campaign"""
     try:
-        status = await security_service.get_campaign_status(campaign_id, customer_id)
+        status = await get_security_service().get_campaign_status(campaign_id, customer_id)
 
         if not status:
             raise HTTPException(status_code=404, detail="Campaign not found")
@@ -815,7 +834,7 @@ async def list_threat_hunting_campaigns(
 ) -> Dict[str, Any]:
     """List customer's threat hunting campaigns"""
     try:
-        campaigns = await security_service.get_customer_campaigns(customer_id, limit)
+        campaigns = await get_security_service().get_customer_campaigns(customer_id, limit)
         
         return {
             "campaigns": campaigns,
@@ -832,7 +851,7 @@ async def list_threat_intel(
 ) -> List[ThreatIntelResponse]:
     """List threat intelligence indicators"""
     try:
-        indicators = await security_service.get_threat_indicators(
+        indicators = await get_security_service().get_threat_indicators(
             customer_id=customer_id,
             indicator_type=indicator_type
         )
@@ -863,7 +882,7 @@ async def add_threat_indicator(
 ) -> ThreatIntelResponse:
     """Add a new threat intelligence indicator"""
     try:
-        indicator_id = await security_service.add_threat_indicator(
+        indicator_id = await get_security_service().add_threat_indicator(
             indicator_data={
                 "customer_id": customer_id,
                 "indicator_type": indicator.indicator_type,
@@ -902,7 +921,7 @@ async def delete_threat_indicator(
 ):
     """Delete a threat intelligence indicator"""
     try:
-        await security_service.delete_threat_indicator(
+        await get_security_service().delete_threat_indicator(
             customer_id=customer_id,
             indicator_id=indicator_id
         )
@@ -932,7 +951,7 @@ async def stream_security_events(
             while True:
                 try:
                     # Get recent security events
-                    events = await security_service.get_security_events(
+                    events = await get_security_service().get_security_events(
                         customer_id=customer_id,
                         limit=20,
                         status_filter=None
@@ -982,7 +1001,7 @@ async def get_threat_hunt_rules(
         # TODO: Get customer tier from user/tenant data - for now default to 'smb'
         customer_tier = "smb"  
         
-        result = await security_service.get_threat_hunt_rules_with_pricing(
+        result = await get_security_service().get_threat_hunt_rules_with_pricing(
             customer_id=customer_id,
             customer_tier=customer_tier
         )
@@ -998,7 +1017,7 @@ async def get_threat_hunt_rules(
 async def initialize_security_content():
     """Initialize default Sigma rules and threat intelligence"""
     try:
-        await security_service.load_default_security_content("default")
+        await get_security_service().load_default_security_content("default")
         logger.info("Default security content initialized")
     except Exception as e:
         logger.error(f"Failed to initialize default security content: {e}")

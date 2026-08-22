@@ -50,12 +50,22 @@ export interface AuthContext {
   isAuthenticated: boolean
 }
 
-// Error types
-export interface ApiError {
-  message: string
-  code: string
-  status: number
-  details?: any
+// Error type (LF-014): a real class, not an interface, so `throw new
+// ApiError(...)` works at runtime and callers can use `instanceof ApiError`.
+// The shape (message/code/status/details) is preserved for structural
+// consumers that only read fields.
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public code: string,
+    public status: number,
+    public details?: any
+  ) {
+    super(message)
+    this.name = 'ApiError'
+    // Maintain prototype chain when targeting ES5
+    Object.setPrototypeOf(this, ApiError.prototype)
+  }
 }
 
 class LogforgeApiClient {
@@ -133,15 +143,14 @@ class LogforgeApiClient {
           }
         }
 
-        // Handle other errors
-        const apiError: ApiError = {
-          message: error.response?.data?.message || error.message || 'An error occurred',
-          code: error.response?.data?.code || 'UNKNOWN_ERROR',
-          status: error.response?.status || 500,
-          details: error.response?.data?.details,
-        }
-
-        throw apiError
+        // Handle other errors: throw the same ApiError class so all
+        // failures are instanceof-checkable (LF-014).
+        throw new ApiError(
+          error.response?.data?.message || error.message || 'An error occurred',
+          error.response?.data?.code || 'UNKNOWN_ERROR',
+          error.response?.status || 500,
+          error.response?.data?.details
+        )
       }
     )
   }
@@ -178,14 +187,29 @@ class LogforgeApiClient {
     this.tenantId = tenantId
 
     if (typeof window !== 'undefined') {
-      // Use secure cookies only in production (HTTPS)
-      const isSecure = window.location.protocol === 'https:'
-      
-      Cookies.set(AUTH_TOKEN_KEY, token, { expires: 1, secure: isSecure, sameSite: 'strict' })
-      Cookies.set(TENANT_ID_KEY, tenantId, { expires: 30, secure: isSecure, sameSite: 'strict' })
-      
+      // ENH-018 (partial hardening).
+      //
+      // `Secure` was previously conditional on the CURRENT page protocol, so a
+      // deployment served over plain HTTP silently sent bearer tokens in the
+      // clear. It is now off only on localhost, where HTTPS is impractical for
+      // development; every other origin gets Secure unconditionally.
+      const isLocalhost =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1' ||
+        window.location.hostname === '[::1]'
+      const secure = !isLocalhost
+
+      // KNOWN LIMITATION: these cookies are readable by JavaScript, so any XSS
+      // in this application yields full account takeover. The complete fix is
+      // httpOnly cookies issued by the API plus a CSRF strategy -- that is an
+      // auth-flow change spanning the API and both UIs, tracked as the
+      // remaining work in ENH-018. Until then the refresh token's lifetime is
+      // reduced from 30 days to 7 to bound the exposure window.
+      Cookies.set(AUTH_TOKEN_KEY, token, { expires: 1, secure, sameSite: 'strict' })
+      Cookies.set(TENANT_ID_KEY, tenantId, { expires: 30, secure, sameSite: 'strict' })
+
       if (refreshToken) {
-        Cookies.set(REFRESH_TOKEN_KEY, refreshToken, { expires: 30, secure: isSecure, sameSite: 'strict' })
+        Cookies.set(REFRESH_TOKEN_KEY, refreshToken, { expires: 7, secure, sameSite: 'strict' })
       }
     }
   }
@@ -484,8 +508,8 @@ class LogforgeApiClient {
 // Export singleton instance
 export const apiClient = new LogforgeApiClient()
 
-// Export types
-export type { ApiResponse, PaginatedResponse, AuthContext, ApiError }
+// NOTE: ApiResponse, PaginatedResponse, AuthContext are exported inline at
+// their declarations; ApiError is exported as a VALUE (class) above (LF-014).
 
 // Export class for creating additional instances if needed
 export { LogforgeApiClient }

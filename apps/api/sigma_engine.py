@@ -71,28 +71,54 @@ class CountCondition:
         """
         Parse a count condition string.
 
-        Examples:
+        Supported forms:
+
+        Logforge-native:
             - "selection | count() > 10"
             - "selection | count(by=['src_ip']) > 5"
             - "selection | count(by=[\"src_ip\"]) > 5"
+
+        Standard Sigma aggregation (ENH-015):
+            - "count(selection) >= 10 by src_ip"
+            - "selection | count() > 5 by src_ip, user"
+
+        The standard form previously returned None, so a rule using it fell
+        through to the SIMPLE evaluation path and never fired. That is how
+        `packages/rules/brute_force_detection.yml` -- a shipped rule -- came to
+        be silently dead.
         """
         import re
 
-        # Pattern for count conditions
-        # Matches: count() > 5, count(by=['field']) > 5, count(by=["field1","field2"]) >= 10
-        count_pattern = r'count\s*\(\s*(?:by\s*=\s*\[([^\]]+)\])?\s*\)\s*(>|>=|<|<=|==|=)\s*(\d+)'
+        # Pattern for count conditions.
+        # Accepts an optional argument inside count(...) -- either the
+        # Logforge `by=[...]` form or a bare selection name as in standard
+        # Sigma -- followed by a comparison, then an optional trailing
+        # `by field1, field2`.
+        count_pattern = (
+            r'count\s*\(\s*(?:by\s*=\s*\[(?P<by_list>[^\]]+)\]|(?P<arg>[^)]*))?\s*\)'
+            r'\s*(?P<op>>=|<=|==|>|<|=)\s*(?P<threshold>\d+)'
+            r'(?:\s+by\s+(?P<by_fields>[A-Za-z0-9_.,\s]+))?'
+        )
 
         match = re.search(count_pattern, condition, re.IGNORECASE)
         if not match:
             return None
 
-        group_by_str, op_str, threshold_str = match.groups()
+        group_by_str = match.group("by_list")
+        trailing_by = match.group("by_fields")
+        op_str = match.group("op")
+        threshold_str = match.group("threshold")
 
         # Parse group_by fields
         group_by = None
         if group_by_str:
             # Remove quotes and split by comma
             fields = re.findall(r'["\']([^"\']+)["\']', group_by_str)
+            if fields:
+                group_by = fields
+        elif trailing_by:
+            # Standard Sigma: `... >= 10 by src_ip, user`
+            fields = [f.strip() for f in trailing_by.split(",") if f.strip()]
             if fields:
                 group_by = fields
 
@@ -132,6 +158,43 @@ class SigmaFieldMatcher:
     """Handles field-level matching for Sigma rule conditions"""
 
     @staticmethod
+    def _match_numeric_comparison(log_value: Any, rule_str: str) -> Optional[bool]:
+        """
+        Evaluate a comparison-style rule value such as ">1000000" (ENH-027).
+
+        Returns:
+            True/False if this IS a numeric comparison and it could be
+            evaluated; None if the rule value is not a comparison, so the
+            caller falls through to normal string matching.
+
+        Returning None rather than False for non-comparisons matters: treating
+        an ordinary value as a failed comparison would break every plain
+        equality match.
+        """
+        match = re.match(r"^\s*(>=|<=|>|<)\s*(-?\d+(?:\.\d+)?)\s*$", rule_str)
+        if not match:
+            return None
+
+        operator_token, threshold_str = match.groups()
+
+        try:
+            numeric_log_value = float(str(log_value).strip())
+        except (TypeError, ValueError):
+            # The rule asks for a numeric comparison but the log value is not
+            # numeric, so it cannot satisfy the condition.
+            return False
+
+        threshold = float(threshold_str)
+
+        if operator_token == ">":
+            return numeric_log_value > threshold
+        if operator_token == ">=":
+            return numeric_log_value >= threshold
+        if operator_token == "<":
+            return numeric_log_value < threshold
+        return numeric_log_value <= threshold
+
+    @staticmethod
     def match_field(log_value: Any, rule_value: Any, operator: str = "eq") -> bool:
         """
         Match a log field value against a rule condition
@@ -151,11 +214,45 @@ class SigmaFieldMatcher:
             # Convert both to strings for comparison
             log_str = str(log_value).lower()
 
-            # Handle list of possible values in rule
+            # ENH-039: the Sigma `|all` modifier. A list is normally an OR
+            # ("any of these values"); `|all` makes it an AND ("every one of
+            # these must be present").
+            #
+            # This matters for rules that need TWO conditions on the same
+            # field -- e.g. "the process is w3wp.exe AND the command line
+            # spawns a shell". Expressing that with two `command_line|contains`
+            # keys is invalid YAML semantics: the duplicate mapping key is
+            # silently discarded, leaving only the second condition. That
+            # produced 11 broken selections in the content pack, one of which
+            # degraded to "any cmd.exe" and fired on benign activity.
+            require_all = False
+            if operator and operator.endswith("|all"):
+                require_all = True
+                operator = operator[: -len("|all")] or "eq"
+
+            # Handle list of values in rule
             if isinstance(rule_value, list):
-                return any(SigmaFieldMatcher.match_field(log_value, val, operator) for val in rule_value)
+                combine = all if require_all else any
+                return combine(
+                    SigmaFieldMatcher.match_field(log_value, val, operator)
+                    for val in rule_value
+                )
 
             rule_str = str(rule_value).lower()
+
+            # ENH-027: numeric comparison values such as ">1000000" or "<=50".
+            #
+            # `packages/rules/data_exfiltration.yml` uses this Sigma idiom for
+            # its size and duration thresholds. Without this branch the value
+            # was compared as a LITERAL STRING, so `bytes_out: ">1000000"` only
+            # matched a log whose bytes_out was the text ">1000000" -- meaning
+            # the rule could never fire. Verified by its positive-sample test.
+            if operator in ("eq", None):
+                comparison = SigmaFieldMatcher._match_numeric_comparison(
+                    log_value, rule_str
+                )
+                if comparison is not None:
+                    return comparison
 
             # Handle different operators
             if operator == "eq" or operator is None:
@@ -590,28 +687,42 @@ class SigmaRuleEngine:
             # Removed logsource matching - SIGMA rules should be generic across environments
             # Real filtering happens at selection level (event_type, status_code, etc.)
 
-            # Evaluate the main selection
-            selection = detection.get("selection", {})
-            if not selection:
+            # ENH-015: evaluate EVERY selection block the rule defines, not just
+            # `selection` and `filter`. A rule may define selection1/selection2/
+            # filter_a/... and combine them arbitrarily in its condition, and
+            # `1 of them` / `all of them` need the full set to resolve against.
+            #
+            # `condition` is the only reserved key in a Sigma detection block;
+            # everything else is a named selection.
+            selection_blocks = {
+                name: block
+                for name, block in detection.items()
+                if name != "condition" and isinstance(block, (dict, list))
+            }
+
+            if not selection_blocks:
                 logger.warning(f"Rule {rule.id} has no selection criteria")
                 return None
 
-            selection_match, matched_fields = self.condition_evaluator.evaluate_selection(normalized_log, selection)
+            selection_results: Dict[str, bool] = {}
+            matched_fields: Dict[str, Any] = {}
 
-            if not selection_match:
-                return None
+            for name, block in selection_blocks.items():
+                block_match, block_fields = self.condition_evaluator.evaluate_selection(
+                    normalized_log, block
+                )
+                selection_results[name] = block_match
+                if block_match:
+                    # Record which fields matched, namespaced by selection so a
+                    # multi-selection rule produces attributable evidence.
+                    for field_name, detail in block_fields.items():
+                        matched_fields[f"{name}.{field_name}"] = detail
 
-            # Check filter conditions (if any)
-            filter_condition = detection.get("filter", {})
-            if filter_condition:
-                filter_match, _ = self.condition_evaluator.evaluate_selection(normalized_log, filter_condition)
-                if filter_match:
-                    # If filter matches, exclude this log (rule condition: "selection and not filter")
-                    return None
-
-            # Check condition logic
+            # Check condition logic across all selections.
             condition = detection.get("condition", "selection")
-            if not self._evaluate_condition_logic(condition, selection_match):
+            if not self._evaluate_condition_logic(
+                condition, selection_results, rule_id=rule.id
+            ):
                 return None
 
             # Create match result using normalized log (contains all the rich field data)
@@ -634,34 +745,47 @@ class SigmaRuleEngine:
             return None
 
 
-    def _evaluate_condition_logic(self, condition: str, selection_match: bool) -> bool:
+    def _evaluate_condition_logic(
+        self,
+        condition: str,
+        selection_results: Dict[str, bool],
+        rule_id: str = "unknown",
+    ) -> bool:
         """
-        Evaluate the condition logic for simple (non-count) rules.
+        Evaluate a Sigma condition against pre-computed selection results.
 
-        Note: Count-based conditions (e.g., "selection | count() > 5") are handled
-        separately by _evaluate_count_rule() at the batch level.
+        ENH-015: this previously implemented almost none of the Sigma grammar.
+        `"and not filter"` returned `selection_match` while IGNORING the filter,
+        so rules fired on exactly the traffic they were written to exclude; and
+        every other condition -- `selection1 or selection2`, `1 of them`,
+        `all of them`, any negation -- fell through to `return selection_match`.
+        Detections were therefore wrong in both directions.
+
+        Parsing now happens in `sigma_condition.py` against the real grammar.
 
         Args:
-            condition: The condition string from the rule
-            selection_match: Whether the selection matched
+            condition: the rule's condition string.
+            selection_results: {selection_name: matched} for every selection
+                block the rule defines.
+            rule_id: for diagnostics.
 
         Returns:
-            bool: True if the condition is satisfied
+            bool: whether the condition is satisfied. An unparseable condition
+            returns False -- a rule we cannot understand must never be treated
+            as matching, because that would fabricate detections.
         """
-        if condition == "selection":
-            return selection_match
-        elif "and not filter" in condition:
-            return selection_match  # Filter logic handled in _evaluate_rule_against_log
-        elif "count(" in condition.lower():
-            # This shouldn't happen as count rules are processed separately
-            # But if it does, don't match - let count rule handler deal with it
-            logger.debug(f"Count condition found in simple evaluation, skipping: {condition}")
+        from sigma_condition import SigmaConditionError, evaluate_condition
+
+        try:
+            return evaluate_condition(condition, selection_results)
+        except SigmaConditionError as exc:
+            # Do not fire on a rule we cannot parse. Logged at error level so
+            # broken rule content is visible rather than silently inert.
+            logger.error(
+                f"Cannot evaluate condition for rule {rule_id}: {exc}. "
+                "Rule skipped (no detection emitted)."
+            )
             return False
-        else:
-            # For other complex conditions (e.g., "selection1 or selection2")
-            # default to selection match for now
-            logger.debug(f"Complex condition using default evaluation: {condition}")
-            return selection_match
 
     def _dict_to_sigma_rule(self, rule_dict: Dict[str, Any]) -> SigmaRule:
         """
@@ -1037,5 +1161,30 @@ class SigmaRuleEngine:
             logger.info(f"Invalidated compiled rules for customer {customer_id}")
 
 
-# Singleton instance for use across the application
-sigma_engine = SigmaRuleEngine()
+# Singleton instance for use across the application.
+#
+# ENH-004/ENH-010: constructing this at import time built a SubscriptionService
+# -> SubscriptionDAO -> DatabaseLayer chain, opening a ClickHouse connection
+# during `import sigma_engine`. That made the detection engine untestable
+# without live infrastructure. It is now built on first use.
+#
+# Every consumer already imports this lazily inside a function
+# (sigma_rule_cache.py:358/382, security_handler.py:182), so the PEP 562 module
+# __getattr__ below keeps the `from sigma_engine import sigma_engine` spelling
+# working unchanged.
+_sigma_engine_instance: Optional["SigmaRuleEngine"] = None
+
+
+def get_sigma_engine() -> "SigmaRuleEngine":
+    """Get the shared SigmaRuleEngine, constructing it on first use."""
+    global _sigma_engine_instance
+    if _sigma_engine_instance is None:
+        _sigma_engine_instance = SigmaRuleEngine()
+    return _sigma_engine_instance
+
+
+def __getattr__(name: str):
+    """Preserve `from sigma_engine import sigma_engine` without connecting at import."""
+    if name == "sigma_engine":
+        return get_sigma_engine()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

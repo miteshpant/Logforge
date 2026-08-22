@@ -31,6 +31,10 @@ class BaseTestSuite:
         self.test_user_id = None
         self.test_tenant_id = f"test-tenant-{self.test_id}"
         self.test_cleanup_data = []
+        # ENH-032: roles granted to the test user, as
+        # [{'role': ..., 'tenant_id': ...}]. Used to mint a session token whose
+        # tenant/role claims match what was actually granted.
+        self.test_granted_roles = []
         
         # Set environment variables for database access
         os.environ['CLICKHOUSE_HOST'] = 'localhost'
@@ -93,6 +97,12 @@ class BaseTestSuite:
                 }
                 role_id = await db.create_user_role(role_data)
                 self.test_cleanup_data.append(('role', role_id))
+                # ENH-032: remember the granted role and the tenant it applies
+                # to, so create_test_session() can mint a token with matching
+                # tenant/role claims instead of guessing.
+                self.test_granted_roles.append(
+                    {'role': role, 'tenant_id': tenant_id_for_role}
+                )
                 print(f"   ✅ Created role assignment: {role} for tenant: {tenant_id_for_role} (Role ID: {role_id})")
             
             return self.test_user_id, self.test_tenant_id
@@ -101,6 +111,29 @@ class BaseTestSuite:
             print(f"❌ Failed to create test user and tenant: {e}")
             raise
     
+    def _primary_granted_role(self) -> dict:
+        """
+        The role/tenant pair a session token should carry (ENH-032).
+
+        Platform roles win when present, matching the middleware's own
+        precedence: a platform admin's token must be scoped to 'platform', not
+        to the throwaway test tenant.
+
+        Raises if no roles were granted -- a session with no role would produce
+        confusing downstream 403s rather than an obvious setup error.
+        """
+        if not self.test_granted_roles:
+            raise RuntimeError(
+                "No roles granted to the test user. Call "
+                "create_test_user_and_tenant() before create_test_session()."
+            )
+
+        for granted in self.test_granted_roles:
+            if granted['tenant_id'] == 'platform':
+                return granted
+
+        return self.test_granted_roles[0]
+
     async def create_test_session(self) -> str:
         """
         Create authenticated session for the test user
@@ -129,9 +162,26 @@ class BaseTestSuite:
                 status=UserStatus.ACTIVE
             )
             
-            # Create session using UserService
+            # Create session using UserService.
+            #
+            # ENH-032: this previously passed only three positional arguments
+            # and raised
+            #   TypeError: create_session() missing 1 required positional
+            #   argument: 'tenant_id'
+            # because the service signature gained `tenant_id` (and `user_role`)
+            # while the helper was not updated. Keyword arguments are used so a
+            # future signature change fails at the call site rather than
+            # silently binding to the wrong parameter.
+            primary = self._primary_granted_role()
+
             user_service = UserService()
-            session_data = await user_service.create_session(user, '127.0.0.1', f'{self.milestone_name}-test-client')
+            session_data = await user_service.create_session(
+                user=user,
+                ip_address='127.0.0.1',
+                user_agent=f'{self.milestone_name}-test-client',
+                tenant_id=primary['tenant_id'],
+                user_role=primary['role'],
+            )
             
             self.auth_token = session_data["access_token"]
             print(f"   ✅ Created session with token: {self.auth_token[:50]}...")

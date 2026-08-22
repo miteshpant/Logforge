@@ -70,6 +70,21 @@ app.add_middleware(
 from authn_authz_middleware import setup_unified_auth_middleware
 setup_unified_auth_middleware(app)
 
+# ENH-012: request body size caps and per-tenant rate limiting.
+#
+# Registered AFTER the auth middleware deliberately. Starlette applies
+# middleware in reverse registration order, so this runs BEFORE authentication
+# -- an oversized or rate-limited request is rejected without paying for JWT
+# validation and the database lookups that auth performs.
+from request_limits import setup_request_limits
+setup_request_limits(app)
+
+# ENH-019: RED metrics. Registered last so it runs FIRST and therefore observes
+# every request -- including those rejected by rate limiting or authentication,
+# which are exactly the ones an on-call engineer needs to see.
+from self_metrics import MetricsMiddleware
+app.add_middleware(MetricsMiddleware)
+
 # Include all routers
 app.include_router(health_router)
 app.include_router(ingestion_router)

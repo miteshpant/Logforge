@@ -9,6 +9,12 @@ RUN npm install
 # Copy source code
 COPY . .
 
+# Create .next directory with proper permissions and change ownership of entire /app
+RUN mkdir -p .next/cache && chown -R node:node /app
+
+# Switch to non-root user
+USER node
+
 # Expose port
 EXPOSE 3000
 

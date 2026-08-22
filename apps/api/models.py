@@ -702,6 +702,22 @@ class LoginResponse(BaseModel):
     access_token: str = Field(..., description="Access token")
     expires_at: datetime = Field(..., description="Token expiration time")
     user: UserResponse = Field(..., description="User profile")
+    # LF-015: rotating refresh token. Optional so the response stays
+    # backward-compatible with clients that ignore it.
+    refresh_token: Optional[str] = Field(None, description="Opaque rotating refresh token")
+    refresh_expires_at: Optional[datetime] = Field(None, description="Refresh token expiration time")
+
+class RefreshRequest(BaseModel):
+    """Token refresh request (LF-015).
+
+    Carries the opaque refresh token; deliberately does NOT require a valid
+    access token, since its whole purpose is renewing an expired session.
+    """
+    refresh_token: str = Field(..., min_length=16, description="Refresh token issued at login")
+
+class LogoutRequest(BaseModel):
+    """Optional logout body carrying the refresh token to revoke (LF-015)."""
+    refresh_token: Optional[str] = Field(None, description="Refresh token to revoke")
 
 class RoleAssignmentRequest(BaseModel):
     """Request to assign role to user"""

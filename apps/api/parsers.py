@@ -106,7 +106,7 @@ class NginxAccessLogParser(BaseParser):
         try:
             # Try JSON format first
             if raw_message.strip().startswith('{'):
-                return self._parse_json_format(raw_message)
+                return self._parse_json_format(raw_message, **kwargs)
             
             # Try timing pattern first (most complete)
             match = self.timing_pattern.match(raw_message)
@@ -125,8 +125,16 @@ class NginxAccessLogParser(BaseParser):
             logger.error("Failed to parse nginx log", error=str(e), raw_message=raw_message[:200])
             raise ParseError(f"Nginx parse error: {str(e)}")
     
-    def _parse_json_format(self, raw_message: str) -> LogEntry:
-        """Parse JSON format nginx log"""
+    def _parse_json_format(self, raw_message: str, **kwargs) -> LogEntry:
+        """
+        Parse JSON format nginx log.
+
+        ENH-011: this referenced `kwargs` in its body but did not accept it,
+        so every JSON-format nginx log raised
+        `NameError: name 'kwargs' is not defined`. Caught by the new CI lint
+        gate (ruff F821). Signature now matches the sibling parsers, which all
+        take `**kwargs` and let the caller override host/service.
+        """
         try:
             data = json.loads(raw_message)
             

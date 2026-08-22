@@ -12,13 +12,43 @@ from faker import Faker
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 
-# Import our modules
-from apps.api.main import app
+# Import our modules.
+#
+# NOTE (ENH-001 / ENH-010): `apps.api.main` cannot be imported at module scope.
+# Importing it transitively constructs `TenantService()` at
+# `apps/api/tenant_service.py:9`, which opens a real ClickHouse connection
+# during import. Doing that here made a *collection* error abort the entire
+# test session, so no test in the repository could run.
+#
+# The app import is therefore deferred into `_load_app()` below. Tests that
+# genuinely need the running app SKIP with an actionable message when the
+# infrastructure is absent. They are deliberately NOT given a mocked or stubbed
+# app: a fake app would silently assert nothing while appearing green, which is
+# worse than an honest skip.
+#
+# Once ENH-010 removes import-time DB coupling, `_load_app()` will simply
+# succeed without infrastructure and these skips will disappear.
 from apps.api.models import LogEntry, BatchLogEntry, OTLPLogsData
 from apps.api.parsers import ParserFactory
 from apps.api.storage_config import StorageConfigManager
 
 fake = Faker()
+
+
+def _load_app():
+    """
+    Import the FastAPI app.
+
+    ENH-010 removed the import-time database connections, so this now succeeds
+    without infrastructure. The import stays inside the fixture rather than at
+    module scope so that any future regression produces a per-test failure
+    instead of aborting collection for the whole session (which is what
+    originally made the entire suite unrunnable -- see ENH-001).
+    """
+    from apps.api.main import app  # noqa: PLC0415 - intentionally deferred
+
+    return app
+
 
 # Test fixtures
 @pytest.fixture(scope="session")
@@ -29,13 +59,18 @@ def event_loop():
     loop.close()
 
 @pytest.fixture
-def client() -> Generator[TestClient, None, None]:
+def app():
+    """The FastAPI application under test (skips if infra is unavailable)."""
+    return _load_app()
+
+@pytest.fixture
+def client(app) -> Generator[TestClient, None, None]:
     """Test client for FastAPI app"""
     with TestClient(app) as test_client:
         yield test_client
 
 @pytest.fixture
-async def async_client() -> AsyncClient:
+async def async_client(app) -> AsyncClient:
     """Async test client"""
     async with AsyncClient(app=app, base_url="http://test") as ac:
         yield ac

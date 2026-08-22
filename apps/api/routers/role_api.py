@@ -14,7 +14,7 @@ from models import (
 )
 from authn_authz_middleware import (
     get_current_user, require_platform_admin, require_tenant_admin,
-    user_service, check_permission
+    get_user_service, check_permission
 )
 from tenant_dependencies import MiddlewareTenant
 
@@ -34,7 +34,26 @@ from services.role_service import RoleService
 
 
 # Global role service instance
-role_service = RoleService()
+# ENH-010: `RoleService()` opens a database connection in its constructor, so
+# building it at import time made this router un-importable -- and untestable --
+# without live infrastructure. Built on first use; the PEP 562 hook below
+# preserves the bare `role_service` name at every call site.
+_role_service_instance: Optional[RoleService] = None
+
+
+def get_role_service() -> RoleService:
+    """Get the shared RoleService, constructing it on first use."""
+    global _role_service_instance
+    if _role_service_instance is None:
+        _role_service_instance = RoleService()
+    return _role_service_instance
+
+
+def __getattr__(name: str):
+    """Resolve `role_service` lazily (PEP 562)."""
+    if name == "role_service":
+        return get_role_service()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 # =================================================================
 # ROLE ASSIGNMENT ENDPOINTS
@@ -50,12 +69,12 @@ async def assign_user_role(
     """Assign role to user for specific tenant"""
     try:
         # Verify target user exists
-        target_user = await user_service.get_user_by_id(user_id)
+        target_user = await get_user_service().get_user_by_id(user_id)
         if not target_user:
             raise HTTPException(404, f"User {user_id} not found")
 
         # Check permission to assign this role
-        can_assign = await role_service.validate_role_assignment_permission(
+        can_assign = await get_role_service().validate_role_assignment_permission(
             current_user.id,
             role_request.tenant_id,
             role_request.role
@@ -65,7 +84,7 @@ async def assign_user_role(
             raise HTTPException(403, f"No permission to assign {role_request.role} to tenant {role_request.tenant_id}")
 
         # Assign role
-        role_assignment = await role_service.assign_role(
+        role_assignment = await get_role_service().assign_role(
             user_id=user_id,
             tenant_id=role_request.tenant_id,
             role=role_request.role,
@@ -107,7 +126,7 @@ async def get_user_roles(
     """Get user's role assignments"""
     try:
         # Verify target user exists
-        target_user = await user_service.get_user_by_id(user_id)
+        target_user = await get_user_service().get_user_by_id(user_id)
         if not target_user:
             raise HTTPException(404, f"User {user_id} not found")
 
@@ -130,7 +149,7 @@ async def get_user_roles(
             raise HTTPException(403, "No permission to view user roles")
 
         # Get user roles
-        user_roles = await role_service.get_user_roles(user_id, tenant_id)
+        user_roles = await get_role_service().get_user_roles(user_id, tenant_id)
 
         # Filter roles based on current user's scope
         if not is_platform_admin and is_tenant_admin and current_tenant_id:
@@ -171,13 +190,13 @@ async def remove_user_role(
     """Remove role assignment from user"""
     try:
         # Find the role assignment by ID
-        target_assignment = await role_service.get_role_by_id(role_id)
+        target_assignment = await get_role_service().get_role_by_id(role_id)
 
         if not target_assignment or target_assignment.user_id != user_id:
             raise HTTPException(404, f"Role assignment {role_id} not found for user {user_id}")
 
         # Check permission to remove this role
-        can_remove = await role_service.validate_role_assignment_permission(
+        can_remove = await get_role_service().validate_role_assignment_permission(
             current_user.id,
             target_assignment.tenant_id,
             target_assignment.role
@@ -187,7 +206,7 @@ async def remove_user_role(
             raise HTTPException(403, f"No permission to remove {target_assignment.role} from tenant {target_assignment.tenant_id}")
 
         # Remove role
-        removed = await role_service.remove_role(
+        removed = await get_role_service().remove_role(
             user_id,
             target_assignment.tenant_id,
             target_assignment.role
@@ -243,7 +262,7 @@ async def list_available_roles(
                 available_roles.append({
                     "role": role.value,
                     "name": role.value.replace("_", " ").title(),
-                    "permissions": role_service.get_role_permissions(role),
+                    "permissions": get_role_service().get_role_permissions(role),
                     "scope": "platform" if role.value.endswith("_admin") else "tenant",
                     "assignable": True
                 })
@@ -257,7 +276,7 @@ async def list_available_roles(
                 available_roles.append({
                     "role": role.value,
                     "name": role.value.replace("_", " ").title(),
-                    "permissions": role_service.get_role_permissions(role),
+                    "permissions": get_role_service().get_role_permissions(role),
                     "scope": "tenant",
                     "assignable": True
                 })
@@ -267,7 +286,7 @@ async def list_available_roles(
                 available_roles.append({
                     "role": role.value,
                     "name": role.value.replace("_", " ").title(),
-                    "permissions": role_service.get_role_permissions(role),
+                    "permissions": get_role_service().get_role_permissions(role),
                     "scope": "platform" if role.value.endswith("_admin") else "tenant",
                     "assignable": False
                 })
@@ -285,7 +304,7 @@ async def get_role_permissions(
 ):
     """Get permissions for specific role"""
     try:
-        permissions = role_service.get_role_permissions(role)
+        permissions = get_role_service().get_role_permissions(role)
 
         return {
             "role": role.value,
@@ -325,12 +344,12 @@ async def list_tenant_users(
             raise HTTPException(403, f"No permission to list users for tenant {tenant_id}")
 
         # Get tenant users
-        tenant_roles = await role_service.get_tenant_users(tenant_id, role)
+        tenant_roles = await get_role_service().get_tenant_users(tenant_id, role)
 
         # Build response with user details
         tenant_users = []
         for role_assignment in tenant_roles:
-            user = await user_service.get_user_by_id(role_assignment.user_id)
+            user = await get_user_service().get_user_by_id(role_assignment.user_id)
             if user:
                 tenant_users.append({
                     "user_id": user.id,
@@ -392,7 +411,7 @@ async def check_user_permission(
             user_roles_data = request.state.roles
         else:
             # Fallback: get from role service
-            user_roles = await role_service.get_user_roles(current_user.id, check_tenant_id)
+            user_roles = await get_role_service().get_user_roles(current_user.id, check_tenant_id)
             user_roles_data = [
                 {
                     "tenant_id": r.tenant_id,
@@ -428,7 +447,7 @@ async def get_permission_map(
         permission_map = {}
 
         for role in UserRole:
-            permissions = role_service.get_role_permissions(role)
+            permissions = get_role_service().get_role_permissions(role)
             permission_map[role.value] = {
                 "name": role.value.replace("_", " ").title(),
                 "permissions": permissions,
@@ -473,7 +492,7 @@ async def get_role_analytics(
             raise HTTPException(403, "Admin permissions required for role analytics")
 
         # Get analytics from service layer
-        analytics_data = await role_service.get_role_analytics(
+        analytics_data = await get_role_service().get_role_analytics(
             None if (is_platform_admin and not tenant_id) else check_tenant_id
         )
 
@@ -509,13 +528,13 @@ async def bulk_assign_roles(
                 role = UserRole(assignment_data["role"])
 
                 # Verify user exists
-                user = await user_service.get_user_by_id(user_id)
+                user = await get_user_service().get_user_by_id(user_id)
                 if not user:
                     errors.append(f"User {user_id} not found")
                     continue
 
                 # Assign role
-                role_assignment = await role_service.assign_role(
+                role_assignment = await get_role_service().assign_role(
                     user_id=user_id,
                     tenant_id=tenant_id,
                     role=role,
@@ -582,7 +601,7 @@ async def validate_user_access(
         if hasattr(request.state, "roles"):
             user_roles_data = request.state.roles
         else:
-            user_roles = await role_service.get_user_roles(current_user.id, check_tenant_id)
+            user_roles = await get_role_service().get_user_roles(current_user.id, check_tenant_id)
             user_roles_data = [
                 {
                     "tenant_id": r.tenant_id,
@@ -626,7 +645,7 @@ async def get_user_effective_permissions(
     """Get user's effective permissions across all roles"""
     try:
         # Verify target user exists
-        target_user = await user_service.get_user_by_id(user_id)
+        target_user = await get_user_service().get_user_by_id(user_id)
         if not target_user:
             raise HTTPException(404, f"User {user_id} not found")
 
@@ -640,14 +659,14 @@ async def get_user_effective_permissions(
             raise HTTPException(403, "Can only view your own permissions or need admin access")
 
         # Get user's roles
-        user_roles = await role_service.get_user_roles(user_id, tenant_id)
+        user_roles = await get_role_service().get_user_roles(user_id, tenant_id)
 
         # Calculate effective permissions
         effective_permissions = set()
         role_breakdown = {}
 
         for role_assignment in user_roles:
-            role_permissions = role_service.get_role_permissions(role_assignment.role)
+            role_permissions = get_role_service().get_role_permissions(role_assignment.role)
             effective_permissions.update(role_permissions)
 
             role_breakdown[f"{role_assignment.tenant_id}:{role_assignment.role.value}"] = role_permissions
@@ -673,6 +692,6 @@ async def get_user_effective_permissions(
 # =================================================================
 
 # Make role service available for dependency injection
-async def get_role_service() -> RoleService:
-    """Get role service instance"""
-    return role_service
+async def get_role_service_dep():
+    """FastAPI dependency wrapper around the lazy role service getter (ENH-010)."""
+    return get_role_service()

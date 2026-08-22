@@ -1,48 +1,43 @@
 /**
  * Tenants API Module
  *
- * APIs for tenant/customer management and multi-tenancy
+ * APIs for tenant/customer management and multi-tenancy.
+ * All paths verified against the live OpenAPI spec (LF-027):
+ *   GET/POST   /v1/tenants
+ *   GET/PUT/DELETE /v1/tenants/{tenant_id}
+ *   GET        /v1/tenants/{tenant_id}/usage
  */
 
 import { apiClient, ApiResponse } from '../api'
 
 // ========== TYPE DEFINITIONS ==========
 
+/**
+ * Shape of the backend's TenantResponse model (apps/api/models.py).
+ */
 export interface Tenant {
-  id: string
+  tenant_id: string
   name: string
-  subdomain?: string
-  status: 'active' | 'inactive' | 'suspended'
+  type: string
+  status: 'active' | 'inactive' | 'suspended' | string
+  primary_contact_name?: string
+  primary_contact_email?: string
+  industry?: string
   created_at: string
   updated_at: string
-  settings?: {
-    retention_days?: number
-    data_limit_gb?: number
-    user_limit?: number
-    features?: string[]
-  }
-  plan?: string
-  billing_email?: string
+}
+
+export interface TenantListResponse {
+  tenants: Tenant[]
+  total_count: number
+  page: number
+  page_size: number
+  total_pages: number
 }
 
 export interface TenantUsage {
   tenant_id: string
-  data_ingested_gb: number
-  data_stored_gb: number
-  active_users: number
-  api_requests: number
-  period_start: string
-  period_end: string
-}
-
-export interface TenantMember {
-  user_id: string
-  email: string
-  name: string
-  role: string
-  joined_at: string
-  last_active?: string
-  status: 'active' | 'inactive'
+  [key: string]: any
 }
 
 // ========== API FUNCTIONS ==========
@@ -55,21 +50,21 @@ export async function getTenant(tenantId: string): Promise<ApiResponse<Tenant>> 
 }
 
 /**
- * List all tenants (admin only)
+ * List all tenants (platform admin only)
  */
 export async function listTenants(params?: {
   status?: string
   limit?: number
   offset?: number
-}): Promise<ApiResponse<{ tenants: Tenant[]; total: number }>> {
+}): Promise<ApiResponse<TenantListResponse>> {
   return apiClient.get('/v1/tenants', params)
 }
 
 /**
- * Create new tenant
+ * Create new tenant (platform admin only)
  */
 export async function createTenant(
-  tenant: Omit<Tenant, 'id' | 'created_at' | 'updated_at'>
+  tenant: Omit<Tenant, 'tenant_id' | 'created_at' | 'updated_at'>
 ): Promise<ApiResponse<Tenant>> {
   return apiClient.post<Tenant>('/v1/tenants', tenant)
 }
@@ -85,7 +80,7 @@ export async function updateTenant(
 }
 
 /**
- * Delete tenant
+ * Delete (decommission) tenant
  */
 export async function deleteTenant(
   tenantId: string
@@ -106,55 +101,6 @@ export async function getTenantUsage(
   return apiClient.get<TenantUsage>(`/v1/tenants/${tenantId}/usage`, params)
 }
 
-/**
- * List tenant members
- */
-export async function listTenantMembers(
-  tenantId: string
-): Promise<ApiResponse<{ members: TenantMember[] }>> {
-  return apiClient.get(`/v1/tenants/${tenantId}/members`)
-}
-
-/**
- * Add member to tenant
- */
-export async function addTenantMember(
-  tenantId: string,
-  member: {
-    email: string
-    role: string
-  }
-): Promise<ApiResponse<TenantMember>> {
-  return apiClient.post<TenantMember>(`/v1/tenants/${tenantId}/members`, member)
-}
-
-/**
- * Update tenant member role
- */
-export async function updateTenantMember(
-  tenantId: string,
-  userId: string,
-  updates: {
-    role?: string
-    status?: string
-  }
-): Promise<ApiResponse<TenantMember>> {
-  return apiClient.put<TenantMember>(
-    `/v1/tenants/${tenantId}/members/${userId}`,
-    updates
-  )
-}
-
-/**
- * Remove member from tenant
- */
-export async function removeTenantMember(
-  tenantId: string,
-  userId: string
-): Promise<ApiResponse<void>> {
-  return apiClient.delete(`/v1/tenants/${tenantId}/members/${userId}`)
-}
-
 // Export all functions as a namespace
 export const TenantsApi = {
   getTenant,
@@ -163,10 +109,6 @@ export const TenantsApi = {
   updateTenant,
   deleteTenant,
   getTenantUsage,
-  listTenantMembers,
-  addTenantMember,
-  updateTenantMember,
-  removeTenantMember,
 }
 
 export default TenantsApi

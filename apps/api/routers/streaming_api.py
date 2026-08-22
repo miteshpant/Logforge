@@ -72,7 +72,8 @@ async def stream_metrics(
                 self.target_customer_id = target_customer_id
                 self.event_queue = event_queue
                 self.streaming_service = get_streaming_config_service()
-                self.rate_limiter = {}
+                # ENH-026: per-instance rate-limit state removed; the shared
+                # Redis-backed StreamRateLimiter holds counters across replicas.
 
             async def handle(self, event) -> bool:
                 """Handle events and put relevant ones in the queue with config-based filtering"""
@@ -120,7 +121,7 @@ async def stream_metrics(
                     # Check rate limiting
                     max_events_per_minute = config.get("max_events_per_minute", 100)
                     logger.info(f" max_events_per_minute : {max_events_per_minute}")
-                    if not self._check_rate_limit(max_events_per_minute):
+                    if not await self._check_rate_limit(max_events_per_minute):
                         return False
                     # Check minimum metrics count
                     min_metrics_count = config.get("min_metrics_count", 1)
@@ -162,25 +163,20 @@ async def stream_metrics(
                     # Default to streaming on error to avoid losing data
                     return True
 
-            def _check_rate_limit(self, max_events_per_minute: int) -> bool:
-                """Check if we're within the rate limit for this customer"""
-                current_minute = int(datetime.now().timestamp() / 60)
-                key = f"{self.target_customer_id}_{current_minute}"
-                logger.info(f"key is : {key}")
-                if key not in self.rate_limiter:
-                    self.rate_limiter[key] = 0
-                logger.info( f"self.rate_limiter : {self.rate_limiter}")
-                # Clean old entries
-                old_keys = [k for k in self.rate_limiter.keys() if int(k.split('_')[-1]) < current_minute - 1]
-                for old_key in old_keys:
-                    del self.rate_limiter[old_key]
+            async def _check_rate_limit(self, max_events_per_minute: int) -> bool:
+                """
+                Check the customer's per-minute event budget (ENH-026).
 
-                if self.rate_limiter[key] >= max_events_per_minute:
-                    return False
+                Delegates to the shared, Redis-backed limiter so the cap holds
+                across replicas. This was previously a per-INSTANCE dict, so N
+                replicas gave a customer N times the intended limit, and the
+                counters were lost on restart.
+                """
+                from request_limits import get_stream_rate_limiter
 
-                self.rate_limiter[key] += 1
-                logger.info(" I am returning true")
-                return True
+                return await get_stream_rate_limiter().allow_event(
+                    self.target_customer_id, max_events_per_minute
+                )
 
             def get_handler_name(self) -> str:
                 return f"streaming_metrics_handler_{self.target_customer_id}"
@@ -311,11 +307,11 @@ async def stream_metrics(
         return StreamingResponse(
             generate_real_time_metrics(),
             media_type="text/event-stream",
+            # LF-021: no hardcoded CORS headers here — the global
+            # CORSMiddleware (main.py) emits the allowlisted origin.
             headers={
                 "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+                "Connection": "keep-alive"
             }
         )
 
@@ -350,7 +346,8 @@ async def stream_traces(
                 self.target_customer_id = target_customer_id
                 self.event_queue = event_queue
                 self.streaming_service = get_streaming_config_service()
-                self.rate_limiter = {}
+                # ENH-026: per-instance rate-limit state removed; the shared
+                # Redis-backed StreamRateLimiter holds counters across replicas.
 
             async def handle(self, event) -> bool:
                 """Handle events and put relevant ones in the queue with config-based filtering"""
@@ -396,7 +393,7 @@ async def stream_traces(
 
                     # Check rate limiting
                     max_events_per_minute = config.get("max_events_per_minute", 50)
-                    if not self._check_rate_limit(max_events_per_minute):
+                    if not await self._check_rate_limit(max_events_per_minute):
                         return False
 
                     # Check minimum traces count
@@ -495,24 +492,20 @@ async def stream_traces(
                     # Default to streaming on error to avoid losing data
                     return True
 
-            def _check_rate_limit(self, max_events_per_minute: int) -> bool:
-                """Check if we're within the rate limit for this customer"""
-                current_minute = int(datetime.now().timestamp() / 60)
-                key = f"{self.target_customer_id}_{current_minute}"
+            async def _check_rate_limit(self, max_events_per_minute: int) -> bool:
+                """
+                Check the customer's per-minute event budget (ENH-026).
 
-                if key not in self.rate_limiter:
-                    self.rate_limiter[key] = 0
+                Delegates to the shared, Redis-backed limiter so the cap holds
+                across replicas. This was previously a per-INSTANCE dict, so N
+                replicas gave a customer N times the intended limit, and the
+                counters were lost on restart.
+                """
+                from request_limits import get_stream_rate_limiter
 
-                # Clean old entries
-                old_keys = [k for k in self.rate_limiter.keys() if int(k.split('_')[-1]) < current_minute - 1]
-                for old_key in old_keys:
-                    del self.rate_limiter[old_key]
-
-                if self.rate_limiter[key] >= max_events_per_minute:
-                    return False
-
-                self.rate_limiter[key] += 1
-                return True
+                return await get_stream_rate_limiter().allow_event(
+                    self.target_customer_id, max_events_per_minute
+                )
 
             def get_handler_name(self) -> str:
                 return f"streaming_traces_handler_{self.target_customer_id}"
@@ -644,11 +637,11 @@ async def stream_traces(
         return StreamingResponse(
             generate_real_time_traces(),
             media_type="text/event-stream",
+            # LF-021: no hardcoded CORS headers here — the global
+            # CORSMiddleware (main.py) emits the allowlisted origin.
             headers={
                 "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+                "Connection": "keep-alive"
             }
         )
 
@@ -848,11 +841,11 @@ async def stream_security_events(
         return StreamingResponse(
             generate_real_time_security_events(),
             media_type="text/event-stream",
+            # LF-021: no hardcoded CORS headers here — the global
+            # CORSMiddleware (main.py) emits the allowlisted origin.
             headers={
                 "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+                "Connection": "keep-alive"
             }
         )
 
@@ -1040,11 +1033,11 @@ async def stream_alerts(
             return StreamingResponse(
                 generate_real_time_alerts(),
                 media_type="text/event-stream",
+                # LF-021: no hardcoded CORS headers here — the global
+                # CORSMiddleware (main.py) emits the allowlisted origin.
                 headers={
                     "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+                    "Connection": "keep-alive"
                 }
             )
 
@@ -1111,11 +1104,11 @@ async def stream_alerts(
         return StreamingResponse(
             generate_polling_alerts(),
             media_type="text/event-stream",
+            # LF-021: no hardcoded CORS headers here — the global
+            # CORSMiddleware (main.py) emits the allowlisted origin.
             headers={
                 "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+                "Connection": "keep-alive"
             }
         )
 
@@ -1173,11 +1166,11 @@ async def stream_usage_data(
         return StreamingResponse(
             generate_usage(),
             media_type="text/event-stream",
+            # LF-021: no hardcoded CORS headers here — the global
+            # CORSMiddleware (main.py) emits the allowlisted origin.
             headers={
                 "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+                "Connection": "keep-alive"
             }
         )
 
@@ -1237,11 +1230,11 @@ async def stream_ai_insights(
         return StreamingResponse(
             generate_ai_insights(),
             media_type="text/event-stream",
+            # LF-021: no hardcoded CORS headers here — the global
+            # CORSMiddleware (main.py) emits the allowlisted origin.
             headers={
                 "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+                "Connection": "keep-alive"
             }
         )
 
@@ -1497,11 +1490,11 @@ async def stream_anomalies(
         return StreamingResponse(
             generate_real_time_anomalies(),
             media_type="text/event-stream",
+            # LF-021: no hardcoded CORS headers here — the global
+            # CORSMiddleware (main.py) emits the allowlisted origin.
             headers={
                 "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+                "Connection": "keep-alive"
             }
         )
 

@@ -1,0 +1,46 @@
+title: Suspicious Scheduled Task or Cron Persistence
+id: pe001-scheduled-task-persistence
+status: stable
+description: >
+  Detects creation of scheduled tasks or cron entries that execute scripting
+  engines or download content. Scheduled tasks are one of the most common
+  persistence mechanisms because they survive reboot and blend into normal
+  administration; the discriminator used here is the *payload*, not the act of
+  creating a task.
+author: Logforge Security Team
+date: 2026/08/13
+references:
+    - https://attack.mitre.org/techniques/T1053/005/
+    - https://attack.mitre.org/techniques/T1053/003/
+tags:
+    - attack.persistence
+    - attack.privilege_escalation
+    - attack.t1053.005
+    - attack.t1053.003
+    - scheduled_task
+logsource:
+    category: process_creation
+detection:
+    selection_schtasks_payload:
+        command_line|contains: "schtasks"
+    selection_cron_payload:
+        command_line|contains:
+            - "crontab -"
+            - "/etc/cron.d/"
+    filter_benign:
+        # Querying or listing tasks is routine administration, not persistence.
+        command_line|contains:
+            - "/query"
+            - "/tn \\Microsoft\\Windows\\"
+            - "crontab -l"
+    condition: (selection_schtasks_payload or selection_cron_payload) and not filter_benign
+fields:
+    - command_line
+    - process_name
+    - user
+    - host
+falsepositives:
+    - Configuration management (Ansible, Puppet, SCCM) creating maintenance tasks
+    - Software installers registering updater tasks
+    - Backup agents scheduling jobs at install time
+level: high

@@ -30,6 +30,9 @@ class ApiClient {
   private baseURL: string
   private defaultHeaders: Record<string, string>
   private timeout: number
+  // LF-015: single in-flight refresh shared by concurrent 401s so a burst of
+  // expired requests performs exactly one token rotation.
+  private refreshPromise: Promise<boolean> | null = null
 
   constructor() {
     this.baseURL = API_CONFIG.baseURL
@@ -42,7 +45,8 @@ class ApiClient {
    */
   async request<T = any>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    isRetryAfterRefresh: boolean = false
   ): Promise<ApiResponse<T>> {
     const url = endpoint.startsWith('http') ? endpoint : `${this.baseURL}${endpoint}`
 
@@ -77,6 +81,18 @@ class ApiClient {
 
       // Handle error responses
       if (!response.ok) {
+        // LF-015: on 401, attempt one transparent token refresh and retry.
+        if (
+          response.status === 401 &&
+          !isRetryAfterRefresh &&
+          !this.isAuthEndpoint(endpoint)
+        ) {
+          const refreshed = await this.tryRefreshAccessToken()
+          if (refreshed) {
+            return this.request<T>(endpoint, options, true)
+          }
+        }
+
         return {
           success: false,
           error: data?.error || data?.message || `HTTP ${response.status}: ${response.statusText}`,
@@ -285,6 +301,100 @@ class ApiClient {
   }
 
   /**
+   * True for auth endpoints that must never trigger a refresh-retry loop.
+   */
+  private isAuthEndpoint(endpoint: string): boolean {
+    return (
+      endpoint.includes('/v1/auth/login') ||
+      endpoint.includes('/v1/auth/refresh') ||
+      endpoint.includes('/v1/auth/logout')
+    )
+  }
+
+  /**
+   * LF-015: exchange the stored refresh token for a new access token.
+   * Returns true when the session was renewed. Rotation: the server
+   * revokes the presented refresh token and issues a replacement.
+   */
+  private async tryRefreshAccessToken(): Promise<boolean> {
+    const refreshToken = this.getRefreshToken()
+    if (!refreshToken) {
+      return false
+    }
+
+    if (!this.refreshPromise) {
+      this.refreshPromise = (async () => {
+        try {
+          const response = await fetch(`${this.baseURL}/v1/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: refreshToken }),
+          })
+
+          if (!response.ok) {
+            // Refresh token expired/revoked: clear it so we stop retrying.
+            this.clearRefreshToken()
+            return false
+          }
+
+          const data = await response.json()
+          if (!data?.access_token) {
+            return false
+          }
+
+          // Persist the renewed access token under the same keys the rest
+          // of the app reads, and update live headers.
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('auth_token', data.access_token)
+          }
+          this.setAuthToken(data.access_token)
+
+          if (data.refresh_token) {
+            this.setRefreshToken(data.refresh_token)
+          }
+
+          return true
+        } catch (error) {
+          console.error('Token refresh failed:', error)
+          return false
+        } finally {
+          this.refreshPromise = null
+        }
+      })()
+    }
+
+    return this.refreshPromise
+  }
+
+  /**
+   * Store the rotating refresh token (LF-015).
+   */
+  setRefreshToken(refreshToken: string) {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('refresh_token', refreshToken)
+    }
+  }
+
+  /**
+   * Read the stored refresh token, if any.
+   */
+  getRefreshToken(): string | null {
+    if (typeof window === 'undefined') {
+      return null
+    }
+    return localStorage.getItem('refresh_token')
+  }
+
+  /**
+   * Remove the stored refresh token.
+   */
+  clearRefreshToken() {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('refresh_token')
+    }
+  }
+
+  /**
    * Set customer/tenant ID header
    */
   setCustomerId(customerId: string) {
@@ -351,6 +461,7 @@ class ApiClient {
       localStorage.removeItem('auth_token')
       localStorage.removeItem('tenant_id')
       localStorage.removeItem('user_role')
+      localStorage.removeItem('refresh_token')
     }
 
     // Clear headers

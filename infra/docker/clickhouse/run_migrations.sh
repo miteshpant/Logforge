@@ -19,34 +19,49 @@ MIGRATIONS_DIR="${MIGRATIONS_DIR:-$(dirname "$0")/migrations}"
 execute_migration() {
     local migration_file="$1"
     local migration_name=$(basename "$migration_file" .sql)
-    
+
     echo "🔄 Running migration: $migration_name"
-    
+
     # Read the file and split by semicolons, then execute each statement
     # Remove comments and empty lines, then process each statement
     temp_file="/tmp/migration_temp.sql"
-    
-    # Clean the file: remove comments and empty lines, split by semicolons
-    grep -v '^--' "$migration_file" | grep -v '^$' | tr '\n' ' ' | sed 's/;/;\n/g' > "$temp_file"
-    
+
+    # Clean the file, then split by semicolons.
+    #
+    # LF-019: inline comments (`col String, -- note`) MUST be stripped
+    # per-line BEFORE the newlines are collapsed. The previous version only
+    # removed full-line comments, so after `tr '\n' ' '` an inline `--`
+    # commented out the remainder of the whole statement -- ClickHouse then
+    # rejected the truncated DDL, and because curl exits 0 on an HTTP 4xx/5xx
+    # without --fail*, the migration was still recorded as executed. That is
+    # how migration 007 "succeeded" while creating only 1 of its 9 tables.
+    # NOTE: this means `--` must not appear inside SQL string literals in
+    # migration files (none do today).
+    sed 's/--.*$//' "$migration_file" | grep -v '^[[:space:]]*$' | tr '\n' ' ' | sed 's/;/;\n/g' > "$temp_file"
+
     # Execute each non-empty statement
     while IFS= read -r statement; do
         # Skip empty statements
         statement=$(echo "$statement" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
         if [ -n "$statement" ] && [ "$statement" != ";" ]; then
             echo "  Executing: $(echo "$statement" | cut -c1-60)..."
-            if ! echo "$statement" | curl -s -X POST \
+            # LF-019: --fail-with-body makes curl exit non-zero on a
+            # ClickHouse error response, so a failed statement actually
+            # fails the migration instead of being recorded as success.
+            response=$(echo "$statement" | curl -s --fail-with-body -X POST \
                 -u "${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}" \
                 -H "Content-Type: text/plain" \
                 --data-binary @- \
-                "http://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=${CLICKHOUSE_DATABASE}"; then
+                "http://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=${CLICKHOUSE_DATABASE}")
+            if [ $? -ne 0 ]; then
                 echo "❌ Migration $migration_name failed on statement: $statement"
+                echo "   ClickHouse response: $response"
                 rm -f "$temp_file"
                 return 1
             fi
         fi
     done < "$temp_file"
-    
+
     rm -f "$temp_file"
     echo "✅ Migration $migration_name completed successfully"
 }
@@ -77,6 +92,16 @@ create_migration_table() {
         ORDER BY migration_name
         SETTINGS index_granularity = 8192;" \
         "http://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=${CLICKHOUSE_DATABASE}" > /dev/null
+}
+
+# Function to check whether a migration is destructive.
+# Mirrors DESTRUCTIVE_PATTERN in apps/api/schema_migrations.py: files that can
+# destroy data are refused unless ALLOW_DESTRUCTIVE_MIGRATIONS=true, so a
+# routine `docker compose up` can never rewrite/drop the log tables
+# unsupervised (011_repartition_logs_tables.sql documents this contract).
+is_destructive_migration() {
+    local migration_file="$1"
+    grep -qiE '(DROP[[:space:]]+(TABLE|DATABASE|VIEW)|TRUNCATE[[:space:]]+TABLE|DELETE[[:space:]]+FROM)' "$migration_file"
 }
 
 # Function to check if migration was already executed
@@ -122,6 +147,10 @@ main() {
             migration_name=$(basename "$migration_file" .sql)
             if is_migration_executed "$migration_name"; then
                 echo "⚠️  Migration $migration_name already executed, skipping"
+            elif is_destructive_migration "$migration_file" && [ "${ALLOW_DESTRUCTIVE_MIGRATIONS:-false}" != "true" ]; then
+                echo "⛔ Migration $migration_name contains destructive statements;"
+                echo "   refusing without ALLOW_DESTRUCTIVE_MIGRATIONS=true"
+                exit 1
             else
                 execute_migration "$migration_file"
                 record_migration "$migration_name"
@@ -137,6 +166,9 @@ main() {
             migration_name=$(basename "$migration_file" .sql)
             if is_migration_executed "$migration_name"; then
                 echo "⚠️  Migration $migration_name already executed, skipping"
+            elif is_destructive_migration "$migration_file" && [ "${ALLOW_DESTRUCTIVE_MIGRATIONS:-false}" != "true" ]; then
+                echo "⛔ Migration $migration_name contains destructive statements; skipped."
+                echo "   Apply it in a supervised window with ALLOW_DESTRUCTIVE_MIGRATIONS=true."
             else
                 execute_migration "$migration_file"
                 record_migration "$migration_name"

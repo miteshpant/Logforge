@@ -68,22 +68,38 @@ class HealthService:
             health_checks["clickhouse"] = clickhouse_health["status"]
             if clickhouse_health["status"] != "healthy":
                 overall_status = "degraded"
-        except Exception as e:
+        except (DatabaseError, SecurityError) as e:
+            # A real connectivity/authorization failure: the service is down.
             logger.error("ClickHouse health check failed", error=str(e))
             health_checks["database"] = "unhealthy"
             health_checks["clickhouse"] = "unhealthy"
             overall_status = "unhealthy"
-        
+        except Exception:
+            # LF-001: a coding error inside the check (e.g. the KeyError that
+            # made every /health report ClickHouse unhealthy) must NOT be
+            # reported as a service outage. Report a distinct "check_error"
+            # status so a bug in the check is distinguishable from real
+            # downtime, and log the full traceback for the operator.
+            logger.error("ClickHouse health check raised unexpectedly", exc_info=True)
+            health_checks["database"] = "check_error"
+            health_checks["clickhouse"] = "check_error"
+            if overall_status == "healthy":
+                overall_status = "degraded"
+
         # Check storage systems
         try:
             storage_health = await self._check_storage_health()
             health_checks["storage"] = storage_health["status"]
             if storage_health["status"] != "healthy":
                 overall_status = "degraded"
-        except Exception as e:
-            logger.error("Storage health check failed", error=str(e))
-            health_checks["storage"] = "unhealthy"
-            overall_status = "unhealthy"
+        except Exception:
+            # LF-001: same principle -- _check_storage_health only inspects
+            # configuration, so an exception here is a coding error, not an
+            # outage. Never let it flip readiness to unhealthy.
+            logger.error("Storage health check raised unexpectedly", exc_info=True)
+            health_checks["storage"] = "check_error"
+            if overall_status == "healthy":
+                overall_status = "degraded"
         
         # API service is healthy if we can respond
         health_checks["api"] = "healthy"
@@ -105,7 +121,10 @@ class HealthService:
             result = await db.fetch_one("SELECT 1 as health_check")
             response_time = (datetime.now() - start_time).total_seconds() * 1000
             
-            if not result or result[0] != 1:
+            # LF-001: fetch_one returns a dict (see DatabaseLayer.fetch_one),
+            # so index [0] raised KeyError and /health always reported
+            # ClickHouse unhealthy. Access the aliased column by name.
+            if not result or result.get("health_check") != 1:
                 return {
                     "status": "unhealthy",
                     "error": "Invalid response from ClickHouse",

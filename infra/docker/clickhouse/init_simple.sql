@@ -763,7 +763,7 @@ CREATE TABLE IF NOT EXISTS api_keys_enterprise_mt (
     tenant_id String,
     created_by String,
     permissions Array(String),
-    service_account_id(String),
+    service_account_id String,
     rate_limit UInt32 DEFAULT 1000,
     expires_at Nullable(DateTime64(3)),
     last_used Nullable(DateTime64(3)),

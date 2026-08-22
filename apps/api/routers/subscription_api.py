@@ -17,7 +17,9 @@ from models import (
     TenantDeletionRequest, FeatureAccessResponse, UsageBreakdownResponse,
     SubscriptionTier, SubscriptionStatus, BillingCycle
 )
-from subscription_service import subscription_service
+# ENH-010: import the ACCESSOR, not the instance -- importing the
+# instance constructed it (and connected to the database) at import time.
+from subscription_service import get_subscription_service
 from tenant_dependencies import RequiredTenant
 
 router = APIRouter(prefix="/v1", tags=["subscription"])
@@ -33,7 +35,7 @@ async def get_tenant_subscription(
 ):
     """Get tenant subscription details"""
     try:
-        subscription = await subscription_service.get_tenant_subscription(tenant_id)
+        subscription = await get_subscription_service().get_tenant_subscription(tenant_id)
         
         if not subscription:
             raise HTTPException(
@@ -43,7 +45,7 @@ async def get_tenant_subscription(
         
         # Get current usage
         try:
-            usage = await subscription_service.get_tenant_usage(tenant_id)
+            usage = await get_subscription_service().get_tenant_usage(tenant_id)
         except Exception:
             # If usage retrieval fails, use empty usage data
             usage = {"feature_usage": [], "total_cost": 0.0}
@@ -82,7 +84,7 @@ async def update_tenant_subscription(
 ):
     """Update tenant subscription"""
     try:
-        subscription = await subscription_service.create_subscription(tenant_id, subscription_request)
+        subscription = await get_subscription_service().create_subscription(tenant_id, subscription_request)
         
         return TenantSubscriptionResponse(
             tenant_id=subscription.tenant_id,
@@ -103,7 +105,7 @@ async def update_tenant_subscription(
 async def get_features_for_tier(tier: str):
     """Get feature list for a subscription tier"""
     try:
-        features = subscription_service.get_features_for_tier(tier)
+        features = get_subscription_service().get_features_for_tier(tier)
         
         if not features:
             raise HTTPException(
@@ -125,7 +127,7 @@ async def get_tenant_features(
 ):
     """Get available features for tenant"""
     try:
-        subscription = await subscription_service.get_tenant_subscription(tenant_id)
+        subscription = await get_subscription_service().get_tenant_subscription(tenant_id)
         
         if not subscription:
             return {
@@ -136,11 +138,11 @@ async def get_tenant_features(
             }
         
         # Get all available features based on subscription
-        all_features = subscription_service.endpoint_feature_map.values()
+        all_features = get_subscription_service().endpoint_feature_map.values()
         available_features = []
         
         for feature in set(all_features):
-            if subscription_service.has_feature_access(subscription.subscribed_features, feature):
+            if get_subscription_service().has_feature_access(subscription.subscribed_features, feature):
                 available_features.append(feature)
         
         return {
@@ -162,7 +164,7 @@ async def check_feature_access(
 ):
     """Check if tenant has access to specific feature"""
     try:
-        subscription = await subscription_service.get_tenant_subscription(tenant_id)
+        subscription = await get_subscription_service().get_tenant_subscription(tenant_id)
         
         if not subscription:
             return FeatureAccessResponse(
@@ -174,7 +176,7 @@ async def check_feature_access(
                 current_usage={}
             )
         
-        has_access = subscription_service.has_feature_access(subscription.subscribed_features, feature_name)
+        has_access = get_subscription_service().has_feature_access(subscription.subscribed_features, feature_name)
         
         return FeatureAccessResponse(
             tenant_id=tenant_id,
@@ -199,7 +201,7 @@ async def get_tenant_usage(
 ):
     """Get tenant usage summary"""
     try:
-        usage = await subscription_service.get_tenant_usage(tenant_id, period)
+        usage = await get_subscription_service().get_tenant_usage(tenant_id, period)
         return usage
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get usage: {str(e)}")
@@ -214,7 +216,7 @@ async def get_detailed_usage(
     """Get detailed usage breakdown"""
     try:
         # For now, return current usage (would implement date range filtering)
-        usage = await subscription_service.get_tenant_usage(tenant_id, "current")
+        usage = await get_subscription_service().get_tenant_usage(tenant_id, "current")
         
         return UsageBreakdownResponse(
             tenant_id=tenant_id,
@@ -270,7 +272,7 @@ async def generate_bill(
             }
         
         # Get tenant subscription tier
-        subscription = await subscription_service.get_tenant_subscription(tenant_id)
+        subscription = await get_subscription_service().get_tenant_subscription(tenant_id)
         if not subscription:
             raise HTTPException(
                 status_code=404, 
@@ -361,7 +363,7 @@ async def list_feature_rates(
     request: Request
 ):
     """List all feature rates (admin only)"""
-    rates = await subscription_service.get_all_feature_rates()
+    rates = await get_subscription_service().get_all_feature_rates()
     
     return {
         "rates": rates,
@@ -376,7 +378,7 @@ async def create_feature_rate(
 ):
     """Create or update feature rate (admin only)"""
     try:
-        rate = await subscription_service.set_feature_rate(rate_request, "admin")
+        rate = await get_subscription_service().set_feature_rate(rate_request, "admin")
         
         return {
             "rate_id": str(uuid.uuid4()),
@@ -401,7 +403,7 @@ async def update_feature_rate(
     """Update existing feature rate (admin only)"""
     try:
         # Create updated rate request
-        current_rate = await subscription_service.get_feature_rate(feature_name, "admin")
+        current_rate = await get_subscription_service().get_feature_rate(feature_name, "admin")
         
         if not current_rate:
             raise HTTPException(status_code=404, detail="Feature rate not found")
@@ -416,7 +418,7 @@ async def update_feature_rate(
             description=rate_update.get("description", current_rate.description)
         )
         
-        updated_rate = await subscription_service.set_feature_rate(updated_request, "admin")
+        updated_rate = await get_subscription_service().set_feature_rate(updated_request, "admin")
         
         return {
             "feature_name": updated_rate.feature_name,
@@ -433,7 +435,7 @@ async def get_rate_history(
     request: Request
 ):
     """Get feature rate history (admin only)"""
-    rate_history = await subscription_service.get_rate_history(feature_name)
+    rate_history = await get_subscription_service().get_rate_history(feature_name)
     return {
         "feature_name": feature_name,
         "rate_history": rate_history
@@ -455,7 +457,7 @@ async def delete_tenant(
         # Get admin user from request (would implement proper auth)
         deleted_by = request.headers.get("X-Admin-User", "admin")
         
-        deletion_record = await subscription_service.delete_tenant(
+        deletion_record = await get_subscription_service().delete_tenant(
             tenant_id, 
             deletion_request, 
             deleted_by
@@ -479,7 +481,7 @@ async def get_deletion_status(
     request: Request
 ):
     """Get tenant deletion status"""
-    deletion_status = await subscription_service.get_deletion_status(tenant_id)
+    deletion_status = await get_subscription_service().get_deletion_status(tenant_id)
     return deletion_status
 
 # =====================================
@@ -494,7 +496,7 @@ async def admin_list_tenants(
     page_size: int = 50
 ):
     """Admin list all tenants with billing info"""
-    tenant_list = await subscription_service.admin_list_tenants_with_billing(include_deleted, page, page_size)
+    tenant_list = await get_subscription_service().admin_list_tenants_with_billing(include_deleted, page, page_size)
     return tenant_list
 
 @router.get("/admin/tenants/{tenant_id}/details")
@@ -505,8 +507,8 @@ async def admin_get_tenant_details(
 ):
     """Admin get detailed tenant information"""
     try:
-        subscription = await subscription_service.get_tenant_subscription(tenant_id)
-        usage = await subscription_service.get_tenant_usage(tenant_id)
+        subscription = await get_subscription_service().get_tenant_subscription(tenant_id)
+        usage = await get_subscription_service().get_tenant_usage(tenant_id)
         
         return {
             "tenant_info": {
@@ -541,7 +543,7 @@ async def admin_force_subscription_change(
             auto_renew=subscription_data.get("auto_renew", True)
         )
         
-        subscription = await subscription_service.create_subscription(tenant_id, subscription_request)
+        subscription = await get_subscription_service().create_subscription(tenant_id, subscription_request)
         
         return {
             "tenant_id": tenant_id,
@@ -562,7 +564,7 @@ async def admin_billing_override(
     _: str = RequiredTenant
 ):
     """Admin override billing amount"""
-    override_result = await subscription_service.admin_billing_override(tenant_id, override_data)
+    override_result = await get_subscription_service().admin_billing_override(tenant_id, override_data)
     return override_result
 
 # =====================================
@@ -577,7 +579,7 @@ async def get_subscription_audit_trail(
     request: Request = None
 ):
     """Get subscription change audit trail"""
-    audit_events = await subscription_service.get_subscription_audit_trail(tenant_id, start_date, end_date)
+    audit_events = await get_subscription_service().get_subscription_audit_trail(tenant_id, start_date, end_date)
     return {
         "audit_events": audit_events,
         "total_events": len(audit_events)
@@ -589,7 +591,7 @@ async def generate_compliance_report(
     request: Request
 ):
     """Generate compliance report"""
-    compliance_report = await subscription_service.generate_compliance_report(report_request)
+    compliance_report = await get_subscription_service().generate_compliance_report(report_request)
     return compliance_report
 
 @router.get("/admin/compliance/retention-status")
@@ -598,7 +600,7 @@ async def get_retention_compliance_status(
     request: Request = None
 ):
     """Get data retention compliance status"""
-    retention_status = await subscription_service.get_retention_compliance_status(tenant_id)
+    retention_status = await get_subscription_service().get_retention_compliance_status(tenant_id)
     return retention_status
 
 # =====================================
@@ -664,7 +666,7 @@ async def list_all_available_features():
                     "export.advanced"
                 ]
             },
-            "subscription_bundles": subscription_service.feature_bundles
+            "subscription_bundles": get_subscription_service().feature_bundles
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list features: {str(e)}")

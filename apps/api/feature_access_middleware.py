@@ -6,7 +6,9 @@ Enforces tenant feature subscriptions with 403 responses for unauthorized access
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from subscription_service import subscription_service
+# ENH-010: import the ACCESSOR, not the instance -- importing the
+# instance constructed it (and connected to the database) at import time.
+from subscription_service import get_subscription_service
 import time
 
 class FeatureAccessMiddleware(BaseHTTPMiddleware):
@@ -14,7 +16,7 @@ class FeatureAccessMiddleware(BaseHTTPMiddleware):
     
     def __init__(self, app):
         super().__init__(app)
-        self.subscription_service = subscription_service
+        self.subscription_service = get_subscription_service()
         
         # Endpoints that don't require feature validation
         self.public_endpoints = {
@@ -62,14 +64,14 @@ class FeatureAccessMiddleware(BaseHTTPMiddleware):
         
         # Validate feature access
         try:
-            access_result = await self.subscription_service.validate_feature_access(
+            access_result = await self.get_subscription_service().validate_feature_access(
                 tenant_id, 
                 request.url.path
             )
             
             if not access_result["access_granted"]:
                 # Track usage attempt for billing/analytics
-                await self.subscription_service.track_feature_usage(
+                await self.get_subscription_service().track_feature_usage(
                     tenant_id,
                     access_result.get("required_feature", "unknown"),
                     0,  # No quantity for denied access
@@ -96,7 +98,7 @@ class FeatureAccessMiddleware(BaseHTTPMiddleware):
             if response.status_code < 400:  # Only track successful requests
                 feature = access_result.get("feature")
                 if feature:
-                    await self.subscription_service.track_feature_usage(
+                    await self.get_subscription_service().track_feature_usage(
                         tenant_id,
                         feature,
                         1,

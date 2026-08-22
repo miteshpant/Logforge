@@ -34,7 +34,26 @@ router = APIRouter(prefix="/v1", tags=["Usage Analytics & Billing"])
 # =================================================================
 
 # Global usage service instance
-usage_service = UsageService()
+# ENH-010: `UsageService()` opens a database connection in its constructor, so
+# building it at import time made this router un-importable -- and untestable --
+# without live infrastructure. Built on first use; the PEP 562 hook below
+# preserves the bare `usage_service` name at every call site.
+_usage_service_instance: Optional[UsageService] = None
+
+
+def get_usage_service() -> UsageService:
+    """Get the shared UsageService, constructing it on first use."""
+    global _usage_service_instance
+    if _usage_service_instance is None:
+        _usage_service_instance = UsageService()
+    return _usage_service_instance
+
+
+def __getattr__(name: str):
+    """Resolve `usage_service` lazily (PEP 562)."""
+    if name == "usage_service":
+        return get_usage_service()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 # =================================================================
 # CURRENT USAGE ENDPOINTS
@@ -62,7 +81,7 @@ async def get_current_usage(
         if not is_platform_admin and not is_tenant_user:
             raise HTTPException(403, f"No access to usage data for tenant {tenant_id}")
 
-        usage_data = await usage_service.get_tenant_usage_summary(tenant_id)
+        usage_data = await get_usage_service().get_tenant_usage_summary(tenant_id)
 
         return UsageCurrentResponse(
             tenant_id=usage_data["tenant_id"],
@@ -101,7 +120,7 @@ async def get_usage_history(
         if not is_platform_admin and not is_tenant_user:
             raise HTTPException(403, f"No access to usage history for tenant {tenant_id}")
 
-        history_data = await usage_service.get_tenant_usage_analytics(tenant_id, f"{months}m")
+        history_data = await get_usage_service().get_tenant_usage_analytics(tenant_id, f"{months}m")
 
         return UsageHistoryResponse(
             tenant_id=history_data["tenant_id"],
@@ -140,7 +159,7 @@ async def get_billing_estimate(
         if not is_platform_admin and not is_tenant_admin:
             raise HTTPException(403, f"No access to billing data for tenant {tenant_id}")
 
-        billing_data = await usage_service.get_billing_estimate(tenant_id)
+        billing_data = await get_usage_service().get_billing_estimate(tenant_id)
 
         return BillingEstimateResponse(
             tenant_id=billing_data["tenant_id"],
@@ -194,7 +213,7 @@ async def generate_invoice(
 
         # Get usage data for the month
         # Get actual usage data from database
-        usage_data = await usage_service.export_usage_report(tenant_id, "json", month)
+        usage_data = await get_usage_service().export_usage_report(tenant_id, "json", month)
         billing_data = usage_data["billing_data"]
 
         feature_usage = {}
@@ -227,7 +246,7 @@ async def generate_invoice(
         }
         
         # Store invoice in database via usage service
-        invoice_id = await usage_service.create_invoice_record(invoice_record)
+        invoice_id = await get_usage_service().create_invoice_record(invoice_record)
 
         logger.info("Invoice generated",
                    tenant_id=tenant_id,
@@ -263,12 +282,12 @@ async def get_platform_usage_trends(
     """Get platform-wide usage trends (platform admins only)"""
     try:
         # Get platform-wide analytics from database
-        platform_data = await usage_service.get_platform_analytics()
+        platform_data = await get_usage_service().get_platform_analytics()
 
         # Get additional analytics from service
-        growth_data = await usage_service.get_growth_metrics()
-        feature_adoption = await usage_service.get_feature_adoption_rates()
-        total_tenants = await usage_service.get_total_tenant_count()
+        growth_data = await get_usage_service().get_growth_metrics()
+        feature_adoption = await get_usage_service().get_feature_adoption_rates()
+        total_tenants = await get_usage_service().get_total_tenant_count()
 
         trends = {
             "total_tenants": total_tenants,
@@ -279,7 +298,7 @@ async def get_platform_usage_trends(
             "growth_metrics": growth_data,
             "feature_adoption": feature_adoption,
             "top_consuming_tenants": [
-                {"tenant_id": tenant["tenant_id"], "cost": await usage_service._estimate_tenant_revenue(tenant["tenant_id"])}
+                {"tenant_id": tenant["tenant_id"], "cost": await get_usage_service()._estimate_tenant_revenue(tenant["tenant_id"])}
                 for tenant in platform_data["top_tenants"][:3]
             ]
         }
@@ -321,20 +340,20 @@ async def get_feature_usage_analytics(
 
         # Query database for feature usage analytics
         if tenant_id:
-            usage_data = await usage_service.get_tenant_usage_summary(tenant_id)
+            usage_data = await get_usage_service().get_tenant_usage_summary(tenant_id)
             feature_breakdown = usage_data["current_month"]["feature_breakdown"]
             cost_breakdown = usage_data["billing"]["cost_breakdown"]
         else:
-            platform_data = await usage_service.get_platform_analytics()
+            platform_data = await get_usage_service().get_platform_analytics()
             # For platform-wide, aggregate across all tenants from database
-            feature_breakdown = await usage_service.get_platform_feature_breakdown()
-            cost_breakdown = await usage_service.get_platform_cost_breakdown()
+            feature_breakdown = await get_usage_service().get_platform_feature_breakdown()
+            cost_breakdown = await get_usage_service().get_platform_cost_breakdown()
 
         usage_analytics_data = {}
         for feature_type, calls in feature_breakdown.items():
             cost_data = cost_breakdown.get(feature_type, {"cost": 0.0})
             # Calculate real trend from historical data
-            trend = await usage_service.calculate_feature_trend(feature_type, tenant_id)
+            trend = await get_usage_service().calculate_feature_trend(feature_type, tenant_id)
             usage_analytics_data[feature_type] = {
                 "total_calls": calls,
                 "avg_calls_per_day": calls // 30,
@@ -397,10 +416,10 @@ async def get_realtime_usage(
         start_time = end_time - timedelta(minutes=window_minutes)
 
         # Get real-time usage from database
-        realtime_data = await usage_service.usage_dao.get_realtime_usage(tenant_id, window_minutes)
+        realtime_data = await get_usage_service().usage_dao.get_realtime_usage(tenant_id, window_minutes)
 
         # Get real status breakdown from database
-        status_breakdown = await usage_service.get_status_breakdown(tenant_id, window_minutes)
+        status_breakdown = await get_usage_service().get_status_breakdown(tenant_id, window_minutes)
         realtime_data["status_breakdown"] = status_breakdown
 
         return realtime_data
@@ -447,7 +466,7 @@ async def export_usage_data(
             end_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
         # Generate export using UsageService
-        export_data = await usage_service.export_usage_report(tenant_id, format)
+        export_data = await get_usage_service().export_usage_report(tenant_id, format)
 
         # Add export metadata
         export_metadata = {
@@ -506,7 +525,7 @@ async def bulk_insert_audit_records(
             processed_entries.append(entry)
 
         # Record usage batch using UsageService
-        await usage_service.track_batch_usage(processed_entries)
+        await get_usage_service().track_batch_usage(processed_entries)
 
         logger.info("Bulk audit insert completed",
                    record_count=len(processed_entries),
@@ -544,8 +563,8 @@ async def get_database_partitions(
                 "partition_name": f"p{month_key}",
                 "table_name": "api_usage_audit",
                 "month": month_date.strftime("%Y-%m"),
-                "record_count": await usage_service.get_partition_record_count(f"p{month_key}"),
-                "size_mb": await usage_service.get_partition_size_mb(f"p{month_key}"),
+                "record_count": await get_usage_service().get_partition_record_count(f"p{month_key}"),
+                "size_mb": await get_usage_service().get_partition_size_mb(f"p{month_key}"),
                 "created_at": month_date.strftime("%Y-%m-01")
             })
 
@@ -587,7 +606,7 @@ async def get_cost_breakdown(
             raise HTTPException(403, f"No access to cost data for tenant {tenant_id}")
 
         # Get actual cost breakdown from UsageService
-        billing_data = await usage_service.get_billing_estimate(tenant_id)
+        billing_data = await get_usage_service().get_billing_estimate(tenant_id)
 
         # Calculate feature costs from breakdown
         feature_costs = {}
@@ -613,7 +632,7 @@ async def get_cost_breakdown(
             },
             "total_cost": billing_data.get("total_cost", 0.0),
             "currency": billing_data.get("currency", "USD"),
-            "cost_per_gb": await usage_service.get_current_cost_per_gb(),
+            "cost_per_gb": await get_usage_service().get_current_cost_per_gb(),
             "cost_per_api_call": billing_data.get("total_cost", 0.0) / max(1, sum(
                 data.get("api_calls", 0) for data in billing_data.get("cost_breakdown", {}).values()
             )),
@@ -749,7 +768,7 @@ async def stream_usage_data(
             while True:
                 try:
                     # Get current usage statistics using real UsageService
-                    usage_data = await usage_service.get_usage_summary(
+                    usage_data = await get_usage_service().get_usage_summary(
                         customer_id=tenant_id,
                         start_date=datetime.now().date() - timedelta(days=1),
                         end_date=datetime.now().date()
@@ -768,11 +787,11 @@ async def stream_usage_data(
         return StreamingResponse(
             generate_usage(),
             media_type="text/event-stream",
+            # LF-021: no hardcoded CORS headers here — the global
+            # CORSMiddleware (main.py) emits the allowlisted origin.
             headers={
                 "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+                "Connection": "keep-alive"
             }
         )
         
@@ -798,7 +817,7 @@ async def get_usage_overview_stats(
     - API rate (requests per minute) for selected time range
     """
     try:
-        overview = await usage_service.get_usage_overview_stats(customer_id, start_time, end_time)
+        overview = await get_usage_service().get_usage_overview_stats(customer_id, start_time, end_time)
         return overview
     except Exception as e:
         logger.error(f"Failed to get usage overview stats: {e}")
@@ -809,12 +828,17 @@ async def get_usage_overview_stats(
 # GLOBAL SERVICE INSTANCES
 # =================================================================
 
-# Make services available for dependency injection
-async def get_usage_service() -> UsageService:
-    """Get usage service instance"""
-    return usage_service
+# Make services available for dependency injection.
+#
+# ENH-010: the previous async helpers here returned module-level singletons that
+# no longer exist (services are now built on first use). They are thin async
+# wrappers over the lazy getters so any FastAPI `Depends(...)` usage keeps
+# working.
+async def get_usage_service_dep() -> UsageService:
+    """FastAPI dependency wrapper around the lazy usage service getter."""
+    return get_usage_service()
 
-async def get_role_service():
-    """Get role service instance"""
-    from apps.api.routers.role_api import role_service
-    return role_service
+async def get_role_service_dep():
+    """FastAPI dependency wrapper around the lazy role service getter."""
+    from routers.role_api import get_role_service
+    return get_role_service()

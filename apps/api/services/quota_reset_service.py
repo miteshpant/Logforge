@@ -362,14 +362,25 @@ class QuotaResetScheduler:
                 # Run quota reset check
                 summary = await self.quota_service.check_and_reset_quotas()
                 logger.info("Scheduled quota reset completed", summary=summary)
-                
+
                 # Wait for next check interval
                 await asyncio.sleep(self.check_interval * 60)  # Convert minutes to seconds
-                
+
+            except asyncio.CancelledError:
+                # ENH-030: cancellation is a shutdown signal, not an error.
+                # Swallowing it here would keep the task alive through shutdown
+                # and stall the event loop.
+                logger.info("Quota reset scheduler cancelled")
+                self.running = False
+                raise
             except Exception as e:
                 logger.error("Scheduler error, will retry", error=str(e))
                 # Wait 5 minutes before retrying on error
-                await asyncio.sleep(300)
+                try:
+                    await asyncio.sleep(300)
+                except asyncio.CancelledError:
+                    self.running = False
+                    raise
     
     def stop_scheduler(self):
         """Stop the background scheduler"""

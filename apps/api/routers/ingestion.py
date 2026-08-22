@@ -5,7 +5,7 @@ Log ingestion API endpoints - all formats and methods
 import json
 import time
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Request, HTTPException
 from fastapi.responses import JSONResponse
@@ -18,7 +18,9 @@ from parsers import ParserFactory
 from storage_config import get_customer_id
 from tenant_dependencies import TenantOrDefault, RequiredTenant, MiddlewareTenant
 from fastapi import Depends
-from tenant_service import tenant_service
+# ENH-033/ENH-010: resolved lazily; importing the singleton connected to
+# the database at import time and made this module untestable offline.
+from tenant_service import get_tenant_service
 from services.ingestion_service import IngestionService
 
 router = APIRouter(prefix="/v1/ingest")
@@ -27,8 +29,61 @@ router = APIRouter(prefix="/v1/ingest")
 parser_factory = None
 process_logs_background = None
 process_logs_and_tracking_background = None
-ingestion_service = IngestionService()
+# ENH-010: `IngestionService()` opens a database connection in its constructor, so
+# building it at import time made this router un-importable -- and untestable --
+# without live infrastructure. Built on first use; the PEP 562 hook below
+# preserves the bare `ingestion_service` name at every call site.
+_ingestion_service_instance: Optional[IngestionService] = None
+
+
+def get_ingestion_service() -> IngestionService:
+    """Get the shared IngestionService, constructing it on first use."""
+    global _ingestion_service_instance
+    if _ingestion_service_instance is None:
+        _ingestion_service_instance = IngestionService()
+    return _ingestion_service_instance
+
+
+def __getattr__(name: str):
+    """Resolve `ingestion_service` lazily (PEP 562)."""
+    if name == "ingestion_service":
+        return get_ingestion_service()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 logger = logging.getLogger(__name__)
+
+def check_ingest_capacity() -> None:
+    """
+    Reject the request if the ingest pipeline is saturated (ENH-029).
+
+    Ingest endpoints return 202 and hand off to a background worker pool. If the
+    pool is full, that 202 is a lie: the batch will be dropped and the customer
+    will believe their logs were accepted. Shedding load with an honest 429 lets
+    the shipper retry, which is how Vector/Fluent Bit/OTel collectors are all
+    designed to behave.
+
+    Raises:
+        HTTPException(429): with `Retry-After`, when saturated.
+    """
+    from ingest_pipeline import get_ingest_pipeline
+
+    pipeline = get_ingest_pipeline()
+    if pipeline.is_saturated():
+        retry_after = pipeline.retry_after_seconds()
+        # NOTE: `logger` here is stdlib logging, not structlog, so keyword
+        # fields must be formatted into the message rather than passed as kwargs.
+        logger.warning(
+            "Ingest rejected: pipeline saturated (queue_depth=%s)",
+            pipeline.get_stats()["queue_depth"],
+        )
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "Ingest pipeline is saturated. Retry after "
+                f"{retry_after}s."
+            ),
+            headers={"Retry-After": str(retry_after)},
+        )
+
 
 def setup_dependencies(pf, plb, pltb=None):
     """Setup dependencies from main app"""
@@ -54,20 +109,23 @@ async def ingest_logs(
     customer_id: str = MiddlewareTenant
 ):
     """Single log entry ingestion endpoint"""
+    # ENH-029: shed load honestly rather than accepting data we cannot persist.
+    check_ingest_capacity()
+
     start_time = time.time()
 
     try:
         # Validate log entry (only validation in main thread)
-        if not ingestion_service.validate_log_entry(log_entry):
+        if not get_ingestion_service().validate_log_entry(log_entry):
             # Error tracking also moved to background to avoid blocking
             background_tasks.add_task(
-                ingestion_service.track_ingestion_error,
+                get_ingestion_service().track_ingestion_error,
                 customer_id, "/logs", "validation_error", "Log entry validation failed"
             )
             raise HTTPException(status_code=400, detail="Invalid log entry")
 
         # Prepare logs for storage
-        logs = ingestion_service.prepare_logs_for_storage([log_entry], customer_id)
+        logs = get_ingestion_service().prepare_logs_for_storage([log_entry], customer_id)
 
         # Calculate metrics for background tracking
         bytes_processed = len(str(log_entry.msg))
@@ -109,7 +167,7 @@ async def ingest_logs(
     except Exception as e:
         # Error tracking moved to background
         background_tasks.add_task(
-            ingestion_service.track_ingestion_error,
+            get_ingestion_service().track_ingestion_error,
             customer_id, "/logs", "processing_error", str(e)
         )
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
@@ -121,6 +179,9 @@ async def ingest_logs_batch(
     customer_id: str = MiddlewareTenant
 ):
     """Batch log entry ingestion"""
+    # ENH-029: shed load honestly rather than accepting data we cannot persist.
+    check_ingest_capacity()
+
     start_time = time.time()
 
     try:
@@ -161,7 +222,7 @@ async def ingest_logs_batch(
     except Exception as e:
         # Error tracking moved to background
         background_tasks.add_task(
-            ingestion_service.track_ingestion_error,
+            get_ingestion_service().track_ingestion_error,
             customer_id, "/logs/batch", "processing_error", str(e)
         )
         raise HTTPException(status_code=500, detail=f"Batch ingestion failed: {str(e)}")
@@ -173,6 +234,9 @@ async def ingest_logs_bulk(
     customer_id: str = MiddlewareTenant
 ):
     """Bulk ingestion from various sources"""
+    # ENH-029: shed load honestly rather than accepting data we cannot persist.
+    check_ingest_capacity()
+
     try:
 
         if "logs" not in bulk_data:
@@ -207,6 +271,9 @@ async def ingest_otlp_logs(
     customer_id: str = MiddlewareTenant
 ):
     """OpenTelemetry Protocol (OTLP) log ingestion"""
+    # ENH-029: shed load honestly rather than accepting data we cannot persist.
+    check_ingest_capacity()
+
     start_time = time.time()
 
     try:
@@ -220,7 +287,7 @@ async def ingest_otlp_logs(
             raise HTTPException(status_code=400, detail="No valid log records found in OTLP data")
 
         # Prepare logs for storage
-        logs = ingestion_service.prepare_logs_for_storage(logs, customer_id)
+        logs = get_ingestion_service().prepare_logs_for_storage(logs, customer_id)
 
         # Calculate metrics for background tracking
         total_bytes_processed = sum(len(str(log.msg)) for log in logs)
@@ -258,7 +325,7 @@ async def ingest_otlp_logs(
     except Exception as e:
         # Error tracking moved to background
         background_tasks.add_task(
-            ingestion_service.track_ingestion_error,
+            get_ingestion_service().track_ingestion_error,
             customer_id, "/otlp", "processing_error", str(e), str(otlp_data)[:500], "application/json"
         )
         raise HTTPException(status_code=500, detail=f"OTLP ingestion failed: {str(e)}")
@@ -270,6 +337,9 @@ async def ingest_syslog(
     customer_id: str = MiddlewareTenant
 ):
     """Syslog format ingestion (RFC 3164 and RFC 5424)"""
+    # ENH-029: shed load honestly rather than accepting data we cannot persist.
+    check_ingest_capacity()
+
     start_time = time.time()
 
     try:
@@ -286,7 +356,7 @@ async def ingest_syslog(
             raise HTTPException(status_code=400, detail="No valid log records found in syslog data")
 
         # Prepare logs for storage
-        logs = ingestion_service.prepare_logs_for_storage([log], customer_id)
+        logs = get_ingestion_service().prepare_logs_for_storage([log], customer_id)
 
         # Calculate metrics for background tracking
         total_bytes_processed = len(syslog_data.encode('utf-8'))
@@ -313,6 +383,10 @@ async def ingest_syslog(
             message=f"Successfully ingested {len(logs)} logs",
             processed_count=len(logs)
         )
+    except HTTPException:
+        # ENH-029: preserve deliberate 4xx (e.g. the 429 from
+        # check_ingest_capacity) instead of relabelling it.
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Syslog parsing failed: {str(e)}")
 
@@ -323,6 +397,9 @@ async def ingest_nginx(
     customer_id: str = MiddlewareTenant
 ):
     """Nginx access log ingestion"""
+    # ENH-029: shed load honestly rather than accepting data we cannot persist.
+    check_ingest_capacity()
+
     start_time = time.time()
 
     try:
@@ -339,7 +416,7 @@ async def ingest_nginx(
             raise HTTPException(status_code=400, detail="No valid log records found in nginx data")
 
         # Prepare logs for storage
-        logs = ingestion_service.prepare_logs_for_storage([log], customer_id)
+        logs = get_ingestion_service().prepare_logs_for_storage([log], customer_id)
 
         # Calculate metrics for background tracking
         total_bytes_processed = len(nginx_logs.encode('utf-8'))
@@ -366,6 +443,10 @@ async def ingest_nginx(
             message=f"Successfully ingested {len(logs)} logs",
             processed_count=len(logs)
         )
+    except HTTPException:
+        # ENH-029: preserve deliberate 4xx (e.g. the 429 from
+        # check_ingest_capacity) instead of relabelling it.
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Nginx log parsing failed: {str(e)}")
 
@@ -376,6 +457,9 @@ async def ingest_cef(
     customer_id: str = MiddlewareTenant
 ):
     """Common Event Format (CEF) log ingestion"""
+    # ENH-029: shed load honestly rather than accepting data we cannot persist.
+    check_ingest_capacity()
+
     start_time = time.time()
 
     try:
@@ -392,7 +476,7 @@ async def ingest_cef(
             raise HTTPException(status_code=400, detail="No valid log records found in CEF data")
 
         # Prepare logs for storage
-        logs = ingestion_service.prepare_logs_for_storage([log], customer_id)
+        logs = get_ingestion_service().prepare_logs_for_storage([log], customer_id)
 
         # Calculate metrics for background tracking
         total_bytes_processed = len(cef_data.encode('utf-8'))
@@ -419,6 +503,10 @@ async def ingest_cef(
             message=f"Successfully ingested {len(logs)} logs",
             processed_count=len(logs)
         )
+    except HTTPException:
+        # ENH-029: preserve deliberate 4xx (e.g. the 429 from
+        # check_ingest_capacity) instead of relabelling it.
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"CEF parsing failed: {str(e)}")
 
@@ -429,6 +517,9 @@ async def ingest_text(
     customer_id: str = MiddlewareTenant
 ):
     """Plain text log ingestion with basic parsing"""
+    # ENH-029: shed load honestly rather than accepting data we cannot persist.
+    check_ingest_capacity()
+
     start_time = time.time()
 
     try:
@@ -445,7 +536,7 @@ async def ingest_text(
             raise HTTPException(status_code=400, detail="No valid log records found in text data")
 
         # Prepare logs for storage
-        logs = ingestion_service.prepare_logs_for_storage([log], customer_id)
+        logs = get_ingestion_service().prepare_logs_for_storage([log], customer_id)
 
         # Calculate metrics for background tracking
         total_bytes_processed = len(text_data.encode('utf-8'))
@@ -472,6 +563,10 @@ async def ingest_text(
             message=f"Successfully ingested {len(logs)} logs",
             processed_count=len(logs)
         )
+    except HTTPException:
+        # ENH-029: preserve deliberate 4xx (e.g. the 429 from
+        # check_ingest_capacity) instead of relabelling it.
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Text parsing failed: {str(e)}")
 
@@ -482,6 +577,9 @@ async def ingest_structured(
     customer_id: str = MiddlewareTenant
 ):
     """Structured JSON log ingestion"""
+    # ENH-029: shed load honestly rather than accepting data we cannot persist.
+    check_ingest_capacity()
+
     start_time = time.time()
 
     try:
@@ -499,7 +597,7 @@ async def ingest_structured(
             raise HTTPException(status_code=400, detail="No valid log records found in structured data")
 
         # Prepare logs for storage
-        logs = ingestion_service.prepare_logs_for_storage(logs, customer_id)
+        logs = get_ingestion_service().prepare_logs_for_storage(logs, customer_id)
 
         # Calculate metrics for background tracking
         total_bytes_processed = len(str(structured_data).encode('utf-8'))
@@ -526,6 +624,10 @@ async def ingest_structured(
             message=f"Successfully ingested {len(logs)} logs",
             processed_count=len(logs)
         )
+    except HTTPException:
+        # ENH-029: preserve deliberate 4xx (e.g. the 429 from
+        # check_ingest_capacity) instead of relabelling it.
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Structured data parsing failed: {str(e)}")
 
@@ -537,6 +639,9 @@ async def ingest_nginx_batch(
     customer_id: str = MiddlewareTenant
 ):
     """Nginx access logs batch ingestion (newline-separated)"""
+    # ENH-029: shed load honestly rather than accepting data we cannot persist.
+    check_ingest_capacity()
+
     start_time = time.time()
 
     try:
@@ -559,6 +664,10 @@ async def ingest_nginx_batch(
             try:
                 log = parser.parse(line)
                 logs.append(log)
+            except HTTPException:
+                # ENH-029: preserve deliberate 4xx (e.g. the 429 from
+                # check_ingest_capacity) instead of relabelling it.
+                raise
             except Exception as e:
                 logger.warning(f"Failed to parse nginx log line {i+1}: {e}")
                 continue
@@ -567,7 +676,7 @@ async def ingest_nginx_batch(
             raise HTTPException(status_code=400, detail="No valid nginx log records could be parsed")
 
         # Prepare logs for storage
-        logs = ingestion_service.prepare_logs_for_storage(logs, customer_id)
+        logs = get_ingestion_service().prepare_logs_for_storage(logs, customer_id)
 
         # Calculate metrics for background tracking
         total_bytes_processed = len(nginx_logs_text.encode('utf-8'))
@@ -593,6 +702,10 @@ async def ingest_nginx_batch(
             message=f"Successfully ingested {len(logs)} nginx logs from {len(nginx_log_lines)} lines",
             processed_count=len(logs)
         )
+    except HTTPException:
+        # ENH-029: preserve deliberate 4xx (e.g. the 429 from
+        # check_ingest_capacity) instead of relabelling it.
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Nginx batch parsing failed: {str(e)}")
 
@@ -603,6 +716,9 @@ async def ingest_syslog_batch(
     customer_id: str = MiddlewareTenant
 ):
     """Syslog messages batch ingestion (newline-separated)"""
+    # ENH-029: shed load honestly rather than accepting data we cannot persist.
+    check_ingest_capacity()
+
     start_time = time.time()
 
     try:
@@ -625,6 +741,10 @@ async def ingest_syslog_batch(
             try:
                 log = parser.parse(line)
                 logs.append(log)
+            except HTTPException:
+                # ENH-029: preserve deliberate 4xx (e.g. the 429 from
+                # check_ingest_capacity) instead of relabelling it.
+                raise
             except Exception as e:
                 logger.warning(f"Failed to parse syslog line {i+1}: {e}")
                 continue
@@ -633,7 +753,7 @@ async def ingest_syslog_batch(
             raise HTTPException(status_code=400, detail="No valid syslog records could be parsed")
 
         # Prepare logs for storage
-        logs = ingestion_service.prepare_logs_for_storage(logs, customer_id)
+        logs = get_ingestion_service().prepare_logs_for_storage(logs, customer_id)
 
         # Calculate metrics for background tracking
         total_bytes_processed = len(syslog_text.encode('utf-8'))
@@ -659,6 +779,10 @@ async def ingest_syslog_batch(
             message=f"Successfully ingested {len(logs)} syslog entries from {len(syslog_lines)} lines",
             processed_count=len(logs)
         )
+    except HTTPException:
+        # ENH-029: preserve deliberate 4xx (e.g. the 429 from
+        # check_ingest_capacity) instead of relabelling it.
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Syslog batch parsing failed: {str(e)}")
 
@@ -669,6 +793,9 @@ async def ingest_cef_batch(
     customer_id: str = MiddlewareTenant
 ):
     """CEF events batch ingestion (newline-separated)"""
+    # ENH-029: shed load honestly rather than accepting data we cannot persist.
+    check_ingest_capacity()
+
     start_time = time.time()
 
     try:
@@ -691,6 +818,10 @@ async def ingest_cef_batch(
             try:
                 log = parser.parse(line)
                 logs.append(log)
+            except HTTPException:
+                # ENH-029: preserve deliberate 4xx (e.g. the 429 from
+                # check_ingest_capacity) instead of relabelling it.
+                raise
             except Exception as e:
                 logger.warning(f"Failed to parse CEF line {i+1}: {e}")
                 continue
@@ -699,7 +830,7 @@ async def ingest_cef_batch(
             raise HTTPException(status_code=400, detail="No valid CEF records could be parsed")
 
         # Prepare logs for storage
-        logs = ingestion_service.prepare_logs_for_storage(logs, customer_id)
+        logs = get_ingestion_service().prepare_logs_for_storage(logs, customer_id)
 
         # Calculate metrics for background tracking
         total_bytes_processed = len(cef_text.encode('utf-8'))
@@ -725,6 +856,10 @@ async def ingest_cef_batch(
             message=f"Successfully ingested {len(logs)} CEF events from {len(cef_lines)} lines",
             processed_count=len(logs)
         )
+    except HTTPException:
+        # ENH-029: preserve deliberate 4xx (e.g. the 429 from
+        # check_ingest_capacity) instead of relabelling it.
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"CEF batch parsing failed: {str(e)}")
 
@@ -735,6 +870,9 @@ async def ingest_text_batch(
     customer_id: str = MiddlewareTenant
 ):
     """Plain text logs batch ingestion with IP/user extraction (newline-separated)"""
+    # ENH-029: shed load honestly rather than accepting data we cannot persist.
+    check_ingest_capacity()
+
     start_time = time.time()
 
     try:
@@ -757,6 +895,10 @@ async def ingest_text_batch(
             try:
                 log = parser.parse(line)
                 logs.append(log)
+            except HTTPException:
+                # ENH-029: preserve deliberate 4xx (e.g. the 429 from
+                # check_ingest_capacity) instead of relabelling it.
+                raise
             except Exception as e:
                 logger.warning(f"Failed to parse text log line {i+1}: {e}")
                 continue
@@ -765,7 +907,7 @@ async def ingest_text_batch(
             raise HTTPException(status_code=400, detail="No valid text log records could be parsed")
 
         # Prepare logs for storage
-        logs = ingestion_service.prepare_logs_for_storage(logs, customer_id)
+        logs = get_ingestion_service().prepare_logs_for_storage(logs, customer_id)
 
         # Calculate metrics for background tracking
         total_bytes_processed = len(text_logs.encode('utf-8'))
@@ -791,6 +933,10 @@ async def ingest_text_batch(
             message=f"Successfully ingested {len(logs)} text logs from {len(text_lines)} lines",
             processed_count=len(logs)
         )
+    except HTTPException:
+        # ENH-029: preserve deliberate 4xx (e.g. the 429 from
+        # check_ingest_capacity) instead of relabelling it.
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Text batch parsing failed: {str(e)}")
 
@@ -802,6 +948,9 @@ async def ingest_auto_detect(
     customer_id: str = MiddlewareTenant
 ):
     """Auto-detect format and ingest logs"""
+    # ENH-029: shed load honestly rather than accepting data we cannot persist.
+    check_ingest_capacity()
+
     start_time = time.time()
 
     try:
@@ -859,7 +1008,7 @@ async def ingest_auto_detect(
             raise HTTPException(status_code=400, detail="No valid log records found in auto-detected data")
 
         # Prepare logs for storage
-        logs = ingestion_service.prepare_logs_for_storage(logs, customer_id)
+        logs = get_ingestion_service().prepare_logs_for_storage(logs, customer_id)
 
         # Calculate metrics for background tracking
         total_bytes_processed = len(raw_content)
@@ -887,5 +1036,9 @@ async def ingest_auto_detect(
             processed_count=len(logs)
         )
 
+    except HTTPException:
+        # ENH-029: preserve deliberate 4xx (e.g. the 429 from
+        # check_ingest_capacity) instead of relabelling it.
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Auto-detection failed: {str(e)}")

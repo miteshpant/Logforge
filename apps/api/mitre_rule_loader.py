@@ -385,7 +385,24 @@ class MitreRuleLoader:
 
 
 # Singleton instance for production use
-mitre_rule_loader = MitreRuleLoader()
+# ENH-010: `MitreRuleLoader()` opens a database connection in its constructor, so
+# building it here connected during import and made this module untestable
+# offline. Built on first use; the PEP 562 hook preserves the `mitre_rule_loader` name.
+_mitre_rule_loader_instance = None
+
+
+def get_mitre_rule_loader() -> "MitreRuleLoader":
+    """Get the shared MitreRuleLoader, constructing it on first use."""
+    global _mitre_rule_loader_instance
+    if _mitre_rule_loader_instance is None:
+        _mitre_rule_loader_instance = MitreRuleLoader()
+    return _mitre_rule_loader_instance
+
+
+def __getattr__(name: str):
+    if name == "mitre_rule_loader":
+        return get_mitre_rule_loader()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 async def initialize_mitre_rules_system() -> Dict[str, Any]:
@@ -399,7 +416,7 @@ async def initialize_mitre_rules_system() -> Dict[str, Any]:
         logger.info("🚀 Starting MITRE Rule System Initialization...")
         
         # Load rules for all tenants
-        results = await mitre_rule_loader.initialize_mitre_rules_for_all_tenants()
+        results = await get_mitre_rule_loader().initialize_mitre_rules_for_all_tenants()
         
         # Calculate summary statistics
         total_tenants = len(results)
@@ -438,7 +455,7 @@ async def verify_mitre_coverage_for_tenant(customer_id: str) -> Dict[str, Any]:
     Returns:
         Dict with coverage verification results
     """
-    return await mitre_rule_loader.verify_mitre_coverage(customer_id)
+    return await get_mitre_rule_loader().verify_mitre_coverage(customer_id)
 
 
 if __name__ == "__main__":
@@ -450,11 +467,11 @@ if __name__ == "__main__":
         test_customer_id = "test_tenant_001"
         
         # Load rules for test tenant
-        loaded_count = await mitre_rule_loader.initialize_mitre_rules_for_tenant(test_customer_id)
+        loaded_count = await get_mitre_rule_loader().initialize_mitre_rules_for_tenant(test_customer_id)
         print(f"✅ Loaded {loaded_count} rules for test tenant")
         
         # Verify coverage
-        coverage = await mitre_rule_loader.verify_mitre_coverage(test_customer_id)
+        coverage = await get_mitre_rule_loader().verify_mitre_coverage(test_customer_id)
         print(f"📊 Coverage: {coverage}")
         
         print("🎉 Test complete!")

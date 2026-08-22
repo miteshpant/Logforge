@@ -331,7 +331,24 @@ class MitreSystemInitializer:
 
 
 # Singleton instance for production use
-mitre_system_initializer = MitreSystemInitializer()
+# ENH-010: `MitreSystemInitializer()` opens a database connection in its constructor, so
+# building it here connected during import and made this module untestable
+# offline. Built on first use; the PEP 562 hook preserves the `mitre_system_initializer` name.
+_mitre_system_initializer_instance = None
+
+
+def get_mitre_system_initializer() -> "MitreSystemInitializer":
+    """Get the shared MitreSystemInitializer, constructing it on first use."""
+    global _mitre_system_initializer_instance
+    if _mitre_system_initializer_instance is None:
+        _mitre_system_initializer_instance = MitreSystemInitializer()
+    return _mitre_system_initializer_instance
+
+
+def __getattr__(name: str):
+    if name == "mitre_system_initializer":
+        return get_mitre_system_initializer()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 async def initialize_mitre_system() -> Dict[str, Any]:
@@ -341,7 +358,7 @@ async def initialize_mitre_system() -> Dict[str, Any]:
     Returns:
         Dict with initialization results
     """
-    return await mitre_system_initializer.initialize_complete_system()
+    return await get_mitre_system_initializer().initialize_complete_system()
 
 
 async def initialize_mitre_for_tenant(customer_id: str) -> Dict[str, Any]:
@@ -354,7 +371,7 @@ async def initialize_mitre_for_tenant(customer_id: str) -> Dict[str, Any]:
     Returns:
         Dict with initialization results
     """
-    return await mitre_system_initializer.initialize_for_single_tenant(customer_id)
+    return await get_mitre_system_initializer().initialize_for_single_tenant(customer_id)
 
 
 async def get_mitre_system_status() -> Dict[str, Any]:
@@ -364,7 +381,7 @@ async def get_mitre_system_status() -> Dict[str, Any]:
     Returns:
         Dict with system status
     """
-    return await mitre_system_initializer.get_system_status()
+    return await get_mitre_system_initializer().get_system_status()
 
 
 if __name__ == "__main__":

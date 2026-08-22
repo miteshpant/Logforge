@@ -5,10 +5,35 @@ Health and core API endpoints
 from datetime import datetime, timezone
 from typing import Dict, Any
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import PlainTextResponse
 from models import HealthResponse
 from services.health_service import HealthService
 
 router = APIRouter()
+
+
+@router.get("/metrics", response_class=PlainTextResponse, include_in_schema=False)
+async def metrics():
+    """
+    Prometheus metrics endpoint (ENH-019).
+
+    Exposes RED metrics (Rate, Errors, Duration) for HTTP traffic plus pipeline
+    gauges: write-buffer depth, dead-lettered log count, and event
+    publish/failure counts. Before this existed, an on-call engineer had only
+    logs -- no ingest lag, queue depth, error rate or latency percentiles.
+
+    Not authenticated, by convention for Prometheus scrape targets: it is
+    expected to be exposed on an internal network or restricted at the ingress.
+    It reports no tenant-identifying data -- all labels are bounded
+    (method, route template, status class, publisher name).
+    """
+    from self_metrics import collect_pipeline_gauges, get_registry
+
+    collect_pipeline_gauges()
+    return PlainTextResponse(
+        get_registry().render(),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
 
 
 def _get_circuit_breaker_status() -> Dict[str, Any]:

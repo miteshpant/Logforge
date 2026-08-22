@@ -1,0 +1,44 @@
+title: Remote Execution Tooling for Lateral Movement
+id: lm001-remote-execution
+status: stable
+description: >
+  Detects remote-execution utilities used to move laterally between hosts
+  (PsExec, WMIC process call create, WinRM, remote service creation). Lateral
+  movement is the step between initial foothold and objective, so catching it
+  is the difference between one compromised host and a domain-wide incident.
+author: Logforge Security Team
+date: 2026/08/13
+references:
+    - https://attack.mitre.org/techniques/T1021/002/
+    - https://attack.mitre.org/techniques/T1047/
+tags:
+    - attack.lateral_movement
+    - attack.execution
+    - attack.t1021.002
+    - attack.t1047
+    - psexec
+logsource:
+    category: process_creation
+detection:
+    selection_psexec:
+        process_name|contains:
+            - "psexec"
+            - "paexec"
+            - "psexesvc"
+    selection_wmic_remote:
+        command_line|contains: "process call create"
+    selection_remote_service:
+        command_line|contains:
+            - "sc \\\\"
+            - "sc.exe \\\\"
+    condition: 1 of selection_*
+fields:
+    - process_name
+    - command_line
+    - user
+    - host
+falsepositives:
+    - IT support performing legitimate remote administration
+    - Software deployment tools that use PsExec-style remote execution
+    - Monitoring agents invoking WMI on remote hosts
+level: high

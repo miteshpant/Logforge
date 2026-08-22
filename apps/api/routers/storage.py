@@ -13,11 +13,30 @@ from tenant_dependencies import MiddlewareTenant
 router = APIRouter(prefix="/v1/storage")
 
 # Initialize storage service
-storage_service = StorageService()
+# ENH-010: `StorageService()` opens a database connection in its constructor, so
+# building it at import time made this router un-importable -- and untestable --
+# without live infrastructure. Built on first use; the PEP 562 hook below
+# preserves the bare `storage_service` name at every call site.
+_storage_service_instance: Optional[StorageService] = None
+
+
+def get_storage_service() -> StorageService:
+    """Get the shared StorageService, constructing it on first use."""
+    global _storage_service_instance
+    if _storage_service_instance is None:
+        _storage_service_instance = StorageService()
+    return _storage_service_instance
+
+
+def __getattr__(name: str):
+    """Resolve `storage_service` lazily (PEP 562)."""
+    if name == "storage_service":
+        return get_storage_service()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 def setup_dependencies(ttl_manager):
     """Setup dependencies from main app"""
-    storage_service.set_ttl_manager(ttl_manager)
+    get_storage_service().set_ttl_manager(ttl_manager)
 
 class RetentionPolicyRequest(BaseModel):
     hot_retention_days: int
@@ -41,7 +60,7 @@ async def create_retention_policy(
             raise HTTPException(status_code=403, detail="Access denied")
         
         # Create policy using storage service
-        result = await storage_service.create_retention_policy({
+        result = await get_storage_service().create_retention_policy({
             "customer_id": customer_id,
             "policy_name": "default",
             "hot_retention_days": policy_request.hot_retention_days,
@@ -71,7 +90,7 @@ async def get_retention_policy(customer_id: str, requesting_customer: str = Midd
         if requesting_customer != customer_id:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        policy = await storage_service.get_retention_policy(customer_id)
+        policy = await get_storage_service().get_retention_policy(customer_id)
         
         return {
             "customer_id": customer_id,
@@ -97,7 +116,7 @@ async def update_retention_policy(
             raise HTTPException(status_code=403, detail="Access denied")
         
         # Update policy using storage service
-        result = await storage_service.update_retention_policy(
+        result = await get_storage_service().update_retention_policy(
             customer_id, 
             "default",  # policy_name
             {
@@ -131,7 +150,7 @@ async def trigger_cleanup(cleanup_request: Optional[Dict[str, Any]] = None, cust
             policy_name = cleanup_request["policy_name"]
         
         # Trigger cleanup using storage service
-        result = await storage_service.trigger_cleanup_operation(customer_id, policy_name)
+        result = await get_storage_service().trigger_cleanup_operation(customer_id, policy_name)
         
         return {
             "status": "completed",
@@ -151,7 +170,7 @@ async def archive_old_data(customer_id: str, requesting_customer: str = Middlewa
             raise HTTPException(status_code=403, detail="Access denied")
         
         # Trigger archival using storage service
-        result = await storage_service.trigger_archive_operation(customer_id)
+        result = await get_storage_service().trigger_archive_operation(customer_id)
         
         return {
             "status": "archival_started",
@@ -194,7 +213,7 @@ async def get_infrastructure_health(request: Request, customer_id: str = Middlew
             )
         
         # Get infrastructure health information using storage service
-        health_info = await storage_service.get_infrastructure_health()
+        health_info = await get_storage_service().get_infrastructure_health()
         
         return {
             "infrastructure_health": health_info,
@@ -216,7 +235,7 @@ async def get_customer_storage_health(customer_id: str = MiddlewareTenant):
         # This is enforced by the middleware tenant validation
         
         # Get comprehensive storage health information using storage service
-        health_info = await storage_service.get_storage_health(customer_id)
+        health_info = await get_storage_service().get_storage_health(customer_id)
         
         return health_info
         
@@ -251,7 +270,7 @@ async def get_specific_customer_health(target_customer_id: str, request: Request
                 raise HTTPException(status_code=403, detail="Admin access required to view other tenant's storage health")
         
         # Get storage health for the target customer
-        health_info = await storage_service.get_storage_health(target_customer_id)
+        health_info = await get_storage_service().get_storage_health(target_customer_id)
         
         return health_info
         
@@ -342,7 +361,7 @@ async def list_customer_archives(
         if requesting_customer != customer_id:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        archives = await storage_service.list_customer_archives(
+        archives = await get_storage_service().list_customer_archives(
             customer_id=customer_id,
             limit=limit,
             offset=offset,
@@ -372,7 +391,7 @@ async def get_archive_metadata(
 ):
     """Get metadata for a specific archive"""
     try:
-        archive_info = await storage_service.get_archive_metadata(archive_key, requesting_customer)
+        archive_info = await get_storage_service().get_archive_metadata(archive_key, requesting_customer)
         if not archive_info:
             raise HTTPException(status_code=404, detail="Archive not found")
         
@@ -396,7 +415,7 @@ async def download_archive(
         # Get user ID from request context
         user_id = getattr(request.state, 'user_id', 'unknown')
         
-        download_info = await storage_service.generate_archive_download(
+        download_info = await get_storage_service().generate_archive_download(
             archive_key=archive_key,
             customer_id=requesting_customer,
             user_id=user_id
@@ -427,7 +446,7 @@ async def query_archived_data(
         # Get user ID from request context
         user_id = getattr(request.state, 'user_id', 'unknown')
         
-        results = await storage_service.query_archived_data(
+        results = await get_storage_service().query_archived_data(
             customer_id=requesting_customer,
             archive_keys=archive_keys,
             filters=filters,

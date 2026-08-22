@@ -17,13 +17,32 @@ router = APIRouter(prefix="/v1/dashboards")
 
 # Global instances (will be injected)
 dashboard_engine = None
-dashboard_service = DashboardService()
+# ENH-010: `DashboardService()` opens a database connection in its constructor, so
+# building it at import time made this router un-importable -- and untestable --
+# without live infrastructure. Built on first use; the PEP 562 hook below
+# preserves the bare `dashboard_service` name at every call site.
+_dashboard_service_instance: Optional[DashboardService] = None
+
+
+def get_dashboard_service() -> DashboardService:
+    """Get the shared DashboardService, constructing it on first use."""
+    global _dashboard_service_instance
+    if _dashboard_service_instance is None:
+        _dashboard_service_instance = DashboardService()
+    return _dashboard_service_instance
+
+
+def __getattr__(name: str):
+    """Resolve `dashboard_service` lazily (PEP 562)."""
+    if name == "dashboard_service":
+        return get_dashboard_service()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 def setup_dependencies(de):
     """Setup dependencies from main app"""
     global dashboard_engine
     dashboard_engine = de
-    dashboard_service.set_dashboard_engine(de)
+    get_dashboard_service().set_dashboard_engine(de)
 
 class DashboardRequest(BaseModel):
     name: str
@@ -60,7 +79,7 @@ async def list_dashboards(
 ):
     """List all available dashboards for the customer"""
     try:
-        result = await dashboard_service.list_dashboards(
+        result = await get_dashboard_service().list_dashboards(
             customer_id=customer_id,
             created_by=created_by,
             is_public=is_public,
@@ -76,7 +95,7 @@ async def list_dashboards(
 async def get_dashboard_config(dashboard_id: str, customer_id: str = MiddlewareTenant):
     """Get dashboard configuration and metadata"""
     try:
-        dashboard = await dashboard_service.get_dashboard(dashboard_id, customer_id)
+        dashboard = await get_dashboard_service().get_dashboard(dashboard_id, customer_id)
 
         if not dashboard:
             # Try default dashboard engine as fallback
@@ -118,7 +137,7 @@ async def get_dashboard_data(
                 logger.warning("Invalid time range format", error=str(e))
 
         # Get dashboard data
-        data = await dashboard_service.get_dashboard_data(dashboard_id, customer_id, time_range)
+        data = await get_dashboard_service().get_dashboard_data(dashboard_id, customer_id, time_range)
 
         if not data:
             raise HTTPException(status_code=404, detail="Dashboard not found")
@@ -139,7 +158,7 @@ async def create_dashboard(dashboard_request: DashboardRequest, customer_id: str
         dashboard_data['customer_id'] = customer_id
 
         # Create dashboard
-        result = await dashboard_service.create_dashboard(dashboard_data)
+        result = await get_dashboard_service().create_dashboard(dashboard_data)
         return result
 
     except ValueError as e:
@@ -153,7 +172,7 @@ async def update_dashboard(dashboard_id: str, dashboard_request: DashboardReques
     try:
         # Update dashboard
         update_data = dashboard_request.model_dump()
-        result = await dashboard_service.update_dashboard(dashboard_id, customer_id, update_data)
+        result = await get_dashboard_service().update_dashboard(dashboard_id, customer_id, update_data)
         return result
 
     except ValueError as e:
@@ -165,7 +184,7 @@ async def update_dashboard(dashboard_id: str, dashboard_request: DashboardReques
 async def delete_dashboard(dashboard_id: str, customer_id: str = MiddlewareTenant):
     """Delete a dashboard"""
     try:
-        result = await dashboard_service.delete_dashboard(dashboard_id, customer_id)
+        result = await get_dashboard_service().delete_dashboard(dashboard_id, customer_id)
         return result
 
     except ValueError as e:
@@ -180,7 +199,7 @@ async def get_widget_data(dashboard_id: str, widget_id: str, customer_id: str = 
     """Get data for a specific dashboard widget"""
     try:
         # Get widget-specific data
-        widget_data = await dashboard_service.get_widget_data(dashboard_id, widget_id, customer_id)
+        widget_data = await get_dashboard_service().get_widget_data(dashboard_id, widget_id, customer_id)
 
         if not widget_data:
             raise HTTPException(status_code=404, detail="Widget not found")
@@ -208,7 +227,7 @@ async def create_widget(dashboard_id: str, widget_request: WidgetRequest, custom
         widget_data['dashboard_id'] = dashboard_id
         widget_data['customer_id'] = customer_id
 
-        result = await dashboard_service.create_widget(widget_data)
+        result = await get_dashboard_service().create_widget(widget_data)
         return result
 
     except ValueError as e:
@@ -221,7 +240,7 @@ async def update_widget(dashboard_id: str, widget_id: str, widget_request: Widge
     """Update a dashboard widget"""
     try:
         update_data = widget_request.model_dump()
-        result = await dashboard_service.update_widget(widget_id, customer_id, update_data)
+        result = await get_dashboard_service().update_widget(widget_id, customer_id, update_data)
         return result
 
     except ValueError as e:
@@ -233,7 +252,7 @@ async def update_widget(dashboard_id: str, widget_id: str, widget_request: Widge
 async def delete_widget(dashboard_id: str, widget_id: str, customer_id: str = MiddlewareTenant):
     """Delete a dashboard widget"""
     try:
-        result = await dashboard_service.delete_widget(widget_id, customer_id)
+        result = await get_dashboard_service().delete_widget(widget_id, customer_id)
         return result
 
     except ValueError as e:
@@ -252,7 +271,7 @@ async def share_dashboard(dashboard_id: str, share_request: ShareRequest, custom
             raise HTTPException(status_code=400, detail="Invalid dashboard ID: template placeholder not allowed")
         
         # First validate that the dashboard exists
-        dashboard = await dashboard_service.get_dashboard(dashboard_id, customer_id)
+        dashboard = await get_dashboard_service().get_dashboard(dashboard_id, customer_id)
         
         # If not found in custom dashboards, check default dashboards
         if not dashboard and dashboard_engine:
@@ -262,7 +281,7 @@ async def share_dashboard(dashboard_id: str, share_request: ShareRequest, custom
             raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found")
         
         share_data = share_request.model_dump()
-        result = await dashboard_service.share_dashboard(dashboard_id, customer_id, share_data)
+        result = await get_dashboard_service().share_dashboard(dashboard_id, customer_id, share_data)
         return result
 
     except HTTPException:
@@ -276,7 +295,7 @@ async def share_dashboard(dashboard_id: str, share_request: ShareRequest, custom
 async def get_dashboard_shares(dashboard_id: str, customer_id: str = MiddlewareTenant):
     """Get dashboard sharing information"""
     try:
-        shares = await dashboard_service.get_dashboard_shares(dashboard_id, customer_id)
+        shares = await get_dashboard_service().get_dashboard_shares(dashboard_id, customer_id)
         return {
             "dashboard_id": dashboard_id,
             "shares": shares,

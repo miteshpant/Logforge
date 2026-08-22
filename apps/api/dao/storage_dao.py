@@ -5,7 +5,10 @@ Handles all database operations for storage management, TTL policies, and data a
 
 import uuid
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timezone
+# ENH-011: `timedelta` was used in get_recent_system_operations() but never
+# imported, so that method raised NameError on every call. Caught by the new
+# CI lint gate (ruff F821).
+from datetime import datetime, timedelta, timezone
 import structlog
 import json
 

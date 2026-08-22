@@ -58,7 +58,10 @@ export default function SigmaRulesPage() {
   const [isEditing, setIsEditing] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [testResult, setTestResult] = useState<RuleTestResult | null>(null)
+  const [testError, setTestError] = useState<string | null>(null)
   const [isTestLoading, setIsTestLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   // Form state
   const [formData, setFormData] = useState<Partial<SigmaRule>>({
@@ -76,16 +79,28 @@ export default function SigmaRulesPage() {
   const loadRules = async () => {
     try {
       setIsLoading(true)
-      const response = await apiClient.get<SigmaRule[]>('/v1/security/sigma-rules')
-      const data = response?.data || response
-      if (Array.isArray(data)) {
+      setLoadError(null)
+      // LF-016: the endpoint returns a paginated envelope
+      // {rules: [...], total, limit, offset}
+      const response = await apiClient.get<{ rules: SigmaRule[]; total: number; limit: number; offset: number }>(
+        '/v1/security/sigma-rules',
+        { params: { limit: 500, offset: 0 } }
+      )
+      const data: any = response?.data || response
+      if (Array.isArray(data?.rules)) {
+        setRules(data.rules)
+      } else if (Array.isArray(data)) {
+        // Pre-LF-016 bare-array shape
         setRules(data)
       } else {
         setRules([])
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load rules:', error)
       setRules([])
+      setLoadError(
+        `Failed to load rules: GET /v1/security/sigma-rules returned ${error?.status ?? 'a network error'}`
+      )
     } finally {
       setIsLoading(false)
     }
@@ -96,6 +111,7 @@ export default function SigmaRulesPage() {
   }, [])
 
   const handleCreateRule = async () => {
+    setActionError(null)
     try {
       await apiClient.post('/v1/security/sigma-rules', {
         title: formData.title,
@@ -111,31 +127,18 @@ export default function SigmaRulesPage() {
       await loadRules()
       setIsCreating(false)
       resetForm()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create rule:', error)
-      // Add locally for demo
-      const newRule: SigmaRule = {
-        id: `rule-${Date.now()}`,
-        title: formData.title || 'New Rule',
-        description: formData.description || '',
-        severity: formData.severity as SigmaRule['severity'] || 'medium',
-        status: 'active',
-        author: formData.author || 'Logforge User',
-        date: new Date().toISOString().split('T')[0],
-        enabled: formData.enabled ?? true,
-        attack_techniques: formData.attack_techniques || [],
-        tags: formData.tags || [],
-        logsource: formData.logsource,
-        detection: formData.detection
-      }
-      setRules(prev => [newRule, ...prev])
-      setIsCreating(false)
-      resetForm()
+      // The rule was NOT created — surface the failure, keep the form open
+      setActionError(
+        `Rule was not created: POST /v1/security/sigma-rules returned ${error?.status ?? 'a network error'}${error?.message ? ` — ${error.message}` : ''}`
+      )
     }
   }
 
   const handleUpdateRule = async () => {
     if (!selectedRule) return
+    setActionError(null)
     try {
       await apiClient.put(`/v1/security/sigma-rules/${selectedRule.id}`, {
         title: formData.title,
@@ -152,52 +155,54 @@ export default function SigmaRulesPage() {
       setIsEditing(false)
       setSelectedRule(null)
       resetForm()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to update rule:', error)
-      // Update locally for demo
-      setRules(prev => prev.map(r =>
-        r.id === selectedRule.id ? { ...r, ...formData } as SigmaRule : r
-      ))
-      setIsEditing(false)
-      setSelectedRule(null)
-      resetForm()
+      // The rule was NOT updated — surface the failure, keep the form open
+      setActionError(
+        `Rule was not updated: PUT /v1/security/sigma-rules/${selectedRule.id} returned ${error?.status ?? 'a network error'}${error?.message ? ` — ${error.message}` : ''}`
+      )
     }
   }
 
   const handleDeleteRule = async (ruleId: string) => {
     if (!confirm('Are you sure you want to delete this rule?')) return
+    setActionError(null)
     try {
       await apiClient.delete(`/v1/security/sigma-rules/${ruleId}`)
       await loadRules()
-    } catch (error) {
+      if (selectedRule?.id === ruleId) {
+        setSelectedRule(null)
+      }
+    } catch (error: any) {
       console.error('Failed to delete rule:', error)
-      // Delete locally for demo
-      setRules(prev => prev.filter(r => r.id !== ruleId))
-    }
-    if (selectedRule?.id === ruleId) {
-      setSelectedRule(null)
+      // The rule was NOT deleted — keep it in the list and surface the failure
+      setActionError(
+        `Rule was not deleted: DELETE /v1/security/sigma-rules/${ruleId} returned ${error?.status ?? 'a network error'}${error?.message ? ` — ${error.message}` : ''}`
+      )
     }
   }
 
   const handleToggleRule = async (rule: SigmaRule) => {
+    setActionError(null)
     try {
       await apiClient.put(`/v1/security/sigma-rules/${rule.id}`, {
         ...rule,
         enabled: !rule.enabled
       })
       await loadRules()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to toggle rule:', error)
-      // Toggle locally for demo
-      setRules(prev => prev.map(r =>
-        r.id === rule.id ? { ...r, enabled: !r.enabled } : r
-      ))
+      // The rule state did NOT change on the server — do not flip it locally
+      setActionError(
+        `Rule was not ${rule.enabled ? 'disabled' : 'enabled'}: PUT /v1/security/sigma-rules/${rule.id} returned ${error?.status ?? 'a network error'}`
+      )
     }
   }
 
   const handleTestRule = async (ruleId: string) => {
     setIsTestLoading(true)
     setTestResult(null)
+    setTestError(null)
     try {
       const response = await apiClient.post<{ result: string; test_details: RuleTestResult }>(
         `/v1/security/sigma-rules/${ruleId}/test`
@@ -205,18 +210,17 @@ export default function SigmaRulesPage() {
       const data = response?.data || response
       if (data?.test_details) {
         setTestResult(data.test_details)
+      } else {
+        setTestError(
+          `POST /v1/security/sigma-rules/${ruleId}/test returned no test_details — the rule was not evaluated`
+        )
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to test rule:', error)
-      // Mock test result
-      setTestResult({
-        matched: Math.random() > 0.5,
-        rule_id: ruleId,
-        rule_title: rules.find(r => r.id === ruleId)?.title || 'Unknown',
-        matched_fields: { field1: 'value1' },
-        confidence: Math.floor(Math.random() * 50) + 50,
-        test_timestamp: new Date().toISOString()
-      })
+      // Never invent a test verdict — show the failure instead
+      setTestError(
+        `Rule test failed: POST /v1/security/sigma-rules/${ruleId}/test returned ${error?.status ?? 'a network error'}${error?.message ? ` — ${error.message}` : ''}`
+      )
     } finally {
       setIsTestLoading(false)
     }
@@ -342,6 +346,25 @@ export default function SigmaRulesPage() {
           </select>
         </div>
 
+        {/* Errors */}
+        {loadError && (
+          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+            <p className="text-sm text-red-400">{loadError}</p>
+          </div>
+        )}
+        {actionError && (
+          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start justify-between gap-2">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+              <p className="text-sm text-red-400">{actionError}</p>
+            </div>
+            <button onClick={() => setActionError(null)} className="text-red-400 hover:text-red-300">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* Rules Table */}
         <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 overflow-hidden">
           <table className="w-full">
@@ -452,6 +475,37 @@ export default function SigmaRulesPage() {
           </table>
         </div>
 
+        {/* Test Error Modal */}
+        {testError && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl shadow-xl w-full max-w-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-white">Test Failed</h3>
+                <button onClick={() => setTestError(null)} className="p-2 hover:bg-white/5 rounded-lg">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-4 rounded-lg mb-4 bg-red-500/10">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="w-8 h-8 text-red-500" />
+                  <div>
+                    <p className="font-medium text-white">The rule could not be tested</p>
+                    <p className="text-sm text-slate-400">{testError}</p>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setTestError(null)}
+                className="w-full mt-2 px-4 py-2 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Test Result Modal */}
         {testResult && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -481,13 +535,17 @@ export default function SigmaRulesPage() {
                 </div>
               </div>
 
-              {testResult.matched && Object.keys(testResult.matched_fields).length > 0 && (
-                <div>
-                  <p className="text-sm font-medium text-slate-300 mb-2">Matched Fields:</p>
-                  <pre className="p-3 bg-slate-900 text-green-400 rounded-lg text-sm overflow-x-auto">
-                    {JSON.stringify(testResult.matched_fields, null, 2)}
-                  </pre>
-                </div>
+              {testResult.matched && (
+                testResult.matched_fields && Object.keys(testResult.matched_fields).length > 0 ? (
+                  <div>
+                    <p className="text-sm font-medium text-slate-300 mb-2">Matched Fields:</p>
+                    <pre className="p-3 bg-slate-900 text-green-400 rounded-lg text-sm overflow-x-auto">
+                      {JSON.stringify(testResult.matched_fields, null, 2)}
+                    </pre>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400">No field detail returned by the server</p>
+                )
               )}
 
               <button

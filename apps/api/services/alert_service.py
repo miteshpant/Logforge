@@ -13,14 +13,110 @@ from dependencies import get_alert_event_publisher
 
 logger = structlog.get_logger(__name__)
 
+# LF-038: sentinel filter injected into LogQL rules' condition_config so the
+# ingest-path matchers (threshold/pattern) never match a batch against them -
+# LogQL rules are evaluated exclusively by the AlertEngine scheduler.
+LOGQL_SENTINEL_FIELD = "__logql__"
+LOGQL_SENTINEL_VALUE = "__scheduled__"
+
+VALID_LOGQL_TRIGGER_KINDS = {"count", "ratio", "absence"}
+VALID_LOGQL_OPERATORS = {"gt", "gte", "lt", "lte", "eq", "ne"}
+
 class AlertService:
     """Business Logic Layer for Alert System"""
-    
+
     def __init__(self):
         self.alert_dao = AlertDAO()
-    
+        self._db = None  # lazy DatabaseLayer for real condition-test queries
+
+    @property
+    def db(self):
+        if self._db is None:
+            from database_layer import DatabaseLayer
+            self._db = DatabaseLayer("AlertService", "alert-service-key-dev")
+        return self._db
+
     # Alert Rules Management
-    
+
+    def _normalize_logql_rule(self, rule_data: Dict[str, Any]) -> None:
+        """LF-038: validate and normalize a saved-search (LogQL) alert rule.
+
+        A LogQL rule carries `query_type: "logql"`, a LogforgeQL `query`, and a
+        `trigger` describing when it fires:
+            {"kind": "count"|"ratio"|"absence", "operator": "gt", ...,
+             "threshold": N, "time_window_minutes": M}
+        The query is compiled here so an invalid query is rejected at create
+        time, not silently at evaluation time.
+        """
+        query_type = rule_data.get("query_type") or (
+            rule_data.get("condition_config", {}).get("query_type")
+            if isinstance(rule_data.get("condition_config"), dict)
+            else None
+        )
+        if query_type != "logql":
+            return
+
+        query = rule_data.get("query", "")
+        if not query or not str(query).strip():
+            raise ValueError("LogQL alert rules require a non-empty 'query'")
+
+        # Compile now - surfaces syntax errors with a clear message.
+        import logql
+        try:
+            logql.parse(str(query))
+        except logql.LogQLSyntaxError as e:
+            raise ValueError(f"Invalid LogQL query: {e}")
+
+        existing_config = rule_data.get("condition_config")
+        if isinstance(existing_config, str):
+            import json as _json
+            existing_config = _json.loads(existing_config or "{}")
+        existing_config = existing_config if isinstance(existing_config, dict) else {}
+
+        trigger = rule_data.get("trigger") or existing_config.get("trigger") or {}
+        kind = str(trigger.get("kind", "count")).lower()
+        if kind not in VALID_LOGQL_TRIGGER_KINDS:
+            raise ValueError(
+                f"Invalid LogQL trigger kind '{kind}'. "
+                f"Must be one of: {sorted(VALID_LOGQL_TRIGGER_KINDS)}"
+            )
+        operator = str(trigger.get("operator", "gt")).lower()
+        if operator not in VALID_LOGQL_OPERATORS:
+            raise ValueError(
+                f"Invalid LogQL trigger operator '{operator}'. "
+                f"Must be one of: {sorted(VALID_LOGQL_OPERATORS)}"
+            )
+        try:
+            threshold = float(trigger.get("threshold", 0))
+        except (TypeError, ValueError):
+            raise ValueError("LogQL trigger 'threshold' must be numeric")
+        try:
+            window = int(trigger.get("time_window_minutes", 5))
+        except (TypeError, ValueError):
+            raise ValueError("LogQL trigger 'time_window_minutes' must be an integer")
+        if window < 1 or window > 1440:
+            raise ValueError("LogQL trigger 'time_window_minutes' must be 1-1440")
+
+        # Map to a schema-legal rule_type (the rule_type enum has no 'logql'):
+        # absence rules use 'absence', everything else 'threshold'.
+        rule_data["rule_type"] = "absence" if kind == "absence" else "threshold"
+        rule_data["query"] = str(query).strip()
+        rule_data["condition_config"] = {
+            **existing_config,
+            "query_type": "logql",
+            "trigger": {
+                "kind": kind,
+                "operator": operator,
+                "threshold": threshold,
+                "time_window_minutes": window,
+            },
+            # Sentinel neutralizes the ingest-path matchers (see constant docs)
+            "field": LOGQL_SENTINEL_FIELD,
+            "value": LOGQL_SENTINEL_VALUE,
+        }
+        rule_data.pop("trigger", None)
+        rule_data.pop("query_type", None)
+
     async def create_alert_rule(self, rule_data: Dict[str, Any]) -> Dict[str, Any]:
         """Create new alert rule with validation"""
         try:
@@ -29,7 +125,10 @@ class AlertService:
             for field in required_fields:
                 if field not in rule_data:
                     raise ValueError(f"Missing required field: {field}")
-            
+
+            # LF-038: normalize saved-search (LogQL) rules before defaults
+            self._normalize_logql_rule(rule_data)
+
             # Set defaults
             rule_data.setdefault("description", "")
             rule_data.setdefault("rule_type", "threshold")
@@ -45,17 +144,17 @@ class AlertService:
             rule_data.setdefault("notification_channels", [])
             rule_data.setdefault("tags", [])
             rule_data.setdefault("created_by", "api-user")
-            
+
             # Validate severity
             valid_severities = ["low", "medium", "high", "critical"]
             if rule_data["severity"] not in valid_severities:
                 raise ValueError(f"Invalid severity. Must be one of: {valid_severities}")
-            
+
             # Validate rule type
             valid_types = ["threshold", "anomaly", "pattern", "frequency", "absence", "sequence"]
             if rule_data["rule_type"] not in valid_types:
                 raise ValueError(f"Invalid rule type. Must be one of: {valid_types}")
-            
+
             # Save to database
             rule_id = await self.alert_dao.save_alert_rule(rule_data)
             
@@ -227,36 +326,57 @@ class AlertService:
             try:
                 # Check if rule has the new complex condition_config structure
                 condition_config = rule.get("condition_config")
-                if condition_config:
+                # Parse condition_config if it's a JSON string
+                if isinstance(condition_config, str):
+                    try:
+                        condition_config = json.loads(condition_config)
+                    except json.JSONDecodeError as e:
+                        test_result["evaluation_error"] = f"Invalid JSON in condition_config: {e}"
+                        return test_result
+
+                if isinstance(condition_config, dict) and condition_config.get("query_type") == "logql":
+                    # LF-038: saved-search rule - evaluate the real query
+                    test_result["condition_evaluation"]["evaluation_method"] = "logql"
+                    evaluation_result = await self._evaluate_test_logql_rule(rule, condition_config, customer_id)
+                    test_result["condition_evaluation"]["human_readable"] = evaluation_result.get("human_readable", "")
+                    test_result["would_trigger"] = evaluation_result.get("would_trigger", False)
+                    test_result["query_result_count"] = evaluation_result.get("matching_logs_count", 0)
+                    if evaluation_result.get("evaluation_error"):
+                        test_result["evaluation_error"] = evaluation_result["evaluation_error"]
+
+                elif condition_config and (
+                    "operator" in condition_config or "field" in condition_config
+                ):
                     # New complex condition format
                     test_result["condition_evaluation"]["has_complex_conditions"] = True
                     test_result["condition_evaluation"]["evaluation_method"] = "complex_nested"
-                    
-                    # Parse condition_config if it's a JSON string
-                    if isinstance(condition_config, str):
-                        try:
-                            condition_config = json.loads(condition_config)
-                        except json.JSONDecodeError as e:
-                            test_result["evaluation_error"] = f"Invalid JSON in condition_config: {e}"
-                            return test_result
-                    
-                    # Perform simplified condition evaluation for testing
+
+                    # Perform condition evaluation against real data for testing
                     evaluation_result = await self._evaluate_test_condition(condition_config, customer_id)
                     test_result["condition_evaluation"]["human_readable"] = evaluation_result.get("human_readable", "Complex condition")
                     test_result["would_trigger"] = evaluation_result.get("would_trigger", False)
                     test_result["query_result_count"] = evaluation_result.get("matching_logs_count", 0)
-                    
+
                 elif rule.get("conditions"):
-                    # Legacy simple conditions format
+                    # Legacy simple conditions format: evaluate every condition
+                    # against real data (this used to fabricate would_trigger=True
+                    # for any enabled rule - no-mock rule violation).
                     test_result["condition_evaluation"]["evaluation_method"] = "legacy_simple"
                     conditions = rule.get("conditions", [])
-                    test_result["condition_evaluation"]["human_readable"] = f"Legacy conditions ({len(conditions)} conditions)"
-                    
-                    # For legacy format, check if rule exists and has valid configuration
-                    if rule.get("enabled", True) and rule.get("severity"):
-                        test_result["query_result_count"] = 1  # Indicates valid rule that could trigger
-                        test_result["would_trigger"] = True
-                        
+
+                    condition_results = []
+                    total_matches = 0
+                    human_parts = []
+                    for condition in conditions:
+                        result = await self._evaluate_test_simple_condition(condition, customer_id)
+                        condition_results.append(result.get("would_trigger", False))
+                        total_matches += result.get("matching_logs_count", 0)
+                        human_parts.append(result.get("human_readable", "condition"))
+
+                    test_result["condition_evaluation"]["human_readable"] = " AND ".join(human_parts)
+                    test_result["would_trigger"] = bool(condition_results) and all(condition_results)
+                    test_result["query_result_count"] = total_matches
+
                 else:
                     # No conditions specified
                     test_result["condition_evaluation"]["human_readable"] = "No conditions configured"

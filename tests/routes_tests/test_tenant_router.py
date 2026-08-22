@@ -717,8 +717,11 @@ class TenantRouterTestSuite(BaseTestSuite):
         print("=" * 60)
 
         # Create test user and tenant for authentication with platform-level access
+        # LF-033: setup_auth() itself creates the user + role assignments; the
+        # previous extra create_test_user_and_tenant() call created a SECOND
+        # user whose platform-scoped token had no matching role row, which is
+        # what produced "No access to tenant: platform" (403).
         try:
-            await self.create_test_user_and_tenant(['super_admin'])
             await self.setup_auth(['super_admin'])
             # Override tenant_id for platform admin operations
             self.tenant_id = "platform"

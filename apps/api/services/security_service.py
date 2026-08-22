@@ -4,6 +4,7 @@ Handles Sigma rules, security events, threat intelligence indicators, and MITRE 
 """
 
 import structlog
+import time
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 from dataclasses import dataclass
@@ -12,6 +13,11 @@ from enum import Enum
 from dao.security_dao import SecurityDAO
 
 logger = structlog.get_logger(__name__)
+
+# LF-040: per-tenant MITRE coverage cache — the matrix is expensive to build
+# (two aggregate queries + catalogue join) and changes slowly.
+_MITRE_COVERAGE_TTL_SECONDS = 300
+_mitre_coverage_cache: Dict[str, tuple] = {}
 
 class AttackTechnique(Enum):
     """MITRE ATT&CK Technique enumeration"""
@@ -240,16 +246,164 @@ class SecurityService:
     async def get_sigma_rules(self, customer_id: str = None, enabled_only: bool = True) -> List[Dict[str, Any]]:
         """Get Sigma detection rules"""
         try:
-            rules = await self.security_dao.get_sigma_rules(customer_id)
-
-            if enabled_only:
-                rules = [rule for rule in rules if rule.get("enabled", True)]
-
-            return rules
+            return await self.security_dao.get_sigma_rules(
+                customer_id,
+                enabled=True if enabled_only else None,
+            )
 
         except Exception as e:
             logger.error(f"Failed to get Sigma rules: {e}")
             raise
+
+    async def list_sigma_rules(
+        self,
+        customer_id: str,
+        limit: int = 100,
+        offset: int = 0,
+        enabled: bool = None,
+        severity: str = None,
+    ) -> Dict[str, Any]:
+        """
+        List Sigma rules with pagination and filtering (LF-016).
+
+        Returns the standard envelope: {"rules": [...], "total": N,
+        "limit": L, "offset": O}.
+        """
+        try:
+            rules = await self.security_dao.get_sigma_rules(
+                customer_id,
+                limit=limit,
+                offset=offset,
+                enabled=enabled,
+                severity=severity,
+            )
+            total = await self.security_dao.count_sigma_rules(
+                customer_id,
+                enabled=enabled,
+                severity=severity,
+            )
+            return {
+                "rules": rules,
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to list Sigma rules for {customer_id}: {e}")
+            raise
+
+    async def get_sigma_rules_for_customer(self, customer_id: str) -> List[Dict[str, Any]]:
+        """
+        Get ONLY the rules owned by this tenant (no platform defaults).
+
+        Used by the sigma rule cache on a cache miss; pairing it with
+        get_default_sigma_rules reconstructs the full evaluation set.
+        """
+        try:
+            rules = await self.security_dao.get_sigma_rules(customer_id, enabled=True)
+            return [rule for rule in rules if not rule.get("is_default")]
+
+        except Exception as e:
+            logger.error(f"Failed to get tenant Sigma rules for {customer_id}: {e}")
+            raise
+
+    async def get_default_sigma_rules(self) -> List[Dict[str, Any]]:
+        """Get the platform-default rule library (LF-003: 'default' sentinel)."""
+        try:
+            # Passing the sentinel itself collapses the DAO predicate to
+            # `customer_id = 'default'` — exactly the default library.
+            return await self.security_dao.get_sigma_rules("default", enabled=True)
+
+        except Exception as e:
+            logger.error(f"Failed to get default Sigma rules: {e}")
+            raise
+
+    async def get_mitre_coverage(self, customer_id: str) -> Dict[str, Any]:
+        """
+        MITRE ATT&CK coverage matrix for a tenant (LF-040).
+
+        Grounded entirely in `sigma_rules_mt` (tenant rules + platform
+        defaults) joined with the ATT&CK catalogue. Only fixture-tested rules
+        (LF-005) count as coverage; rules without verified fixtures are
+        exposed separately as `awaiting_content`. Techniques with no rule
+        report `rule_count: 0` — never a fabricated value.
+        """
+        cached = _mitre_coverage_cache.get(customer_id)
+        if cached and (time.monotonic() - cached[0]) < _MITRE_COVERAGE_TTL_SECONDS:
+            return cached[1]
+
+        from mitre_metadata_generator import generate_production_metadata
+
+        catalogue = generate_production_metadata()
+        rule_stats = await self.security_dao.get_rule_technique_stats(customer_id)
+        detection_times = await self.security_dao.get_last_detection_times(customer_id)
+        total_rules = await self.security_dao.count_sigma_rules(customer_id)
+
+        stats_by_technique = {row["technique"]: row for row in rule_stats}
+        last_seen_by_technique = {
+            row["technique"]: row["last_detection_at"] for row in detection_times
+        }
+
+        def _catalogue_entry(technique_id: str):
+            """Resolve a technique (or its base, for sub-techniques)."""
+            meta = catalogue.get(technique_id)
+            if meta is None and "." in technique_id:
+                meta = catalogue.get(technique_id.split(".")[0])
+            return meta
+
+        techniques: List[Dict[str, Any]] = []
+        awaiting_content: List[str] = []
+
+        for technique_id in sorted(set(catalogue) | set(stats_by_technique)):
+            stats = stats_by_technique.get(technique_id, {})
+            meta = _catalogue_entry(technique_id)
+
+            rule_count = int(stats.get("rule_count", 0))
+            enabled_rule_count = int(stats.get("enabled_rule_count", 0))
+            fixture_rule_count = int(stats.get("fixture_rule_count", 0))
+            has_fixtures = fixture_rule_count > 0
+
+            last_detection = last_seen_by_technique.get(technique_id)
+            if isinstance(last_detection, datetime):
+                last_detection = last_detection.isoformat()
+
+            techniques.append({
+                "technique_id": technique_id,
+                "technique_name": meta.name if meta else "",
+                "tactic": (meta.tactics[0] if meta and meta.tactics else ""),
+                "tactics": list(meta.tactics) if meta else [],
+                "rule_count": rule_count,
+                "enabled_rule_count": enabled_rule_count,
+                "has_fixtures": has_fixtures,
+                "last_detection_at": last_detection,
+            })
+
+            if rule_count > 0 and not has_fixtures:
+                # Rules exist but none carries verified fixtures — these are
+                # stubs, reported separately rather than counted as coverage.
+                awaiting_content.append(technique_id)
+
+        covered = sum(
+            1 for t in techniques
+            if t["has_fixtures"] and t["enabled_rule_count"] > 0
+        )
+
+        result = {
+            "techniques": techniques,
+            "awaiting_content": awaiting_content,
+            "summary": {
+                "total_techniques": len(techniques),
+                "covered_techniques": covered,
+                "awaiting_content": len(awaiting_content),
+                "total_rules": total_rules,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "cache_ttl_seconds": _MITRE_COVERAGE_TTL_SECONDS,
+            },
+        }
+
+        _mitre_coverage_cache[customer_id] = (time.monotonic(), result)
+        return result
 
     async def get_sigma_rule_by_id(self, rule_id: str, customer_id: str = None) -> Optional[Dict[str, Any]]:
         """Get specific Sigma rule by ID"""

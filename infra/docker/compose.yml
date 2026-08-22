@@ -128,8 +128,12 @@ services:
       - "7080:8080"
     volumes:
       - ../../apps/api:/app
+      # Read-only so the app can report migration state/drift; DDL is applied
+      # by the clickhouse-migrations service, not the API.
+      - ../../infra/docker/clickhouse/migrations:/migrations:ro
     environment:
       - PYTHONPATH=/app
+      - MIGRATIONS_DIR=/migrations
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_PORT=8123
       - CLICKHOUSE_USER=logforge

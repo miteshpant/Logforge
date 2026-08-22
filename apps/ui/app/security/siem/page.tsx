@@ -133,10 +133,13 @@ export default function SIEMDashboardPage() {
 
       const [dashboardRes, rulesRes] = await Promise.allSettled([
         apiClient.get<SecurityDashboard>('/v1/security/dashboard', {
-          start_time,
-          end_time
+          params: { start_time, end_time }
         }),
-        apiClient.get<SigmaRule[]>('/v1/security/sigma-rules')
+        // LF-016: paginated envelope {rules: [...], total, limit, offset}
+        apiClient.get<{ rules: SigmaRule[]; total: number; limit: number; offset: number }>(
+          '/v1/security/sigma-rules',
+          { params: { limit: 500, offset: 0 } }
+        )
       ])
 
       if (dashboardRes.status === 'fulfilled') {
@@ -151,8 +154,11 @@ export default function SIEMDashboardPage() {
       }
 
       if (rulesRes.status === 'fulfilled') {
-        const data = rulesRes.value?.data || rulesRes.value
-        if (Array.isArray(data)) {
+        const data: any = rulesRes.value?.data || rulesRes.value
+        if (Array.isArray(data?.rules)) {
+          setRules(data.rules)
+        } else if (Array.isArray(data)) {
+          // Pre-LF-016 bare-array shape
           setRules(data)
         } else {
           setRules([])
@@ -204,16 +210,17 @@ export default function SIEMDashboardPage() {
     return date.toLocaleString()
   }
 
-  // Calculate MITRE coverage from rules
+  // Calculate MITRE coverage from rules. Techniques with no known tactic are
+  // counted under 'unmapped' — never assigned a tactic they don't belong to.
   const getMITRECoverage = () => {
     const coverage: Record<string, number> = {}
     MITRE_TACTICS.forEach(t => coverage[t.id] = 0)
+    coverage['unmapped'] = 0
 
     rules.forEach(rule => {
       rule.attack_techniques?.forEach(tech => {
-        // Map technique to tactic (simplified)
         const tactic = mapTechniqueToTactic(tech)
-        if (tactic && coverage[tactic] !== undefined) {
+        if (coverage[tactic] !== undefined) {
           coverage[tactic]++
         }
       })
@@ -222,32 +229,69 @@ export default function SIEMDashboardPage() {
     return coverage
   }
 
-  const mapTechniqueToTactic = (technique: string): string | null => {
-    // Simplified mapping - in production, use MITRE ATT&CK API
+  const mapTechniqueToTactic = (technique: string): string => {
+    // Static technique -> primary-tactic mapping for common ATT&CK techniques.
+    // The authoritative mapping belongs server-side (LF-040,
+    // GET /v1/security/mitre-coverage); until that lands, anything not in this
+    // table is reported honestly as 'unmapped' — never guessed.
     const tacticMap: Record<string, string> = {
-      'T1190': 'initial-access',
-      'T1133': 'initial-access',
-      'T1078': 'persistence',
-      'T1059': 'execution',
-      'T1047': 'execution',
-      'T1055': 'privilege-escalation',
-      'T1548': 'privilege-escalation',
-      'T1070': 'defense-evasion',
-      'T1027': 'defense-evasion',
-      'T1003': 'credential-access',
-      'T1110': 'credential-access',
-      'T1087': 'discovery',
-      'T1021': 'lateral-movement',
-      'T1560': 'collection',
-      'T1071': 'command-and-control',
-      'T1048': 'exfiltration',
-      'T1486': 'impact'
+      // Reconnaissance
+      'T1595': 'reconnaissance', 'T1592': 'reconnaissance', 'T1589': 'reconnaissance',
+      'T1590': 'reconnaissance', 'T1598': 'reconnaissance',
+      // Resource Development
+      'T1583': 'resource-development', 'T1586': 'resource-development', 'T1588': 'resource-development',
+      // Initial Access
+      'T1190': 'initial-access', 'T1133': 'initial-access', 'T1566': 'initial-access',
+      'T1189': 'initial-access', 'T1091': 'initial-access', 'T1195': 'initial-access',
+      // Execution
+      'T1059': 'execution', 'T1047': 'execution', 'T1053': 'execution',
+      'T1204': 'execution', 'T1129': 'execution', 'T1203': 'execution',
+      // Persistence
+      'T1078': 'persistence', 'T1098': 'persistence', 'T1136': 'persistence',
+      'T1543': 'persistence', 'T1547': 'persistence', 'T1505': 'persistence',
+      // Privilege Escalation
+      'T1055': 'privilege-escalation', 'T1548': 'privilege-escalation', 'T1068': 'privilege-escalation',
+      'T1134': 'privilege-escalation', 'T1484': 'privilege-escalation',
+      // Defense Evasion
+      'T1070': 'defense-evasion', 'T1027': 'defense-evasion', 'T1036': 'defense-evasion',
+      'T1562': 'defense-evasion', 'T1112': 'defense-evasion', 'T1218': 'defense-evasion',
+      'T1140': 'defense-evasion', 'T1553': 'defense-evasion',
+      // Credential Access
+      'T1003': 'credential-access', 'T1110': 'credential-access', 'T1555': 'credential-access',
+      'T1552': 'credential-access', 'T1558': 'credential-access', 'T1539': 'credential-access',
+      'T1556': 'credential-access',
+      // Discovery
+      'T1087': 'discovery', 'T1082': 'discovery', 'T1083': 'discovery',
+      'T1046': 'discovery', 'T1057': 'discovery', 'T1018': 'discovery',
+      'T1069': 'discovery', 'T1033': 'discovery',
+      // Lateral Movement
+      'T1021': 'lateral-movement', 'T1570': 'lateral-movement', 'T1550': 'lateral-movement',
+      'T1080': 'lateral-movement',
+      // Collection
+      'T1560': 'collection', 'T1005': 'collection', 'T1039': 'collection',
+      'T1114': 'collection', 'T1113': 'collection', 'T1056': 'collection',
+      // Command and Control
+      'T1071': 'command-and-control', 'T1105': 'command-and-control', 'T1572': 'command-and-control',
+      'T1090': 'command-and-control', 'T1573': 'command-and-control', 'T1219': 'command-and-control',
+      // Exfiltration
+      'T1048': 'exfiltration', 'T1041': 'exfiltration', 'T1567': 'exfiltration',
+      'T1030': 'exfiltration', 'T1020': 'exfiltration',
+      // Impact
+      'T1486': 'impact', 'T1485': 'impact', 'T1490': 'impact',
+      'T1489': 'impact', 'T1498': 'impact', 'T1529': 'impact', 'T1531': 'impact'
     }
-    return tacticMap[technique] || MITRE_TACTICS[Math.floor(Math.random() * MITRE_TACTICS.length)].id
+    // Sub-techniques (e.g. T1059.001) inherit the parent technique's tactic
+    const base = technique?.split('.')[0]?.toUpperCase() ?? ''
+    return tacticMap[base] || 'unmapped'
   }
 
   const mitreCoverage = getMITRECoverage()
-  const maxCoverage = Math.max(...Object.values(mitreCoverage), 1)
+  // Intensity scale excludes 'unmapped' — it is not tactic coverage
+  const maxCoverage = Math.max(
+    ...MITRE_TACTICS.map(t => mitreCoverage[t.id]),
+    1
+  )
+  const unmappedCount = mitreCoverage['unmapped'] || 0
 
   return (
     <DashboardLayout>
@@ -369,7 +413,21 @@ export default function SIEMDashboardPage() {
                 </div>
               )
             })}
+            {unmappedCount > 0 && (
+              <div
+                className="flex-1 min-w-[80px] p-3 rounded-lg text-center border border-dashed border-slate-500/40 bg-slate-500/5"
+                title={`Unmapped: ${unmappedCount} technique reference${unmappedCount === 1 ? '' : 's'} without a known tactic mapping — excluded from coverage`}
+              >
+                <p className="text-xs font-medium text-slate-500 truncate italic">Unmapped</p>
+                <p className="text-lg font-bold text-slate-400">{unmappedCount}</p>
+              </div>
+            )}
           </div>
+          {unmappedCount > 0 && (
+            <p className="text-xs text-slate-500 mt-2">
+              {unmappedCount} technique reference{unmappedCount === 1 ? '' : 's'} could not be mapped to a tactic and {unmappedCount === 1 ? 'is' : 'are'} excluded from coverage.
+            </p>
+          )}
         </div>
 
         {/* Severity Distribution */}

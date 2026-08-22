@@ -281,9 +281,20 @@ class UsageRouterTestSuite(BaseTestSuite):
                 status=UserStatus.ACTIVE
             )
 
-            # Create session using UserService
+            # Create session using UserService.
+            #
+            # ENH-032: `tenant_id`/`user_role` are required by the service
+            # signature. This is a PLATFORM admin, so the token must be scoped
+            # to the 'platform' super-tenant -- scoping it to the test tenant
+            # would not grant the platform-level access this test needs.
             user_service = UserService()
-            session_data = await user_service.create_session(user, '127.0.0.1', 'usage-test-client')
+            session_data = await user_service.create_session(
+                user=user,
+                ip_address='127.0.0.1',
+                user_agent='usage-test-client',
+                tenant_id='platform',
+                user_role='super_admin',
+            )
             platform_admin_session = session_data["access_token"]
 
             # Test with platform admin - switch to platform admin auth headers

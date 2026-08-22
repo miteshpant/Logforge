@@ -68,6 +68,15 @@ class DatabaseLayer:
         'MigrationService': os.getenv('MIGRATION_SERVICE_KEY', 'migration-service-key'),
         # Alert Correlation Service
         'AlertCorrelationService': os.getenv('ALERT_CORRELATION_SERVICE_KEY', 'alert-correlation-service-key'),
+        # Quota services (ENH-030). These already had TABLE_ACCESS_CONTROL and
+        # UPDATE_ALLOWED_SERVICES entries but were missing here, so
+        # `DatabaseLayer("QuotaResetService", ...)` raised SecurityError on
+        # construction. That is the "database permissions" problem the scheduler
+        # was disabled for -- it was an authorization-registry gap, not a
+        # ClickHouse grant.
+        'QuotaResetService': os.getenv('QUOTA_RESET_SERVICE_KEY', 'quota-reset-service-key'),
+        'QuotaTestService': os.getenv('QUOTA_TEST_SERVICE_KEY', 'quota-test-service-key'),
+        'QuotaHistoryAPI': os.getenv('QUOTA_HISTORY_API_KEY', 'quota-history-api-key'),
         # Predictive Analytics Service
         'PredictiveAnalyticsService': os.getenv('PREDICTIVE_ANALYTICS_SERVICE_KEY', 'predictive-analytics-service-key')
     }
@@ -133,35 +142,61 @@ class DatabaseLayer:
     # Services allowed to perform UPDATE operations (ALTER TABLE ... UPDATE)
     UPDATE_ALLOWED_SERVICES = ['UserService', 'AlertService', 'SecurityService', 'TestService', 'UserDAO', 'TenantDAO', 'RoleDAO', 'QueryDAO', 'QueryService', 'DashboardDAO', 'DashboardService', 'StorageDAO', 'StorageService', 'AlertDAO', 'SecurityDAO', 'AIDAO', 'ObservabilityDAO', 'EnterpriseDAO', 'SubscriptionDAO', 'QuotaResetService', 'QuotaTestService', 'StorageQuotaSyncService', 'StreamingConfigDAO']
     
+    # LF-002: table-existence DDL/verification must run at most once per
+    # process per service, not on every DatabaseLayer construction (DAOs are
+    # constructed per request). Keyed by service name.
+    _TABLES_ENSURED: set = set()
+
+    @staticmethod
+    def _pooled_db_enabled() -> bool:
+        """
+        LF-002 feature flag: when enabled (the default), every DatabaseLayer
+        shares one process-wide ClickHouse client from
+        `utils.connection_pool.get_shared_client()` instead of opening a new
+        connection per construction (11 clients per /v1/logs request were
+        measured). Set `LOGFORGE_POOLED_DB=false` to restore per-instance
+        clients while the flag is being burned in.
+        """
+        return os.getenv("LOGFORGE_POOLED_DB", "true").strip().lower() not in {
+            "false", "0", "no"
+        }
+
     def __init__(self, service_name: str, service_key: str):
         """Initialize database layer with service authentication
-        
+
         Args:
             service_name: Name of the requesting service
             service_key: Authentication key for the service
         """
         self.service_name = service_name
-        
+
         # Validate service credentials
         if not self._validate_service_credentials(service_name, service_key):
             raise SecurityError(f"Invalid credentials for service: {service_name}")
-        
-        # Initialize ClickHouse client
+
+        # Acquire ClickHouse client -- shared (pooled) by default
+        self._client_is_shared = self._pooled_db_enabled()
         try:
-            self.client = clickhouse_connect.get_client(
-                host=os.getenv('CLICKHOUSE_HOST', 'clickhouse'),
-                port=int(os.getenv('CLICKHOUSE_PORT', '8123')),
-                username=os.getenv('CLICKHOUSE_USER', 'logforge'),
-                password=os.getenv('CLICKHOUSE_PASSWORD', 'logforge123'),
-                database=os.getenv('CLICKHOUSE_DATABASE', 'logforge')
-            )
-            logger.info("ClickHouse client initialized", service=service_name)
+            if self._client_is_shared:
+                from utils.connection_pool import get_shared_client
+                self.client = get_shared_client()
+            else:
+                self.client = clickhouse_connect.get_client(
+                    host=os.getenv('CLICKHOUSE_HOST', 'clickhouse'),
+                    port=int(os.getenv('CLICKHOUSE_PORT', '8123')),
+                    username=os.getenv('CLICKHOUSE_USER', 'logforge'),
+                    password=os.getenv('CLICKHOUSE_PASSWORD', 'logforge123'),
+                    database=os.getenv('CLICKHOUSE_DATABASE', 'logforge')
+                )
+                logger.info("ClickHouse client initialized", service=service_name)
         except Exception as e:
             logger.error("Failed to initialize ClickHouse client", service=service_name, error=str(e))
             raise DatabaseError(f"Database connection failed: {str(e)}")
-        
-        # Ensure required tables exist
-        self._ensure_tables_exist()
+
+        # Ensure required tables exist (once per process per service)
+        if service_name not in DatabaseLayer._TABLES_ENSURED:
+            self._ensure_tables_exist()
+            DatabaseLayer._TABLES_ENSURED.add(service_name)
     
     def _validate_service_credentials(self, service_name: str, service_key: str) -> bool:
         """Validate service authentication credentials"""
@@ -171,11 +206,38 @@ class DatabaseLayer:
             return False
         return True
     
+    @staticmethod
+    def _runtime_ddl_enabled() -> bool:
+        """
+        Whether services may issue DDL at runtime (ENH-021).
+
+        Schema should be owned by the migration runner, not by application
+        code: runtime `CREATE TABLE IF NOT EXISTS` lets environments drift, and
+        it requires the application's database user to hold DDL privileges it
+        should not need.
+
+        Defaults to True to preserve existing behaviour for deployments that
+        depend on it. Set `ALLOW_RUNTIME_DDL=false` once migrations own the
+        schema -- the intended end state.
+        """
+        return os.getenv("ALLOW_RUNTIME_DDL", "true").strip().lower() not in {
+            "false", "0", "no"
+        }
+
     def _ensure_tables_exist(self):
         """Create required tables if they don't exist"""
         try:
+            # ENH-021: creation is skipped when runtime DDL is disabled, so the
+            # migration runner is the single owner of schema. Verification steps
+            # below still run -- they only read, and a missing table should still
+            # fail loudly rather than surface later as a confusing query error.
+            if not self._runtime_ddl_enabled():
+                logger.debug(
+                    "Runtime DDL disabled; schema is owned by migrations",
+                    service=self.service_name,
+                )
             # User management tables
-            if self.service_name in ['UserService', 'UserDAO', 'TestService', 'PlatformSetup']:
+            elif self.service_name in ['UserService', 'UserDAO', 'TestService', 'PlatformSetup']:
                 self._create_user_tables()
             
             # Alert management tables
@@ -477,6 +539,21 @@ class DatabaseLayer:
             elif table == 'archive_access_log_mt':
                 columns = ['customer_id', 'archive_key', 'access_type', 'user_id', 'session_id',
                           'accessed_at', 'bytes_transferred', 'query_filter', 'client_ip']
+            elif table == 'security_events_mt':
+                # ENH-004: explicit column list so detection writes go through the
+                # driver's parameter binding instead of interpolated SQL text.
+                # Values here originate from ingested log content and must never
+                # reach the database as literals inside a statement.
+                #
+                # ENH-021: columns match `init_simple.sql:636` -- the schema
+                # compose actually mounts, and the one `dao/security_dao.py`
+                # uses. They previously matched migration 003's conflicting
+                # definition, so inserts referenced non-existent columns.
+                columns = ['id', 'customer_id', 'rule_id', 'event_type', 'severity',
+                          'status', 'title', 'description', 'raw_log_data',
+                          'enrichment_data', 'mitre_techniques', 'assigned_to',
+                          'investigation_notes', 'artifacts',
+                          'created_at', 'updated_at']
             else:
                 # For other tables, let ClickHouse determine columns
                 self.client.insert(table, data)
@@ -819,6 +896,12 @@ class DatabaseLayer:
     async def close(self):
         """Close database connection"""
         try:
+            # LF-002: the shared pooled client is owned by
+            # utils.connection_pool and outlives any single DatabaseLayer --
+            # closing it here would break every other consumer in the process.
+            if getattr(self, "_client_is_shared", False):
+                logger.debug("Shared ClickHouse client left open", service=self.service_name)
+                return
             if hasattr(self.client, 'close'):
                 self.client.close()
             logger.info("Database connection closed", service=self.service_name)

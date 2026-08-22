@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import LiveMetricsChart from '@/components/observability/LiveMetricsChart'
 import MetricsConfiguration from '@/components/observability/MetricsConfiguration'
-import { Play, Pause, Download, AlertCircle } from 'lucide-react'
+import { apiClient } from '@/lib/api'
+import { Play, Pause, Download, AlertCircle, RefreshCw, WifiOff } from 'lucide-react'
 
 export interface MetricDataPoint {
   timestamp: number
@@ -20,8 +21,15 @@ export interface StreamConfig {
   interval: number // milliseconds
 }
 
+const STREAM_ENDPOINT = '/v1/stream/metrics'
+const MAX_RECONNECT_DELAY_MS = 30000
+
+type ConnectionState = 'idle' | 'connecting' | 'connected' | 'disconnected'
+
 export default function LiveMetricsPage() {
-  const [isStreaming, setIsStreaming] = useState(false)
+  const [connectionState, setConnectionState] = useState<ConnectionState>('idle')
+  const [streamError, setStreamError] = useState<string | null>(null)
+  const [reconnectAttempt, setReconnectAttempt] = useState(0)
   const [dataPoints, setDataPoints] = useState<MetricDataPoint[]>([])
   const [config, setConfig] = useState<StreamConfig>({
     services: [],
@@ -34,165 +42,169 @@ export default function LiveMetricsPage() {
   })
   const [alerts, setAlerts] = useState<string[]>([])
 
-  const eventSourceRef = useRef<EventSource | null>(null)
-  const dataPointsRef = useRef<MetricDataPoint[]>([])
+  const stopStreamRef = useRef<(() => void) | null>(null)
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const manualStopRef = useRef(false)
+  const attemptRef = useRef(0)
+  const configRef = useRef(config)
+  const thresholdsRef = useRef(alertThresholds)
 
-  // Keep dataPoints in sync with ref for SSE callback
-  useEffect(() => {
-    dataPointsRef.current = dataPoints
-  }, [dataPoints])
+  useEffect(() => { configRef.current = config }, [config])
+  useEffect(() => { thresholdsRef.current = alertThresholds }, [alertThresholds])
 
-  const startStreaming = async () => {
-    if (config.services.length === 0 || config.metrics.length === 0) {
-      alert('Please select at least one service and one metric')
-      return
-    }
+  const isStreaming = connectionState === 'connected' || connectionState === 'connecting'
 
-    try {
-      // Apply configuration to backend
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7080'}/v1/streaming/config/apply`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          services: config.services,
-          metrics: config.metrics,
-          interval: config.interval
-        })
-      })
+  // Turn a raw metric record from the stream into a data point.
+  // Only real, numeric values received from the server become points —
+  // records without a usable value are dropped, never invented.
+  const toDataPoint = (record: any, fallbackTimestamp: number): MetricDataPoint | null => {
+    const metricName = record?.metric_name
+    const value = record?.value
+    if (typeof metricName !== 'string' || metricName === '') return null
+    const numeric = typeof value === 'number' ? value : Number(value)
+    if (!Number.isFinite(numeric)) return null
 
-      // Start SSE connection
-      const params = new URLSearchParams({
-        services: config.services.join(','),
-        metrics: config.metrics.join(','),
-        interval: config.interval.toString()
-      })
-
-      const eventSource = new EventSource(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7080'}/v1/streaming/live?${params}`
-      )
-
-      eventSource.onmessage = (event) => {
-        try {
-          const data: MetricDataPoint = JSON.parse(event.data)
-
-          // Add to data points (keep last 100 points per metric/service combo)
-          setDataPoints(prev => {
-            const key = `${data.service}-${data.metric_name}`
-            const filtered = prev.filter(p =>
-              `${p.service}-${p.metric_name}` !== key ||
-              prev.indexOf(p) >= prev.length - 99
-            )
-            return [...filtered, data].slice(-500) // Keep last 500 total points
-          })
-
-          // Check thresholds for alerts
-          if (data.metric_name === 'latency' && data.value > alertThresholds.latency) {
-            setAlerts(prev => [
-              ...prev,
-              `High latency detected: ${data.service} - ${data.value}${data.unit}`
-            ].slice(-10))
-          }
-
-          if (data.metric_name === 'error_rate' && data.value > alertThresholds.error_rate) {
-            setAlerts(prev => [
-              ...prev,
-              `High error rate detected: ${data.service} - ${data.value}${data.unit}`
-            ].slice(-10))
-          }
-        } catch (err) {
-          console.error('Failed to parse SSE data:', err)
-        }
-      }
-
-      eventSource.onerror = (error) => {
-        console.error('SSE error:', error)
-        // Use mock data generator instead
-        startMockStreaming()
-        eventSource.close()
-      }
-
-      eventSourceRef.current = eventSource
-      setIsStreaming(true)
-    } catch (error) {
-      console.error('Failed to start streaming:', error)
-      // Fallback to mock streaming
-      startMockStreaming()
-      setIsStreaming(true)
+    const service = record?.service_name || record?.service || 'unknown'
+    const ts = record?.timestamp ? Date.parse(record.timestamp) : NaN
+    return {
+      timestamp: Number.isFinite(ts) ? ts : fallbackTimestamp,
+      service,
+      metric_name: metricName,
+      value: numeric,
+      unit: typeof record?.unit === 'string' ? record.unit : ''
     }
   }
 
-  const startMockStreaming = () => {
-    const interval = setInterval(() => {
-      const now = Date.now()
+  const ingestPoints = (points: MetricDataPoint[]) => {
+    const cfg = configRef.current
+    const filtered = points.filter(p =>
+      (cfg.services.length === 0 || cfg.services.includes(p.service)) &&
+      (cfg.metrics.length === 0 || cfg.metrics.includes(p.metric_name))
+    )
+    if (filtered.length === 0) return
 
-      config.services.forEach(service => {
-        config.metrics.forEach(metric => {
-          let value: number
-          let unit: string
+    setDataPoints(prev => [...prev, ...filtered].slice(-500))
 
-          switch (metric) {
-            case 'latency':
-              value = Math.random() * 200 + 50 + (Math.random() > 0.9 ? 300 : 0)
-              unit = 'ms'
-              break
-            case 'throughput':
-              value = Math.random() * 500 + 200
-              unit = 'req/s'
-              break
-            case 'error_rate':
-              value = Math.random() * 2 + (Math.random() > 0.95 ? 5 : 0)
-              unit = '%'
-              break
-            case 'cpu':
-              value = Math.random() * 40 + 30
-              unit = '%'
-              break
-            case 'memory':
-              value = Math.random() * 30 + 50
-              unit = '%'
-              break
-            default:
-              value = Math.random() * 100
-              unit = ''
-          }
+    // Threshold alerts derive only from data points the server actually sent
+    const thresholds = thresholdsRef.current
+    const triggered: string[] = []
+    filtered.forEach(p => {
+      if (p.metric_name === 'latency' && thresholds.latency != null && p.value > thresholds.latency) {
+        triggered.push(`High latency detected: ${p.service} - ${p.value}${p.unit || 'ms'}`)
+      }
+      if (p.metric_name === 'error_rate' && thresholds.error_rate != null && p.value > thresholds.error_rate) {
+        triggered.push(`High error rate detected: ${p.service} - ${p.value}${p.unit || '%'}`)
+      }
+    })
+    if (triggered.length > 0) {
+      setAlerts(prev => [...prev, ...triggered].slice(-10))
+    }
+  }
 
-          const dataPoint: MetricDataPoint = {
-            timestamp: now,
-            service,
-            metric_name: metric,
-            value,
-            unit
-          }
+  const handleStreamData = useCallback((data: any) => {
+    // Server sends: connected {status: 'streaming_started'},
+    // keepalive {status: 'listening'}, error {message},
+    // metrics_event {event_type, metrics: [...] | metric_name/value}
+    if (data?.status === 'streaming_started') {
+      attemptRef.current = 0
+      setReconnectAttempt(0)
+      setStreamError(null)
+      setConnectionState('connected')
+      return
+    }
+    if (data?.status === 'listening') {
+      return // keepalive
+    }
+    if (data?.message && !data?.event_type) {
+      setStreamError(`Stream error from ${STREAM_ENDPOINT}: ${data.message}`)
+      return
+    }
+    if (!data?.event_type) return
 
-          setDataPoints(prev => [...prev, dataPoint].slice(-500))
-
-          // Check thresholds
-          if (metric === 'latency' && value > alertThresholds.latency) {
-            setAlerts(prev => [
-              ...prev,
-              `High latency detected: ${service} - ${value.toFixed(0)}${unit}`
-            ].slice(-10))
-          }
-
-          if (metric === 'error_rate' && value > alertThresholds.error_rate) {
-            setAlerts(prev => [
-              ...prev,
-              `High error rate detected: ${service} - ${value.toFixed(2)}${unit}`
-            ].slice(-10))
-          }
-        })
+    const now = Date.now()
+    const points: MetricDataPoint[] = []
+    if (Array.isArray(data.metrics)) {
+      data.metrics.forEach((m: any) => {
+        const p = toDataPoint({ timestamp: data.timestamp, service_name: data.service_name, ...m }, now)
+        if (p) points.push(p)
       })
-    }, config.interval)
+    } else {
+      const p = toDataPoint(data, now)
+      if (p) points.push(p)
+    }
+    ingestPoints(points)
+  }, [])
 
-    eventSourceRef.current = { close: () => clearInterval(interval) } as any
+  const scheduleReconnect = useCallback(() => {
+    if (manualStopRef.current) return
+    attemptRef.current += 1
+    setReconnectAttempt(attemptRef.current)
+    const delay = Math.min(1000 * 2 ** (attemptRef.current - 1), MAX_RECONNECT_DELAY_MS)
+    reconnectTimerRef.current = setTimeout(() => {
+      if (manualStopRef.current) return
+      setConnectionState('connecting')
+      // eslint-disable-next-line @typescript-eslint/no-use-before-define
+      connect()
+    }, delay)
+  }, [])
+
+  const handleStreamError = useCallback((error: Error) => {
+    if (stopStreamRef.current) {
+      stopStreamRef.current()
+      stopStreamRef.current = null
+    }
+    if (manualStopRef.current) return
+    setConnectionState('disconnected')
+    setStreamError(`Connection to ${STREAM_ENDPOINT} lost: ${error?.message || 'network error'}`)
+    scheduleReconnect()
+  }, [scheduleReconnect])
+
+  const connect = useCallback(async () => {
+    try {
+      const stop = await apiClient.getStream(STREAM_ENDPOINT, handleStreamData, handleStreamError)
+      if (manualStopRef.current) {
+        stop()
+        return
+      }
+      stopStreamRef.current = stop
+    } catch (error: any) {
+      handleStreamError(error instanceof Error ? error : new Error(String(error)))
+    }
+  }, [handleStreamData, handleStreamError])
+
+  const startStreaming = () => {
+    manualStopRef.current = false
+    attemptRef.current = 0
+    setReconnectAttempt(0)
+    setStreamError(null)
+    setConnectionState('connecting')
+    connect()
   }
 
   const stopStreaming = () => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-      eventSourceRef.current = null
+    manualStopRef.current = true
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current)
+      reconnectTimerRef.current = null
     }
-    setIsStreaming(false)
+    if (stopStreamRef.current) {
+      stopStreamRef.current()
+      stopStreamRef.current = null
+    }
+    attemptRef.current = 0
+    setReconnectAttempt(0)
+    setConnectionState('idle')
+  }
+
+  const reconnectNow = () => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current)
+      reconnectTimerRef.current = null
+    }
+    manualStopRef.current = false
+    setStreamError(null)
+    setConnectionState('connecting')
+    connect()
   }
 
   const exportData = () => {
@@ -221,18 +233,34 @@ export default function LiveMetricsPage() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
+      manualStopRef.current = true
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current)
+      }
+      if (stopStreamRef.current) {
+        stopStreamRef.current()
       }
     }
   }, [])
+
+  const statusLabel =
+    connectionState === 'connected' ? 'Streaming' :
+    connectionState === 'connecting' ? (reconnectAttempt > 0 ? `Reconnecting (attempt ${reconnectAttempt})` : 'Connecting') :
+    connectionState === 'disconnected' ? 'Disconnected' :
+    'Stopped'
+
+  const statusColor =
+    connectionState === 'connected' ? 'text-emerald-400' :
+    connectionState === 'connecting' ? 'text-yellow-400' :
+    connectionState === 'disconnected' ? 'text-red-400' :
+    'text-slate-400'
 
   return (
     <DashboardLayout>
       <div className="space-y-4">
         {/* Controls Bar */}
         <div className="flex items-center gap-3">
-          {isStreaming ? (
+          {isStreaming || connectionState === 'disconnected' ? (
             <button
               onClick={stopStreaming}
               className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
@@ -259,6 +287,37 @@ export default function LiveMetricsPage() {
             Export CSV
           </button>
         </div>
+
+        {/* Connection error / disconnected state — no data is ever synthesised */}
+        {(connectionState === 'disconnected' || (streamError && connectionState !== 'connected')) && (
+          <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2">
+                <WifiOff className="w-5 h-5 text-red-400 mt-0.5 shrink-0" />
+                <div>
+                  <h3 className="text-sm font-semibold text-red-300">
+                    Metrics stream disconnected
+                  </h3>
+                  <p className="text-xs text-red-200 mt-1">
+                    {streamError || `Connection to ${STREAM_ENDPOINT} lost`}
+                  </p>
+                  {reconnectAttempt > 0 && !manualStopRef.current && (
+                    <p className="text-xs text-red-300/70 mt-1">
+                      Reconnecting automatically (attempt {reconnectAttempt}, backoff capped at {MAX_RECONNECT_DELAY_MS / 1000}s). No metrics are shown while disconnected.
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={reconnectNow}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-200 rounded-lg text-xs font-medium transition-colors shrink-0"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Reconnect now
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Configuration */}
         <MetricsConfiguration
@@ -300,7 +359,7 @@ export default function LiveMetricsPage() {
         <LiveMetricsChart
           dataPoints={dataPoints}
           config={config}
-          isStreaming={isStreaming}
+          isStreaming={connectionState === 'connected'}
         />
 
         {/* Stats */}
@@ -310,13 +369,13 @@ export default function LiveMetricsPage() {
             <div className="text-2xl font-bold text-white">{dataPoints.length}</div>
           </div>
           <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl rounded-lg p-4 border border-white/5">
-            <div className="text-sm text-slate-400 mb-1">Update Interval</div>
-            <div className="text-2xl font-bold text-white">{config.interval}ms</div>
+            <div className="text-sm text-slate-400 mb-1">Stream Endpoint</div>
+            <div className="text-sm font-mono text-white mt-2 truncate">{STREAM_ENDPOINT}</div>
           </div>
           <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl rounded-lg p-4 border border-white/5">
             <div className="text-sm text-slate-400 mb-1">Status</div>
-            <div className={`text-2xl font-bold ${isStreaming ? 'text-emerald-400' : 'text-slate-400'}`}>
-              {isStreaming ? 'Streaming' : 'Stopped'}
+            <div className={`text-2xl font-bold ${statusColor}`}>
+              {statusLabel}
             </div>
           </div>
         </div>

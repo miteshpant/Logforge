@@ -19,7 +19,26 @@ logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/v1/alerts/correlation", tags=["alert-correlation"])
 
 # Shared service instance
-correlation_service = AlertCorrelationService()
+# ENH-010: `AlertCorrelationService()` opens a database connection in its constructor, so
+# building it at import time made this router un-importable -- and untestable --
+# without live infrastructure. Built on first use; the PEP 562 hook below
+# preserves the bare `correlation_service` name at every call site.
+_correlation_service_instance: Optional[AlertCorrelationService] = None
+
+
+def get_correlation_service() -> AlertCorrelationService:
+    """Get the shared AlertCorrelationService, constructing it on first use."""
+    global _correlation_service_instance
+    if _correlation_service_instance is None:
+        _correlation_service_instance = AlertCorrelationService()
+    return _correlation_service_instance
+
+
+def __getattr__(name: str):
+    """Resolve `correlation_service` lazily (PEP 562)."""
+    if name == "correlation_service":
+        return get_correlation_service()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +174,7 @@ async def get_correlated_groups(
     alert, member list, correlation score, and a suggested root cause.
     """
     try:
-        result = await correlation_service.get_correlated_alert_groups(
+        result = await get_correlation_service().get_correlated_alert_groups(
             customer_id=customer_id,
             time_range=time_range,
             min_group_size=min_group_size,
@@ -187,7 +206,7 @@ async def get_fatigue_score(
     average resolution time.
     """
     try:
-        result = await correlation_service.calculate_fatigue_score(
+        result = await get_correlation_service().calculate_fatigue_score(
             customer_id=customer_id,
         )
         return result
@@ -218,7 +237,7 @@ async def get_service_dependencies(
     relationships.
     """
     try:
-        result = await correlation_service.get_service_dependency_alerts(
+        result = await get_correlation_service().get_service_dependency_alerts(
             customer_id=customer_id,
             time_range=time_range,
         )
@@ -250,7 +269,7 @@ async def get_duplicates(
     the potential noise reduction percentage.
     """
     try:
-        result = await correlation_service.get_duplicate_alerts(
+        result = await get_correlation_service().get_duplicate_alerts(
             customer_id=customer_id,
             time_range=time_range,
         )
@@ -282,7 +301,7 @@ async def get_trends(
     along with a trend indicator (increasing / decreasing / stable).
     """
     try:
-        result = await correlation_service.get_alert_trends(
+        result = await get_correlation_service().get_alert_trends(
             customer_id=customer_id,
             time_range=time_range,
             granularity=granularity,
@@ -315,23 +334,23 @@ async def get_correlation_summary(
     service dependency data into a single response.
     """
     try:
-        fatigue = await correlation_service.calculate_fatigue_score(
+        fatigue = await get_correlation_service().calculate_fatigue_score(
             customer_id=customer_id,
         )
-        groups = await correlation_service.get_correlated_alert_groups(
-            customer_id=customer_id,
-            time_range=time_range,
-        )
-        duplicates = await correlation_service.get_duplicate_alerts(
+        groups = await get_correlation_service().get_correlated_alert_groups(
             customer_id=customer_id,
             time_range=time_range,
         )
-        trends = await correlation_service.get_alert_trends(
+        duplicates = await get_correlation_service().get_duplicate_alerts(
+            customer_id=customer_id,
+            time_range=time_range,
+        )
+        trends = await get_correlation_service().get_alert_trends(
             customer_id=customer_id,
             time_range=time_range,
             granularity="1h",
         )
-        service_deps = await correlation_service.get_service_dependency_alerts(
+        service_deps = await get_correlation_service().get_service_dependency_alerts(
             customer_id=customer_id,
             time_range=time_range,
         )

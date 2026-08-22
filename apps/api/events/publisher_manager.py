@@ -4,6 +4,7 @@ Comprehensive publisher management for event-driven architecture
 """
 
 import asyncio
+import inspect
 import json
 import yaml
 import os
@@ -248,7 +249,14 @@ class KafkaEventPublisher(EventPublisher):
             # Determine topic
             topic = self._get_topic_for_event(event)
 
-            # Add to batch if batching is enabled
+            # Add to batch if batching is enabled.
+            #
+            # ENH-006 caveat: when batching, `True` means ACCEPTED FOR DELIVERY,
+            # not delivered -- the event sits in an in-process buffer until the
+            # batch timer or size threshold fires. Events buffered here are lost
+            # if the process dies before the flush. Publishers that need a
+            # delivery guarantee must be configured with max_batch_size=1 (as
+            # `kafka_realtime` is, for alert and system events).
             if self.config.max_batch_size > 1:
                 if topic not in self._pending_events:
                     self._pending_events[topic] = []
@@ -270,7 +278,21 @@ class KafkaEventPublisher(EventPublisher):
             return False
 
     async def _publish_single(self, event: BaseEvent, topic: str) -> bool:
-        """Publish a single event immediately"""
+        """
+        Publish a single event and WAIT FOR BROKER ACKNOWLEDGEMENT.
+
+        ENH-006: this previously did `future = await self.producer.send(...)` and
+        never awaited `future`. `send()` only resolves once the record is
+        *enqueued* in the producer's buffer -- the returned future is what
+        resolves on broker acknowledgement. The old code therefore reported
+        success for events the broker had never accepted, so logs were silently
+        lost whenever a partition was unavailable or the broker applied
+        back-pressure, while metrics showed 100% success.
+
+        Silent loss is the single worst failure mode for an observability
+        product: customers only discover it when they need the data during an
+        incident. We now await delivery and let failures propagate.
+        """
         try:
             # Get partition
             partition = self._get_partition_for_event(event, topic)
@@ -278,27 +300,52 @@ class KafkaEventPublisher(EventPublisher):
             # Convert event to publishable format
             event_data = event.to_dict()
 
-            # Send to Kafka
-            future = await self.producer.send(
+            # Enqueue with the producer. This resolves when the record is
+            # buffered locally, NOT when the broker has accepted it.
+            delivery_future = await self.producer.send(
                 topic=topic,
                 value=event_data,
                 partition=partition,
                 key=event.get_partition_key().encode('utf-8')
             )
 
+            # Await actual broker acknowledgement. Anything short of this is a
+            # fire-and-forget write with no delivery guarantee.
+            record_metadata = await self._await_delivery(delivery_future)
+
             self.metrics.record_event_published()
             logger.debug(
-                "Event published successfully",
+                "Event delivery acknowledged by broker",
                 event_id=event.metadata.event_id,
                 event_type=event.event_type,
                 topic=topic,
-                partition=partition
+                partition=partition,
+                offset=getattr(record_metadata, "offset", None)
             )
             return True
 
         except Exception as e:
-            logger.error(f"Failed to send event to Kafka: {e}", event_id=event.metadata.event_id)
+            logger.error(
+                f"Failed to deliver event to Kafka: {e}",
+                event_id=event.metadata.event_id,
+                topic=topic
+            )
             raise
+
+    async def _await_delivery(self, delivery_future):
+        """
+        Await a producer delivery future.
+
+        `aiokafka` returns an asyncio Future from `send()`. Some driver versions
+        and test doubles return an already-resolved value instead, so this
+        tolerates a non-awaitable without pretending delivery was confirmed when
+        it was not.
+        """
+        if delivery_future is None:
+            return None
+        if inspect.isawaitable(delivery_future):
+            return await delivery_future
+        return delivery_future
 
     async def publish_batch(self, events: List[BaseEvent]) -> Dict[str, bool]:
         """Publish multiple events in batch"""
@@ -342,7 +389,16 @@ class KafkaEventPublisher(EventPublisher):
                 logger.error(f"Error in batch processor: {e}")
 
     async def _flush_topic_batch(self, topic: str):
-        """Flush pending events for a specific topic"""
+        """
+        Flush pending events for a specific topic.
+
+        ENH-006: a failed event here is a LOST LOG. We count failures, record
+        them in metrics, and log at error level with the event id so the loss is
+        attributable. Events are not re-queued: the buffer is unbounded and
+        re-queueing on a persistent broker outage would grow it without limit
+        (the same failure mode fixed in ENH-007). A durable dead-letter path is
+        tracked as follow-up work in ENH-006's notes.
+        """
         if topic not in self._pending_events or not self._pending_events[topic]:
             return
 
@@ -351,11 +407,27 @@ class KafkaEventPublisher(EventPublisher):
 
         logger.debug(f"Flushing batch of {len(events_to_send)} events for topic {topic}")
 
+        failed_event_ids = []
         for event in events_to_send:
             try:
                 await self._publish_single(event, topic)
             except Exception as e:
-                logger.error(f"Failed to publish event in batch flush: {e}", event_id=event.metadata.event_id)
+                self.metrics.record_event_failed()
+                failed_event_ids.append(event.metadata.event_id)
+                logger.error(
+                    f"Event LOST during batch flush -- broker did not acknowledge: {e}",
+                    event_id=event.metadata.event_id,
+                    topic=topic
+                )
+
+        if failed_event_ids:
+            logger.error(
+                "Batch flush completed with unrecoverable event loss",
+                topic=topic,
+                lost_count=len(failed_event_ids),
+                total_count=len(events_to_send),
+                lost_event_ids=failed_event_ids[:20]
+            )
 
     def _get_topic_for_event(self, event: BaseEvent) -> str:
         """Determine topic for event based on type using centralized constants"""

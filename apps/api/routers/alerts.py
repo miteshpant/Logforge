@@ -20,7 +20,26 @@ from tenant_dependencies import MiddlewareTenant
 router = APIRouter(prefix="/v1/alerts")
 
 # Initialize alert service
-alert_service = AlertService()
+# ENH-010: `AlertService()` opens a database connection in its constructor, so
+# building it at import time made this router un-importable -- and untestable --
+# without live infrastructure. Built on first use; the PEP 562 hook below
+# preserves the bare `alert_service` name at every call site.
+_alert_service_instance: Optional[AlertService] = None
+
+
+def get_alert_service() -> AlertService:
+    """Get the shared AlertService, constructing it on first use."""
+    global _alert_service_instance
+    if _alert_service_instance is None:
+        _alert_service_instance = AlertService()
+    return _alert_service_instance
+
+
+def __getattr__(name: str):
+    """Resolve `alert_service` lazily (PEP 562)."""
+    if name == "alert_service":
+        return get_alert_service()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 def setup_dependencies(alert_engine):
     """Setup dependencies from main app"""
@@ -51,7 +70,7 @@ async def create_alert_rule(rule_request: Dict[str, Any], customer_id: str = Mid
         rule_data["customer_id"] = customer_id
         
         # Use AlertService to create rule
-        created_rule = await alert_service.create_alert_rule(rule_data)
+        created_rule = await get_alert_service().create_alert_rule(rule_data)
         
         return created_rule
         
@@ -69,7 +88,7 @@ async def list_alert_rules(
     """List alert rules for the customer"""
     try:
         # Server-side pagination: query only the needed records from DB
-        result = await alert_service.list_alert_rules_paginated(
+        result = await get_alert_service().list_alert_rules_paginated(
             customer_id, enabled, severity, limit, offset
         )
 
@@ -88,7 +107,7 @@ async def list_alert_rules(
 async def get_alert_rule(rule_id: str, customer_id: str = MiddlewareTenant):
     """Get a specific alert rule"""
     try:
-        rule = await alert_service.get_alert_rule(rule_id, customer_id)
+        rule = await get_alert_service().get_alert_rule(rule_id, customer_id)
         
         if not rule:
             raise HTTPException(status_code=404, detail="Alert rule not found")
@@ -110,7 +129,7 @@ async def update_alert_rule(
     try:
         # Update rule using AlertService
         update_data = {k: v for k, v in update_request.model_dump().items() if v is not None}
-        rule = await alert_service.update_alert_rule(rule_id, customer_id, update_data)
+        rule = await get_alert_service().update_alert_rule(rule_id, customer_id, update_data)
         
         if not rule:
             raise HTTPException(status_code=404, detail="Alert rule not found")
@@ -126,7 +145,7 @@ async def update_alert_rule(
 async def delete_alert_rule(rule_id: str, customer_id: str = MiddlewareTenant):
     """Delete an alert rule"""
     try:
-        success = await alert_service.delete_alert_rule(rule_id, customer_id)
+        success = await get_alert_service().delete_alert_rule(rule_id, customer_id)
         
         if not success:
             raise HTTPException(status_code=404, detail="Alert rule not found")
@@ -147,7 +166,7 @@ async def test_alert_rule(rule_id: str, test_data: Optional[Dict[str, Any]] = No
     """Test an alert rule against sample data"""
     try:
         # Test rule using AlertService
-        test_result = await alert_service.test_alert_rule(rule_id, customer_id)
+        test_result = await get_alert_service().test_alert_rule(rule_id, customer_id)
         
         return {
             "rule_id": rule_id,
@@ -176,7 +195,7 @@ async def list_alerts(
     """List alerts for the customer, optionally filtered by time range"""
     try:
         # Server-side pagination: query only the needed records from DB
-        result = await alert_service.list_alert_instances(
+        result = await get_alert_service().list_alert_instances(
             customer_id, status, severity, limit, offset,
             start_time, end_time
         )
@@ -196,7 +215,7 @@ async def list_alerts(
 async def alert_engine_stats(customer_id: str = MiddlewareTenant):
     """Get detailed alert engine statistics"""
     try:
-        stats = await alert_service.get_alert_stats(customer_id)
+        stats = await get_alert_service().get_alert_stats(customer_id)
 
         return {
             "rules": {
@@ -243,7 +262,7 @@ async def get_alert_overview_stats(
     """
     try:
         # Get alert overview statistics
-        overview = await alert_service.get_alert_overview_stats(
+        overview = await get_alert_service().get_alert_overview_stats(
             customer_id=customer_id,
             start_time=start_time,
             end_time=end_time
@@ -259,7 +278,7 @@ async def get_alert_overview_stats(
 async def alert_engine_health(customer_id: str = MiddlewareTenant):
     """Get alert engine health and status"""
     try:
-        health = await alert_service.get_alert_health()
+        health = await get_alert_service().get_alert_health()
         
         return {
             "status": health.get("status", "unknown"),
@@ -277,7 +296,7 @@ async def alert_engine_health(customer_id: str = MiddlewareTenant):
 async def get_alert(alert_id: str, customer_id: str = MiddlewareTenant):
     """Get a specific alert instance"""
     try:
-        alert = await alert_service.get_alert_instance(alert_id, customer_id)
+        alert = await get_alert_service().get_alert_instance(alert_id, customer_id)
         
         if not alert:
             raise HTTPException(status_code=404, detail="Alert not found")
@@ -307,7 +326,7 @@ async def list_alert_instances_by_rule(
             raise HTTPException(status_code=400, detail="Invalid status. Must be one of: active, triggered, acknowledged, resolved, suppressed")
         
         # Get alert instances for the rule
-        instances = await alert_service.list_alert_instances_by_rule(rule_id, customer_id, status, limit)
+        instances = await get_alert_service().list_alert_instances_by_rule(rule_id, customer_id, status, limit)
         
         return {
             "rule_id": rule_id,
@@ -357,7 +376,7 @@ async def bulk_update_alert_instances_by_rule(
         user_identifier = user.email if user and user.email else user.id if user else "api-user"
         
         # Perform bulk update
-        result = await alert_service.bulk_update_alert_instances_by_rule(
+        result = await get_alert_service().bulk_update_alert_instances_by_rule(
             rule_id=rule_id,
             customer_id=customer_id,
             status=update_request.status,
@@ -397,7 +416,7 @@ async def acknowledge_alert(
         user = getattr(request.state, 'user', None)
         user_identifier = user.email if user and user.email else user.id if user else "api-user"
         
-        success = await alert_service.acknowledge_alert(alert_id, customer_id, user_identifier)
+        success = await get_alert_service().acknowledge_alert(alert_id, customer_id, user_identifier)
         
         if not success:
             raise HTTPException(status_code=404, detail="Alert not found")
@@ -430,7 +449,7 @@ async def resolve_alert(
         user_identifier = user.email if user and user.email else user.id if user else "api-user"
         
         notes = (status_update.notes if status_update else None) or "Resolved via API"
-        success = await alert_service.resolve_alert(
+        success = await get_alert_service().resolve_alert(
             alert_id,
             customer_id,
             user_identifier,
@@ -460,7 +479,7 @@ async def resolve_alert(
 async def list_notification_channels(customer_id: str = MiddlewareTenant):
     """List notification channels"""
     try:
-        channels = await alert_service.list_notification_channels(customer_id)
+        channels = await get_alert_service().list_notification_channels(customer_id)
         
         return {
             "channels": channels,
@@ -480,7 +499,7 @@ async def create_notification_channel(channel_request: Dict[str, Any], customer_
         channel_data["customer_id"] = customer_id
         
         # Create channel using AlertService
-        result = await alert_service.create_notification_channel(channel_data)
+        result = await get_alert_service().create_notification_channel(channel_data)
         
         return {
             "status": "created",
@@ -500,7 +519,7 @@ async def update_notification_channel(
     """Update a notification channel (enable/disable, config changes)"""
     try:
         channel_update["customer_id"] = customer_id
-        result = await alert_service.update_notification_channel(channel_id, customer_id, channel_update)
+        result = await get_alert_service().update_notification_channel(channel_id, customer_id, channel_update)
         if not result:
             raise HTTPException(status_code=404, detail=f"Channel {channel_id} not found")
         return {"status": "updated", "channel_id": channel_id, "customer_id": customer_id}
@@ -516,7 +535,7 @@ async def delete_notification_channel(
 ):
     """Delete a notification channel"""
     try:
-        result = await alert_service.delete_notification_channel(channel_id, customer_id)
+        result = await get_alert_service().delete_notification_channel(channel_id, customer_id)
         if not result:
             raise HTTPException(status_code=404, detail=f"Channel {channel_id} not found")
         return {"status": "deleted", "channel_id": channel_id}
@@ -532,7 +551,7 @@ async def test_notification_channel(
 ):
     """Send a test notification through a channel"""
     try:
-        result = await alert_service.test_notification_channel(channel_id, customer_id)
+        result = await get_alert_service().test_notification_channel(channel_id, customer_id)
         if not result:
             raise HTTPException(status_code=404, detail=f"Channel {channel_id} not found")
         return {"status": "test_sent", "channel_id": channel_id, "success": True}
@@ -547,7 +566,7 @@ async def test_notification_channel(
 async def list_webhooks(customer_id: str = MiddlewareTenant):
     """List webhook integrations"""
     try:
-        webhooks = await alert_service.list_webhook_integrations(customer_id)
+        webhooks = await get_alert_service().list_webhook_integrations(customer_id)
         
         return {
             "webhooks": webhooks,
@@ -567,7 +586,7 @@ async def create_webhook(webhook_request: Dict[str, Any], customer_id: str = Mid
         webhook_data["customer_id"] = customer_id
         
         # Create webhook using AlertService
-        result = await alert_service.create_webhook_integration(webhook_data)
+        result = await get_alert_service().create_webhook_integration(webhook_data)
         
         return {
             "status": "created", 
@@ -599,7 +618,7 @@ async def stream_alerts(
             while True:
                 try:
                     # Get recent alerts using the existing alert service
-                    alerts = await alert_service.list_alert_instances(
+                    alerts = await get_alert_service().list_alert_instances(
                         customer_id=customer_id,
                         status=None
                     )
@@ -624,11 +643,11 @@ async def stream_alerts(
         return StreamingResponse(
             generate_alerts(),
             media_type="text/event-stream",
+            # LF-021: no hardcoded CORS headers here — the global
+            # CORSMiddleware (main.py) emits the allowlisted origin.
             headers={
                 "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+                "Connection": "keep-alive"
             }
         )
         

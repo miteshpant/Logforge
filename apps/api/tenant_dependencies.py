@@ -8,7 +8,9 @@ import structlog
 from fastapi import Header, HTTPException, Depends, Request
 from typing import Optional
 
-from tenant_service import tenant_service
+# ENH-033/ENH-010: resolved lazily; importing the singleton connected to
+# the database at import time and made this module untestable offline.
+from tenant_service import get_tenant_service
 
 logger = structlog.get_logger()
 
@@ -22,7 +24,7 @@ async def validate_tenant_header(
         return x_customer_id
     
     # Validate tenant UUID
-    is_valid = await tenant_service.validate_tenant_uuid(x_customer_id)
+    is_valid = await get_tenant_service().validate_tenant_uuid(x_customer_id)
     if not is_valid:
         logger.warning("Invalid tenant UUID provided", tenant_id=x_customer_id)
         raise HTTPException(
@@ -31,7 +33,7 @@ async def validate_tenant_header(
         )
     
     # Track API usage - REMOVED: Handled by authentication middleware to prevent duplicates
-    # await tenant_service.track_usage(x_customer_id, "api_call")
+    # await get_tenant_service().track_usage(x_customer_id, "api_call")
     
     return x_customer_id
 
@@ -49,11 +51,11 @@ async def get_validated_tenant_id(
         return x_customer_id
     
     # Validate tenant UUID exists
-    validated_id = await tenant_service.get_tenant_by_uuid_or_default(x_customer_id)
+    validated_id = await get_tenant_service().get_tenant_by_uuid_or_default(x_customer_id)
     
     # Track API usage for valid tenants - REMOVED: Handled by authentication middleware to prevent duplicates
     # if validated_id != "default":
-    #     await tenant_service.track_usage(validated_id, "api_call")
+    #     await get_tenant_service().track_usage(validated_id, "api_call")
     
     return validated_id
 
@@ -92,7 +94,7 @@ async def require_valid_tenant(
         return x_customer_id
     
     # Validate tenant UUID
-    is_valid = await tenant_service.validate_tenant_uuid(x_customer_id)
+    is_valid = await get_tenant_service().validate_tenant_uuid(x_customer_id)
     if not is_valid:
         logger.warning("Invalid tenant UUID required", tenant_id=x_customer_id)
         raise HTTPException(
@@ -101,7 +103,7 @@ async def require_valid_tenant(
         )
     
     # Track API usage - REMOVED: Handled by authentication middleware to prevent duplicates
-    # await tenant_service.track_usage(x_customer_id, "api_call")
+    # await get_tenant_service().track_usage(x_customer_id, "api_call")
     
     return x_customer_id
 

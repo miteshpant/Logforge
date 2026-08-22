@@ -14,7 +14,9 @@ from models import (
 )
 from authn_authz_middleware import (
     get_current_user, require_platform_admin, require_tenant_admin,
-    user_service
+    # ENH-010: the ACCESSOR, not the instance. Importing the instance
+    # constructed it (and connected to the database) at import time.
+    get_user_service,
 )
 
 logger = structlog.get_logger()
@@ -35,13 +37,13 @@ async def create_user(
     """Create new user account"""
     try:
         # Check if user already exists
-        existing_user = await user_service.get_user_by_email(user_request.email)
+        existing_user = await get_user_service().get_user_by_email(user_request.email)
         if existing_user:
             raise HTTPException(409, f"User with email {user_request.email} already exists")
         
         # Create user (this will validate password strength)
         user_data = user_request.dict()
-        new_user = await user_service.create_user(user_data)
+        new_user = await get_user_service().create_user(user_data)
     
     except HTTPException:
         # Re-raise HTTP exceptions (including 409 for duplicate email)
@@ -96,7 +98,7 @@ async def search_users(
             raise HTTPException(403, "Admin permissions required to search users")
         
         # Search users from database (handled at database level)
-        result = await user_service.list_users(page, page_size, None, q)
+        result = await get_user_service().list_users(page, page_size, None, q)
         matching_users = result["users"]
         total_count = result["total_count"]
         
@@ -157,7 +159,7 @@ async def update_current_user_profile(
         
         # Update user profile in database
         filtered_update_data = {k: v for k, v in update_data.items() if k != "status"}
-        await user_service.update_user(current_user.id, {
+        await get_user_service().update_user(current_user.id, {
             **filtered_update_data,
             "updated_at": current_user.updated_at
         })
@@ -189,7 +191,7 @@ async def get_user(
 ):
     """Get user by ID"""
     try:
-        user = await user_service.get_user_by_id(user_id)
+        user = await get_user_service().get_user_by_id(user_id)
         if not user:
             raise HTTPException(404, f"User {user_id} not found")
         
@@ -249,7 +251,7 @@ async def update_user(
 ):
     """Update user account"""
     try:
-        user = await user_service.get_user_by_id(user_id)
+        user = await get_user_service().get_user_by_id(user_id)
         if not user:
             raise HTTPException(404, f"User {user_id} not found")
         
@@ -264,7 +266,7 @@ async def update_user(
         
         # Apply updates through user service (database-enabled)
         update_data = user_update.dict(exclude_none=True)
-        updated_user = await user_service.update_user(user.id, update_data)
+        updated_user = await get_user_service().update_user(user.id, update_data)
         
         if not updated_user:
             raise HTTPException(500, "User update failed - could not retrieve updated user")
@@ -299,7 +301,7 @@ async def delete_user(
 ):
     """Delete user account"""
     try:
-        user = await user_service.get_user_by_id(user_id)
+        user = await get_user_service().get_user_by_id(user_id)
         if not user:
             raise HTTPException(404, f"User {user_id} not found")
         
@@ -314,7 +316,7 @@ async def delete_user(
             raise HTTPException(403, "Admin permissions required to delete users")
         
         # Soft delete using user service (database-enabled)
-        deleted = await user_service.delete_user(user.id)
+        deleted = await get_user_service().delete_user(user.id)
         
         logger.info("User deleted", 
                    user_id=user.id,
@@ -359,7 +361,7 @@ async def list_users(
             total_count = 1
         else:
             # Query database with proper filtering (search handled at database level)
-            result = await user_service.list_users(page, page_size, status, search)
+            result = await get_user_service().list_users(page, page_size, status, search)
             users = result["users"]
             total_count = result["total_count"]
         
@@ -402,7 +404,7 @@ async def create_admin_user(
     """Create platform admin user (platform admins only)"""
     try:
         # Check if admin user already exists
-        existing_user = await user_service.get_user_by_email(user_request.email)
+        existing_user = await get_user_service().get_user_by_email(user_request.email)
         if existing_user:
             raise HTTPException(409, f"Admin user with email {user_request.email} already exists")
         
@@ -410,7 +412,7 @@ async def create_admin_user(
         user_data = user_request.dict()
         user_data["status"] = UserStatus.ACTIVE  # Admin users start active
         
-        new_admin = await user_service.create_user(user_data)
+        new_admin = await get_user_service().create_user(user_data)
         
         logger.info("Admin user created", 
                    admin_user_id=new_admin.id,
@@ -447,7 +449,7 @@ async def list_admin_users(
     """List platform admin users (platform admins only)"""
     try:
         # Query database for users with platform admin roles
-        result = await user_service.list_platform_admin_users(page, page_size)
+        result = await get_user_service().list_platform_admin_users(page, page_size)
         users = result["users"]
         total_count = result["total_count"]
         
@@ -483,12 +485,12 @@ async def update_admin_user(
 ):
     """Update admin user (platform admins only)"""
     try:
-        user = await user_service.get_user_by_id(user_id)
+        user = await get_user_service().get_user_by_id(user_id)
         if not user:
             raise HTTPException(404, f"Admin user {user_id} not found")
         
         # Verify target user has platform roles
-        has_platform_roles = await user_service.verify_user_has_platform_roles(user_id)
+        has_platform_roles = await get_user_service().verify_user_has_platform_roles(user_id)
         if not has_platform_roles:
             raise HTTPException(403, "Target user does not have platform admin roles")
         
@@ -500,7 +502,7 @@ async def update_admin_user(
         user.updated_at = datetime.utcnow()
         
         # Update user in database
-        await user_service.update_user(user.id, {
+        await get_user_service().update_user(user.id, {
             "status": user.status,
             "updated_at": user.updated_at
         })
@@ -534,7 +536,7 @@ async def delete_admin_user(
 ):
     """Delete admin user (platform admins only)"""
     try:
-        user = await user_service.get_user_by_id(user_id)
+        user = await get_user_service().get_user_by_id(user_id)
         if not user:
             raise HTTPException(404, f"Admin user {user_id} not found")
         
@@ -543,12 +545,12 @@ async def delete_admin_user(
             raise HTTPException(400, "Cannot delete your own admin account")
         
         # Verify target user has platform roles
-        has_platform_roles = await user_service.verify_user_has_platform_roles(user_id)
+        has_platform_roles = await get_user_service().verify_user_has_platform_roles(user_id)
         if not has_platform_roles:
             raise HTTPException(403, "Target user does not have platform admin roles")
         
         # Check if this is the last super_admin (prevent lockout)
-        super_admin_count = await user_service.check_super_admin_count()
+        super_admin_count = await get_user_service().check_super_admin_count()
         if super_admin_count <= 1:
             raise HTTPException(400, "Cannot delete the last super admin - this would lock out the platform")
         
@@ -557,13 +559,13 @@ async def delete_admin_user(
         user.updated_at = datetime.utcnow()
         
         # Soft delete user in database
-        await user_service.update_user(user.id, {
+        await get_user_service().update_user(user.id, {
             "status": user.status,
             "updated_at": user.updated_at
         })
         
         # Revoke all sessions for security
-        revoked_sessions = await user_service.revoke_all_user_sessions_for_security(user_id)
+        revoked_sessions = await get_user_service().revoke_all_user_sessions_for_security(user_id)
         logger.info("User sessions revoked for security", user_id=user_id, revoked_count=revoked_sessions)
         
         logger.info("Admin user deleted",
@@ -585,12 +587,12 @@ async def get_admin_user(
 ):
     """Get admin user details (platform admins only)"""
     try:
-        user = await user_service.get_user_by_id(user_id)
+        user = await get_user_service().get_user_by_id(user_id)
         if not user:
             raise HTTPException(404, f"Admin user {user_id} not found")
         
         # Verify target user has platform roles
-        has_platform_roles = await user_service.verify_user_has_platform_roles(user_id)
+        has_platform_roles = await get_user_service().verify_user_has_platform_roles(user_id)
         if not has_platform_roles:
             raise HTTPException(403, "Target user does not have platform admin roles")
         
@@ -640,7 +642,7 @@ async def bulk_create_users(
 
         # Batch check for existing emails (O(1) query instead of O(n))
         all_emails = [u.email.lower() for u in users]
-        existing_emails = await user_service.get_existing_emails_batch(all_emails)
+        existing_emails = await get_user_service().get_existing_emails_batch(all_emails)
 
         for user_request in users:
             try:
@@ -651,7 +653,7 @@ async def bulk_create_users(
 
                 # Create user
                 user_data = user_request.dict()
-                new_user = await user_service.create_user(user_data)
+                new_user = await get_user_service().create_user(user_data)
                 created_users.append(new_user)
 
                 # Add to existing set to prevent duplicates within same batch

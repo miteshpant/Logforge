@@ -994,11 +994,11 @@ async def stream_metrics(
         return StreamingResponse(
             generate_metrics(),
             media_type="text/event-stream",
+            # LF-021: no hardcoded CORS headers here — the global
+            # CORSMiddleware (main.py) emits the allowlisted origin.
             headers={
                 "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+                "Connection": "keep-alive"
             }
         )
 
@@ -1042,11 +1042,11 @@ async def stream_traces(
         return StreamingResponse(
             generate_traces(),
             media_type="text/event-stream",
+            # LF-021: no hardcoded CORS headers here — the global
+            # CORSMiddleware (main.py) emits the allowlisted origin.
             headers={
                 "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "Authorization, X-Customer-ID"
+                "Connection": "keep-alive"
             }
         )
 

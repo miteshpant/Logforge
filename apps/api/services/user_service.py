@@ -465,10 +465,21 @@ class UserService:
             raise e
     
     async def revoke_session(self, token: str) -> bool:
-        """Revoke user session by token"""
+        """
+        Revoke a user session by token.
+
+        ENH-016: the auth cache is invalidated here so a revoked token stops
+        working immediately rather than remaining valid for the cache TTL.
+        Invalidation runs BEFORE the result is reported, and unconditionally,
+        so a partial failure cannot leave a live cache entry for a session that
+        was actually revoked.
+        """
+        from auth_cache import get_auth_cache
+
         try:
             # Revoke session via DAO
             success = await self.user_dao.revoke_session(token)
+            await get_auth_cache().invalidate_session(token)
             if success:
                 logger.info("Session revoked successfully", token=token[:8] + "...")
             else:
@@ -589,13 +600,33 @@ class UserService:
             logger.error("Failed to update session activity asynchronously", token=token[:8] + "...", error=str(e))
     
     async def get_user_tenant_roles(self, user_id: str, tenant_id: str) -> List[Dict[str, Any]]:
-        """Get user's roles for specific tenant (includes platform admin roles)"""
-        try:
-            return await self.user_dao.get_user_tenant_roles(user_id, tenant_id)
-        except Exception as e:
-            logger.error("Failed to get user tenant roles via service", 
-                       user_id=user_id, tenant_id=tenant_id, error=str(e))
-            return []
+        """
+        Get a user's roles for a specific tenant (includes platform admin roles).
+
+        ENH-016: this runs on EVERY authenticated request and hits ClickHouse,
+        an OLAP engine that is poorly suited to point lookups. It is now served
+        from a short-TTL Redis cache when available.
+
+        The cache fails closed: on any cache error the authoritative database
+        lookup still runs. An empty result is never cached, so a transient
+        failure cannot lock a user out for the whole TTL.
+        """
+        from auth_cache import get_auth_cache
+
+        async def _load() -> List[Dict[str, Any]]:
+            try:
+                return await self.user_dao.get_user_tenant_roles(user_id, tenant_id)
+            except Exception as e:
+                # Returning [] means "no roles", which the middleware turns into
+                # a 403 -- fail closed, but the underlying error must stay
+                # visible rather than being silently swallowed.
+                logger.error("Failed to get user tenant roles via service",
+                             user_id=user_id, tenant_id=tenant_id, error=str(e))
+                return []
+
+        return await get_auth_cache().get_user_tenant_roles(
+            user_id, tenant_id, _load
+        )
     
     async def list_platform_admin_users(self, page: int = 1, page_size: int = DEFAULT_PAGE_SIZE) -> Dict[str, Any]:
         """List users with platform admin roles"""

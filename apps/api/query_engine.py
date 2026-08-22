@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional, Union
 from datetime import datetime, timezone, timedelta
 from pydantic import BaseModel, Field, validator
 from enum import Enum
+import os
 import re
 import json
 import clickhouse_connect
@@ -61,72 +62,159 @@ class TimeGranularity(str, Enum):
     MONTH = "month"
 
 
+class QueryFieldError(ValueError):
+    """Raised when a query references an identifier that is not allow-listed."""
+
+
+# ---------------------------------------------------------------------------
+# Identifier allow-list (ENH-002)
+# ---------------------------------------------------------------------------
+#
+# ClickHouse binds VALUES as parameters, but IDENTIFIERS (column names, ORDER BY
+# targets) cannot be bound -- they are part of the statement's grammar. So every
+# identifier that reaches SQL must be validated against a fixed allow-list
+# derived from the real schema, and anything unknown is rejected outright.
+#
+# Source of truth: infra/docker/clickhouse/init_simple.sql
+#   logs_raw_mt        -> line 181
+#   logs_normalized_mt -> line 207
+ALLOWED_QUERY_FIELDS = frozenset({
+    # Shared across logs_raw_mt and logs_normalized_mt
+    "ts", "host", "service", "level", "msg", "trace_id", "span_id",
+    "status", "src_ip", "user_id", "ingested_at", "severity_num",
+    "facility", "customer_id",
+    # logs_raw_mt only
+    "attrs", "parser_version",
+    # logs_normalized_mt only
+    "date", "hour",
+    # Normalized/extracted fields referenced by _select_optimal_table
+    "extracted_user_id", "extracted_ip", "http_method", "http_uri",
+    "http_status", "http_response_time_ms", "error_code", "is_error", "is_slow",
+})
+
+# Aggregation aliases are generated internally, so they follow a known-safe
+# shape. Anything else is rejected.
+_SAFE_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+# JSON path prefixes that may address keys inside a JSON column.
+_JSON_FIELD_PREFIXES = ("attrs.", "raw_data.")
+
+
+def validate_identifier(field: str) -> str:
+    """
+    Validate a bare column identifier against the schema allow-list.
+
+    Raises:
+        QueryFieldError: if the identifier is unknown. Rejecting is deliberate --
+        silently dropping an unknown filter would widen the result set and could
+        leak rows the caller never intended to match.
+    """
+    if field in ALLOWED_QUERY_FIELDS:
+        return field
+    raise QueryFieldError(
+        f"Unknown query field: {field!r}. "
+        f"Allowed fields: {', '.join(sorted(ALLOWED_QUERY_FIELDS))}"
+    )
+
+
 @dataclass
 class QueryFilter:
     """Individual query filter"""
     field: str
     operator: QueryOperator
     value: Union[str, int, float, List[Any]]
-    
-    def to_clickhouse_condition(self) -> str:
-        """Convert filter to ClickHouse WHERE condition"""
-        field_name = self.field
-        
-        # Handle nested JSON fields in attrs/raw_data
-        if '.' in field_name and field_name.startswith('attrs.'):
-            json_field = field_name.replace('attrs.', '')
-            field_name = f"JSONExtractString(raw_data, '{json_field}')"
-        elif '.' in field_name and field_name.startswith('raw_data.'):
-            json_field = field_name.replace('raw_data.', '')
-            field_name = f"JSONExtractString(raw_data, '{json_field}')"
-        
-        if self.operator == QueryOperator.EQ:
-            if isinstance(self.value, str):
-                return f"{field_name} = '{self.value}'"
-            return f"{field_name} = {self.value}"
-            
-        elif self.operator == QueryOperator.NE:
-            if isinstance(self.value, str):
-                return f"{field_name} != '{self.value}'"
-            return f"{field_name} != {self.value}"
-            
-        elif self.operator == QueryOperator.GT:
-            return f"{field_name} > {self.value}"
-            
-        elif self.operator == QueryOperator.GTE:
-            return f"{field_name} >= {self.value}"
-            
-        elif self.operator == QueryOperator.LT:
-            return f"{field_name} < {self.value}"
-            
-        elif self.operator == QueryOperator.LTE:
-            return f"{field_name} <= {self.value}"
-            
-        elif self.operator == QueryOperator.CONTAINS:
-            return f"{field_name} LIKE '%{self.value}%'"
-            
-        elif self.operator == QueryOperator.STARTS_WITH:
-            return f"{field_name} LIKE '{self.value}%'"
-            
-        elif self.operator == QueryOperator.ENDS_WITH:
-            return f"{field_name} LIKE '%{self.value}'"
-            
-        elif self.operator == QueryOperator.REGEX:
-            return f"match({field_name}, '{self.value}')"
-            
-        elif self.operator == QueryOperator.IN:
+
+    def to_clickhouse_condition(self, params: Dict[str, Any], param_prefix: str) -> str:
+        """
+        Render this filter as a ClickHouse condition using BOUND PARAMETERS.
+
+        ENH-002: this previously interpolated `self.value` straight into SQL, so
+        a value such as ``x' OR customer_id != '`` could neutralise the
+        tenant-isolation predicate appended by the router and expose other
+        tenants' data. Values are now bound; only allow-listed identifiers are
+        emitted as SQL text.
+
+        Args:
+            params: mutable dict that receives the bound parameter values.
+            param_prefix: unique prefix so parameters never collide.
+
+        Returns:
+            A condition string containing only placeholders for values.
+        """
+        field_name = self._render_field_reference(params, param_prefix)
+
+        def bind(value: Any, suffix: str = "") -> str:
+            key = f"{param_prefix}{suffix}"
+            params[key] = value
+            return f"%({key})s"
+
+        op = self.operator
+
+        if op == QueryOperator.EQ:
+            return f"{field_name} = {bind(self.value)}"
+        if op == QueryOperator.NE:
+            return f"{field_name} != {bind(self.value)}"
+        if op == QueryOperator.GT:
+            return f"{field_name} > {bind(self.value)}"
+        if op == QueryOperator.GTE:
+            return f"{field_name} >= {bind(self.value)}"
+        if op == QueryOperator.LT:
+            return f"{field_name} < {bind(self.value)}"
+        if op == QueryOperator.LTE:
+            return f"{field_name} <= {bind(self.value)}"
+
+        # LIKE wildcards are applied to the BOUND VALUE, not to the SQL text, so
+        # a '%' inside user input stays literal data rather than becoming syntax.
+        if op == QueryOperator.CONTAINS:
+            return f"{field_name} LIKE {bind(f'%{self.value}%')}"
+        if op == QueryOperator.STARTS_WITH:
+            return f"{field_name} LIKE {bind(f'{self.value}%')}"
+        if op == QueryOperator.ENDS_WITH:
+            return f"{field_name} LIKE {bind(f'%{self.value}')}"
+
+        if op == QueryOperator.REGEX:
+            return f"match({field_name}, {bind(self.value)})"
+
+        if op in (QueryOperator.IN, QueryOperator.NOT_IN):
+            keyword = "IN" if op == QueryOperator.IN else "NOT IN"
             if isinstance(self.value, list):
-                values = [f"'{v}'" if isinstance(v, str) else str(v) for v in self.value]
-                return f"{field_name} IN ({', '.join(values)})"
-            return f"{field_name} = '{self.value}'"
-            
-        elif self.operator == QueryOperator.NOT_IN:
-            if isinstance(self.value, list):
-                values = [f"'{v}'" if isinstance(v, str) else str(v) for v in self.value]
-                return f"{field_name} NOT IN ({', '.join(values)})"
-            return f"{field_name} != '{self.value}'"
-        
-        return f"{field_name} = '{self.value}'"
+                if not self.value:
+                    # An empty IN () is a syntax error in ClickHouse. Emit a
+                    # constant instead: `IN ()` matches nothing, `NOT IN ()`
+                    # matches everything.
+                    return "0" if op == QueryOperator.IN else "1"
+                placeholders = [
+                    bind(item, f"_{index}") for index, item in enumerate(self.value)
+                ]
+                return f"{field_name} {keyword} ({', '.join(placeholders)})"
+            return (
+                f"{field_name} = {bind(self.value)}"
+                if op == QueryOperator.IN
+                else f"{field_name} != {bind(self.value)}"
+            )
+
+        raise QueryFieldError(f"Unsupported operator: {op}")
+
+    def _render_field_reference(self, params: Dict[str, Any], param_prefix: str) -> str:
+        """
+        Render the left-hand side of the condition.
+
+        Bare columns are allow-listed. JSON paths keep working, but the KEY is
+        bound as a parameter so it cannot terminate the JSONExtractString call.
+        """
+        field = self.field
+
+        for prefix in _JSON_FIELD_PREFIXES:
+            if field.startswith(prefix):
+                json_key = field[len(prefix):]
+                if not json_key:
+                    raise QueryFieldError(f"Empty JSON key in field: {field!r}")
+                key_param = f"{param_prefix}_jsonkey"
+                params[key_param] = json_key
+                column = "attrs" if prefix == "attrs." else "raw_data"
+                return f"JSONExtractString({column}, %({key_param})s)"
+
+        return validate_identifier(field)
 
 
 @dataclass
@@ -138,15 +226,31 @@ class QueryAggregation:
     percentile_value: Optional[float] = None  # For percentile aggregations
     
     def to_clickhouse_select(self) -> str:
-        """Convert to ClickHouse SELECT clause"""
+        """
+        Convert to a ClickHouse SELECT clause.
+
+        ENH-002: both the aggregated field and the alias land in SQL text, so
+        both are validated. `count(*)` is the one permitted non-column form.
+        """
         field_name = self.field
         alias = self.alias or f"{self.type.value}_{self.field.replace('*', 'all')}"
-        
-        # Handle nested JSON fields
-        if '.' in field_name and field_name.startswith('attrs.'):
-            json_field = field_name.replace('attrs.', '')
+
+        if not _SAFE_IDENTIFIER_RE.match(alias):
+            raise QueryFieldError(f"Invalid aggregation alias: {alias!r}")
+
+        # Handle nested JSON fields. The key is embedded in SQL here (there is no
+        # parameter dict on this path), so it is restricted to a safe shape
+        # rather than quoted -- quoting is what fails under adversarial input.
+        if field_name.startswith('attrs.'):
+            json_field = field_name[len('attrs.'):]
+            if not _SAFE_IDENTIFIER_RE.match(json_field):
+                raise QueryFieldError(
+                    f"Invalid JSON key in aggregation field: {field_name!r}"
+                )
             field_name = f"JSONExtractString(attrs, '{json_field}')"
-        
+        elif field_name != "*":
+            field_name = validate_identifier(field_name)
+
         if self.type == AggregationType.COUNT:
             if field_name == "*":
                 return f"count() AS {alias}"
@@ -253,48 +357,80 @@ class AdvancedQueryEngine:
         import time
         start_time = time.time()
         
-        try:
-            # Determine which table to use
-            table = self._select_optimal_table(query)
-            
-            # Build the SQL query
-            sql_query = self._build_sql_query(query, table)
-            
-            # Debug logging for alert queries
-            logger.info(f"Executing SQL: {sql_query}")
-            
-            # Execute query
-            result = self.client.query(sql_query)
-            rows = result.result_rows
-            
-            # Process results
-            if query.aggregations:
-                # Handle aggregation results
-                response = self._process_aggregation_results(rows, query)
-            else:
-                # Handle log results
-                response = self._process_log_results(rows, query)
-            
-            # Add execution metadata
-            execution_time = (time.time() - start_time) * 1000
-            response.execution_time_ms = execution_time
-            response.query_info = {
-                "sql_query": sql_query,
-                "table_used": table,
-                "total_rows_scanned": len(rows)
-            }
-            
-            return response
-            
-        except Exception as e:
-            # Return error response
-            return QueryResponse(
-                logs=[],
-                total_count=0,
-                execution_time_ms=(time.time() - start_time) * 1000,
-                query_info={"error": str(e)}
-            )
+        # Determine which table to use
+        table = self._select_optimal_table(query)
+
+        # Build the SQL query. `params` receives every bound value; the returned
+        # SQL contains placeholders only (ENH-002).
+        params: Dict[str, Any] = {}
+        sql_query = self._build_sql_query(query, table, params)
+
+        logger.debug("Executing query", table=table, param_count=len(params))
+
+        # ENH-017: cost guards. Without these, one tenant's unfiltered
+        # wide-time-range query scans their entire partition set and degrades
+        # the cluster for everyone -- a noisy-neighbour failure. `timeout_seconds`
+        # was declared on the request model but never passed to the client, so
+        # the documented timeout did nothing.
+        settings = self._build_query_settings(query)
+
+        # Values are bound by the driver -- never formatted into the statement.
+        result = self.client.query(sql_query, parameters=params, settings=settings)
+        rows = result.result_rows
+
+        # Process results
+        if query.aggregations:
+            response = self._process_aggregation_results(rows, query)
+        else:
+            response = self._process_log_results(rows, query)
+
+        # Add execution metadata.
+        #
+        # NOTE: the rendered SQL is deliberately NOT echoed back to callers.
+        # It previously leaked the full statement (including other tenants'
+        # filter structure) into API responses.
+        execution_time = (time.time() - start_time) * 1000
+        response.execution_time_ms = execution_time
+        response.query_info = {
+            "table_used": table,
+            "rows_returned": len(rows)
+        }
+
+        return response
     
+    # ENH-017: default per-query resource budget. Deliberately generous enough
+    # for real analytical queries but low enough that a single request cannot
+    # monopolise the cluster. Tunable per deployment via the environment, and
+    # per subscription tier once tiering is wired in.
+    DEFAULT_MAX_BYTES_TO_READ = 50 * 1024 * 1024 * 1024  # 50 GiB
+    DEFAULT_MAX_RESULT_ROWS = 100_000
+
+    def _build_query_settings(self, query: AdvancedQueryRequest) -> Dict[str, Any]:
+        """
+        Build ClickHouse execution settings that bound the cost of a query.
+
+        `*_overflow_mode='throw'` is deliberate: a query that exceeds its budget
+        must FAIL, not silently return a truncated result. Returning partial
+        data as though it were complete would make dashboards and alerts lie --
+        exactly the fabricated-success pattern this project forbids.
+        """
+        max_bytes = int(
+            os.getenv("LOGFORGE_QUERY_MAX_BYTES", self.DEFAULT_MAX_BYTES_TO_READ)
+        )
+        max_rows = int(
+            os.getenv("LOGFORGE_QUERY_MAX_RESULT_ROWS", self.DEFAULT_MAX_RESULT_ROWS)
+        )
+
+        return {
+            # Honour the timeout the caller actually asked for.
+            "max_execution_time": int(query.timeout_seconds),
+            "timeout_overflow_mode": "throw",
+            "max_bytes_to_read": max_bytes,
+            "read_overflow_mode": "throw",
+            "max_result_rows": max_rows,
+            "result_overflow_mode": "throw",
+        }
+
     def _select_optimal_table(self, query: AdvancedQueryRequest) -> str:
         """Select the optimal table for the query"""
         # Check if this is a multi-tenant query (has customer_id filter)
@@ -323,106 +459,136 @@ class AdvancedQueryEngine:
         # Default to raw table for simple queries
         return self.base_table
     
-    def _build_sql_query(self, query: AdvancedQueryRequest, table: str) -> str:
-        """Build ClickHouse SQL query"""
+    def _build_sql_query(
+        self,
+        query: AdvancedQueryRequest,
+        table: str,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """
+        Build a ClickHouse SQL query.
+
+        ENH-002: all VALUES are bound into `params` as placeholders; only
+        allow-listed IDENTIFIERS are emitted as SQL text. `table` is chosen
+        internally by `_select_optimal_table` and is never caller-supplied.
+        """
+        if params is None:
+            params = {}
+
+        # Validate every caller-supplied identifier up front so a bad request
+        # fails cleanly before any SQL is assembled.
+        group_by_fields = [validate_identifier(f) for f in query.group_by]
+
         # SELECT clause
         if query.aggregations:
-            select_parts = []
-            
-            # Add group by fields
-            for field in query.group_by:
-                select_parts.append(field)
-            
+            select_parts = list(group_by_fields)
+
             # Add time series grouping
             if query.time_series:
                 time_func = self._get_time_function(query.time_granularity)
                 select_parts.append(f"{time_func}(ts) AS time_bucket")
-            
+
             # Add aggregations
             for agg in query.aggregations:
                 select_parts.append(agg.to_clickhouse_select())
-            
+
             # Ensure we have at least one SELECT element
             if not select_parts:
-                select_parts.append("1")  # Fallback
-            
+                select_parts.append("1")
+
             select_clause = ", ".join(select_parts)
         else:
             # Regular log query
             if query.include_fields:
-                select_clause = ", ".join(query.include_fields)
+                select_clause = ", ".join(
+                    validate_identifier(f) for f in query.include_fields
+                )
             else:
                 select_clause = "*"
-        
-        # FROM clause
+
+        # FROM clause -- `table` is engine-selected, not caller-supplied.
         from_clause = f"FROM {table}"
-        
+
         # WHERE clause
         where_conditions = []
-        
-        # Time range
-        where_conditions.append(f"ts >= '{query.start_time.strftime('%Y-%m-%d %H:%M:%S')}'")
-        where_conditions.append(f"ts <= '{query.end_time.strftime('%Y-%m-%d %H:%M:%S')}'")
-        
-        # Filters
-        for filter_obj in query.filters:
-            where_conditions.append(filter_obj.to_clickhouse_condition())
-        
-        # Text search
+
+        # Time range -- bound, not formatted.
+        params["_start_time"] = query.start_time
+        params["_end_time"] = query.end_time
+        where_conditions.append("ts >= %(_start_time)s")
+        where_conditions.append("ts <= %(_end_time)s")
+
+        # Filters -- each gets a unique parameter prefix so keys never collide.
+        for index, filter_obj in enumerate(query.filters):
+            where_conditions.append(
+                filter_obj.to_clickhouse_condition(params, f"_f{index}")
+            )
+
+        # Text search -- wildcards applied to the bound value, so a '%' in user
+        # input stays literal instead of becoming a wildcard.
         if query.text_search:
-            where_conditions.append(f"msg LIKE '%{query.text_search}%'")
-        
+            params["_text_search"] = f"%{query.text_search}%"
+            where_conditions.append("msg LIKE %(_text_search)s")
+
         where_clause = f"WHERE {' AND '.join(where_conditions)}"
-        
+
         # GROUP BY clause
         group_by_clause = ""
         if query.aggregations:
-            group_parts = []
-            
-            for field in query.group_by:
-                group_parts.append(field)
-            
+            group_parts = list(group_by_fields)
+
             if query.time_series:
                 group_parts.append("time_bucket")
-            
+
             if group_parts:
                 group_by_clause = f"GROUP BY {', '.join(group_parts)}"
-        
+
         # ORDER BY clause
+        sort_direction = query.sort_order.value.upper()
+        if sort_direction not in ("ASC", "DESC"):
+            raise QueryFieldError(f"Invalid sort order: {query.sort_order}")
+
         if query.aggregations and query.time_series:
-            order_by_clause = f"ORDER BY time_bucket {query.sort_order.value}"
+            order_by_clause = f"ORDER BY time_bucket {sort_direction}"
         elif query.aggregations:
-            # For aggregations without time series, order by first aggregation or group by field
-            if query.group_by:
-                order_by_clause = f"ORDER BY {query.group_by[0]} {query.sort_order.value}"
-            elif query.aggregations:
-                # Use first aggregation alias (match the one generated in to_clickhouse_select)
-                first_agg = query.aggregations[0]
-                first_agg_alias = first_agg.alias or f"{first_agg.type.value}_{first_agg.field.replace('*', 'all')}"
-                order_by_clause = f"ORDER BY {first_agg_alias} {query.sort_order.value}"
+            if group_by_fields:
+                order_by_clause = f"ORDER BY {group_by_fields[0]} {sort_direction}"
             else:
-                order_by_clause = ""
+                # Aggregation aliases are generated internally; still shape-check
+                # them so a hand-crafted alias cannot inject SQL.
+                first_agg = query.aggregations[0]
+                first_agg_alias = first_agg.alias or (
+                    f"{first_agg.type.value}_{first_agg.field.replace('*', 'all')}"
+                )
+                if not _SAFE_IDENTIFIER_RE.match(first_agg_alias):
+                    raise QueryFieldError(
+                        f"Invalid aggregation alias: {first_agg_alias!r}"
+                    )
+                order_by_clause = f"ORDER BY {first_agg_alias} {sort_direction}"
         else:
-            order_by_clause = f"ORDER BY {query.sort_field} {query.sort_order.value}"
-        
-        # LIMIT clause
-        limit_clause = f"LIMIT {query.offset}, {query.limit}"
-        
+            order_by_clause = (
+                f"ORDER BY {validate_identifier(query.sort_field)} {sort_direction}"
+            )
+
+        # LIMIT clause -- coerced to int, so no string can reach the statement.
+        # Pydantic already bounds these (limit 1..10000, offset >= 0).
+        limit_clause = f"LIMIT {int(query.offset)}, {int(query.limit)}"
+
         # Assemble query
         query_parts = [
             f"SELECT {select_clause}",
             from_clause,
             where_clause
         ]
-        
+
         if group_by_clause:
             query_parts.append(group_by_clause)
-        
+
         query_parts.extend([
             order_by_clause,
             limit_clause
         ])
-        
+
         return " ".join(query_parts)
     
     def _get_time_function(self, granularity: TimeGranularity) -> str:

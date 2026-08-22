@@ -5,17 +5,22 @@ FastAPI router for authentication operations: login, logout, setup, password man
 
 from fastapi import APIRouter, HTTPException, Request, Depends
 from datetime import datetime, timedelta
+from typing import Optional
 import structlog
 
 from models import (
-    LoginRequest, LoginResponse, UserResponse, UserCreateRequest,
+    LoginRequest, LoginResponse, RefreshRequest, LogoutRequest,
+    UserResponse, UserCreateRequest,
     SetupTokenResponse, AdminSetupRequest,
     InvitationRequest, InvitationResponse, AcceptInviteRequest,
     PasswordResetRequest, PasswordChangeRequest,
     User, UserRole, UserStatus
 )
 from authn_authz_middleware import (
-    setup_token_manager, invitation_manager,
+    # ENH-013/ENH-014: `setup_token_manager` is imported as an ACCESSOR, not as
+    # the instance. Importing the instance triggered its construction (and a
+    # database connection) at module import time.
+    get_setup_token_manager, invitation_manager,
     get_current_user, generate_secure_token, require_platform_admin
 )
 from services.user_service import UserService
@@ -28,8 +33,47 @@ logger = structlog.get_logger()
 # Create router for authentication
 router = APIRouter(prefix="/v1/auth", tags=["Authentication"])
 
-# Initialize services using proper service layer
-user_service = UserService()
+# Initialize services using proper service layer.
+#
+# ENH-013/ENH-010: `UserService()` opens a database connection in its
+# constructor, so building it here connected during `import routers.auth_api`,
+# making the login endpoint untestable without live infrastructure.
+# Built on first use; the PEP 562 hook below preserves the bare
+# `user_service` name at every call site.
+_user_service_instance: Optional[UserService] = None
+
+
+def get_user_service() -> UserService:
+    """Get the shared UserService, constructing it on first use."""
+    global _user_service_instance
+    if _user_service_instance is None:
+        _user_service_instance = UserService()
+    return _user_service_instance
+
+
+def __getattr__(name: str):
+    """Resolve `user_service` lazily (PEP 562)."""
+    if name == "user_service":
+        return get_user_service()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+# LF-015: rotating refresh tokens. Issuance is feature-flagged so a rollback
+# is a config change, not a deploy; the UI tolerates a missing refresh token.
+def _refresh_tokens_enabled() -> bool:
+    return os.getenv("LOGFORGE_REFRESH_TOKENS_ENABLED", "true").lower() == "true"
+
+
+_refresh_token_service = None
+
+
+def get_refresh_token_service():
+    """Shared RefreshTokenService bound to the UserDAO database layer."""
+    global _refresh_token_service
+    if _refresh_token_service is None:
+        from services.refresh_token_service import RefreshTokenService
+        _refresh_token_service = RefreshTokenService(get_user_service().user_dao.db)
+    return _refresh_token_service
 
 # =================================================================
 # AUTHENTICATION ENDPOINTS
@@ -41,18 +85,51 @@ async def login_user(
     request: Request
 ):
     """User login with email and password"""
+    ip_address = request.client.host if request.client else "unknown"
+
+    # ENH-013: brute-force / credential-stuffing defence. Checked BEFORE
+    # authenticate_user(), because bcrypt verification at 12 rounds is
+    # deliberately expensive -- letting unlimited attempts reach it is also a
+    # CPU-exhaustion vector against our own servers.
+    from login_throttle import LoginThrottleError, get_login_throttle
+
+    throttle = get_login_throttle()
+    try:
+        decision = await throttle.check(login_request.email, ip_address)
+    except LoginThrottleError:
+        # Fail closed: if we cannot count attempts we must not accept them.
+        raise HTTPException(
+            503,
+            "Authentication is temporarily unavailable. Please retry shortly.",
+        )
+
+    if not decision.allowed:
+        logger.warning(
+            "Login blocked by throttle",
+            scope=decision.scope,
+            ip_address=ip_address,
+        )
+        raise HTTPException(
+            status_code=429,
+            detail="Too many failed login attempts. Please try again later.",
+            headers={"Retry-After": str(decision.retry_after_seconds)},
+        )
+
     try:
         # Authenticate user
-        user = await user_service.authenticate_user(
-            login_request.email, 
+        user = await get_user_service().authenticate_user(
+            login_request.email,
             login_request.password
         )
-        
+
         if not user:
+            await throttle.record_failure(login_request.email, ip_address)
             # Log failed attempt for security monitoring
             logger.warning("Login attempt failed",
                           email=login_request.email,
-                          ip_address=request.client.host if request.client else "unknown")
+                          ip_address=ip_address)
+            # Deliberately identical to the "unknown account" response: the
+            # message must not disclose whether the email exists.
             raise HTTPException(401, "Invalid email or password")
         
         # Get user's tenant roles to determine primary tenant context
@@ -71,19 +148,34 @@ async def login_user(
             raise HTTPException(403, "User has no tenant role assignments. Contact administrator.")
         
         # Create session with tenant context
-        ip_address = request.client.host if request.client else "unknown"
         user_agent = request.headers.get("user-agent", "unknown")
-        
-        session_data = await user_service.create_session(user, ip_address, user_agent, primary_tenant_id, user_roles[0].role)
-        
+
+        session_data = await get_user_service().create_session(user, ip_address, user_agent, primary_tenant_id, user_roles[0].role)
+
+        # ENH-013: clear the account counter so a legitimate user who mistyped
+        # a few times is not penalised after a successful login.
+        await throttle.record_success(login_request.email)
+
         logger.info("User login successful",
                    user_id=user.id,
                    email=user.email,
                    ip_address=ip_address)
-        
+
+        # LF-015: issue a rotating refresh token alongside the access token.
+        refresh_token = None
+        refresh_expires_at = None
+        if _refresh_tokens_enabled():
+            refresh_data = await get_refresh_token_service().issue(
+                user.id, primary_tenant_id, ip_address, user_agent
+            )
+            refresh_token = refresh_data["refresh_token"]
+            refresh_expires_at = refresh_data["expires_at"]
+
         return LoginResponse(
             access_token=session_data["access_token"],
             expires_at=session_data["expires_at"],
+            refresh_token=refresh_token,
+            refresh_expires_at=refresh_expires_at,
             user=UserResponse(
                 id=user.id,
                 email=user.email,
@@ -104,75 +196,111 @@ async def login_user(
 
 @router.post("/logout")
 async def logout_user(
+    logout_request: Optional[LogoutRequest] = None,
     current_user: User = Depends(get_current_user),
     request: Request = None
 ):
-    """User logout - invalidate session"""
+    """User logout - invalidate session and revoke the refresh token"""
     try:
         # Extract token from request
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
-            await user_service.revoke_session(token)
-        
+            await get_user_service().revoke_session(token)
+
+        # LF-015: revoke the refresh token server-side so logout genuinely
+        # ends the session — a copied refresh token must stop working.
+        if logout_request and logout_request.refresh_token:
+            await get_refresh_token_service().revoke(logout_request.refresh_token)
+
         logger.info("User logout successful", user_id=current_user.id)
-        
+
         return {"message": "Logout successful"}
-        
+
     except Exception as e:
         logger.error("Logout failed", user_id=current_user.id, error=str(e))
         raise HTTPException(500, "Logout system error")
 
 @router.post("/refresh", response_model=LoginResponse)
 async def refresh_session(
-    current_user: User = Depends(get_current_user),
-    request: Request = None
+    refresh_request: RefreshRequest,
+    request: Request
 ):
-    """Refresh user session with new token"""
+    """Exchange a refresh token for a new access + refresh token pair.
+
+    LF-015: this endpoint deliberately does NOT require a valid access token
+    (the old `Depends(get_current_user)` guard made it useless — it could
+    never renew an expired session). The refresh token itself is the
+    credential: it is validated against the server-side store, rotated
+    (single use), and reuse of a rotated token revokes the whole chain.
+    """
+    from services.refresh_token_service import (
+        RefreshTokenError, RefreshTokenReuseError
+    )
+
+    if not _refresh_tokens_enabled():
+        raise HTTPException(403, "Refresh tokens are disabled")
+
     try:
+        token_row = await get_refresh_token_service().validate_and_rotate(
+            refresh_request.refresh_token
+        )
+    except RefreshTokenReuseError:
+        raise HTTPException(401, "Refresh token reuse detected. Please log in again.")
+    except RefreshTokenError:
+        raise HTTPException(401, "Invalid or expired refresh token")
+
+    try:
+        user = await get_user_service().get_user_by_id(token_row["user_id"])
+        if not user or user.status != UserStatus.ACTIVE:
+            raise HTTPException(401, "User account is not active")
+
         # Get user's tenant roles to determine tenant context for refresh
         from services.role_service import RoleService
         role_service = RoleService()
-        user_roles = await role_service.get_user_roles(current_user.id)
-        
+        user_roles = await role_service.get_user_roles(user.id)
+
         # Determine tenant ID from user's roles
         primary_tenant_id = None
         if user_roles:
             primary_tenant_id = user_roles[0].tenant_id
-        
+
         if not primary_tenant_id:
-            logger.error("User has no tenant role assignments during refresh", user_id=current_user.id)
+            logger.error("User has no tenant role assignments during refresh", user_id=user.id)
             raise HTTPException(403, "User has no tenant role assignments. Contact administrator.")
-        
-        # Create new session
+
+        # Create new access-token session
         ip_address = request.client.host if request.client else "unknown"
         user_agent = request.headers.get("user-agent", "unknown")
-        
-        session_data = await user_service.create_session(current_user, ip_address, user_agent, primary_tenant_id, user_roles[0].role)
-        
-        # Revoke old session
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            old_token = auth_header.split(" ")[1]
-            await user_service.revoke_session(old_token)
-        
-        logger.info("Session refreshed", user_id=current_user.id)
-        
+
+        session_data = await get_user_service().create_session(
+            user, ip_address, user_agent, primary_tenant_id, user_roles[0].role
+        )
+
+        # Rotation: issue the replacement refresh token
+        refresh_data = await get_refresh_token_service().issue(
+            user.id, primary_tenant_id, ip_address, user_agent
+        )
+
+        logger.info("Session refreshed via refresh token", user_id=user.id)
+
         return LoginResponse(
             access_token=session_data["access_token"],
             expires_at=session_data["expires_at"],
+            refresh_token=refresh_data["refresh_token"],
+            refresh_expires_at=refresh_data["expires_at"],
             user=UserResponse(
-                id=current_user.id,
-                email=current_user.email,
-                name=current_user.name,
-                status=current_user.status,
-                created_at=current_user.created_at,
-                updated_at=current_user.updated_at,
-                last_login_at=current_user.last_login_at,
-                email_verified_at=current_user.email_verified_at
+                id=user.id,
+                email=user.email,
+                name=user.name,
+                status=user.status,
+                created_at=user.created_at,
+                updated_at=user.updated_at,
+                last_login_at=user.last_login_at,
+                email_verified_at=user.email_verified_at
             )
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -234,11 +362,11 @@ async def initialize_platform_setup():
     """Generate initial setup token for platform admin creation"""
     try:
         # Check if setup is already completed
-        if setup_token_manager.has_setup_completed():
+        if get_setup_token_manager().has_setup_completed():
             raise HTTPException(400, "Platform setup already completed")
         
         # Generate setup token
-        token_data = setup_token_manager.generate_setup_token()
+        token_data = get_setup_token_manager().generate_setup_token()
         
         logger.info("Platform setup initialized", 
                    expires_at=token_data["expires_at"])
@@ -262,11 +390,11 @@ async def complete_platform_setup(
     """Complete initial platform setup by creating first admin"""
     try:
         # Validate setup token
-        if not setup_token_manager.validate_setup_token(setup_request.setup_token):
+        if not get_setup_token_manager().validate_setup_token(setup_request.setup_token):
             raise HTTPException(400, "Invalid or expired setup token")
         
         # Check if admin already exists with this email
-        existing_user = await user_service.get_user_by_email(setup_request.email)
+        existing_user = await get_user_service().get_user_by_email(setup_request.email)
         if existing_user:
             raise HTTPException(409, f"User with email {setup_request.email} already exists")
         
@@ -278,7 +406,7 @@ async def complete_platform_setup(
             "status": UserStatus.ACTIVE
         }
         
-        admin_user = await user_service.create_user(admin_data)
+        admin_user = await get_user_service().create_user(admin_data)
         
         # Assign super_admin role for platform-wide access using role service
         try:
@@ -338,7 +466,7 @@ async def request_password_reset(
     """Request password reset token"""
     try:
         # Find user by email
-        user = await user_service.get_user_by_email(reset_request.email)
+        user = await get_user_service().get_user_by_email(reset_request.email)
         if not user:
             # Don't reveal if email exists - security best practice
             logger.warning("Password reset requested for non-existent email",
@@ -355,7 +483,7 @@ async def request_password_reset(
         user.updated_at = datetime.utcnow()
         
         # Update user in database
-        await user_service.update_user(user.id, {
+        await get_user_service().update_user(user.id, {
             "password_reset_token": user.password_reset_token,
             "password_reset_expires": user.password_reset_expires,
             "updated_at": user.updated_at
@@ -382,7 +510,7 @@ async def confirm_password_reset(
     """Confirm password reset with token"""
     try:
         # Find user with valid reset token through user service
-        user = await user_service.get_user_by_reset_token(token)
+        user = await get_user_service().get_user_by_reset_token(token)
         
         if not user:
             raise HTTPException(400, "Invalid or expired reset token")
@@ -403,7 +531,7 @@ async def confirm_password_reset(
         user.updated_at = datetime.utcnow()
         
         # Update password in database and clear reset token
-        await user_service.update_user(user.id, {
+        await get_user_service().update_user(user.id, {
             "password_hash": user.password_hash,
             "password_reset_token": None,
             "password_reset_expires": None,
@@ -447,7 +575,7 @@ async def change_password(
         current_user.updated_at = datetime.utcnow()
         
         # Update password in database
-        await user_service.update_user(current_user.id, {
+        await get_user_service().update_user(current_user.id, {
             "password_hash": current_user.password_hash,
             "updated_at": current_user.updated_at
         })
@@ -492,7 +620,7 @@ async def invite_user(
             raise HTTPException(403, f"No permission to invite users to tenant {tenant_id}")
         
         # Check if user already exists
-        existing_user = await user_service.get_user_by_email(invitation_request.email)
+        existing_user = await get_user_service().get_user_by_email(invitation_request.email)
         if existing_user:
             raise HTTPException(409, f"User with email {invitation_request.email} already exists")
         
@@ -541,7 +669,7 @@ async def accept_invitation(
             raise HTTPException(400, "Tenant ID does not match invitation")
         
         # Check if user already exists
-        existing_user = await user_service.get_user_by_email(accept_request.email)
+        existing_user = await get_user_service().get_user_by_email(accept_request.email)
         if existing_user:
             raise HTTPException(409, f"User with email {accept_request.email} already exists")
         
@@ -553,7 +681,7 @@ async def accept_invitation(
             "status": UserStatus.ACTIVE  # Invited users start active
         }
         
-        new_user = await user_service.create_user(user_data)
+        new_user = await get_user_service().create_user(user_data)
         
         # Mark invitation as accepted
         await invitation_manager.accept_invitation(accept_request.invitation_token, invitation["id"])
@@ -629,7 +757,7 @@ async def confirm_email_verification(
         current_user.updated_at = datetime.utcnow()
         
         # Update email verification in database
-        await user_service.update_user(current_user.id, {
+        await get_user_service().update_user(current_user.id, {
             "email_verified_at": current_user.email_verified_at,
             "updated_at": current_user.updated_at
         })
@@ -709,7 +837,7 @@ async def list_user_sessions(
     """List current user's active sessions"""
     try:
         # Get user sessions through user service
-        session_list = await user_service.get_user_sessions(current_user.id)
+        session_list = await get_user_service().get_user_sessions(current_user.id)
         
         return {"sessions": session_list, "total_count": len(session_list)}
         
@@ -731,7 +859,7 @@ async def revoke_all_sessions(
             current_token = auth_header.split(" ")[1]
         
         # Revoke all other sessions except current through user service
-        revoked_count = await user_service.revoke_all_user_sessions_except_current(
+        revoked_count = await get_user_service().revoke_all_user_sessions_except_current(
             current_user.id, 
             current_token
         )
@@ -754,7 +882,7 @@ async def revoke_session(
     """Revoke specific session"""
     try:
         # Revoke session by ID through user service
-        success = await user_service.revoke_session_by_id(session_id, current_user.id)
+        success = await get_user_service().revoke_session_by_id(session_id, current_user.id)
         
         if not success:
             raise HTTPException(404, f"Session {session_id} not found or already revoked")
@@ -786,7 +914,7 @@ async def deactivate_account(
         current_user.updated_at = datetime.utcnow()
         
         # Deactivate user in database
-        await user_service.update_user(current_user.id, {
+        await get_user_service().update_user(current_user.id, {
             "status": current_user.status,
             "updated_at": current_user.updated_at
         })
@@ -807,7 +935,7 @@ async def reactivate_account(
 ):
     """Reactivate user account (platform admins only)"""
     try:
-        user = await user_service.get_user_by_id(user_id)
+        user = await get_user_service().get_user_by_id(user_id)
         if not user:
             raise HTTPException(404, f"User {user_id} not found")
         
@@ -819,7 +947,7 @@ async def reactivate_account(
         user.updated_at = datetime.utcnow()
         
         # Reactivate user in database
-        await user_service.update_user(user.id, {
+        await get_user_service().update_user(user.id, {
             "status": user.status,
             "updated_at": user.updated_at
         })

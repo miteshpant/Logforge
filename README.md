@@ -1,572 +1,494 @@
-# Logforge — An Advanced, Cost-Effective Observability + SIEM Platform
+# Logforge - Enterprise Observability Platform
 
-An enterprise-grade observability and security platform designed to deliver superior value through innovative architecture and open standards.
-
----
+Multi-tenant observability and SIEM platform with advanced log management, metrics, traces, and security analytics.
 
 ## Table of Contents
 
-* [Vision & Goals](#vision--goals)
-* [Non-Goals (for now)](#non-goals-for-now)
-* [High-Level Architecture](#high-level-architecture)
-* [Tech Choices](#tech-choices)
-* [Delivery Plan (Milestones & Sprints)](#delivery-plan-milestones--sprints)
-* [Milestone Details](#milestone-details)
-
-  * [M0: Scaffold & Hello Logs](#m0-scaffold--hello-logs)
-  * [M1: Ingestion & Storage MVP](#m1-ingestion--storage-mvp)
-  * [M2: Search & Dashboards](#m2-search--dashboards)
-  * [M3: Alerts & Integrations](#m3-alerts--integrations)
-  * [M4: Security Analytics (SIEM-lite)](#m4-security-analytics-siem-lite)
-  * [M5: Traces & Metrics](#m5-traces--metrics)
-  * [M6: AI Assistant & RCA](#m6-ai-assistant--rca)
-  * [M7: Enterprise Readiness](#m7-enterprise-readiness)
-* [Directory Structure](#directory-structure)
-* [Local Dev via Docker Compose](#local-dev-via-docker-compose)
-* [Configuration](#configuration)
-* [APIs (Initial)](#apis-initial)
-* [Rule Formats](#rule-formats)
-* [Dashboards](#dashboards)
-* [Data Model](#data-model)
-* [Testing Strategy](#testing-strategy)
-* [Performance Targets](#performance-targets)
-* [Security & Compliance](#security--compliance)
-* [Data Lifecycle & Retention Management](#data-lifecycle--retention-management)
-* [Pricing Model (suggested)](#pricing-model-suggested)
-* [KPIs](#kpis)
-* [Risks & Mitigations](#risks--mitigations)
-* [Contributing](#contributing)
-* [License](#license)
+- [Quick Start](#quick-start)
+- [Architecture](#architecture)
+- [Initial Setup](#initial-setup)
+- [Admin Functionality](#admin-functionality)
+- [Development](#development)
+- [Testing](#testing)
 
 ---
 
-## Vision & Goals
+## Quick Start
 
-* Build an open, cloud-native platform for logs first, then security analytics and observability — advanced, cost-effective, and no lock-in.
-* **Win on cost**: multi-tier storage + intelligent compression + automated TTL policies.
-* **Win on simplicity**: SQL-first search; curated dashboards; sane defaults.
-* **Win on openness**: OpenTelemetry, Vector/Fluent Bit, ClickHouse, multi-cloud storage.
-* **Win on time-to-value**: 15-minute setup; out-of-the-box parsers & content packs.
-* **Win on compliance**: Built-in FedRAMP, HIPAA, SOX, and GDPR support.
+### Prerequisites
 
----
+- Docker & Docker Compose
+- Node.js 18+ (for local UI development)
+- Python 3.11+ (for local API development)
 
-## Non-Goals (for now)
-
-* Full SOAR with complex playbooks (ship **SOAR-lite** webhooks first).
-* Proprietary agents (prefer open shippers) unless there's a clear gap.
-* Niche compliance frameworks beyond PCI/SOC 2/HIPAA in MVP.
-
----
-
-## High-Level Architecture
-
-```
-Shippers (Vector/Fluent Bit/Beats) 
-        │
-        ▼
-    Ingest API  ──►  Kafka/Redpanda  ──►  Transform (Rust/Python)
-        │                               (enrich, parse, PII redact)
-        ▼
-   Hot Store (ClickHouse)  ──►  Cold Store (S3/MinIO)
-        │
-        ├─► Query API (SQL + filters)
-        ├─► Alert Engine (rules + schedules)
-        └─► Content Packs (dashboards, detections, parsers)
-               │
-               ▼
-        Web UI (Next.js/React) + AuthN/Z (OIDC)
-```
-
----
-
-## Tech Choices
-
-* **Ingestion:** HTTP/OTLP (OpenTelemetry), Syslog; brokers: Redpanda (dev) / Kafka (prod).
-* **Transforms:** Vector remap + custom processors (Rust for performance, Python for quick wins).
-* **Storage:** ClickHouse (hot), S3/MinIO (warm/cold) with TTL + S3 offload.
-* **APIs:** FastAPI (Python) to start; consider Rust for ingest path later.
-* **UI:** Next.js (React), Tailwind, shadcn/ui.
-* **Auth:** OIDC (Auth0/Keycloak), API Keys for service-to-service.
-* **Infra:** Terraform, Helm charts; Docker Compose for local.
-* **Observability:** OpenTelemetry SDKs + Prometheus exporters.
-* **CI/CD:** GitHub Actions (lint, test, sec scans, build images).
-
----
-
-## Delivery Plan (Milestones & Sprints)
-
-| Milestone | Scope                                  | Duration | Exit Criteria                                                    |
-| --------- | -------------------------------------- | -------- | ---------------------------------------------------------------- |
-| M0        | Repo scaffold, local env, “hello logs” | 1 wk     | Docker compose up ingests sample logs; basic UI alive            |
-| M1        | Ingestion + storage MVP                | 2 wks    | HTTP ingest → ClickHouse; TTL policies; multi-cloud storage; 10k EPS  |
-| M2        | Search + dashboards                    | 2 wks    | SQL/filters; saved searches; 6 starter dashboards                |
-| M3        | Alerts + integrations                  | 2 wks    | Rule engine; Slack/Email/Webhook; alert dedupe/silence           |
-| M4        | SIEM-lite                              | 3 wks    | Sigma-like rules; ATT\&CK tagging; 25 detections; TI feed ingest |
-| M5        | Traces + metrics                       | 3 wks    | OTLP traces/metrics ingest; correlated views                     |
-| M6        | AI assistant & RCA                     | 3 wks    | NL→SQL; log summarization; guided RCA workflow                   |
-| M7        | Enterprise                             | 3 wks    | RBAC, SSO, multi-tenant, quotas, usage billing                   |
-
-**Tip:** If solo, run 1-week sprints. If a small team, 2-week sprints with demos at the end.
-
----
-
-## Milestone Details
-
-### M0: Scaffold & Hello Logs
-
-**Objectives:**
-
-* Bootstrap monorepo, CI, code quality.
-* Local dev with Docker Compose.
-
-**Tasks:**
-
-* Init repo, templates (.editorconfig, pre-commit, black/ruff).
-* Compose services: ClickHouse, MinIO, Redpanda, API, UI.
-* “Hello logs”: `POST /ingest` writes to ClickHouse; `GET /health`.
-
-**Acceptance:**
-
-* One command runs the stack.
-* Post sample log, visible in ClickHouse table.
-
-### M1: Ingestion & Storage MVP
-
-**Objectives:**
-
-* Reliable ingestion, schema-on-read friendly.
-* Retention strategy (hot→cold).
-
-**Tasks:**
-
-* Ingest endpoints: `/v1/ingest/logs` (JSON, text), `/v1/ingest/otlp`.
-* Vector/Fluent Bit recipes.
-* ClickHouse tables: `logs_raw`, `logs_normalized` (Materialized View), `logs_hourly_stats`.
-* Advanced TTL/partitioning with multi-tier storage (hot/cold/archive).
-* Multi-cloud storage integration (S3, GCS, Azure, MinIO).
-* Comprehensive parsers: Nginx, Syslog, JSON, CEF, OTLP, Text.
-* Automated data lifecycle management with compliance-driven retention.
-
-**Acceptance:**
-
-* 10k EPS sustained locally.
-* Customer-specific retention policies (30 days to 7 years).
-* Automated hot/cold/archive tiering.
-* Queries < 1s p50 on 10M rows.
-
-### M2: Search & Dashboards
-
-**Objectives:**
-
-* Fast search (filters + SQL).
-* Easy dashboards.
-
-**Tasks:**
-
-* Query API: filters (time, service, severity, text), SQL passthrough.
-* Saved searches & pinned queries.
-* UI dashboards: Nginx, K8s, Postgres, AWS CloudTrail, App logs, Errors & Latency.
-* RBAC scaffold (roles: viewer, analyst, admin).
-
-**Acceptance:**
-
-* Query 30M rows in <2s p50 for filtered search.
-* At least 6 reusable dashboards.
-
-### M3: Alerts & Integrations
-
-**Objectives:**
-
-* Rule-based alerting, noise controls.
-
-**Tasks:**
-
-* Rule engine (CRON schedule, thresholds, query-based).
-* Notifications: Email, Slack, Webhook, PagerDuty.
-* Dedupe (fingerprints), group-by, silence windows, maintenance mode.
-* Alert UI: create, test, simulate.
-
-**Acceptance:**
-
-* Simulate alert against historical window.
-* Audit log of notifications.
-
-### M4: Security Analytics (SIEM-lite)
-
-**Objectives:**
-
-* Detections, enrichment, ATT\&CK mapping.
-
-**Tasks:**
-
-* Sigma-like YAML rules.
-* Built-in 25 detections (CloudTrail, auth anomalies, firewall).
-* Threat intel (file, TAXII) enrichment.
-* Asset/IP/Identity enrichment tables.
-* Case management MVP.
-
-**Acceptance:**
-
-* 3 live POCs on demo data (brute force, exfil spike, suspicious admin action).
-* Rule versioning + hit counts.
-
-### M5: Traces & Metrics
-
-**Objectives:**
-
-* Unified observability.
-
-**Tasks:**
-
-* OTLP ingest for traces/metrics.
-* Service map; link logs ⇄ trace spans.
-* Metrics store with retention.
-
-**Acceptance:**
-
-* From a 500 error log, jump to related trace.
-* Metrics panel overlays.
-
-### M6: AI Assistant & RCA
-
-**Objectives:**
-
-* Lower barrier to insights.
-
-**Tasks:**
-
-* NL → query translation.
-* Summarize incident timelines.
-* RCA wizard: blast radius, first seen, top contributing services.
-
-**Acceptance:**
-
-* Analyst can ask: “show spikes in 5xx last 2h by service” and get a chart + query.
-
-### M7: Enterprise Readiness
-
-**Objectives:**
-
-* Security, scale, governance.
-
-**Tasks:**
-
-* SSO (OIDC), fine-grained RBAC, audit trails.
-* Multi-tenant namespaces, quotas.
-* Usage metering (ingest GB/day, storage GB, queries).
-* Backups, DR docs, HA patterns.
-
-**Acceptance:**
-
-* Pass security review.
-* On-call runbook ready.
-
----
-
-## Directory Structure
-
-```
-logforge/
-  apps/
-    api/            # FastAPI services
-    ui/             # Next.js frontend
-    workers/        # background processors (enrichment, alerts)
-  packages/
-    sdk-python/     # client SDK
-    rules/          # Sigma-like detections
-    dashboards/     # JSON dashboard packs
-    shipper-recipes/# Vector/FluentBit configs
-  infra/
-    docker/         # compose files
-    helm/           # k8s charts
-    terraform/      # cloud infra
-  datasets/
-    demo/           # synthetic nginx, cloudtrail, auth logs
-  docs/
-    adr/            # architecture decision records
-  .github/
-    workflows/
-```
-
----
-
-## Local Dev via Docker Compose
+### 1. Start the Infrastructure
 
 ```bash
-# 1) Start the stack
-docker compose -f infra/docker/compose.yml up -d
+# Deploy all services (ClickHouse, MinIO, RedPanda, Redis, API, UI)
+./deploy.sh
 
-# 2) Seed demo data
-make seed-demo
-
-# 3) Send a test log
-curl -X POST localhost:8080/v1/ingest/logs \
-  -H 'Content-Type: application/json' \
-  -d '{"ts":"2025-01-01T00:00:00Z","service":"web","level":"error","msg":"oops","trace_id":"abc"}'
+# Check service status
+docker compose -f infra/docker/compose.yml ps
 ```
 
-**Compose services:** api:8080 (FastAPI), ui:3000 (Next.js), clickhouse:8123, minio:9000, redpanda:9092.
+**Services:**
+- API: http://localhost:7080
+- Main UI: http://localhost:3001
+- Admin UI: http://localhost:3002
+- ClickHouse: http://localhost:8124
+- MinIO Console: http://localhost:9004
+- RedPanda Console: http://localhost:18081
 
 ---
 
-## Configuration
+## Initial Setup
 
-```yaml
-auth:
-  oidc:
-    enabled: false
-    issuer: ""
-    client_id: ""
-    client_secret: ""
-ingest:
-  max_body_mb: 10
-  rate_limit_rps: 2000
-storage:
-  clickhouse_url: http://clickhouse:8123
-  hot_retention_days: 7
-  warm_to_s3_after_days: 7
-  s3:
-    endpoint: http://minio:9000
-    bucket: logforge
-    access_key: minio
-    secret_key: minio123
-alerts:
-  scheduler: "*/2 * * * *"
-  sinks:
-    slack_webhook: ""
-    email_smtp: ""
-security:
-  pii_redaction:
-    enabled: true
-    patterns: ["(?i)password=\\S+", "\\b\\d{16}\\b"]
+### Create First Platform Admin User
+
+After deploying the infrastructure, you need to create the first platform administrator to access the admin UI and manage the platform.
+
+#### Step 1: Generate Setup Token
+
+```bash
+curl -X POST http://localhost:7080/v1/auth/setup/init
 ```
 
----
-
-## APIs (Initial)
-
-**POST /v1/ingest/logs**
-
+**Response:**
 ```json
 {
-  "ts": "2025-01-01T00:00:00Z",
-  "host": "ip-10-0-0-1",
-  "service": "checkout",
-  "level": "info",
-  "msg": "user login",
-  "trace_id": "c0ffee",
-  "attrs": {"user_id":"123","ip":"1.2.3.4"}
+  "setup_token": "AbCdEfGhIjKlMnOpQrStUvWxYz1234567890",
+  "expires_at": "2025-08-12T10:30:00Z"
 }
 ```
 
-**POST /v1/query**
+**Note:** The setup token expires in 24 hours and can only be used once.
 
+#### Step 2: Create First Admin User
+
+```bash
+curl -X POST http://localhost:7080/v1/auth/setup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@logforge.com",
+    "name": "Platform Admin",
+    "password": "YourSecurePassword123!",
+    "setup_token": "AbCdEfGhIjKlMnOpQrStUvWxYz1234567890"
+  }'
+```
+
+**Password Requirements:**
+- Minimum 12 characters
+- At least 1 uppercase letter
+- At least 1 lowercase letter
+- At least 1 number
+- At least 1 special character (!@#$%^&*(),.?":{}|<>)
+
+**Response:**
 ```json
 {
-  "range": {"from":"now-1h","to":"now"},
-  "filter": {"service":"checkout","level":["error","warn"],"text":"timeout"},
-  "group_by": ["service","level"],
-  "limit": 1000,
-  "sql": null
+  "id": "user-uuid-123",
+  "email": "admin@logforge.com",
+  "name": "Platform Admin",
+  "status": "active",
+  "created_at": "2025-08-11T10:30:00Z",
+  "customer_id": "platform"
 }
 ```
 
-**POST /v1/alerts/test**
+#### Step 3: Login to Admin UI
 
-```json
-{
-  "name":"High 5xx",
-  "query":"SELECT count() FROM logs_view WHERE status >= 500 AND ts > now() - INTERVAL 5 MINUTE",
-  "threshold":100,
-  "compare":"gt",
-  "notify":["slack"]
-}
+1. Navigate to Admin UI: http://localhost:3002
+2. Login with credentials:
+   - Email: `admin@logforge.com`
+   - Password: `YourSecurePassword123!`
+
+3. You should now have access to the Admin Dashboard
+
+---
+
+## Admin Functionality
+
+### 1. Admin User Management
+
+**Endpoint:** `/v1/admin/users`
+
+#### Create Additional Admin Users
+
+Via Admin UI:
+1. Go to http://localhost:3002/admin-users
+2. Click "Add Admin User" button
+3. Fill in the form:
+   - Full Name
+   - Email Address
+   - Role (Admin, Super Admin, Support Admin, Billing Admin)
+   - Optional: Temporary Password (defaults to `TempPassword123!`)
+4. Click "Add User"
+
+Via API:
+```bash
+# Get your JWT token first by logging in
+curl -X POST http://localhost:7080/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@logforge.com",
+    "password": "YourSecurePassword123!"
+  }'
+
+# Create new admin user
+curl -X POST http://localhost:7080/v1/admin/users \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin2@logforge.com",
+    "name": "Second Admin",
+    "password": "SecondAdminPass123!"
+  }'
+```
+
+#### List Admin Users
+
+```bash
+curl -X GET http://localhost:7080/v1/admin/users?page=1&page_size=50 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+#### Update Admin User
+
+```bash
+curl -X PUT http://localhost:7080/v1/admin/users/{user_id} \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated Name",
+    "status": "active"
+  }'
+```
+
+#### Delete Admin User
+
+```bash
+curl -X DELETE http://localhost:7080/v1/admin/users/{user_id} \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Safeguards:**
+- Cannot delete your own admin account
+- Cannot delete the last super_admin (prevents lockout)
+- Automatically revokes all sessions for security
+
+---
+
+### 2. Tenant Management
+
+#### Create Tenant
+
+Via Admin UI:
+1. Go to http://localhost:3002/tenants
+2. Click "Onboard New Tenant" button
+3. Fill in tenant details:
+   - Organization Name *
+   - Domain *
+   - Billing Email *
+   - **Admin Contact Name*** (will become the tenant admin user)
+   - **Admin Contact Email*** (will become the tenant admin login)
+   - Subscription Tier * (Startup, SMB, Enterprise, etc.)
+   - Industry, Region, Compliance Requirements (optional)
+4. Submit
+
+**Important:** When creating a tenant, the system automatically:
+- ✅ Creates a tenant record
+- ✅ Creates a tenant admin user with the contact email provided
+- ✅ Generates a **secure 16-character temporary password**
+- ✅ Assigns `tenant_admin` role to the user
+
+#### How to Get the Tenant User's Password
+
+The tenant admin password is auto-generated during creation. Here's how to retrieve it:
+
+**Option 1: Check Browser Console (During Creation)**
+1. Open browser DevTools (Press F12)
+2. Go to Console tab
+3. Look for logs showing: `✅ Admin user created: {...}`
+4. The temporary password is logged in the workflow result
+
+**Option 2: Reset Password via API**
+```bash
+# 1. Find the user by email
+curl -X GET "http://localhost:7080/v1/users?email=mitesh.pant@gmail.com" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+
+# 2. Reset the password (creates new password)
+curl -X POST "http://localhost:7080/v1/users/{user_id}/reset-password" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "new_password": "NewSecurePassword123!"
+  }'
+```
+
+**Option 3: Send Password Reset Email** *(Recommended for production)*
+```bash
+curl -X POST "http://localhost:7080/v1/auth/forgot-password" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "mitesh.pant@gmail.com"
+  }'
+```
+
+Via API:
+```bash
+curl -X POST http://localhost:7080/v1/tenants \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Acme Corporation",
+    "type": "enterprise",
+    "primary_contact_name": "John Doe",
+    "primary_contact_email": "john@acme.com",
+    "domain": "acme.com",
+    "status": "active"
+  }'
+```
+
+#### List Tenants
+
+```bash
+curl -X GET http://localhost:7080/v1/tenants?page=1&page_size=50 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
 ---
 
-## Rule Formats
+### 3. Usage Analytics
 
-**Detection Rule (Sigma-like)** — `rules/detections/cloudtrail/root-login.yml`
+View platform-wide usage metrics:
+- Total tenants
+- Active users
+- Data ingestion rates
+- Storage usage
+- API usage
 
-```yaml
-id: CT-ROOT-LOGIN
-title: AWS Root Account Login
-status: stable
-logsource:
-  product: aws
-  service: cloudtrail
-detection:
-  selection:
-    eventName: "ConsoleLogin"
-    userIdentity.type: "Root"
-  condition: selection
-severity: high
-mitre:
-  tactics: ["TA0001"]
-  techniques: ["T1078"]
-enrichment:
-  - geoip: src_ip
-  - ti_ip: src_ip
-respond:
-  - type: alert
-  - type: webhook
-    url: ${WEBHOOK_IR}
+Access via Admin UI: http://localhost:3002/usage
+
+---
+
+### 4. Billing & Subscriptions
+
+Manage tenant subscriptions, billing, and payments.
+
+Access via Admin UI: http://localhost:3002/billing
+
+---
+
+### 5. Feature Flags
+
+Enable/disable features for specific tenants or platform-wide.
+
+Access via Admin UI: http://localhost:3002/features
+
+---
+
+### 6. Support Management
+
+Manage support tickets and customer inquiries.
+
+Access via Admin UI: http://localhost:3002/support
+
+---
+
+## Architecture
+
+### Technology Stack
+
+**Backend:**
+- FastAPI (Python 3.11)
+- ClickHouse (columnar database for logs/metrics)
+- RedPanda (Kafka-compatible message broker)
+- Redis (caching & session management)
+- MinIO (S3-compatible object storage)
+
+**Frontend:**
+- Next.js 14 (Main UI)
+- Next.js 14 (Admin UI)
+- TypeScript
+- Tailwind CSS
+- shadcn/ui components
+
+**Infrastructure:**
+- Docker & Docker Compose
+- Nginx (reverse proxy)
+
+### Services
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| API | 7080 | Backend REST API |
+| Main UI | 3001 | Tenant-facing dashboard |
+| Admin UI | 3002 | Platform admin dashboard |
+| ClickHouse | 8124 | Database (HTTP), 9001 (Native) |
+| MinIO | 9003 (API), 9004 (Console) | Object storage |
+| RedPanda | 19092 (Kafka), 18081 (Schema Registry) | Message broker |
+| Redis | 6379 | Cache & sessions |
+
+---
+
+## Development
+
+### Running API Locally
+
+```bash
+cd apps/api
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8080
 ```
 
-**Alert Rule (threshold)** — `rules/alerts/high-5xx.yml`
+### Running Main UI Locally
 
-```yaml
-name: High 5xx errors
-schedule: "*/1 * * * *"
-query: >
-  SELECT toStartOfMinute(ts) AS m, count() AS c
-  FROM logs_view
-  WHERE status >= 500 AND ts > now() - INTERVAL 5 MINUTE
-  GROUP BY m
-threshold:
-  compare: "gt"
-  value: 100
-notify: ["slack","pagerduty"]
+```bash
+cd apps/ui
+npm install
+npm run dev
+# Access at http://localhost:3000
+```
+
+### Running Admin UI Locally
+
+```bash
+cd apps/admin-ui
+npm install
+npm run dev
+# Access at http://localhost:3002
 ```
 
 ---
 
-## Dashboards
+## Testing
 
-* Errors & Latency (HTTP status, p50/p95 latency, top URIs)
-* Kubernetes (pod restarts, container OOMs, node pressure)
-* Nginx/Ingress (reqs/sec, 4xx/5xx, upstreams)
-* CloudTrail (CreateUser, AttachPolicy, root login)
-* Postgres (slow queries, locks)
-* Auth (failed logins by geo, unusual success outside business hours)
+### API Tests
 
-*Ship as JSON packs under `packages/dashboards/`.*
-
----
-
-## Data Model
-
-**ClickHouse logs\_raw**
-
-```sql
-CREATE TABLE logs_raw (
-  ts DateTime64(3, 'UTC'),
-  host LowCardinality(String),
-  service LowCardinality(String),
-  level LowCardinality(String),
-  msg String,
-  trace_id String,
-  span_id String,
-  attrs String,
-  status UInt16,
-  src_ip String,
-  user_id String,
-  ingested_at DateTime64(3, 'UTC'),
-  severity_num UInt8,
-  facility UInt8,
-  parser_version String
-)
-ENGINE = MergeTree()
-PARTITION BY toYYYYMM(ts)
-ORDER BY (service, level, ts, host)
-TTL ts + INTERVAL customer_retention_days DAY TO VOLUME 'cold',
-    ts + INTERVAL compliance_retention_days DAY DELETE;
+```bash
+cd apps/api
+pytest
 ```
 
-**logs\_normalized:** materialized view with advanced field extraction and enrichment.
-**logs\_hourly\_stats:** aggregation table for fast analytics and dashboards.
+### UI Tests
 
+```bash
+cd apps/ui
+npm test
+```
 
-ADRs for every major change in docs/adr/
----
+### Admin UI Tests
 
-## Testing Strategy
-
-* **Unit:** parsers, API handlers, rule evaluators
-* **Integration:** ingest → ClickHouse roundtrip; alert firing to sinks
-* **Load:** k6/Gatling scripts for 10k–50k EPS synthetic logs
-* **Detections:** replay PCAP/JSON fixtures for each Sigma rule with expected hits
-* **Security:** dependency scans (Trivy), SAST (CodeQL), secrets scan (gitleaks)
-* **E2E:** Playwright checks: login, search, dashboard render, alert create/test
+```bash
+cd apps/admin-ui
+npm test
+```
 
 ---
 
-## Performance Targets
+## Environment Variables
 
-* **Ingest:** ≥50k EPS per node (baseline) with batching
-* **Query:** p50 < 1.5s for 24h window on 200M rows with selective filters
-* **Storage:** compression 3–6×; hot: 7–14 days, warm: 30–90, cold: 180–365+
-* **Alert latency:** schedule-to-notify <60s
+### API
 
----
+```bash
+CLICKHOUSE_HOST=localhost
+CLICKHOUSE_PORT=8123
+CLICKHOUSE_USER=logforge
+CLICKHOUSE_PASSWORD=logforge123
+CLICKHOUSE_DATABASE=logforge
 
-## Security & Compliance
+KAFKA_BOOTSTRAP_SERVERS=localhost:19092
+KAFKA_SECURITY_PROTOCOL=PLAINTEXT
 
-* TLS everywhere; mTLS optional for shippers
-* OIDC SSO; API keys with scopes; per-tenant RBAC
-* PII redaction at ingest (regex + allowlist)
-* Audit logging of admin actions and rule changes
-* Data retention & legal hold flags per index/tenant
-* Backups tested monthly; DR docs with RPO 1h / RTO 4h
+MINIO_ENDPOINT=localhost:9003
+MINIO_ACCESS_KEY=minio
+MINIO_SECRET_KEY=minio123
 
----
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
 
-## Data Lifecycle & Retention Management
+CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:3002
+```
 
-* **Automated TTL Policies:** Customer-specific retention rules (shared: 30 days, enterprise: 365 days, FedRAMP: 7 years)
-* **Multi-Tier Storage:** Hot (ClickHouse) → Cold (S3/GCS/Azure) → Archive (encrypted, compressed)
-* **Compliance Support:** Built-in policies for SOC 2, FedRAMP, HIPAA, SOX with automated retention
-* **Cost Optimization:** Intelligent data tiering reduces storage costs by 60-80% vs traditional SIEM platforms
-* **Geographic Controls:** Region-specific storage for compliance (e.g., US Gov Cloud for FedRAMP)
+### UI
 
----
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:7080
+```
 
-## Pricing Model (Suggested)
+### Admin UI
 
-* **Free tier:** 5 GB/day ingest, 7-day hot retention, 1 user
-* **Pro:** \$0.20/GB stored/month (not ingested), 30-day hot; unlimited users
-* **Enterprise:** custom + SSO, SLOs, VPC peering, on-prem
-
----
-
-## KPIs
-
-* Time to first dashboard < 15 minutes
-* Storage cost reduction vs traditional SIEM platforms (target: ≥ 60%)
-* MTTR reduction on incidents (target: 20% with M6)
-* False positive rate for detections (target: < 5%)
-* Automated compliance reporting accuracy (target: 99.9%)
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:7080
+NEXT_PUBLIC_ADMIN_MODE=true
+```
 
 ---
 
-## Risks & Mitigations
+## Troubleshooting
 
-* **Query latency** on huge datasets → summarize tables, rollups, projections
-* **Noisy alerts** → dedupe, adaptive thresholds, preview simulations
-* **Vendor lock-in fear** → open formats (Parquet), export everything
-* **Team bandwidth** → content packs first (90/10 rule), then advanced features
+### Services Not Starting
+
+```bash
+# Check service status
+docker compose -f infra/docker/compose.yml ps
+
+# View logs
+docker compose -f infra/docker/compose.yml logs -f
+
+# Restart services
+docker compose -f infra/docker/compose.yml restart
+```
+
+### Database Connection Issues
+
+```bash
+# Check ClickHouse health
+docker exec logforge-clickhouse clickhouse-client --query "SELECT 1"
+
+# List databases
+docker exec logforge-clickhouse clickhouse-client --query "SHOW DATABASES"
+
+# List tables
+docker exec logforge-clickhouse clickhouse-client --query "SHOW TABLES FROM logforge"
+```
+
+### UI Permission Errors (Development Mode)
+
+If running UI in Docker and seeing permission errors:
+```bash
+# Stop UI container
+docker stop logforge-ui
+
+# Run UI locally instead
+cd apps/ui
+npm install
+npm run dev
+```
 
 ---
 
-## Contributing
+## Documentation
 
-* ADRs for every major change in `docs/adr/`
-* Conventional commits; PR checks must pass (lint, tests, security)
-* Add datasets & expected results when adding parsers or rules
+- [API Reference](./docs/API_REFERENCE.md)
+- [Architecture](./docs/ARCHITECTURE.md)
+- [Deployment Guide](./DEPLOYMENT.md)
+- [Admin UI Guide](./apps/admin-ui/README.md)
 
 ---
 
 ## License
 
-TBD (recommend **AGPLv3** if you want to discourage closed forks, or **Apache-2.0** to maximize adoption)
+Proprietary - All rights reserved
 
 ---
 
-## Getting Started (Today)
+## Support
 
-1. Clone & run compose: boot ClickHouse, MinIO, API, UI
-2. Send logs from Vector/Fluent Bit using provided recipes
-3. Build first dashboard (Nginx) and wire first alert (High 5xx)
-4. Record a demo showing ingest → search → dashboard → alert
+For issues or questions:
+- Create an issue in the repository
+- Contact: support@logforge.com

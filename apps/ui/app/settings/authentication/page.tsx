@@ -105,6 +105,9 @@ export default function AuthenticationPage() {
   })
   const [createdKey, setCreatedKey] = useState<string | null>(null)
   const [showKeyValue, setShowKeyValue] = useState(false)
+  // ENH-040/041/047: failures must be visible to the operator, not just logged.
+  const [keyError, setKeyError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // SSO state
   const [authProviders, setAuthProviders] = useState<AuthProvider[]>([])
@@ -131,29 +134,57 @@ export default function AuthenticationPage() {
 
   const loadData = async () => {
     setIsLoading(true)
+    setLoadError(null)
     try {
-      const [keysRes, providersRes, mfaRes] = await Promise.allSettled([
+      // ENH-046: `/v1/enterprise/auth/mfa/status` was requested here but does
+      // not exist -- `enterprise_api.py` defines only `POST /auth/mfa/setup`.
+      // Inside `allSettled` the 404 was discarded and the MFA panel rendered
+      // blank forever. The call is removed; the panel now states plainly that
+      // status reporting is unavailable rather than implying "MFA is off".
+      const [keysRes, providersRes] = await Promise.allSettled([
         apiClient.get('/v1/enterprise/auth/api-keys'),
-        apiClient.get('/v1/enterprise/auth/providers'),
-        apiClient.get('/v1/enterprise/auth/mfa/status')
+        apiClient.get('/v1/enterprise/auth/providers')
       ])
 
-      if (keysRes.status === 'fulfilled') {
+      // ENH-047: a rejected promise, or the client's resolved-but-failed shape,
+      // must be surfaced. Silently leaving the list empty makes a broken
+      // backend indistinguishable from a tenant with no keys.
+      const failures: string[] = []
+
+      if (keysRes.status === 'fulfilled' && keysRes.value?.success !== false) {
         const data = keysRes.value?.data || keysRes.value
-        setApiKeys(data?.api_keys || data?.keys || (Array.isArray(data) ? data : []))
+        const keys = data?.api_keys ?? (Array.isArray(data) ? data : [])
+        // Server returns `key_id`; the table keys off `id`.
+        setApiKeys(
+          keys.map((k: any) => ({
+            ...k,
+            id: k.key_id ?? k.id,
+            status: k.status ?? 'active',
+            last_used_at: k.last_used ?? k.last_used_at ?? null
+          }))
+        )
+      } else {
+        const reason =
+          keysRes.status === 'rejected'
+            ? keysRes.reason?.message
+            : keysRes.value?.error
+        failures.push(`API keys: ${reason || 'request failed'}`)
       }
 
-      if (providersRes.status === 'fulfilled') {
+      if (providersRes.status === 'fulfilled' && providersRes.value?.success !== false) {
         const data = providersRes.value?.data || providersRes.value
         setAuthProviders(data?.providers || (Array.isArray(data) ? data : []))
+      } else {
+        const reason =
+          providersRes.status === 'rejected'
+            ? providersRes.reason?.message
+            : providersRes.value?.error
+        failures.push(`SSO providers: ${reason || 'request failed'}`)
       }
 
-      if (mfaRes.status === 'fulfilled') {
-        const data = mfaRes.value?.data || mfaRes.value
-        setMfaStatus(data)
+      if (failures.length > 0) {
+        setLoadError(failures.join(' · '))
       }
-    } catch (error) {
-      console.error('Failed to load authentication data:', error)
     } finally {
       setIsLoading(false)
     }
@@ -175,26 +206,35 @@ export default function AuthenticationPage() {
           : []
       }
 
+      // ENH-040: this must throw on failure. `apiClient` resolves errors into
+      // `{success:false, error}` rather than rejecting, so the failure is
+      // detected explicitly below instead of relying on `catch`.
       const response = await apiClient.post('/v1/enterprise/auth/api-keys', payload)
+      if (response?.success === false) {
+        throw new Error(response.error || 'API key creation failed')
+      }
       const data = response?.data || response
 
-      // Show the created key (only shown once)
-      if (data?.key || data?.api_key) {
-        setCreatedKey(data.key || data.api_key)
+      // The secret is returned exactly once, as `api_key`
+      // (apps/api/services/enterprise_service.py:333).
+      const secret = data?.api_key
+      if (!secret) {
+        throw new Error('Server did not return an API key')
       }
+      setCreatedKey(secret)
 
-      // Add to list
+      // Field names mirror the server response; nothing is invented here.
       const newKey: APIKey = {
-        id: data?.id || `key_${Date.now()}`,
-        name: newKeyData.name,
-        description: newKeyData.description,
-        key_prefix: data?.key_prefix || 'lf_****',
-        permissions: newKeyData.permissions,
-        created_at: new Date().toISOString(),
-        expires_at: newKeyData.expires_at || null,
+        id: data.key_id,
+        name: data.name,
+        description: data.description ?? '',
+        key_prefix: `${String(secret).slice(0, 12)}****`,
+        permissions: data.permissions ?? [],
+        created_at: data.created_at,
+        expires_at: data.expires_at ?? null,
         last_used_at: null,
-        rate_limit: newKeyData.rate_limit,
-        ip_whitelist: payload.ip_whitelist,
+        rate_limit: data.rate_limit,
+        ip_whitelist: data.ip_whitelist ?? [],
         status: 'active'
       }
       setApiKeys(prev => [newKey, ...prev])
@@ -209,39 +249,35 @@ export default function AuthenticationPage() {
         ip_whitelist: ''
       })
     } catch (error) {
-      console.error('Failed to create API key:', error)
-      // Mock for demo
-      const mockKey = `lf_live_${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`
-      setCreatedKey(mockKey)
-
-      const newKey: APIKey = {
-        id: `key_${Date.now()}`,
-        name: newKeyData.name,
-        description: newKeyData.description,
-        key_prefix: mockKey.slice(0, 12) + '****',
-        permissions: newKeyData.permissions,
-        created_at: new Date().toISOString(),
-        expires_at: newKeyData.expires_at || null,
-        last_used_at: null,
-        rate_limit: newKeyData.rate_limit,
-        ip_whitelist: newKeyData.ip_whitelist
-          ? newKeyData.ip_whitelist.split(',').map(ip => ip.trim()).filter(Boolean)
-          : [],
-        status: 'active'
-      }
-      setApiKeys(prev => [newKey, ...prev])
+      // ENH-040: previously this fabricated `lf_live_<random>` and presented it
+      // as a working credential. A key that does not exist server-side must
+      // never be shown -- the user would store it and get 401s forever. Surface
+      // the real failure and add nothing to the list.
+      setKeyError(error instanceof Error ? error.message : 'Failed to create API key')
+      setCreatedKey(null)
     }
   }
 
   const handleRevokeKey = async (keyId: string) => {
     if (!confirm('Are you sure you want to revoke this API key? This action cannot be undone.')) return
 
+    // ENH-041: the revocation state must reflect the server, not the intent.
+    // Previously this marked the key "revoked" even when the DELETE failed --
+    // during a leaked-credential incident that is a false sense of containment
+    // while the key stays live.
     try {
-      await apiClient.delete(`/v1/enterprise/auth/api-keys/${keyId}`)
+      const response = await apiClient.delete(`/v1/enterprise/auth/api-keys/${keyId}`)
+      if (response?.success === false) {
+        throw new Error(response.error || 'Revocation failed')
+      }
     } catch (error) {
-      console.error('Failed to revoke API key:', error)
+      setKeyError(
+        `Failed to revoke key: ${error instanceof Error ? error.message : 'unknown error'}. The key is still active.`
+      )
+      return
     }
 
+    setKeyError(null)
     setApiKeys(prev => prev.map(key =>
       key.id === keyId ? { ...key, status: 'revoked' as const } : key
     ))
@@ -264,19 +300,16 @@ export default function AuthenticationPage() {
   const handleConfigureSSO = async () => {
     if (!ssoConfig.client_id || !ssoConfig.domain) return
 
+    // ENH-041: a failed SSO configuration previously still added the provider
+    // row and closed the dialog, telling the operator that federated login was
+    // configured when the server had rejected it. Only reflect confirmed state,
+    // then re-read from the server rather than guessing the stored shape.
     try {
-      await apiClient.post('/v1/enterprise/auth/oidc/configure', ssoConfig)
-
-      const newProvider: AuthProvider = {
-        id: `provider_${Date.now()}`,
-        provider_name: ssoConfig.provider_name,
-        provider_type: ssoConfig.provider_type,
-        domain: ssoConfig.domain,
-        enabled: ssoConfig.enabled,
-        created_at: new Date().toISOString(),
-        user_count: 0
+      const response = await apiClient.post('/v1/enterprise/auth/oidc/configure', ssoConfig)
+      if (response?.success === false) {
+        throw new Error(response.error || 'SSO configuration failed')
       }
-      setAuthProviders(prev => [...prev, newProvider])
+
       setShowConfigureSSO(false)
       setSsoConfig({
         provider_name: '',
@@ -287,28 +320,24 @@ export default function AuthenticationPage() {
         scopes: ['openid', 'profile', 'email'],
         enabled: true
       })
+      await loadData()
     } catch (error) {
-      console.error('Failed to configure SSO:', error)
-      // Mock for demo
-      const newProvider: AuthProvider = {
-        id: `provider_${Date.now()}`,
-        provider_name: ssoConfig.provider_name,
-        provider_type: ssoConfig.provider_type,
-        domain: ssoConfig.domain,
-        enabled: ssoConfig.enabled,
-        created_at: new Date().toISOString(),
-        user_count: 0
-      }
-      setAuthProviders(prev => [...prev, newProvider])
-      setShowConfigureSSO(false)
+      setKeyError(
+        `Failed to configure SSO: ${error instanceof Error ? error.message : 'unknown error'}`
+      )
     }
   }
 
-  const toggleProviderStatus = async (providerId: string) => {
-    setAuthProviders(prev => prev.map(p =>
-      p.id === providerId ? { ...p, enabled: !p.enabled } : p
-    ))
-  }
+  // ENH-041: this used to flip `enabled` in local state with no API call at
+  // all, so the switch appeared to work and silently reverted on reload. The
+  // backend exposes no enable/disable route for auth providers -- only
+  // `GET /v1/enterprise/auth/providers` and
+  // `POST /v1/enterprise/auth/oidc/configure` exist. Rather than fake a
+  // persisted change to a security control, the control is disabled in the UI
+  // and the missing capability is stated. Implementing the endpoint is
+  // follow-up work.
+  const PROVIDER_TOGGLE_UNAVAILABLE =
+    'Enabling or disabling a provider is not supported by the API yet.'
 
   // Utility functions
   const formatDate = (date: string | null) => {
@@ -397,8 +426,10 @@ export default function AuthenticationPage() {
               </div>
               <div className="min-w-0">
                 <p className="text-slate-400 text-sm">MFA Enrolled</p>
+                {/* ENH-046: no MFA status endpoint exists, so "0/0" would be a
+                    fabricated reading of a security control. Show unknown. */}
                 <p className="text-2xl font-bold text-white">
-                  {mfaStatus?.enrolled_users ?? 0}/{mfaStatus?.total_users ?? 0}
+                  {mfaStatus ? `${mfaStatus.enrolled_users}/${mfaStatus.total_users}` : '—'}
                 </p>
               </div>
             </div>
@@ -410,8 +441,17 @@ export default function AuthenticationPage() {
               </div>
               <div className="min-w-0">
                 <p className="text-slate-400 text-sm">MFA Status</p>
+                {/* ENH-046: reporting "Disabled" for an unknown state would tell
+                    an operator their tenant is unprotected when we simply have
+                    no data. Unknown is reported as unknown. */}
                 <p className="text-2xl font-bold text-white">
-                  {mfaStatus?.enforced ? 'Enforced' : mfaStatus?.enabled ? 'Optional' : 'Disabled'}
+                  {mfaStatus
+                    ? mfaStatus.enforced
+                      ? 'Enforced'
+                      : mfaStatus.enabled
+                        ? 'Optional'
+                        : 'Disabled'
+                    : 'Unknown'}
                 </p>
               </div>
             </div>
@@ -454,6 +494,38 @@ export default function AuthenticationPage() {
             MFA
           </button>
         </div>
+
+        {/* ENH-047: request failures are rendered, not just logged, so a broken
+            backend is never mistaken for "no data". */}
+        {loadError && (
+          <div className="flex items-start gap-3 rounded-lg border border-red-500/40 bg-red-500/10 p-4">
+            <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-red-300">Failed to load authentication data</p>
+              <p className="text-sm text-red-200/80 break-words">{loadError}</p>
+            </div>
+            <button
+              onClick={loadData}
+              className="ml-auto flex-shrink-0 text-sm text-red-300 hover:text-white underline"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {keyError && (
+          <div className="flex items-start gap-3 rounded-lg border border-red-500/40 bg-red-500/10 p-4">
+            <XCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-red-200 break-words">{keyError}</p>
+            <button
+              onClick={() => setKeyError(null)}
+              className="ml-auto flex-shrink-0 text-red-300 hover:text-white"
+              aria-label="Dismiss error"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {isLoading ? (
           <div className="flex items-center justify-center h-48">
@@ -665,14 +737,11 @@ export default function AuthenticationPage() {
                             </div>
                             <div className="flex items-center gap-2">
                               <button
-                                onClick={() => toggleProviderStatus(provider.id)}
-                                className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                                  provider.enabled
-                                    ? 'bg-slate-700 hover:bg-slate-600 text-white'
-                                    : 'bg-green-600 hover:bg-green-700 text-white'
-                                }`}
+                                disabled
+                                title={PROVIDER_TOGGLE_UNAVAILABLE}
+                                className="px-3 py-1.5 rounded-lg text-sm bg-slate-800 text-slate-500 cursor-not-allowed"
                               >
-                                {provider.enabled ? 'Disable' : 'Enable'}
+                                {provider.enabled ? 'Enabled' : 'Disabled'}
                               </button>
                               <button
                                 className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
@@ -693,6 +762,22 @@ export default function AuthenticationPage() {
             {/* MFA Tab */}
             {activeTab === 'mfa' && (
               <div className="space-y-4">
+                {/* ENH-046: there is no endpoint that reports MFA status, so the
+                    panel below cannot show live state. Say so explicitly --
+                    rendering the per-method cards as "Disabled" would assert a
+                    security posture we have not measured. */}
+                {!mfaStatus && (
+                  <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
+                    <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-amber-300">MFA status is unavailable</p>
+                      <p className="text-sm text-amber-200/80">
+                        This deployment does not expose an MFA status endpoint, so enrolment and
+                        enforcement cannot be reported here. The settings below are not live state.
+                      </p>
+                    </div>
+                  </div>
+                )}
                 <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-6">
                   <div className="flex items-start justify-between mb-6">
                     <div>
@@ -702,13 +787,21 @@ export default function AuthenticationPage() {
                       </p>
                     </div>
                     <div className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
-                      mfaStatus?.enforced
-                        ? 'bg-green-500/20 text-green-400'
-                        : mfaStatus?.enabled
-                          ? 'bg-blue-500/20 text-blue-400'
-                          : 'bg-slate-500/20 text-slate-400'
+                      !mfaStatus
+                        ? 'bg-slate-500/20 text-slate-400'
+                        : mfaStatus.enforced
+                          ? 'bg-green-500/20 text-green-400'
+                          : mfaStatus.enabled
+                            ? 'bg-blue-500/20 text-blue-400'
+                            : 'bg-slate-500/20 text-slate-400'
                     }`}>
-                      {mfaStatus?.enforced ? 'Enforced' : mfaStatus?.enabled ? 'Optional' : 'Disabled'}
+                      {!mfaStatus
+                        ? 'Unknown'
+                        : mfaStatus.enforced
+                          ? 'Enforced'
+                          : mfaStatus.enabled
+                            ? 'Optional'
+                            : 'Disabled'}
                     </div>
                   </div>
 

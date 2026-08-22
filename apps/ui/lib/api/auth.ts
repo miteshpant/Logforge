@@ -1,39 +1,63 @@
 /**
  * Authentication API Module
  *
- * APIs for user authentication, authorization, and profile management
+ * APIs for user authentication, authorization, and profile management.
+ * All paths verified against the live OpenAPI spec (LF-027):
+ *   POST /v1/auth/login, /v1/auth/logout, /v1/auth/refresh
+ *   GET  /v1/auth/me, /v1/auth/me/roles, /v1/auth/sessions
+ *   POST /v1/auth/password/change, /v1/auth/password/reset,
+ *        /v1/auth/password/reset-confirm, /v1/auth/verify-email,
+ *        /v1/auth/verify-email-confirm
  */
 
 import { apiClient, ApiResponse } from '../api'
 
 // ========== TYPE DEFINITIONS ==========
 
+/**
+ * Shape of the backend's UserResponse model, as returned by
+ * GET /v1/auth/me and inside the login response.
+ */
 export interface UserProfile {
   id: string
   email: string
   name: string
-  customer_id: string
+  status: 'active' | 'inactive' | 'suspended' | string
   created_at: string
-  last_login?: string
-  email_verified_at?: string
-  status: 'active' | 'inactive' | 'suspended'
+  updated_at?: string
+  last_login_at?: string | null
+  email_verified_at?: string | null
 }
 
+/**
+ * UI-side tenant summary used by AuthContext / TenantSelector.
+ */
 export interface TenantInfo {
   id: string
   name: string
   subdomain?: string
-  created_at: string
-  status: 'active' | 'inactive' | 'suspended'
+  created_at?: string
+  status?: 'active' | 'inactive' | 'suspended' | string
   plan?: string
+  subscription_tier?: string
+  features?: string[]
+  limits?: {
+    users?: number
+    storage_gb?: number
+    retention_days?: number
+    api_calls_per_month?: number
+  }
 }
 
+/**
+ * One row of GET /v1/auth/me/roles → { user_id, roles: [...] }.
+ */
 export interface UserRoleAssignment {
-  user_id: string
-  customer_id: string
+  id: string
+  tenant_id: string
   role: string
-  granted_at: string
-  granted_by: string
+  granted_at: string | null
+  status: string
   tenant?: TenantInfo
 }
 
@@ -44,6 +68,9 @@ export interface LoginRequest {
 
 export interface LoginResponse {
   access_token: string
+  /** Opaque rotating refresh token (LF-015). */
+  refresh_token?: string
+  refresh_expires_at?: string
   user: UserProfile
   tenant?: TenantInfo
   expires_at: string
@@ -58,19 +85,27 @@ export interface AuthContext {
 // ========== API FUNCTIONS ==========
 
 /**
- * Login with email and password
+ * Login with email and password.
+ * Stores the returned refresh token so the client can renew the
+ * session transparently when the access token expires (LF-015).
  */
 export async function login(
   credentials: LoginRequest
 ): Promise<ApiResponse<LoginResponse>> {
-  return apiClient.post<LoginResponse>('/v1/auth/login', credentials)
+  const response = await apiClient.post<LoginResponse>('/v1/auth/login', credentials)
+  if (response.success && response.data?.refresh_token) {
+    apiClient.setRefreshToken(response.data.refresh_token)
+  }
+  return response
 }
 
 /**
- * Logout current user
+ * Logout current user. Revokes the server-side session and the
+ * refresh token, then clears local auth state.
  */
 export async function logout(): Promise<ApiResponse<void>> {
-  return apiClient.post('/v1/auth/logout')
+  const refreshToken = apiClient.getRefreshToken()
+  return apiClient.post('/v1/auth/logout', refreshToken ? { refresh_token: refreshToken } : undefined)
 }
 
 /**
@@ -84,18 +119,27 @@ export async function getCurrentUser(): Promise<ApiResponse<UserProfile>> {
  * Get current user's role assignments across tenants
  */
 export async function getCurrentUserRoles(): Promise<
-  ApiResponse<{ roles: UserRoleAssignment[] }>
+  ApiResponse<{ user_id: string; roles: UserRoleAssignment[] }>
 > {
   return apiClient.get('/v1/auth/me/roles')
 }
 
 /**
- * Refresh authentication token
+ * Exchange the stored refresh token for a new access + refresh token
+ * pair (rotation). Fails if no refresh token is stored.
  */
-export async function refreshToken(): Promise<
-  ApiResponse<{ token: string; expires_at: string }>
-> {
-  return apiClient.post('/v1/auth/refresh')
+export async function refreshToken(): Promise<ApiResponse<LoginResponse>> {
+  const stored = apiClient.getRefreshToken()
+  if (!stored) {
+    return { success: false, error: 'No refresh token available' }
+  }
+  const response = await apiClient.post<LoginResponse>('/v1/auth/refresh', {
+    refresh_token: stored,
+  })
+  if (response.success && response.data?.refresh_token) {
+    apiClient.setRefreshToken(response.data.refresh_token)
+  }
+  return response
 }
 
 /**
@@ -105,7 +149,7 @@ export async function changePassword(params: {
   current_password: string
   new_password: string
 }): Promise<ApiResponse<void>> {
-  return apiClient.post('/v1/auth/change-password', params)
+  return apiClient.post('/v1/auth/password/change', params)
 }
 
 /**
@@ -114,7 +158,7 @@ export async function changePassword(params: {
 export async function requestPasswordReset(
   email: string
 ): Promise<ApiResponse<void>> {
-  return apiClient.post('/v1/auth/password-reset/request', { email })
+  return apiClient.post('/v1/auth/password/reset', { email })
 }
 
 /**
@@ -124,23 +168,30 @@ export async function resetPassword(params: {
   token: string
   new_password: string
 }): Promise<ApiResponse<void>> {
-  return apiClient.post('/v1/auth/password-reset/confirm', params)
+  return apiClient.post('/v1/auth/password/reset-confirm', params)
 }
 
 /**
- * Verify email with token
+ * Send an email-verification token to the current user
+ */
+export async function sendEmailVerification(): Promise<ApiResponse<void>> {
+  return apiClient.post('/v1/auth/verify-email')
+}
+
+/**
+ * Confirm email verification with token
  */
 export async function verifyEmail(token: string): Promise<ApiResponse<void>> {
-  return apiClient.post('/v1/auth/verify-email', { token })
+  return apiClient.post('/v1/auth/verify-email-confirm', { token })
 }
 
 /**
- * Update user profile
+ * List the current user's active sessions
  */
-export async function updateProfile(
-  updates: Partial<UserProfile>
-): Promise<ApiResponse<UserProfile>> {
-  return apiClient.put<UserProfile>('/v1/auth/me', updates)
+export async function listSessions(): Promise<
+  ApiResponse<{ sessions: any[]; total_count: number }>
+> {
+  return apiClient.get('/v1/auth/sessions')
 }
 
 // Export all functions as a namespace
@@ -153,8 +204,9 @@ export const AuthApi = {
   changePassword,
   requestPasswordReset,
   resetPassword,
+  sendEmailVerification,
   verifyEmail,
-  updateProfile,
+  listSessions,
 }
 
 export default AuthApi

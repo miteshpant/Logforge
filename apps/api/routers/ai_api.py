@@ -13,6 +13,7 @@ from services.rca_engine import get_rca_engine
 from services.anomaly_detector import get_anomaly_detector
 from services.nlq_processor import get_nlq_processor
 from authn_authz_middleware import get_current_user
+from error_handling import internal_error
 
 logger = structlog.get_logger(__name__)
 
@@ -183,7 +184,7 @@ async def process_natural_language_query(
         logger.error("NLQ processing failed", error=str(e), customer_id=customer_id)
         import traceback
         logger.error("Traceback", trace=traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to process query: {str(e)}")
+        raise internal_error(e, "Failed to process query")
 
 
 @router.get("/query/history")
@@ -209,7 +210,7 @@ async def get_query_history(
         
     except Exception as e:
         logger.error("Failed to get query history", error=str(e), customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Failed to get query history: {str(e)}")
+        raise internal_error(e, "Failed to get query history")
 
 
 @router.post("/query/feedback")
@@ -237,7 +238,7 @@ async def submit_query_feedback(
         
     except Exception as e:
         logger.error("Failed to submit feedback", error=str(e), customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Failed to submit feedback: {str(e)}")
+        raise internal_error(e, "Failed to submit feedback")
 
 
 @router.post("/investigate")
@@ -352,7 +353,7 @@ async def start_investigation(
         logger.error("Failed to start investigation", error=str(e), customer_id=customer_id)
         import traceback
         logger.error("Investigation traceback", trace=traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to start investigation: {str(e)}")
+        raise internal_error(e, "Failed to start investigation")
 
 
 @router.get("/investigate/{investigation_id}")
@@ -387,7 +388,7 @@ async def get_investigation_status(
         raise
     except Exception as e:
         logger.error("Failed to get investigation", error=str(e), customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Failed to get investigation: {str(e)}")
+        raise internal_error(e, "Failed to get investigation")
 
 
 @router.post("/analyze-incident")
@@ -460,7 +461,7 @@ async def analyze_incident_rca(
         logger.error("RCA analysis failed", error=str(e), customer_id=customer_id)
         import traceback
         logger.error("RCA traceback", trace=traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"RCA analysis failed: {str(e)}")
+        raise internal_error(e, "RCA analysis failed")
 
 
 # Legacy endpoints REMOVED - use /analyze-incident for RCA
@@ -558,7 +559,7 @@ async def save_baseline(
         logger.error("Failed to save baseline", error=str(e), customer_id=customer_id)
         import traceback
         logger.error("Baseline save traceback", trace=traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to save baseline: {str(e)}")
+        raise internal_error(e, "Failed to save baseline")
 
 
 def _generate_baseline_recommendations(baseline_data: dict, training_metrics: dict) -> List[str]:
@@ -614,7 +615,7 @@ async def list_baselines(
 
     except Exception as e:
         logger.error("Failed to list baselines", error=str(e), customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Failed to list baselines: {str(e)}")
+        raise internal_error(e, "Failed to list baselines")
 
 
 @router.post("/anomalies/detect")
@@ -708,15 +709,17 @@ async def detect_anomalies(
         logger.error("Anomaly detection failed", error=str(e), customer_id=customer_id)
         import traceback
         logger.error("Traceback", trace=traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Anomaly detection failed: {str(e)}")
+        raise internal_error(e, "Anomaly detection failed")
 
 
 @router.get("/anomalies/history")
 async def get_anomaly_history(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    severity: Optional[str] = Query(None),
-    category: Optional[str] = Query(None),
+    severity: Optional[str] = Query(None, description="critical | high | medium | low"),
+    # ENH-035: was `category`, which has no backing column in
+    # multi_metric_anomalies_mt. `service` is the real dimension available.
+    service: Optional[str] = Query(None, description="Filter by service name"),
     customer_id: str = Header(..., alias="X-Customer-ID"),
     current_user = Depends(get_current_user)
 ):
@@ -727,29 +730,67 @@ async def get_anomaly_history(
     - limit: Number of records to return (1-500, default 50)
     - offset: Offset for pagination (default 0)
     - severity: Filter by severity (critical, high, medium, low)
-    - category: Filter by category (error_spike, performance_degradation, etc.)
+    - service: Filter by service name
+
+    ENH-035: this previously imported `dao.anomaly_dao`, a module that does not
+    exist, so the endpoint returned 500 on every request. It now uses `AIDAO`
+    against `multi_metric_anomalies_mt` -- the same table the dismiss handler
+    updates.
     """
 
     try:
-        from dao.anomaly_dao import AnomalyDAO
+        from dao.ai_dao import AIDAO
 
-        anomaly_dao = AnomalyDAO()
+        dao = AIDAO()
 
-        # Get historical anomalies
-        anomalies = await anomaly_dao.get_anomalies(
-            customer_id=customer_id,
-            limit=limit,
-            offset=offset,
-            severity=severity,
-            category=category
+        # Bound parameters only -- `severity`/`service` are caller-supplied.
+        conditions = ["customer_id = %(customer_id)s"]
+        params: Dict[str, Any] = {"customer_id": customer_id}
+
+        if severity:
+            # `severity` is an Enum8 column; an unknown value would be a
+            # ClickHouse error, so reject it as a client error first.
+            allowed_severities = {"low", "medium", "high", "critical"}
+            if severity.lower() not in allowed_severities:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Invalid severity '{severity}'. "
+                        f"Expected one of: {', '.join(sorted(allowed_severities))}"
+                    ),
+                )
+            conditions.append("severity = %(severity)s")
+            params["severity"] = severity.lower()
+
+        if service:
+            conditions.append("service = %(service)s")
+            params["service"] = service
+
+        where_clause = " AND ".join(conditions)
+
+        # limit/offset are integer-bounded by FastAPI (ge/le), so they cannot
+        # carry SQL; int() makes that independent of the route signature.
+        anomalies = await dao.execute_query(
+            f"""
+            SELECT
+                anomaly_id, customer_id, detected_at, service, title,
+                description, severity, confidence, correlation_score,
+                affected_metrics, root_cause_hints, recommended_actions,
+                status, resolved_at, dismissed_at, dismissed_by,
+                dismissal_reason, tags
+            FROM multi_metric_anomalies_mt
+            WHERE {where_clause}
+            ORDER BY detected_at DESC
+            LIMIT {int(limit)} OFFSET {int(offset)}
+            """,
+            params,
         )
 
-        # Get total count for pagination
-        total = await anomaly_dao.count_anomalies(
-            customer_id=customer_id,
-            severity=severity,
-            category=category
+        count_rows = await dao.execute_query(
+            f"SELECT count() AS total FROM multi_metric_anomalies_mt WHERE {where_clause}",
+            params,
         )
+        total = count_rows[0]["total"] if count_rows else 0
 
         return {
             "anomalies": anomalies,
@@ -759,50 +800,22 @@ async def get_anomaly_history(
             "has_more": (offset + limit) < total
         }
 
+    except HTTPException:
+        # ENH-035: preserve the deliberate 400 for an invalid severity instead
+        # of relabelling it as a server error.
+        raise
     except Exception as e:
         logger.error("Failed to get anomaly history", error=str(e), customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Failed to get anomaly history: {str(e)}")
+        raise internal_error(e, "Failed to get anomaly history")
 
 
-@router.post("/anomalies/{anomaly_id}/dismiss")
-async def dismiss_anomaly(
-    anomaly_id: str,
-    reason: str = Body(..., embed=True),
-    customer_id: str = Header(..., alias="X-Customer-ID"),
-    current_user = Depends(get_current_user)
-):
-    """
-    Dismiss an anomaly with a reason
-
-    This marks the anomaly as dismissed and won't show up in active anomalies list.
-    Useful for false positives or known issues.
-    """
-
-    try:
-        from dao.anomaly_dao import AnomalyDAO
-        from datetime import datetime, timezone
-
-        anomaly_dao = AnomalyDAO()
-
-        # Update anomaly status
-        await anomaly_dao.dismiss_anomaly(
-            anomaly_id=anomaly_id,
-            customer_id=customer_id,
-            dismissed_by=current_user.get('user_id'),
-            dismissed_at=datetime.now(timezone.utc),
-            dismissal_reason=reason
-        )
-
-        return {
-            "success": True,
-            "anomaly_id": anomaly_id,
-            "dismissed_at": datetime.now(timezone.utc).isoformat(),
-            "dismissed_by": current_user.get('email')
-        }
-
-    except Exception as e:
-        logger.error("Failed to dismiss anomaly", error=str(e), anomaly_id=anomaly_id)
-        raise HTTPException(status_code=500, detail=f"Failed to dismiss anomaly: {str(e)}")
+# ENH-034: a duplicate `dismiss_anomaly` handler was registered on this same
+# route above this point. FastAPI matches the FIRST registration, and that one
+# imported `dao.anomaly_dao`, a module that does not exist -- so
+# POST /anomalies/{id}/dismiss returned 500 for every caller while this
+# working implementation (using the real `dao.ai_dao`) was unreachable.
+# The broken duplicate has been removed. Caught by the new CI lint gate
+# (ruff F811).
 
 
 @router.get("/anomalies/stats")
@@ -928,7 +941,7 @@ async def get_anomaly_stats(
 
     except Exception as e:
         logger.error("Failed to get anomaly stats", error=str(e), customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Failed to get anomaly stats: {str(e)}")
+        raise internal_error(e, "Failed to get anomaly stats")
 
 
 @router.post("/knowledge/search")
@@ -959,7 +972,7 @@ async def search_knowledge_base(
         
     except Exception as e:
         logger.error("Failed to search knowledge base", error=str(e), customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Failed to search knowledge base: {str(e)}")
+        raise internal_error(e, "Failed to search knowledge base")
 
 
 @router.post("/knowledge/solutions")
@@ -992,7 +1005,7 @@ async def add_solution(
         
     except Exception as e:
         logger.error("Failed to add solution", error=str(e), customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Failed to add solution: {str(e)}")
+        raise internal_error(e, "Failed to add solution")
 
 
 @router.get("/insights")
@@ -1185,7 +1198,7 @@ async def get_operational_insights(
         logger.error("Failed to get insights", error=str(e), customer_id=customer_id)
         import traceback
         logger.error("Insights traceback", trace=traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to get insights: {str(e)}")
+        raise internal_error(e, "Failed to get insights")
 
 
 @router.post("/correlate")
@@ -1217,7 +1230,7 @@ async def correlate_events(
         
     except Exception as e:
         logger.error("Failed to correlate events", error=str(e), customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Failed to correlate events: {str(e)}")
+        raise internal_error(e, "Failed to correlate events")
 
 
 @router.get("/health")
@@ -1246,8 +1259,10 @@ async def ai_health():
         }
         
     except Exception as e:
-        logger.error("AI health check failed", error=str(e))
-        return {"status": "error", "message": f"Health check failed: {str(e)}"}
+        # LF-020: never echo raw exception text (schema/version details) to
+        # the client -- log it, return a generic failure.
+        logger.error("AI health check failed", error=str(e), exc_info=True)
+        return {"status": "error", "message": "Health check failed"}
 
 
 # Advanced AI endpoints
@@ -1280,7 +1295,7 @@ async def predict_incidents(
         
     except Exception as e:
         logger.error("Failed to predict incidents", error=str(e), customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Failed to predict incidents: {str(e)}")
+        raise internal_error(e, "Failed to predict incidents")
 
 
 @router.post("/optimize")
@@ -1308,7 +1323,7 @@ async def optimize_performance(
         
     except Exception as e:
         logger.error("Failed to generate optimization plan", error=str(e), customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Failed to generate optimization plan: {str(e)}")
+        raise internal_error(e, "Failed to generate optimization plan")
 
 
 @router.get("/models")
@@ -1332,7 +1347,7 @@ async def list_ai_models(
 
     except Exception as e:
         logger.error("Failed to list AI models", error=str(e), customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Failed to list AI models: {str(e)}")
+        raise internal_error(e, "Failed to list AI models")
 
 
 # ============================================================================
@@ -1486,7 +1501,7 @@ async def get_model_health(
 
     except Exception as e:
         logger.error("Failed to get model health", error=str(e), customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Failed to get model health: {str(e)}")
+        raise internal_error(e, "Failed to get model health")
 
 
 @router.get("/models/baselines/visualization")
@@ -1559,7 +1574,7 @@ async def get_baseline_visualization(
 
     except Exception as e:
         logger.error("Failed to get baseline visualization", error=str(e), customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Failed to get baseline data: {str(e)}")
+        raise internal_error(e, "Failed to get baseline data")
 
 
 @router.put("/models/thresholds")
@@ -1615,7 +1630,7 @@ async def update_anomaly_thresholds(
         raise
     except Exception as e:
         logger.error("Failed to update thresholds", error=str(e), customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Failed to update thresholds: {str(e)}")
+        raise internal_error(e, "Failed to update thresholds")
 
 
 @router.post("/models/retrain")
@@ -1710,7 +1725,7 @@ async def retrain_model(
         logger.error("Failed to retrain model", error=str(e), customer_id=customer_id)
         import traceback
         logger.error("Retrain traceback", trace=traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to retrain model: {str(e)}")
+        raise internal_error(e, "Failed to retrain model")
 
 
 # ============================================================================
@@ -1869,7 +1884,7 @@ async def detect_multi_metric_anomalies(
 
     except Exception as e:
         logger.error("Multi-metric anomaly detection failed", error=str(e), customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Anomaly detection failed: {str(e)}")
+        raise internal_error(e, "Anomaly detection failed")
 
 
 @router.post("/anomalies/{anomaly_id}/analyze")
@@ -1970,7 +1985,7 @@ async def analyze_anomaly(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error("Anomaly analysis failed", error=str(e), anomaly_id=anomaly_id, customer_id=customer_id)
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+        raise internal_error(e, "Analysis failed")
 
 
 @router.post("/anomalies/{anomaly_id}/dismiss")
@@ -2039,4 +2054,4 @@ async def dismiss_anomaly(
 
     except Exception as e:
         logger.error("Failed to dismiss anomaly", error=str(e), anomaly_id=anomaly_id)
-        raise HTTPException(status_code=500, detail=f"Failed to dismiss anomaly: {str(e)}")
+        raise internal_error(e, "Failed to dismiss anomaly")

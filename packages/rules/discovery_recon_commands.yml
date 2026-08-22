@@ -1,0 +1,45 @@
+title: Active Directory and Host Reconnaissance
+id: di001-domain-discovery
+status: stable
+description: >
+  Detects domain and host enumeration commonly run immediately after an
+  attacker gains a foothold, to map users, groups, trusts and privileges.
+  Individually these commands are unremarkable, so this rule requires a
+  DOMAIN-scoped query -- the discriminator between an admin checking a machine
+  and an intruder mapping the estate.
+author: Logforge Security Team
+date: 2026/08/13
+references:
+    - https://attack.mitre.org/techniques/T1087/002/
+    - https://attack.mitre.org/techniques/T1482/
+tags:
+    - attack.discovery
+    - attack.t1087.002
+    - attack.t1482
+    - reconnaissance
+logsource:
+    category: process_creation
+detection:
+    selection_domain_enum:
+        command_line|contains:
+            - "net group \"domain admins\""
+            - "net group /domain"
+            - "net user /domain"
+    selection_trust_enum:
+        command_line|contains:
+            - "nltest /domain_trusts"
+            - "nltest /dclist"
+    selection_bloodhound:
+        command_line|contains:
+            - "sharphound"
+            - "-collectionmethod"
+    condition: 1 of selection_*
+fields:
+    - command_line
+    - user
+    - host
+falsepositives:
+    - Directory administrators performing routine audits
+    - Asset inventory and compliance tooling enumerating group membership
+    - Authorised penetration tests (correlate with the engagement window)
+level: medium

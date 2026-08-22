@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
@@ -8,13 +8,11 @@ import { apiClient } from '@/lib/api'
 import {
   Edit,
   RefreshCw,
-  Share2,
-  MoreVertical,
   Clock,
   ArrowLeft,
   Maximize2,
-  Download,
-  Settings
+  AlertTriangle,
+  Inbox
 } from 'lucide-react'
 import {
   LineChart,
@@ -37,7 +35,7 @@ import {
 interface Widget {
   id: string
   name: string
-  type: 'line_chart' | 'bar_chart' | 'area_chart' | 'pie_chart' | 'stat' | 'gauge' | 'table'
+  type: 'line_chart' | 'bar_chart' | 'area_chart' | 'pie_chart' | 'stat' | 'gauge' | 'table' | 'metric'
   query_definition: {
     metric?: string
     metrics?: string[]
@@ -65,85 +63,163 @@ interface Dashboard {
   updated_at: string
 }
 
+// Per-widget entry from GET /v1/dashboards/{id}/data.
+// Built-in dashboards return widgets as a dict keyed by widget id; custom
+// dashboards return a list of {widget_id, name, type, data, ...}.
+interface WidgetDataEntry {
+  title?: string
+  name?: string
+  type?: string
+  data?: any
+  error?: string
+  execution_time_ms?: number
+  last_updated?: string
+}
+
+type NormalizedWidget =
+  | { kind: 'error'; message: string }
+  | { kind: 'unsupported'; message: string }
+  | { kind: 'empty' }
+  | { kind: 'stat'; value: number; formatted?: string; change?: number; label?: string }
+  | { kind: 'series'; rows: { label: string; value: number }[] }
+  | { kind: 'table'; columns: string[]; rows: any[] }
+
 const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
-// Generate sample data for widgets
-const generateWidgetData = (widget: Widget) => {
-  const now = Date.now()
-  const type = widget.type
+// Extract {label, value} rows from the various chart payload shapes the data
+// API returns. Returns [] when the payload contains no plottable data — an
+// empty chart is rendered honestly, values are never invented.
+const extractSeriesRows = (d: any): { label: string; value: number }[] => {
+  if (!d || typeof d !== 'object') return []
 
-  if (type === 'line_chart' || type === 'area_chart') {
-    return Array.from({ length: 20 }, (_, i) => ({
-      time: new Date(now - (19 - i) * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      value: Math.random() * 100 + 50,
-      value2: Math.random() * 80 + 30
-    }))
+  if (Array.isArray(d.series) && d.series.length > 0) {
+    const first = d.series[0]
+
+    // Engine pie shape: series = [{label, value}, ...]
+    if (first && typeof first === 'object' && 'value' in first && !('data' in first)) {
+      return d.series
+        .filter((s: any) => typeof s.value === 'number')
+        .map((s: any) => ({ label: String(s.label ?? s.name ?? ''), value: s.value }))
+    }
+
+    if (first && Array.isArray(first.data)) {
+      // Engine time-series shape: series = [{name, data: [{x, y}]}]
+      if (first.data.length > 0 && typeof first.data[0] === 'object' && first.data[0] !== null && 'y' in first.data[0]) {
+        return first.data
+          .filter((p: any) => typeof p.y === 'number')
+          .map((p: any) => ({ label: String(p.x ?? ''), value: p.y }))
+      }
+      // DAO shape: series = [{name, data: [numbers]}], labels = [...]
+      if (first.data.length > 0 && typeof first.data[0] === 'number') {
+        const labels: any[] = Array.isArray(d.labels) ? d.labels : (Array.isArray(d.categories) ? d.categories : [])
+        return first.data.map((v: number, i: number) => ({
+          label: String(labels[i] ?? i),
+          value: v
+        }))
+      }
+    }
   }
 
-  if (type === 'bar_chart') {
-    return [
-      { name: 'api-service', value: Math.random() * 100 + 50 },
-      { name: 'web-service', value: Math.random() * 100 + 50 },
-      { name: 'db-service', value: Math.random() * 100 + 50 },
-      { name: 'cache-service', value: Math.random() * 100 + 50 },
-      { name: 'auth-service', value: Math.random() * 100 + 50 }
-    ]
-  }
-
-  if (type === 'pie_chart') {
-    return [
-      { name: 'Success', value: 85 + Math.random() * 10 },
-      { name: 'Error', value: 5 + Math.random() * 5 },
-      { name: 'Timeout', value: 3 + Math.random() * 3 },
-      { name: 'Other', value: 2 + Math.random() * 2 }
-    ]
-  }
-
-  if (type === 'stat') {
-    return { value: Math.random() * 500 + 100, change: (Math.random() - 0.5) * 20 }
-  }
-
-  if (type === 'gauge') {
-    return { value: Math.random() * 100 }
-  }
-
-  if (type === 'table') {
-    return [
-      { endpoint: '/api/users', latency: '45ms', calls: 1234, errors: 12 },
-      { endpoint: '/api/orders', latency: '67ms', calls: 892, errors: 8 },
-      { endpoint: '/api/products', latency: '32ms', calls: 2341, errors: 5 },
-      { endpoint: '/api/auth', latency: '23ms', calls: 4521, errors: 23 },
-      { endpoint: '/api/search', latency: '89ms', calls: 567, errors: 2 }
-    ]
+  // Query-engine default shape: {logs, aggregations, total_count}
+  if (d.aggregations && typeof d.aggregations === 'object') {
+    if (Array.isArray(d.aggregations.time_series)) {
+      return d.aggregations.time_series
+        .map((item: any) => {
+          const values = Object.values(item).filter(v => typeof v === 'number')
+          return {
+            label: String(item.time ?? ''),
+            value: (values.length > 0 ? values[values.length - 1] : NaN) as number
+          }
+        })
+        .filter((r: any) => Number.isFinite(r.value))
+    }
+    const rows = Object.entries(d.aggregations)
+      .filter(([, v]) => typeof v === 'number')
+      .map(([k, v]) => ({ label: k, value: v as number }))
+    if (rows.length > 0) return rows
   }
 
   return []
 }
 
-// Widget Components
-function StatWidget({ widget, data }: { widget: Widget; data: any }) {
-  const change = data?.change || 0
-  const value = data?.value || 0
+const normalizeWidgetData = (widgetType: string, entry: WidgetDataEntry): NormalizedWidget => {
+  if (entry.error) {
+    return { kind: 'error', message: entry.error }
+  }
+  const d = entry.data
+  if (d === null || d === undefined) {
+    return { kind: 'empty' }
+  }
+  if (typeof d === 'object' && typeof d.error === 'string' && d.error) {
+    return { kind: 'error', message: d.error }
+  }
+  if (typeof d === 'object' && typeof d.message === 'string' && d.message.includes('not implemented')) {
+    return { kind: 'unsupported', message: d.message }
+  }
 
+  if (widgetType === 'stat' || widgetType === 'gauge' || widgetType === 'metric') {
+    if (typeof d.value === 'number') {
+      let change: number | undefined
+      if (typeof d.change === 'string') {
+        const parsed = parseFloat(d.change)
+        if (Number.isFinite(parsed)) change = parsed
+      } else if (typeof d.change === 'number') {
+        change = d.change
+      }
+      return {
+        kind: 'stat',
+        value: d.value,
+        formatted: typeof d.formatted_value === 'string' ? d.formatted_value : undefined,
+        change,
+        label: typeof d.label === 'string' ? d.label : undefined
+      }
+    }
+    return { kind: 'empty' }
+  }
+
+  if (widgetType === 'table') {
+    const columns: string[] = Array.isArray(d.columns) ? d.columns : (Array.isArray(d.headers) ? d.headers : [])
+    const rows: any[] = Array.isArray(d.rows) ? d.rows : []
+    if (rows.length === 0) return { kind: 'empty' }
+    return {
+      kind: 'table',
+      columns: columns.length > 0 ? columns : Object.keys(rows[0] ?? {}),
+      rows
+    }
+  }
+
+  // Chart types
+  const rows = extractSeriesRows(d)
+  if (rows.length === 0) return { kind: 'empty' }
+  return { kind: 'series', rows }
+}
+
+// Widget Components
+function StatWidget({ widget, data }: { widget: Widget; data: Extract<NormalizedWidget, { kind: 'stat' }> }) {
   return (
     <div className="h-full flex flex-col justify-center">
       <div className="text-3xl font-bold text-white">
-        {value.toFixed(0)}
+        {data.formatted ?? (Number.isInteger(data.value) ? data.value : data.value.toFixed(2))}
         <span className="text-sm font-normal text-slate-400 ml-1">
-          {widget.query_definition.metric === 'latency' ? 'ms' : ''}
-          {widget.query_definition.metric === 'throughput' ? '/s' : ''}
-          {widget.query_definition.metric === 'error_rate' ? '%' : ''}
+          {widget.query_definition?.metric === 'latency' ? 'ms' : ''}
+          {widget.query_definition?.metric === 'throughput' ? '/s' : ''}
+          {widget.query_definition?.metric === 'error_rate' ? '%' : ''}
         </span>
       </div>
-      <div className={`text-sm mt-1 ${change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-        {change >= 0 ? '↑' : '↓'} {Math.abs(change).toFixed(1)}%
-      </div>
+      {data.change !== undefined && (
+        <div className={`text-sm mt-1 ${data.change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+          {data.change >= 0 ? '↑' : '↓'} {Math.abs(data.change).toFixed(1)}%
+        </div>
+      )}
+      {data.label && (
+        <div className="text-xs text-slate-500 mt-1">{data.label}</div>
+      )}
     </div>
   )
 }
 
-function GaugeWidget({ widget, data }: { widget: Widget; data: any }) {
-  const value = data?.value || 0
+function GaugeWidget({ data }: { data: Extract<NormalizedWidget, { kind: 'stat' }> }) {
+  const value = Math.max(0, Math.min(data.value, 100))
   const color = value > 80 ? '#ef4444' : value > 60 ? '#f59e0b' : '#10b981'
 
   return (
@@ -165,18 +241,19 @@ function GaugeWidget({ widget, data }: { widget: Widget; data: any }) {
           />
         </svg>
       </div>
-      <div className="text-2xl font-bold text-white mt-2">{value.toFixed(0)}%</div>
+      <div className="text-2xl font-bold text-white mt-2">{data.value.toFixed(0)}%</div>
+      {data.label && <div className="text-xs text-slate-500 mt-1">{data.label}</div>}
     </div>
   )
 }
 
-function TableWidget({ widget, data }: { widget: Widget; data: any[] }) {
+function TableWidget({ data }: { data: Extract<NormalizedWidget, { kind: 'table' }> }) {
   return (
     <div className="h-full overflow-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-slate-700">
-            {data[0] && Object.keys(data[0]).map(key => (
+            {data.columns.map(key => (
               <th key={key} className="text-left py-2 px-2 text-slate-400 font-medium">
                 {key}
               </th>
@@ -184,11 +261,11 @@ function TableWidget({ widget, data }: { widget: Widget; data: any[] }) {
           </tr>
         </thead>
         <tbody>
-          {data.map((row, i) => (
+          {data.rows.map((row, i) => (
             <tr key={i} className="border-b border-slate-700/50">
-              {Object.values(row).map((val, j) => (
+              {data.columns.map((col, j) => (
                 <td key={j} className="py-2 px-2 text-white">
-                  {String(val)}
+                  {String((row && typeof row === 'object' ? row[col] : row) ?? '')}
                 </td>
               ))}
             </tr>
@@ -199,21 +276,20 @@ function TableWidget({ widget, data }: { widget: Widget; data: any[] }) {
   )
 }
 
-function ChartWidget({ widget, data }: { widget: Widget; data: any[] }) {
+function ChartWidget({ widget, rows }: { widget: Widget; rows: { label: string; value: number }[] }) {
   const type = widget.type
 
   if (type === 'line_chart') {
     return (
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
+        <LineChart data={rows}>
           <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-          <XAxis dataKey="time" stroke="#64748b" fontSize={10} />
+          <XAxis dataKey="label" stroke="#64748b" fontSize={10} />
           <YAxis stroke="#64748b" fontSize={10} />
           <Tooltip
             contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
           />
           <Line type="monotone" dataKey="value" stroke={CHART_COLORS[0]} strokeWidth={2} dot={false} />
-          <Line type="monotone" dataKey="value2" stroke={CHART_COLORS[1]} strokeWidth={2} dot={false} />
         </LineChart>
       </ResponsiveContainer>
     )
@@ -222,7 +298,7 @@ function ChartWidget({ widget, data }: { widget: Widget; data: any[] }) {
   if (type === 'area_chart') {
     return (
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data}>
+        <AreaChart data={rows}>
           <defs>
             <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor={CHART_COLORS[0]} stopOpacity={0.3} />
@@ -230,7 +306,7 @@ function ChartWidget({ widget, data }: { widget: Widget; data: any[] }) {
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-          <XAxis dataKey="time" stroke="#64748b" fontSize={10} />
+          <XAxis dataKey="label" stroke="#64748b" fontSize={10} />
           <YAxis stroke="#64748b" fontSize={10} />
           <Tooltip
             contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
@@ -244,10 +320,10 @@ function ChartWidget({ widget, data }: { widget: Widget; data: any[] }) {
   if (type === 'bar_chart') {
     return (
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} layout="vertical">
+        <BarChart data={rows} layout="vertical">
           <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={false} />
           <XAxis type="number" stroke="#64748b" fontSize={10} />
-          <YAxis dataKey="name" type="category" stroke="#64748b" fontSize={10} width={80} />
+          <YAxis dataKey="label" type="category" stroke="#64748b" fontSize={10} width={80} />
           <Tooltip
             contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
           />
@@ -262,15 +338,16 @@ function ChartWidget({ widget, data }: { widget: Widget; data: any[] }) {
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
-            data={data}
+            data={rows}
             cx="50%"
             cy="50%"
             innerRadius={40}
             outerRadius={60}
             paddingAngle={2}
             dataKey="value"
+            nameKey="label"
           >
-            {data.map((_, index) => (
+            {rows.map((_, index) => (
               <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
             ))}
           </Pie>
@@ -286,51 +363,114 @@ function ChartWidget({ widget, data }: { widget: Widget; data: any[] }) {
   return null
 }
 
-// Widget Renderer
-function WidgetRenderer({ widget }: { widget: Widget }) {
-  const [data, setData] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(true)
+function WidgetMessage({ icon: Icon, title, detail, tone }: {
+  icon: any
+  title: string
+  detail?: string
+  tone: 'error' | 'muted'
+}) {
+  const color = tone === 'error' ? 'text-red-400' : 'text-slate-400'
+  return (
+    <div className="h-full flex flex-col items-center justify-center text-center px-2">
+      <Icon className={`w-6 h-6 mb-2 ${tone === 'error' ? 'text-red-400' : 'text-slate-500'}`} />
+      <p className={`text-xs font-medium ${color}`}>{title}</p>
+      {detail && <p className="text-[10px] text-slate-500 mt-1 break-all">{detail}</p>}
+    </div>
+  )
+}
 
-  useEffect(() => {
-    // Generate sample data
-    setData(generateWidgetData(widget))
-    setIsLoading(false)
-
-    // Set up refresh interval if configured
-    if (widget.refresh_interval) {
-      const interval = setInterval(() => {
-        setData(generateWidgetData(widget))
-      }, widget.refresh_interval * 1000)
-      return () => clearInterval(interval)
-    }
-  }, [widget])
-
+// Widget Renderer — three explicit states: loading, error, empty.
+// Data always comes from GET /v1/dashboards/{id}/data; nothing is generated
+// client-side.
+function WidgetRenderer({ widget, entry, isLoading, fetchError, dataEndpoint }: {
+  widget: Widget
+  entry: WidgetDataEntry | undefined
+  isLoading: boolean
+  fetchError: string | null
+  dataEndpoint: string
+}) {
   if (isLoading) {
-    return <div className="h-full flex items-center justify-center text-slate-400">Loading...</div>
+    return <div className="h-full flex items-center justify-center text-slate-400 text-sm">Loading...</div>
   }
 
-  switch (widget.type) {
+  if (fetchError) {
+    return (
+      <WidgetMessage
+        icon={AlertTriangle}
+        title="Failed to load widget data"
+        detail={fetchError}
+        tone="error"
+      />
+    )
+  }
+
+  if (!entry) {
+    return (
+      <WidgetMessage
+        icon={AlertTriangle}
+        title="No data returned for this widget"
+        detail={`${dataEndpoint} did not include widget "${widget.id}"`}
+        tone="error"
+      />
+    )
+  }
+
+  const normalized = normalizeWidgetData(widget.type, entry)
+
+  switch (normalized.kind) {
+    case 'error':
+      return (
+        <WidgetMessage
+          icon={AlertTriangle}
+          title="Widget query failed"
+          detail={normalized.message}
+          tone="error"
+        />
+      )
+    case 'unsupported':
+      return (
+        <WidgetMessage
+          icon={Inbox}
+          title="Widget type not supported by the data API"
+          detail={normalized.message}
+          tone="muted"
+        />
+      )
+    case 'empty':
+      return (
+        <WidgetMessage
+          icon={Inbox}
+          title="No data in selected range"
+          tone="muted"
+        />
+      )
     case 'stat':
-      return <StatWidget widget={widget} data={data} />
-    case 'gauge':
-      return <GaugeWidget widget={widget} data={data} />
+      return widget.type === 'gauge'
+        ? <GaugeWidget data={normalized} />
+        : <StatWidget widget={widget} data={normalized} />
     case 'table':
-      return <TableWidget widget={widget} data={data || []} />
-    default:
-      return <ChartWidget widget={widget} data={data || []} />
+      return <TableWidget data={normalized} />
+    case 'series':
+      return <ChartWidget widget={widget} rows={normalized.rows} />
   }
 }
 
 export default function DashboardViewPage() {
   const params = useParams()
   const router = useRouter()
-  const { getApiTimeRange } = useTimeRange()
+  const { getApiTimeRange, refreshTrigger } = useTimeRange()
   const [dashboard, setDashboard] = useState<Dashboard | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [widgetData, setWidgetData] = useState<Record<string, WidgetDataEntry>>({})
+  const [isDataLoading, setIsDataLoading] = useState(true)
+  const [dataError, setDataError] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [autoRefresh, setAutoRefresh] = useState(false)
+  const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null)
 
-  // Fetch dashboard
+  const dataEndpoint = `GET /v1/dashboards/${params.id}/data`
+
+  // Fetch dashboard definition
   useEffect(() => {
     const fetchDashboard = async () => {
       setIsLoading(true)
@@ -352,12 +492,72 @@ export default function DashboardViewPage() {
     fetchDashboard()
   }, [params.id])
 
-  // Refresh dashboard
+  // Fetch real widget data for the whole dashboard
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      const { start_time, end_time } = getApiTimeRange()
+      const response = await apiClient.get(`/v1/dashboards/${params.id}/data`, {
+        params: { start_time, end_time }
+      })
+      const data: any = response?.data ?? response
+
+      // Normalize the two widget-collection shapes into a map keyed by widget id
+      const map: Record<string, WidgetDataEntry> = {}
+      if (Array.isArray(data?.widgets)) {
+        data.widgets.forEach((w: any) => {
+          if (w?.widget_id) map[w.widget_id] = w
+        })
+      } else if (data?.widgets && typeof data.widgets === 'object') {
+        Object.entries(data.widgets).forEach(([id, w]) => {
+          map[id] = w as WidgetDataEntry
+        })
+      }
+      setWidgetData(map)
+      setDataError(null)
+      setLastFetchedAt(new Date())
+    } catch (err: any) {
+      console.error('Failed to fetch dashboard data:', err)
+      setWidgetData({})
+      setDataError(`${dataEndpoint} returned ${err?.status ?? 'a network error'}${err?.message ? ` — ${err.message}` : ''}`)
+    } finally {
+      setIsDataLoading(false)
+    }
+  }, [params.id, getApiTimeRange, dataEndpoint])
+
+  // Initial fetch + refetch when the global time range changes
+  useEffect(() => {
+    setIsDataLoading(true)
+    fetchDashboardData()
+  }, [fetchDashboardData, refreshTrigger])
+
+  // Refresh by re-calling the data endpoint — driven by the widgets'
+  // refresh_interval (smallest wins) or the auto-refresh toggle. Values are
+  // never regenerated locally.
+  useEffect(() => {
+    if (!dashboard) return
+    const intervals = (dashboard.widgets || [])
+      .map(w => w.refresh_interval)
+      .filter((n): n is number => typeof n === 'number' && n > 0)
+    const widgetIntervalMs = intervals.length > 0 ? Math.min(...intervals) * 1000 : null
+    const periodMs = autoRefresh
+      ? Math.min(widgetIntervalMs ?? 30000, 30000)
+      : widgetIntervalMs
+
+    if (!periodMs) return
+    const timer = setInterval(() => {
+      fetchDashboardData()
+    }, Math.max(periodMs, 5000))
+    return () => clearInterval(timer)
+  }, [dashboard, autoRefresh, fetchDashboardData])
+
+  // Manual refresh — refetches from the API
   const handleRefresh = async () => {
     setIsRefreshing(true)
-    // Trigger re-render of widgets
-    setDashboard(prev => prev ? { ...prev } : null)
-    setTimeout(() => setIsRefreshing(false), 1000)
+    try {
+      await fetchDashboardData()
+    } finally {
+      setIsRefreshing(false)
+    }
   }
 
   if (isLoading) {
@@ -449,6 +649,16 @@ export default function DashboardViewPage() {
           </div>
         </div>
 
+        {/* Dashboard-level data error */}
+        {dataError && (
+          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+            <p className="text-sm text-red-400">
+              Failed to load widget data: {dataError}
+            </p>
+          </div>
+        )}
+
         {/* Widgets Grid */}
         <div className="grid grid-cols-4 gap-4">
           {(dashboard.widgets || []).map(widget => (
@@ -458,13 +668,21 @@ export default function DashboardViewPage() {
               className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4"
             >
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium text-slate-300">{widget.name || 'Widget'}</h3>
+                <h3 className="text-sm font-medium text-slate-300">
+                  {widget.name || widgetData[widget.id]?.title || 'Widget'}
+                </h3>
                 <button className="p-1 text-slate-500 hover:text-slate-300 rounded transition-colors">
                   <Maximize2 className="w-3.5 h-3.5" />
                 </button>
               </div>
               <div className="h-[calc(100%-2rem)]">
-                <WidgetRenderer widget={widget} />
+                <WidgetRenderer
+                  widget={widget}
+                  entry={widgetData[widget.id]}
+                  isLoading={isDataLoading}
+                  fetchError={dataError}
+                  dataEndpoint={dataEndpoint}
+                />
               </div>
             </div>
           ))}
@@ -488,6 +706,9 @@ export default function DashboardViewPage() {
           <div className="flex items-center gap-4">
             <span>Last updated: {dashboard.updated_at ? new Date(dashboard.updated_at).toLocaleString() : 'Unknown'}</span>
             <span>Created by: {dashboard.created_by || 'Unknown'}</span>
+            {lastFetchedAt && (
+              <span>Data fetched: {lastFetchedAt.toLocaleTimeString()}</span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Clock className="w-3 h-3" />

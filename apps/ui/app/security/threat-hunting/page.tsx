@@ -28,16 +28,18 @@ interface ThreatHuntCampaign {
   status: 'pending' | 'running' | 'completed' | 'failed'
   started_at: string
   completed_at?: string
-  findings_count: number
-  rules_tested: number
-  logs_scanned: number
+  // null = not yet reported by the server. Never invent these values.
+  findings_count: number | null
+  rules_tested: number | null
+  logs_scanned: number | null
   time_range: string
   severity_filter?: string[]
   progress_percentage?: number
   indicators_detected?: number
 }
 
-// Map backend campaign fields to frontend interface
+// Map backend campaign fields to frontend interface.
+// Counts stay null until the server reports them — they are never synthesised.
 function normalizeCampaign(raw: any): ThreatHuntCampaign {
   return {
     campaign_id: raw.campaign_id || raw.id,
@@ -45,9 +47,9 @@ function normalizeCampaign(raw: any): ThreatHuntCampaign {
     status: raw.status || 'pending',
     started_at: raw.started_at || raw.created_at || '',
     completed_at: raw.completed_at,
-    findings_count: raw.findings_count ?? raw.events_found ?? 0,
-    rules_tested: raw.rules_tested ?? raw.rules_evaluated ?? 0,
-    logs_scanned: raw.logs_scanned ?? 0,
+    findings_count: raw.findings_count ?? raw.events_found ?? null,
+    rules_tested: raw.rules_tested ?? raw.rules_evaluated ?? null,
+    logs_scanned: raw.logs_scanned ?? null,
     time_range: raw.time_range || '',
     severity_filter: raw.severity_filter,
     progress_percentage: raw.progress_percentage ?? 0,
@@ -81,6 +83,9 @@ export default function ThreatHuntingPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [selectedCampaign, setSelectedCampaign] = useState<ThreatHuntCampaign | null>(null)
   const [isStartingHunt, setIsStartingHunt] = useState(false)
+  const [huntError, setHuntError] = useState<string | null>(null)
+  const [pollError, setPollError] = useState<string | null>(null)
+  const [findingsError, setFindingsError] = useState<string | null>(null)
   const [campaignFindings, setCampaignFindings] = useState<CampaignFinding[]>([])
   const [loadingFindings, setLoadingFindings] = useState(false)
 
@@ -137,6 +142,7 @@ export default function ThreatHuntingPage() {
 
   const startHunt = async () => {
     setIsStartingHunt(true)
+    setHuntError(null)
     try {
       const response = await apiClient.post<ThreatHuntCampaign>('/v1/security/threat-hunting', {
         description: huntConfig.description || 'Ad-hoc threat hunting campaign',
@@ -147,18 +153,15 @@ export default function ThreatHuntingPage() {
 
       const data = response?.data || response
       if (data?.campaign_id) {
-        // Add to campaigns list
-        const newCampaign: ThreatHuntCampaign = {
-          campaign_id: data.campaign_id,
-          description: huntConfig.description || 'Ad-hoc threat hunting campaign',
-          status: 'running',
-          started_at: new Date().toISOString(),
-          findings_count: 0,
-          rules_tested: 0,
-          logs_scanned: 0,
-          time_range: huntConfig.time_range,
-          severity_filter: huntConfig.severity_filter
-        }
+        // Only campaigns with a server-assigned ID are ever added to state
+        const newCampaign = normalizeCampaign({
+          ...data,
+          description: data.description || huntConfig.description || 'Ad-hoc threat hunting campaign',
+          status: data.status || 'running',
+          started_at: data.started_at || new Date().toISOString(),
+          time_range: data.time_range || huntConfig.time_range,
+          severity_filter: data.severity_filter || huntConfig.severity_filter
+        })
         setCampaigns(prev => [newCampaign, ...prev])
         setSelectedCampaign(newCampaign)
 
@@ -172,26 +175,15 @@ export default function ThreatHuntingPage() {
 
         // Poll for updates
         pollCampaignStatus(data.campaign_id)
+      } else {
+        setHuntError('POST /v1/security/threat-hunting succeeded but returned no campaign_id — hunt was not started')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to start threat hunt:', error)
-      // Create mock campaign for demo
-      const mockCampaign: ThreatHuntCampaign = {
-        campaign_id: `hunt-${Date.now()}`,
-        description: huntConfig.description || 'Ad-hoc threat hunting campaign',
-        status: 'running',
-        started_at: new Date().toISOString(),
-        findings_count: 0,
-        rules_tested: 0,
-        logs_scanned: 0,
-        time_range: huntConfig.time_range,
-        severity_filter: huntConfig.severity_filter
-      }
-      setCampaigns(prev => [mockCampaign, ...prev])
-      setSelectedCampaign(mockCampaign)
-
-      // Simulate campaign progress
-      simulateCampaignProgress(mockCampaign.campaign_id)
+      // No campaign is created on failure — surface the error instead
+      setHuntError(
+        `Failed to start hunt: POST /v1/security/threat-hunting returned ${error?.status ?? 'a network error'}${error?.message ? ` — ${error.message}` : ''}`
+      )
     } finally {
       setIsStartingHunt(false)
     }
@@ -216,8 +208,11 @@ export default function ThreatHuntingPage() {
             clearInterval(pollInterval)
           }
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to poll campaign status:', error)
+        setPollError(
+          `Lost track of campaign ${campaignId}: GET /v1/security/threat-hunting/${campaignId} returned ${error?.status ?? 'a network error'}. Refresh to retry.`
+        )
         clearInterval(pollInterval)
       }
     }, 3000)
@@ -226,41 +221,9 @@ export default function ThreatHuntingPage() {
     setTimeout(() => clearInterval(pollInterval), 300000)
   }
 
-  const simulateCampaignProgress = (campaignId: string) => {
-    let progress = 0
-    const interval = setInterval(() => {
-      progress += 10
-
-      setCampaigns(prev => prev.map(c => {
-        if (c.campaign_id !== campaignId) return c
-
-        if (progress >= 100) {
-          return {
-            ...c,
-            status: 'completed' as const,
-            completed_at: new Date().toISOString(),
-            findings_count: Math.floor(Math.random() * 15) + 3,
-            rules_tested: Math.floor(Math.random() * 50) + 20,
-            logs_scanned: Math.floor(Math.random() * 500000) + 100000
-          }
-        }
-
-        return {
-          ...c,
-          rules_tested: Math.floor((progress / 100) * 50),
-          logs_scanned: Math.floor((progress / 100) * 500000),
-          findings_count: Math.floor((progress / 100) * 10)
-        }
-      }))
-
-      if (progress >= 100) {
-        clearInterval(interval)
-      }
-    }, 1500)
-  }
-
   const loadCampaignFindings = async (campaignId: string) => {
     setLoadingFindings(true)
+    setFindingsError(null)
     try {
       const response = await apiClient.get(`/v1/security/threat-hunting/${campaignId}/findings`)
       const data = response?.data || response
@@ -271,8 +234,11 @@ export default function ThreatHuntingPage() {
       } else {
         setCampaignFindings([])
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load campaign findings:', err)
+      setFindingsError(
+        `Failed to load findings: GET /v1/security/threat-hunting/${campaignId}/findings returned ${err?.status ?? 'a network error'}`
+      )
       setCampaignFindings([])
     } finally {
       setLoadingFindings(false)
@@ -281,7 +247,7 @@ export default function ThreatHuntingPage() {
 
   const selectCampaign = (campaign: ThreatHuntCampaign) => {
     setSelectedCampaign(campaign)
-    if (campaign.status === 'completed' && campaign.findings_count > 0) {
+    if (campaign.status === 'completed' && (campaign.findings_count ?? 0) > 0) {
       loadCampaignFindings(campaign.campaign_id)
     }
   }
@@ -318,12 +284,12 @@ export default function ThreatHuntingPage() {
     }
   }
 
-  // Stats
+  // Stats — only counts the server has actually reported
   const stats = {
     total: campaigns.length,
     running: campaigns.filter(c => c.status === 'running').length,
     completed: campaigns.filter(c => c.status === 'completed').length,
-    totalFindings: campaigns.reduce((sum, c) => sum + c.findings_count, 0)
+    totalFindings: campaigns.reduce((sum, c) => sum + (c.findings_count ?? 0), 0)
   }
 
   return (
@@ -451,6 +417,14 @@ export default function ThreatHuntingPage() {
                 </div>
               </div>
 
+              {/* Start Hunt Error */}
+              {huntError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-2">
+                  <XCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+                  <p className="text-sm text-red-400">{huntError}</p>
+                </div>
+              )}
+
               {/* Start Button */}
               <button
                 onClick={startHunt}
@@ -505,6 +479,13 @@ export default function ThreatHuntingPage() {
               Campaign History
             </h2>
 
+            {pollError && (
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+                <p className="text-sm text-red-400">{pollError}</p>
+              </div>
+            )}
+
             {isLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3].map(i => (
@@ -558,7 +539,7 @@ export default function ThreatHuntingPage() {
                           <>
                             <div className="flex items-center gap-1">
                               <AlertTriangle className="w-4 h-4 text-orange-500" />
-                              <span className="text-lg font-bold text-white">{campaign.findings_count}</span>
+                              <span className="text-lg font-bold text-white">{campaign.findings_count ?? '—'}</span>
                             </div>
                             <span className="text-xs text-slate-400">findings</span>
                           </>
@@ -570,13 +551,13 @@ export default function ThreatHuntingPage() {
                     {campaign.status === 'running' && (
                       <div className="mt-3">
                         <div className="flex justify-between text-xs text-slate-400 mb-1">
-                          <span>{campaign.rules_tested} rules tested</span>
-                          <span>{(campaign.logs_scanned ?? 0).toLocaleString()} logs scanned</span>
+                          <span>{campaign.rules_tested ?? '—'} rules tested</span>
+                          <span>{campaign.logs_scanned != null ? campaign.logs_scanned.toLocaleString() : '—'} logs scanned</span>
                         </div>
                         <div className="h-2 bg-slate-800/30 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-gradient-to-r from-blue-500 to-purple-500 animate-pulse"
-                            style={{ width: `${Math.min((campaign.rules_tested / 50) * 100, 100)}%` }}
+                            style={{ width: `${Math.min(campaign.progress_percentage ?? 0, 100)}%` }}
                           />
                         </div>
                       </div>
@@ -586,16 +567,16 @@ export default function ThreatHuntingPage() {
                     {campaign.status === 'completed' && (
                       <div className="mt-3 pt-3 border-t border-white/5 grid grid-cols-3 gap-4 text-center">
                         <div>
-                          <p className="text-lg font-bold text-white">{campaign.rules_tested}</p>
+                          <p className="text-lg font-bold text-white">{campaign.rules_tested ?? '—'}</p>
                           <p className="text-xs text-slate-400">Rules Tested</p>
                         </div>
                         <div>
-                          <p className="text-lg font-bold text-white">{(campaign.logs_scanned ?? 0).toLocaleString()}</p>
+                          <p className="text-lg font-bold text-white">{campaign.logs_scanned != null ? campaign.logs_scanned.toLocaleString() : '—'}</p>
                           <p className="text-xs text-slate-400">Logs Scanned</p>
                         </div>
                         <div>
-                          <p className={`text-lg font-bold ${campaign.findings_count > 0 ? 'text-orange-500' : 'text-green-500'}`}>
-                            {campaign.findings_count}
+                          <p className={`text-lg font-bold ${(campaign.findings_count ?? 0) > 0 ? 'text-orange-500' : 'text-green-500'}`}>
+                            {campaign.findings_count ?? '—'}
                           </p>
                           <p className="text-xs text-slate-400">Findings</p>
                         </div>
@@ -609,7 +590,7 @@ export default function ThreatHuntingPage() {
         </div>
 
         {/* Campaign Findings */}
-        {selectedCampaign && selectedCampaign.status === 'completed' && selectedCampaign.findings_count > 0 && (
+        {selectedCampaign && selectedCampaign.status === 'completed' && (selectedCampaign.findings_count ?? 0) > 0 && (
           <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 p-6">
             <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-orange-500" />
@@ -651,30 +632,20 @@ export default function ThreatHuntingPage() {
                   </div>
                 ))}
               </div>
+            ) : findingsError ? (
+              <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-2">
+                <XCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+                <p className="text-sm text-red-400">{findingsError}</p>
+              </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {[...Array(Math.min(selectedCampaign.findings_count, 6))].map((_, i) => (
-                  <div key={i} className="p-4 bg-slate-800/50 rounded-lg border border-white/5">
-                    <div className="flex items-start justify-between mb-2">
-                      <span className={`px-2 py-0.5 text-xs rounded ${
-                        i < 2 ? 'bg-red-500/10 text-red-400' :
-                        i < 4 ? 'bg-orange-500/10 text-orange-400' :
-                        'bg-yellow-500/10 text-yellow-400'
-                      }`}>
-                        {i < 2 ? 'critical' : i < 4 ? 'high' : 'medium'}
-                      </span>
-                      <Zap className="w-4 h-4 text-orange-500" />
-                    </div>
-                    <p className="font-medium text-white text-sm">Finding #{i + 1}</p>
-                    <p className="text-xs text-slate-400 mt-1">Detection matched</p>
-                    <a
-                      href="/security/events"
-                      className="text-xs text-blue-400 hover:text-blue-300 mt-2 inline-flex items-center gap-1"
-                    >
-                      View in Events <ChevronRight className="w-3 h-3" />
-                    </a>
-                  </div>
-                ))}
+              <div className="text-center py-8">
+                <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                <p className="text-sm text-slate-400">
+                  The server reported {selectedCampaign.findings_count} finding{(selectedCampaign.findings_count ?? 0) === 1 ? '' : 's'} but returned no finding detail
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  GET /v1/security/threat-hunting/{selectedCampaign.campaign_id}/findings returned an empty list
+                </p>
               </div>
             )}
           </div>

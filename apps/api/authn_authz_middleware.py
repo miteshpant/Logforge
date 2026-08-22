@@ -22,12 +22,24 @@ from models import (
     User, UserSession, UserTenantRole, APIUsageAudit,
     UserRole, UserStatus, SessionStatus
 )
-from subscription_service import subscription_service
+# ENH-008/ENH-010: `subscription_service` is resolved lazily inside
+# UnifiedAuthMiddleware.__init__ rather than imported at module scope.
+# Importing the singleton here opened a ClickHouse connection during
+# `import authn_authz_middleware`, which made the whole authentication layer
+# un-importable -- and untestable -- without live infrastructure.
+from subscription_service import get_subscription_service
 from database_layer import DatabaseLayer, DatabaseError, SecurityError
 
 logger = structlog.get_logger()
 
-# Authentication configuration from environment variables
+# Authentication configuration from environment variables.
+#
+# ENH-005: the JWT signing key previously fell back to a literal published in
+# this repository, so any deployment that forgot to set JWT_SECRET would accept
+# tokens forged by anyone who had read the source. The development default is
+# retained ONLY for local work; `security_config.validate_security_configuration()`
+# runs at startup and refuses to boot any non-development environment that is
+# still using it. See apps/api/security_config.py.
 JWT_SECRET = os.getenv("JWT_SECRET", "logforge-jwt-secret-key-change-in-production")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 SESSION_EXPIRY_HOURS = int(os.getenv("SESSION_EXPIRY_HOURS", "8"))
@@ -508,22 +520,49 @@ def check_permission(user_roles: List[Dict[str, Any]], required_permission: str,
 # USER SERVICE (IMPORT FROM PROPER SERVICE LAYER)
 # =================================================================
 
-# Import UserService from proper service layer
+# Import UserService from proper service layer.
+#
+# ENH-008/ENH-010: `UserService()` opens a database connection in its
+# constructor, so instantiating it here connected during
+# `import authn_authz_middleware`. Built lazily instead; the PEP 562
+# `__getattr__` at the bottom of this module keeps the bare `user_service` name
+# working at every existing call site.
 from services.user_service import UserService
-user_service = UserService()
+
+_user_service_instance: Optional[UserService] = None
+
+
+def get_user_service() -> UserService:
+    """Get the shared UserService, constructing it on first use."""
+    global _user_service_instance
+    if _user_service_instance is None:
+        _user_service_instance = UserService()
+    return _user_service_instance
 
 # =================================================================
 # SETUP TOKEN MANAGEMENT
 # =================================================================
 
 class SetupTokenManager:
-    """Manages initial platform setup tokens"""
+    """
+    Manages initial platform setup tokens.
+
+    KNOWN LIMITATION (ENH-014, partially addressed): tokens are held in process
+    memory, so they do not survive a restart and are not shared across replicas.
+    A multi-replica deployment can therefore issue a token on one pod and reject
+    it on another. Persisting them requires a new table, which is a schema
+    change and is deliberately out of scope here -- it is folded into ENH-021's
+    migration work.
+
+    What IS fixed here: construction failure and setup-status errors no longer
+    fall back to fabricated answers. See `get_setup_token_manager()`.
+    """
 
     def __init__(self):
         # Use database storage instead of memory
         from database_layer import DatabaseLayer
         self.db = DatabaseLayer("PlatformSetup", "platform-setup-key")
-        # Initialize in-memory storage for now (TODO: move to database)
+        # In-process token store -- see the class docstring for the limitation.
         self.setup_tokens = {}
 
     def generate_setup_token(self) -> Dict[str, Any]:
@@ -586,29 +625,35 @@ class SetupTokenManager:
             return setup_completed
 
         except Exception as e:
+            # ENH-014: previously fell back to "has any in-process token been
+            # used?", which is unrelated to whether a super admin actually
+            # exists. Answering this wrongly either re-opens the bootstrap
+            # endpoint on a live platform or locks out a legitimate first admin,
+            # so an unknown answer must be an error, not a guess.
             logger.error("Failed to check setup completion", error=str(e))
-            # Fallback: check if any tokens have been used (old behavior)
-            return any(token_data["used"] for token_data in self.setup_tokens.values())
+            raise
 
 # Global setup token manager (lazy initialization)
-setup_token_manager = None
+_setup_token_manager_instance = None
 
-def get_setup_token_manager():
-    """Get setup token manager with lazy initialization"""
-    global setup_token_manager
-    if setup_token_manager is None:
-        try:
-            setup_token_manager = SetupTokenManager()
-        except Exception as e:
-            logger.warning("Failed to initialize SetupTokenManager", error=str(e))
-            # Return a dummy manager for testing
-            setup_token_manager = type('DummySetupTokenManager', (), {
-                'is_setup_complete': lambda: True,
-                'generate_setup_token': lambda: {"token": "test-token", "expires_at": "2024-01-01T00:00:00Z"},
-                'validate_setup_token': lambda token: None,
-                'complete_setup': lambda token, admin_data: True
-            })()
-    return setup_token_manager
+
+def get_setup_token_manager() -> "SetupTokenManager":
+    """
+    Get the setup token manager, constructing it on first use.
+
+    ENH-014: construction failure previously substituted a dummy object whose
+    `generate_setup_token()` returned a HARDCODED `"test-token"` and whose
+    `is_setup_complete()` always returned `True`. That is fabricated behaviour
+    masking a hard failure -- and a security hazard, because a predictable
+    bootstrap token is a platform-takeover primitive if it is ever honoured.
+
+    Failure now propagates. A platform that cannot reach its database must not
+    pretend it can bootstrap.
+    """
+    global _setup_token_manager_instance
+    if _setup_token_manager_instance is None:
+        _setup_token_manager_instance = SetupTokenManager()
+    return _setup_token_manager_instance
 
 # =================================================================
 # INVITATION SYSTEM
@@ -625,17 +670,17 @@ class InvitationManager:
                                invited_by: str) -> Dict[str, Any]:
         """Create user invitation using database storage"""
         # Use the global user_service instance
-        return await user_service.create_invitation(email, tenant_id, role, invited_by)
+        return await get_user_service().create_invitation(email, tenant_id, role, invited_by)
 
     async def validate_invitation(self, token: str, email: str) -> Optional[Dict[str, Any]]:
         """Validate invitation token and email match using database"""
         # Use the global user_service instance
-        return await user_service.validate_invitation(token, email)
+        return await get_user_service().validate_invitation(token, email)
 
     async def accept_invitation(self, token: str, invitation_id: str) -> bool:
         """Mark invitation as accepted using database"""
         # Use the global user_service instance
-        return await user_service.accept_invitation(invitation_id)
+        return await get_user_service().accept_invitation(invitation_id)
 
 # Global invitation manager
 invitation_manager = InvitationManager()
@@ -656,17 +701,25 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app):
         super().__init__(app)
-        self.user_service = user_service
-        self.subscription_service = subscription_service
+        self.user_service = get_user_service()
+        # Resolved on first middleware construction (app startup), not at import.
+        self.subscription_service = get_subscription_service()
 
         # Public endpoints (no authentication required)
         self.public_endpoints = [
             "/",
             "/health",
+            # ENH-019: Prometheus scrape target. Reports no tenant-identifying
+            # data; expected to be restricted at the ingress.
+            "/metrics",
             "/docs",
             "/openapi.json",
             "/redoc",
             "/v1/auth/login",
+            # LF-015: the refresh endpoint authenticates via the refresh token
+            # in its body — requiring a valid (unexpired) access token here
+            # made refresh useless by design.
+            "/v1/auth/refresh",
             "/v1/auth/setup/init",
             "/v1/auth/setup",
             "/v1/auth/accept-invite",
@@ -722,6 +775,18 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             if tenant_id:
                 user_roles = await self.user_service.get_user_tenant_roles(user.id, tenant_id)
 
+                if not user_roles and tenant_id != "platform":
+                    # LF-033: 'platform' is a ROLE SCOPE, not a tenant. A
+                    # tenant-less platform admin (role assignment with
+                    # tenant_id='platform') may access any tenant-scoped
+                    # route; check_permission() already understands
+                    # platform-scoped role rows.
+                    platform_roles = await self.user_service.get_user_tenant_roles(
+                        user.id, "platform"
+                    )
+                    if platform_roles:
+                        user_roles = platform_roles
+
                 if not user_roles:
                     raise HTTPException(403, f"No access to tenant: {tenant_id}")
 
@@ -735,12 +800,14 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             # Step 5: Feature Access - Check subscription (skip for admin endpoints)
             if not is_admin_endpoint and tenant_id:
                 feature_access = await self._validate_feature_access(tenant_id, request.url.path)
-                if not feature_access["access_granted"]:
+                if not feature_access.get("access_granted"):
                     return JSONResponse(
                         status_code=403,
                         content={
-                            "error": feature_access["error_code"],
-                            "message": feature_access["reason"],
+                            # `.get()` so a malformed denial payload yields a
+                            # correct 403 rather than a KeyError -> 500.
+                            "error": feature_access.get("error_code", "feature_not_available"),
+                            "message": feature_access.get("reason", "Feature not available on your plan"),
                             "required_feature": feature_access.get("required_feature"),
                             "current_subscription": feature_access.get("current_features", []),
                             "upgrade_url": f"/v1/tenants/{tenant_id}/subscription/upgrade"
@@ -873,17 +940,36 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             raise HTTPException(401, "Unsupported token type")
 
     async def _validate_feature_access(self, tenant_id: str, endpoint: str) -> Dict[str, Any]:
-        """Validate feature access based on subscription"""
+        """
+        Validate feature access based on subscription.
+
+        ENH-008: this previously returned `{"access_granted": True}` whenever the
+        subscription lookup raised. Degrading the subscription service therefore
+        granted EVERY tenant EVERY paid feature -- a revenue-integrity and
+        entitlement failure, and a fabricated success response of exactly the
+        kind the project forbids.
+
+        It now fails closed with a 503. A 503 is deliberately distinct from the
+        403 used for a genuine entitlement denial: the tenant may well be
+        entitled, we simply cannot currently prove it, and the client should
+        retry rather than be told to upgrade.
+        """
         try:
             return await self.subscription_service.validate_feature_access(tenant_id, endpoint)
         except Exception as e:
-            logger.error("Feature validation error", error=str(e))
-            # On feature validation error, allow access but log
-            return {
-                "access_granted": True,
-                "feature": "fallback",
-                "reason": "Feature validation error - access granted"
-            }
+            logger.error(
+                "Feature validation failed -- denying access (fail closed)",
+                tenant_id=tenant_id,
+                endpoint=endpoint,
+                error=str(e)
+            )
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Subscription verification is temporarily unavailable. "
+                    "Please retry shortly."
+                )
+            )
 
     async def _calculate_api_call_cost(self, endpoint: str, status_code: int, response_size: int = 0) -> float:
         """Calculate API call cost using pricing.yml configuration"""
@@ -1209,7 +1295,7 @@ async def get_current_user(request: Request, credentials: HTTPAuthorizationCrede
         return request.state.user
 
     # Fallback: validate session directly (for endpoints not going through middleware)
-    user = await user_service.validate_session(credentials.credentials)
+    user = await get_user_service().validate_session(credentials.credentials)
     if not user:
         raise HTTPException(401, "Invalid or expired session")
     return user
@@ -1249,13 +1335,28 @@ async def require_tenant_admin(user: User = Depends(get_current_user),
 
     return user
 
-# Global instances (using lazy initialization)
+# Global instances.
+#
+# `InvitationManager()` does no I/O in its constructor, so it stays eager.
+# `setup_token_manager` and `user_service` DO connect to the database, so they
+# are resolved on first attribute access via the PEP 562 hook below
+# (ENH-008/ENH-010). This keeps every existing `user_service.…` /
+# `setup_token_manager.…` call site working unchanged while allowing this
+# module -- the whole authentication layer -- to be imported and tested without
+# live infrastructure.
 invitation_manager = InvitationManager()
-setup_token_manager = get_setup_token_manager()
+
+
+def __getattr__(name: str):
+    """Resolve database-backed module globals lazily (PEP 562)."""
+    if name == "user_service":
+        return get_user_service()
+    if name == "setup_token_manager":
+        return get_setup_token_manager()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 def setup_unified_auth_middleware(app):
     """Setup unified authentication and authorization middleware"""
-    print("🔧 REGISTERING UnifiedAuthMiddleware...")  # Debug print
     app.add_middleware(UnifiedAuthMiddleware)
     logger.debug("Unified Authentication & Authorization middleware configured")
-    print("✅ UnifiedAuthMiddleware REGISTERED!")  # Debug print

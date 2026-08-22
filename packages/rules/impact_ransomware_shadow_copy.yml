@@ -1,0 +1,41 @@
+title: Shadow Copy Deletion (Ransomware Precursor)
+id: im001-shadow-copy-deletion
+status: stable
+description: >
+  Detects deletion of volume shadow copies and disabling of recovery options.
+  Essentially every ransomware family does this immediately before encryption
+  to prevent restoration, which makes it one of the highest-fidelity signals in
+  security monitoring and a genuine last chance to intervene before data loss.
+author: Logforge Security Team
+date: 2026/08/13
+references:
+    - https://attack.mitre.org/techniques/T1490/
+tags:
+    - attack.impact
+    - attack.t1490
+    - ransomware
+    - inhibit_recovery
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection_vssadmin:
+        command_line|contains: "delete shadows"
+    selection_wmic_shadow:
+        command_line|contains: "shadowcopy delete"
+    selection_bcdedit:
+        command_line|contains:
+            - "recoveryenabled no"
+            - "bootstatuspolicy ignoreallfailures"
+    selection_wbadmin:
+        command_line|contains: "delete catalog"
+    condition: 1 of selection_*
+fields:
+    - command_line
+    - process_name
+    - user
+    - host
+falsepositives:
+    - Storage maintenance scripts reclaiming space from old snapshots
+    - Backup software rotating its own shadow copies (verify the parent process)
+level: critical

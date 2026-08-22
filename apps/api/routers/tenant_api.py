@@ -16,7 +16,9 @@ from models import (
     LegalHoldRequest, TenantUsageResponse, TenantHealthResponse,
     TenantType, TenantStatus
 )
-from tenant_service import tenant_service
+# ENH-033/ENH-010: resolved lazily; importing the singleton connected to
+# the database at import time and made this module untestable offline.
+from tenant_service import get_tenant_service
 
 logger = structlog.get_logger()
 
@@ -27,7 +29,7 @@ router = APIRouter(prefix="/v1/tenants", tags=["tenants"])
 async def create_tenant(request: TenantCreate) -> TenantResponse:
     """Create a new tenant with UUID generation"""
     try:
-        tenant = await tenant_service.create_tenant(request)
+        tenant = await get_tenant_service().create_tenant(request)
 
         return TenantResponse(
             tenant_id=tenant.tenant_id,
@@ -53,7 +55,7 @@ async def list_tenants(
 ) -> TenantListResponse:
     """List tenants with pagination and filtering"""
     try:
-        return await tenant_service.list_tenants(
+        return await get_tenant_service().list_tenants(
             page=page,
             page_size=page_size,
             status_filter=status,
@@ -67,7 +69,7 @@ async def list_tenants(
 async def get_tenant_stats() -> Dict[str, Any]:
     """Get lightweight tenant statistics for dashboard (performance optimized)"""
     try:
-        return await tenant_service.get_tenant_stats()
+        return await get_tenant_service().get_tenant_stats()
     except Exception as e:
         logger.error("Tenant stats retrieval failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
@@ -76,7 +78,7 @@ async def get_tenant_stats() -> Dict[str, Any]:
 async def get_tenant(tenant_id: str) -> TenantResponse:
     """Get tenant details by ID"""
     try:
-        tenant = await tenant_service.get_tenant(tenant_id)
+        tenant = await get_tenant_service().get_tenant(tenant_id)
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
 
@@ -105,7 +107,7 @@ async def get_tenant(tenant_id: str) -> TenantResponse:
 async def update_tenant(tenant_id: str, request: TenantUpdate) -> TenantResponse:
     """Update tenant information"""
     try:
-        tenant = await tenant_service.update_tenant(tenant_id, request)
+        tenant = await get_tenant_service().update_tenant(tenant_id, request)
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
 
@@ -135,7 +137,7 @@ async def decommission_tenant(
 ) -> Dict[str, Any]:
     """Securely decommission tenant"""
     try:
-        result = await tenant_service.decommission_tenant(
+        result = await get_tenant_service().decommission_tenant(
             tenant_id=tenant_id,
             reason=reason,
             data_retention=data_retention,
@@ -153,7 +155,7 @@ async def decommission_tenant(
 async def configure_storage(tenant_id: str, request: StorageConfig) -> Dict[str, Any]:
     """Configure storage backend for tenant"""
     try:
-        result = await tenant_service.configure_storage(tenant_id, request)
+        result = await get_tenant_service().configure_storage(tenant_id, request)
         return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -165,7 +167,7 @@ async def configure_storage(tenant_id: str, request: StorageConfig) -> Dict[str,
 async def test_storage_connection(tenant_id: str) -> Dict[str, Any]:
     """Test storage connectivity"""
     try:
-        result = await tenant_service.test_storage_connection(tenant_id)
+        result = await get_tenant_service().test_storage_connection(tenant_id)
         return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -177,7 +179,7 @@ async def test_storage_connection(tenant_id: str) -> Dict[str, Any]:
 async def get_storage_status(tenant_id: str) -> StorageStatusResponse:
     """Get storage status and usage"""
     try:
-        return await tenant_service.get_storage_status(tenant_id)
+        return await get_tenant_service().get_storage_status(tenant_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -189,7 +191,7 @@ async def get_storage_status(tenant_id: str) -> StorageStatusResponse:
 async def get_tenant_usage(tenant_id: str) -> TenantUsageResponse:
     """Get tenant usage statistics and billing data"""
     try:
-        return await tenant_service.get_tenant_usage(tenant_id)
+        return await get_tenant_service().get_tenant_usage(tenant_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -200,7 +202,7 @@ async def get_tenant_usage(tenant_id: str) -> TenantUsageResponse:
 async def get_tenant_quotas(tenant_id: str) -> TenantQuotas:
     """Get tenant quotas and limits"""
     try:
-        return await tenant_service.get_tenant_quotas(tenant_id)
+        return await get_tenant_service().get_tenant_quotas(tenant_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -211,7 +213,7 @@ async def get_tenant_quotas(tenant_id: str) -> TenantQuotas:
 async def update_tenant_quotas(tenant_id: str, request: TenantQuotas) -> TenantQuotas:
     """Update tenant quotas and limits"""
     try:
-        return await tenant_service.update_tenant_quotas(tenant_id, request)
+        return await get_tenant_service().update_tenant_quotas(tenant_id, request)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -223,7 +225,7 @@ async def update_tenant_quotas(tenant_id: str, request: TenantQuotas) -> TenantQ
 async def get_tenant_config(tenant_id: str) -> TenantConfig:
     """Get tenant configuration"""
     try:
-        return await tenant_service.get_tenant_config(tenant_id)
+        return await get_tenant_service().get_tenant_config(tenant_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -234,7 +236,7 @@ async def get_tenant_config(tenant_id: str) -> TenantConfig:
 async def update_tenant_config(tenant_id: str, request: TenantConfig) -> TenantConfig:
     """Update tenant configuration"""
     try:
-        return await tenant_service.update_tenant_config(tenant_id, request)
+        return await get_tenant_service().update_tenant_config(tenant_id, request)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -245,7 +247,7 @@ async def update_tenant_config(tenant_id: str, request: TenantConfig) -> TenantC
 async def get_compliance_status(tenant_id: str) -> Dict[str, Any]:
     """Get compliance status and reports"""
     try:
-        return await tenant_service.get_compliance_status(tenant_id)
+        return await get_tenant_service().get_compliance_status(tenant_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -256,7 +258,7 @@ async def get_compliance_status(tenant_id: str) -> Dict[str, Any]:
 async def create_legal_hold(tenant_id: str, request: LegalHoldRequest) -> Dict[str, Any]:
     """Create legal hold for data preservation"""
     try:
-        return await tenant_service.create_legal_hold(tenant_id, request)
+        return await get_tenant_service().create_legal_hold(tenant_id, request)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -268,7 +270,7 @@ async def create_legal_hold(tenant_id: str, request: LegalHoldRequest) -> Dict[s
 async def get_tenant_health(tenant_id: str) -> TenantHealthResponse:
     """Get tenant health status"""
     try:
-        return await tenant_service.get_tenant_health(tenant_id)
+        return await get_tenant_service().get_tenant_health(tenant_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -279,7 +281,7 @@ async def get_tenant_health(tenant_id: str) -> TenantHealthResponse:
 async def get_tenant_metrics(tenant_id: str) -> Dict[str, Any]:
     """Get tenant performance metrics and analytics"""
     try:
-        return await tenant_service.get_tenant_metrics(tenant_id)
+        return await get_tenant_service().get_tenant_metrics(tenant_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -290,7 +292,7 @@ async def get_tenant_metrics(tenant_id: str) -> Dict[str, Any]:
 async def get_tenant_alerts(tenant_id: str) -> Dict[str, Any]:
     """Get tenant-specific alerts configuration"""
     try:
-        return await tenant_service.get_tenant_alerts(tenant_id)
+        return await get_tenant_service().get_tenant_alerts(tenant_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -302,7 +304,7 @@ async def get_tenant_alerts(tenant_id: str) -> Dict[str, Any]:
 async def validate_tenant(tenant_id: str) -> Dict[str, Any]:
     """Validate tenant UUID and existence"""
     try:
-        is_valid = await tenant_service.validate_tenant_uuid(tenant_id)
+        is_valid = await get_tenant_service().validate_tenant_uuid(tenant_id)
         # For database-backed implementation, validate_tenant_uuid already checks existence
         return {
             "tenant_id": tenant_id,

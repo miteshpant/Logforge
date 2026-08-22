@@ -119,57 +119,35 @@ def process_logs_and_tracking_background(
     bytes_processed: int,
     processing_time_ms: int
 ):
-    """Unified background task for logs processing + all tracking with proper cost calculation"""
-    try:
-        # Fire-and-forget: create async task that runs independently
-        import asyncio
-        import threading
+    """
+    Hand a batch to the ingest worker pool (ENH-009).
 
-        def run_async_in_thread():
-            """Run async processing in a separate thread with its own event loop"""
-            try:
-                # Create a new ClickHouse client instance for this background task
-                from clickhouse_connect import get_client
-                background_client = get_client(
-                    host=config["clickhouse_host"],
-                    port=config["clickhouse_port"],
-                    username=config["clickhouse_user"],
-                    password=config["clickhouse_password"],
-                    database=config["clickhouse_database"],
-                    send_receive_timeout=120
-                ) if config else None
+    This previously spawned a **daemon thread per batch**, each creating its own
+    event loop AND its own ClickHouse client, then tearing both down. Three
+    problems:
 
-                if not background_client:
-                    logger.error("Failed to create background ClickHouse client")
-                    return
+    1. Unbounded thread and connection creation. At even modest request rates
+       this exhausts file descriptors and thread stacks, capping ingest
+       throughput far below what the hardware allows.
+    2. Connection setup dominated latency, for no benefit.
+    3. The ClickHouse client was never actually used --
+       `process_logs_and_tracking_async()` only publishes a Kafka event. Every
+       batch paid for a connection that did nothing.
 
-                # Run the async function in a new event loop
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+    Work is now submitted to a bounded asyncio queue drained by a fixed set of
+    workers, so concurrency is capped and connections are reused.
+    """
+    from ingest_pipeline import get_ingest_pipeline
 
-                try:
-                    loop.run_until_complete(
-                        process_logs_and_tracking_async(
-                            logs, customer_id, endpoint, format_type,
-                            log_count, bytes_processed, processing_time_ms,
-                            background_client
-                        )
-                    )
-                finally:
-                    loop.close()
-                    background_client.close()
-
-            except Exception as e:
-                logger.error(f"Async background processing failed: {e}")
-
-        # Start the processing in a daemon thread (fire-and-forget)
-        thread = threading.Thread(target=run_async_in_thread, daemon=True)
-        thread.start()
-
-        logger.info(f"Non-blocking background processing started for customer {customer_id}")
-
-    except Exception as e:
-        logger.error(f"Failed to start background processing: {e}")
+    get_ingest_pipeline().submit(
+        logs=logs,
+        customer_id=customer_id,
+        endpoint=endpoint,
+        format_type=format_type,
+        log_count=log_count,
+        bytes_processed=bytes_processed,
+        processing_time_ms=processing_time_ms,
+    )
 
 async def process_logs_and_tracking_async(
     logs: List[LogEntry],
@@ -235,6 +213,18 @@ async def initialize_engines():
 
         # Get ClickHouse client
         client = get_clickhouse_client()
+
+        # ENH-021: report (and optionally apply) schema migrations before any
+        # engine touches a table. Defaults to a DRY RUN: it logs what is pending
+        # without changing anything unless RUN_MIGRATIONS_ON_STARTUP=true.
+        try:
+            from schema_migrations import run_migrations_if_enabled
+            run_migrations_if_enabled(client)
+        except Exception as e:
+            # A migration failure must be loud and must stop startup: continuing
+            # would run the application against a half-migrated schema.
+            logger.error(f"Schema migration failed: {e}")
+            raise
 
         # Initialize TTL manager with storage manager
         ttl_manager = TTLManager(client, storage_manager)
@@ -369,11 +359,23 @@ async def initialize_engines():
             alert_rule_cache_instance = None
 
         # Initialize quota reset scheduler (disabled during development)
-        # TODO: Enable after database permissions are updated in container
-        # from services.quota_reset_service import get_quota_reset_scheduler
-        # scheduler = get_quota_reset_scheduler()
-        # asyncio.create_task(scheduler.start_scheduler())
-        logger.info("Quota reset scheduler initialization skipped (development mode)")
+        # ENH-030: re-enabled. The scheduler was disabled pending "database
+        # permissions"; the actual cause was that QuotaResetService was missing
+        # from DatabaseLayer.AUTHORIZED_SERVICES, so construction raised
+        # SecurityError. That registry gap is fixed.
+        #
+        # Without this running, tenant quotas never reset: usage accumulates
+        # forever until tenants are wrongly blocked or wrongly billed.
+        try:
+            from services.quota_reset_service import get_quota_reset_scheduler
+            scheduler = get_quota_reset_scheduler()
+            asyncio.create_task(scheduler.start_scheduler())
+            logger.info("Quota reset scheduler started")
+        except Exception as e:
+            # Billing correctness matters, but a scheduler failure must not
+            # block the API from serving traffic. Logged at error level so it
+            # is visible rather than silently skipped.
+            logger.error(f"Failed to start quota reset scheduler: {e}")
 
         logger.info("All engines initialized successfully")
 
@@ -425,12 +427,13 @@ async def shutdown_engines():
         except Exception as e:
             logger.warning(f"Error cleaning up Redis: {e}")
 
-        # Stop quota reset scheduler (disabled during development)
-        # TODO: Enable after database permissions are updated in container
-        # from services.quota_reset_service import get_quota_reset_scheduler
-        # scheduler = get_quota_reset_scheduler()
-        # scheduler.stop_scheduler()
-        logger.info("Quota reset scheduler shutdown skipped (development mode)")
+        # Stop quota reset scheduler (ENH-030)
+        try:
+            from services.quota_reset_service import get_quota_reset_scheduler
+            get_quota_reset_scheduler().stop_scheduler()
+            logger.info("Quota reset scheduler stopped")
+        except Exception as e:
+            logger.warning(f"Failed to stop quota reset scheduler: {e}")
 
         if clickhouse_client:
             clickhouse_client.close()
@@ -459,6 +462,13 @@ async def lifespan(app):
 
     # Startup
     logger.info("Starting Logforge API server...")
+
+    # ENH-005: validate secrets BEFORE anything else starts. Outside
+    # development this raises and aborts startup rather than serving traffic
+    # with a publicly known JWT signing key. Deliberately the first step so a
+    # misconfigured deployment fails fast and loudly.
+    from security_config import validate_security_configuration
+    validate_security_configuration()
 
     # Load configuration
     config = load_config()
@@ -499,6 +509,13 @@ async def lifespan(app):
     except Exception as e:
         logger.warning(f"Failed to initialize connection pools: {str(e)}")
 
+    # ENH-009: bounded ingest worker pool. Must start before traffic is served,
+    # because `process_logs_and_tracking_background()` submits to it -- a batch
+    # arriving before startup is explicitly dropped and counted rather than
+    # silently lost.
+    from ingest_pipeline import start_ingest_pipeline
+    await start_ingest_pipeline()
+
     logger.info("Logforge API server started successfully")
 
     yield
@@ -521,6 +538,15 @@ async def lifespan(app):
         logger.info("Write buffer service stopped (remaining logs flushed)")
     except Exception as e:
         logger.warning(f"Failed to stop write buffer service: {str(e)}")
+
+    # ENH-009: drain the ingest pipeline BEFORE tearing down connections, so
+    # batches already accepted from customers get a bounded chance to complete.
+    try:
+        from ingest_pipeline import stop_ingest_pipeline
+        await stop_ingest_pipeline()
+        logger.info("Ingest pipeline stopped")
+    except Exception as e:
+        logger.warning(f"Failed to stop ingest pipeline: {str(e)}")
 
     # Close connection pools
     try:

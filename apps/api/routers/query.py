@@ -3,29 +3,167 @@ Advanced query API endpoints - M2 core functionality
 """
 
 import json
-from typing import Dict, Any, List
-from datetime import datetime, timezone
+import os
+import re
+from typing import Dict, Any, List, Optional, Tuple
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Request, HTTPException, Query
 from pydantic import BaseModel
 
 from models import QueryResponse
-from query_engine import AdvancedQueryRequest, QueryFilter, QueryOperator
+from query_engine import (
+    AdvancedQueryRequest,
+    AggregationType,
+    QueryAggregation,
+    QueryFieldError,
+    QueryFilter,
+    QueryOperator,
+)
 from storage_config import get_customer_id
 from tenant_dependencies import MiddlewareTenant
 from services.query_service import QueryService
+from error_handling import internal_error
 
 router = APIRouter(prefix="/v1")
 
 # Global instances (will be injected)
 query_engine = None
 clickhouse_client = None
-query_service = QueryService()
+
+# ENH-033/ENH-010: `QueryService()` opens a database connection in its
+# constructor, so building it here connected during `import routers.query` --
+# making this router, and the request-building logic in it, untestable without
+# live infrastructure. Built on first use instead.
+_query_service_instance: Optional[QueryService] = None
+
+
+def get_query_service() -> QueryService:
+    """Get the shared QueryService, constructing it on first use."""
+    global _query_service_instance
+    if _query_service_instance is None:
+        _query_service_instance = QueryService()
+    return _query_service_instance
+
+
+def __getattr__(name: str):
+    """Preserve the module-level `query_service` name (PEP 562)."""
+    if name == "query_service":
+        return get_query_service()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 def setup_dependencies(qe, client):
     """Setup dependencies from main app"""
     global query_engine, clickhouse_client
     query_engine = qe
     clickhouse_client = client
+
+# ---------------------------------------------------------------------------
+# LF-017 / LF-022: shared default time window.
+#
+# Endpoints must NEVER run unbounded over the log tables: without a `ts`
+# predicate ClickHouse reads every monthly partition for the tenant before
+# applying LIMIT. When the caller supplies no range, default to the last hour
+# (the Loki/Datadog convention), and reject windows wider than
+# LOGFORGE_MAX_QUERY_WINDOW_DAYS (default 31) with a clear 400 instead of a
+# slow success. The effective window is echoed in every response so the UI
+# can display "showing last 1 hour".
+# ---------------------------------------------------------------------------
+
+DEFAULT_QUERY_WINDOW = timedelta(hours=1)
+
+_RELATIVE_RANGE_RE = re.compile(r"^\s*(\d+)\s*([smhdw])\s*$")
+_RELATIVE_UNITS = {
+    "s": timedelta(seconds=1),
+    "m": timedelta(minutes=1),
+    "h": timedelta(hours=1),
+    "d": timedelta(days=1),
+    "w": timedelta(weeks=1),
+}
+
+
+def _max_query_window() -> timedelta:
+    return timedelta(days=int(os.getenv("LOGFORGE_MAX_QUERY_WINDOW_DAYS", "31")))
+
+
+def _coerce_datetime(value: Any, field_name: str) -> datetime:
+    """Parse a datetime from a datetime or ISO-8601 string; always tz-aware UTC."""
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, str):
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid {field_name}: {value!r} is not an ISO-8601 datetime",
+            )
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid {field_name}: expected an ISO-8601 datetime",
+        )
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _parse_since(value: str) -> timedelta:
+    """Parse a relative range like '15m', '24h', '7d' (LF-022)."""
+    match = _RELATIVE_RANGE_RE.match(value or "")
+    if not match:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid 'since' value {value!r}. "
+                "Expected <number><unit> with unit one of s, m, h, d, w (e.g. '15m', '24h', '7d')."
+            ),
+        )
+    return int(match.group(1)) * _RELATIVE_UNITS[match.group(2)]
+
+
+def resolve_time_window(
+    start_time: Any = None,
+    end_time: Any = None,
+    since: Optional[str] = None,
+) -> Tuple[datetime, datetime]:
+    """
+    Resolve the effective [start, end] query window.
+
+    * Missing end -> now.
+    * Missing start -> end - since (when given) else end - 1h.
+    * start >= end, or a window wider than the configured maximum -> 400.
+    """
+    now = datetime.now(timezone.utc)
+    end = _coerce_datetime(end_time, "end_time") if end_time is not None else now
+    if start_time is not None:
+        start = _coerce_datetime(start_time, "start_time")
+    elif since is not None:
+        start = end - _parse_since(since)
+    else:
+        start = end - DEFAULT_QUERY_WINDOW
+
+    if start >= end:
+        raise HTTPException(
+            status_code=400, detail="start_time must be before end_time"
+        )
+
+    max_window = _max_query_window()
+    if end - start > max_window:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Requested time range of {(end - start).days} days exceeds the "
+                f"maximum of {max_window.days} days "
+                "(LOGFORGE_MAX_QUERY_WINDOW_DAYS). Narrow the range."
+            ),
+        )
+    return start, end
+
+
+def _time_range_payload(start: datetime, end: datetime) -> Dict[str, str]:
+    """The effective window, echoed in responses (LF-017/LF-022)."""
+    return {"start_time": start.isoformat(), "end_time": end.isoformat()}
+
 
 # Define TimeseriesQueryRequest model here since it's query-specific
 class TimeseriesQueryRequest(BaseModel):
@@ -37,6 +175,83 @@ class TimeseriesQueryRequest(BaseModel):
     group_by: List[str] = []
     aggregations: List[Dict[str, Any]] = []  # For M2 compatibility
     granularity: str = "hour"  # For M2 compatibility
+
+
+def build_query_request(
+    query_data: Dict[str, Any], customer_id: str
+) -> AdvancedQueryRequest:
+    """
+    Build a validated `AdvancedQueryRequest` from a raw request dict, with the
+    tenant-isolation filter applied.
+
+    ENH-033: three endpoints passed raw dicts straight to
+    `query_engine.execute_query()`, which expects an `AdvancedQueryRequest`.
+    That raised `AttributeError: 'dict' object has no attribute 'filters'` and
+    always had -- the failure was invisible because `execute_query` caught every
+    exception and returned an empty result set, so clients saw a valid-looking
+    "no data" response instead of an error.
+
+    The tenant filter is appended HERE, after the caller's own filters, so it
+    cannot be omitted by a caller-supplied payload.
+
+    Raises:
+        HTTPException(400): if the payload is not a valid query.
+    """
+    payload = dict(query_data or {})
+
+    raw_filters = list(payload.get("filters") or [])
+    # Tenant isolation is non-negotiable and always appended last.
+    raw_filters.append(
+        {"field": "customer_id", "operator": "eq", "value": customer_id}
+    )
+
+    try:
+        filters = [
+            f if isinstance(f, QueryFilter) else QueryFilter(
+                field=f["field"],
+                operator=QueryOperator(f["operator"]),
+                value=f["value"],
+            )
+            for f in raw_filters
+        ]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid filter: {exc}")
+
+    try:
+        # `QueryAggregation` is a plain dataclass, so it does NOT validate its
+        # own `type`. Coercing through the enum here means an unknown
+        # aggregation is rejected with a 400 instead of silently degrading to
+        # `count()` and returning a number the caller never asked for.
+        aggregations = [
+            a if isinstance(a, QueryAggregation) else QueryAggregation(
+                type=AggregationType(a["type"]),
+                field=a.get("field", "*"),
+                alias=a.get("alias"),
+                percentile_value=a.get("percentile_value"),
+            )
+            for a in (payload.get("aggregations") or [])
+        ]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid aggregation: {exc}")
+
+    fields = {
+        key: payload[key]
+        for key in (
+            "start_time", "end_time", "text_search", "group_by", "time_series",
+            "time_granularity", "sort_field", "sort_order", "limit", "offset",
+            "include_fields", "exclude_fields", "timeout_seconds",
+        )
+        if key in payload and payload[key] is not None
+    }
+
+    try:
+        return AdvancedQueryRequest(
+            filters=filters, aggregations=aggregations, **fields
+        )
+    except Exception as exc:
+        # Pydantic validation error -> 400, never a 500 and never a silent
+        # empty result.
+        raise HTTPException(status_code=400, detail=f"Invalid query: {exc}")
 
 
 # Advanced Query Engine Endpoints (M2 Core)
@@ -60,7 +275,7 @@ async def advanced_query_logs(query_request: AdvancedQueryRequest, customer_id: 
         
         # Check cache first
         query_dict = query_request.model_dump(mode='json')
-        cached_result = await query_service.get_cached_result(query_dict, customer_id)
+        cached_result = await get_query_service().get_cached_result(query_dict, customer_id)
         
         if cached_result:
             # Return cached result as QueryResponse
@@ -76,7 +291,7 @@ async def advanced_query_logs(query_request: AdvancedQueryRequest, customer_id: 
         result = await query_engine.execute_query(query_request)
         
         # Cache the result for future use (5 minutes TTL)
-        await query_service.cache_query_result(
+        await get_query_service().cache_query_result(
             query_data=query_dict,
             customer_id=customer_id,
             result=result.model_dump(mode='json'),
@@ -87,8 +302,80 @@ async def advanced_query_logs(query_request: AdvancedQueryRequest, customer_id: 
         result.customer_id = customer_id
         return result
         
+    except HTTPException:
+        raise
+    except QueryFieldError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Advanced query failed: {str(e)}")
+        raise internal_error(e, "Advanced query failed")
+
+@router.post("/query/logql")
+async def logql_query(
+    request_body: Dict[str, Any], customer_id: str = MiddlewareTenant
+):
+    """
+    Execute a LogforgeQL text query (ENH-028).
+
+    Examples:
+        {"query": "error | where service = \\"api\\" | limit 100"}
+        {"query": "error | limit 50", "since": "24h"}
+        {"query": "error", "start_time": "2026-08-15T00:00:00Z",
+         "end_time": "2026-08-15T06:00:00Z"}
+
+    LF-022: when no time range is supplied, the query runs over the last hour
+    (the effective window is echoed back as `time_range`). A relative range
+    can be given as `"since": "15m" | "24h" | "7d"`. Ranges wider than
+    LOGFORGE_MAX_QUERY_WINDOW_DAYS (default 31) are rejected with a 400.
+
+    The query compiles to an `AdvancedQueryRequest` and is executed by the
+    parameterised builder, so it can never become an injection surface, and the
+    tenant filter is applied by `build_query_request` exactly as for every other
+    endpoint.
+    """
+    from logql import LogQLSyntaxError, compile_to_request_payload
+
+    query_text = request_body.get("query")
+    if not query_text or not isinstance(query_text, str):
+        raise HTTPException(status_code=400, detail="A 'query' string is required")
+
+    try:
+        payload = compile_to_request_payload(query_text)
+    except (LogQLSyntaxError, QueryFieldError) as exc:
+        # A syntax error is a user error: explain it rather than returning a
+        # confusing 500 or an empty result set.
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    # Time range comes from the request body, not the query language, so the
+    # caller keeps explicit control over how much data is scanned. LF-022:
+    # absent bounds default to the last hour instead of a 400.
+    start, end = resolve_time_window(
+        start_time=request_body.get("start_time"),
+        end_time=request_body.get("end_time"),
+        since=request_body.get("since"),
+    )
+    payload["start_time"] = start
+    payload["end_time"] = end
+
+    try:
+        if not query_engine:
+            raise HTTPException(status_code=500, detail="Query engine not initialized")
+
+        query_request = build_query_request(payload, customer_id)
+        result = await query_engine.execute_query(query_request)
+
+        result.customer_id = customer_id
+        response = result.model_dump(mode="json")
+        # LF-022: echo the effective window so callers see what was scanned.
+        response["time_range"] = _time_range_payload(start, end)
+        return response
+
+    except HTTPException:
+        raise
+    except QueryFieldError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise internal_error(e, "LogQL query failed")
+
 
 @router.post("/query/aggregate")
 async def aggregate_logs(query_data: Dict[str, Any], customer_id: str = MiddlewareTenant):
@@ -98,18 +385,13 @@ async def aggregate_logs(query_data: Dict[str, Any], customer_id: str = Middlewa
         if not query_engine:
             raise HTTPException(status_code=500, detail="Query engine not initialized")
         
-        # Add customer_id filter to ensure multi-tenant isolation
-        if "filters" not in query_data:
-            query_data["filters"] = []
-        query_data["filters"].append({
-            "field": "customer_id",
-            "operator": "eq",
-            "value": customer_id
-        })
-        
+        # ENH-033: build a validated request (tenant filter applied inside)
+        # instead of handing a raw dict to the engine.
+        query_request = build_query_request(query_data, customer_id)
+
         # Check cache first
-        cached_result = await query_service.get_cached_result(query_data, customer_id)
-        
+        cached_result = await get_query_service().get_cached_result(query_data, customer_id)
+
         if cached_result:
             return {
                 "aggregations": cached_result.get('aggregations', {}),
@@ -118,9 +400,9 @@ async def aggregate_logs(query_data: Dict[str, Any], customer_id: str = Middlewa
                 "execution_time_ms": cached_result.get('execution_time_ms', 0),
                 "customer_id": customer_id
             }
-        
+
         # Build aggregation query
-        result = await query_engine.execute_query(query_data)
+        result = await query_engine.execute_query(query_request)
         
         # Cache the result
         result_dict = {
@@ -128,7 +410,7 @@ async def aggregate_logs(query_data: Dict[str, Any], customer_id: str = Middlewa
             "total_count": result.total_count or 0,
             "execution_time_ms": result.execution_time_ms or 0
         }
-        await query_service.cache_query_result(
+        await get_query_service().cache_query_result(
             query_data=query_data,
             customer_id=customer_id,
             result=result_dict,
@@ -143,8 +425,14 @@ async def aggregate_logs(query_data: Dict[str, Any], customer_id: str = Middlewa
             "customer_id": customer_id
         }
         
+    except HTTPException:
+        # ENH-033: preserve deliberate 4xx (e.g. an invalid query) instead of
+        # relabelling it as a 500.
+        raise
+    except QueryFieldError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Aggregation failed: {str(e)}")
+        raise internal_error(e, "Aggregation failed")
 
 @router.post("/query/timeseries")
 async def timeseries_query(query_request: TimeseriesQueryRequest, customer_id: str = MiddlewareTenant):
@@ -154,19 +442,11 @@ async def timeseries_query(query_request: TimeseriesQueryRequest, customer_id: s
         if not query_engine:
             raise HTTPException(status_code=500, detail="Query engine not initialized")
         
-        # Add customer_id filter to ensure multi-tenant isolation
         query_data = query_request.model_dump()
-        if "filters" not in query_data:
-            query_data["filters"] = []
-        query_data["filters"].append({
-            "field": "customer_id",
-            "operator": "eq",
-            "value": customer_id
-        })
-        
-        # Check cache first
-        cached_result = await query_service.get_cached_result(query_data, customer_id)
-        
+
+        # Check cache first (cache key is built from the raw request shape)
+        cached_result = await get_query_service().get_cached_result(query_data, customer_id)
+
         if cached_result:
             return {
                 "buckets": cached_result.get('aggregations', {}).get("time_series", []),
@@ -175,9 +455,22 @@ async def timeseries_query(query_request: TimeseriesQueryRequest, customer_id: s
                 "execution_time_ms": cached_result.get('execution_time_ms', 0),
                 "customer_id": customer_id
             }
-        
+
+        # ENH-033: translate the timeseries-specific request into a validated
+        # AdvancedQueryRequest. `time_series`/`time_granularity` are what make
+        # the engine emit time buckets; the previous raw dict carried
+        # `granularity`/`interval`, which the engine never read.
+        engine_payload = dict(query_data)
+        engine_payload["time_series"] = True
+        engine_payload["time_granularity"] = query_data.get("granularity") or "hour"
+        # `interval`, `metrics` and `granularity` are not engine fields.
+        for key in ("interval", "metrics", "granularity"):
+            engine_payload.pop(key, None)
+
+        engine_request = build_query_request(engine_payload, customer_id)
+
         # Execute time-series query
-        result = await query_engine.execute_query(query_data)
+        result = await query_engine.execute_query(engine_request)
         
         # Cache the result
         result_dict = {
@@ -185,7 +478,7 @@ async def timeseries_query(query_request: TimeseriesQueryRequest, customer_id: s
             "total_count": result.total_count or 0,
             "execution_time_ms": result.execution_time_ms or 0
         }
-        await query_service.cache_query_result(
+        await get_query_service().cache_query_result(
             query_data=query_data,
             customer_id=customer_id,
             result=result_dict,
@@ -200,8 +493,12 @@ async def timeseries_query(query_request: TimeseriesQueryRequest, customer_id: s
             "customer_id": customer_id
         }
         
+    except HTTPException:
+        raise
+    except QueryFieldError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Timeseries query failed: {str(e)}")
+        raise internal_error(e, "Timeseries query failed")
 
 # Saved Query Management
 
@@ -214,7 +511,7 @@ async def list_saved_queries(
 ):
     """List saved queries for the customer"""
     try:
-        result = await query_service.list_saved_queries(
+        result = await get_query_service().list_saved_queries(
             customer_id=customer_id,
             created_by=created_by,
             query_type=query_type,
@@ -223,7 +520,7 @@ async def list_saved_queries(
         return result
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to list saved queries: {str(e)}")
+        raise internal_error(e, "Failed to list saved queries")
 
 @router.post("/query/saved") 
 async def save_query(query_data: Dict[str, Any], customer_id: str = MiddlewareTenant):
@@ -233,19 +530,19 @@ async def save_query(query_data: Dict[str, Any], customer_id: str = MiddlewareTe
         query_data['customer_id'] = customer_id
         
         # Validate and save query
-        result = await query_service.save_query(query_data)
+        result = await get_query_service().save_query(query_data)
         return result
         
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save query: {str(e)}")
+        raise internal_error(e, "Failed to save query")
 
 @router.get("/query/saved/{query_id}")
 async def get_saved_query(query_id: str, customer_id: str = MiddlewareTenant):
     """Retrieve a specific saved query"""
     try:
-        query_data = await query_service.get_saved_query(query_id, customer_id)
+        query_data = await get_query_service().get_saved_query(query_id, customer_id)
         
         if query_data:
             return query_data
@@ -255,41 +552,41 @@ async def get_saved_query(query_id: str, customer_id: str = MiddlewareTenant):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve query: {str(e)}")
+        raise internal_error(e, "Failed to retrieve query")
 
 @router.put("/query/saved/{query_id}")
 async def update_saved_query(query_id: str, update_data: Dict[str, Any], customer_id: str = MiddlewareTenant):
     """Update a specific saved query"""
     try:
-        result = await query_service.update_saved_query(query_id, customer_id, update_data)
+        result = await get_query_service().update_saved_query(query_id, customer_id, update_data)
         return result
         
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update query: {str(e)}")
+        raise internal_error(e, "Failed to update query")
 
 @router.delete("/query/saved/{query_id}")
 async def delete_saved_query(query_id: str, customer_id: str = MiddlewareTenant):
     """Delete a specific saved query"""
     try:
-        result = await query_service.delete_saved_query(query_id, customer_id)
+        result = await get_query_service().delete_saved_query(query_id, customer_id)
         return result
         
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete query: {str(e)}")
+        raise internal_error(e, "Failed to delete query")
 
 @router.post("/query/validate")
 async def validate_query(query_data: Dict[str, Any], customer_id: str = MiddlewareTenant):
     """Validate query structure and parameters"""
     try:
-        validation_result = await query_service.validate_query_structure(query_data)
+        validation_result = await get_query_service().validate_query_structure(query_data)
         return validation_result
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Query validation failed: {str(e)}")
+        raise internal_error(e, "Query validation failed")
 
 # Data Export Endpoints
 
@@ -305,11 +602,14 @@ async def export_query_results(export_request: Dict[str, Any], customer_id: str 
         raw_query = export_request.get("query", {})
         export_format = export_request.get("format", "json")
 
-        # Handle string query (from log explorer search) vs dict query object
+        # Handle string query (from log explorer search) vs dict query object.
+        #
+        # ENH-033: the free-text term was previously placed under a `search`
+        # key, which the engine never reads -- so an export silently ignored the
+        # user's search term. It maps to `text_search`.
         if isinstance(raw_query, str):
             query_data = {
-                "query_type": "search",
-                "search": raw_query,
+                "text_search": raw_query,
                 "filters": [],
                 "start_time": export_request.get("start_time"),
                 "end_time": export_request.get("end_time"),
@@ -332,17 +632,11 @@ async def export_query_results(export_request: Dict[str, Any], customer_id: str 
         else:
             query_data = raw_query if isinstance(raw_query, dict) else {}
 
-        # Add customer_id filter to ensure multi-tenant isolation
-        if "filters" not in query_data:
-            query_data["filters"] = []
-        query_data["filters"].append({
-            "field": "customer_id",
-            "operator": "eq",
-            "value": customer_id
-        })
-        
+        # ENH-033: validated request; tenant isolation applied inside.
+        query_request = build_query_request(query_data, customer_id)
+
         # Execute query
-        result = await query_engine.execute_query(query_data)
+        result = await query_engine.execute_query(query_request)
         
         # Format results based on requested format
         if export_format.lower() == "csv":
@@ -366,45 +660,82 @@ async def export_query_results(export_request: Dict[str, Any], customer_id: str 
                 "customer_id": customer_id
             }
             
+    except HTTPException:
+        raise
+    except QueryFieldError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
+        raise internal_error(e, "Export failed")
 
 # Basic log retrieval for M0 compatibility
 @router.get("/logs")
 async def get_logs(
     service: str = Query(None, description="Filter by service name"),
     level: str = Query(None, description="Filter by log level"),
-    limit: int = Query(100, description="Maximum number of logs to return"),
-    offset: int = Query(0, description="Number of logs to skip"),
+    start_time: Optional[datetime] = Query(None, description="Window start (ISO-8601). Defaults to end_time - 1h"),
+    end_time: Optional[datetime] = Query(None, description="Window end (ISO-8601). Defaults to now"),
+    limit: int = Query(100, ge=1, le=10000, description="Maximum number of logs to return"),
+    offset: int = Query(0, ge=0, description="Number of logs to skip"),
     customer_id: str = MiddlewareTenant
 ):
-    """Simple log retrieval endpoint for basic queries (M0 compatibility)"""
+    """
+    Simple log retrieval endpoint for basic queries (M0 compatibility).
+
+    ENH-003: `customer_id`, `service` and `level` were interpolated directly into
+    the WHERE clause, so a crafted `service` value could terminate the predicate
+    and neutralise the `customer_id` tenant-isolation filter, exposing other
+    tenants' logs. All values are now bound as ClickHouse parameters, and
+    limit/offset are integer-bounded by FastAPI before use.
+
+    LF-017: the query is always bounded by a `ts` predicate. Without one,
+    ClickHouse reads every monthly partition for the tenant before applying
+    LIMIT -- a full-partition scan for what the UI presents as "recent logs".
+    Omitted bounds default to the last hour; the effective window is returned
+    as `time_range`; ranges wider than LOGFORGE_MAX_QUERY_WINDOW_DAYS
+    (default 31) are rejected with a 400.
+    """
     try:
-        
+
         if not clickhouse_client:
             raise HTTPException(status_code=500, detail="Database client not initialized")
-        
-        # Build a simple query
-        where_conditions = [f"customer_id = '{customer_id}'"]
-        
+
+        # LF-017: resolve the bounded time window (defaults: last 1h).
+        window_start, window_end = resolve_time_window(start_time, end_time)
+
+        # Build the predicate with BOUND parameters only. `customer_id` comes
+        # from the auth middleware, but is bound regardless -- defence in depth.
+        where_conditions = [
+            "customer_id = %(customer_id)s",
+            "ts >= %(start_time)s",
+            "ts <= %(end_time)s",
+        ]
+        params = {
+            "customer_id": customer_id,
+            "start_time": window_start,
+            "end_time": window_end,
+        }
+
         if service:
-            where_conditions.append(f"service = '{service}'")
+            where_conditions.append("service = %(service)s")
+            params["service"] = service
         if level:
-            where_conditions.append(f"level = '{level}'")
-        
+            where_conditions.append("level = %(level)s")
+            params["level"] = level
+
         where_clause = " AND ".join(where_conditions)
-        
-        # Simple query to get logs
+
+        # limit/offset are ints validated by FastAPI (ge/le), so they cannot
+        # carry SQL. int() makes that explicit and independent of the router.
         query = f"""
         SELECT ts, service, level, msg, host, trace_id, customer_id
         FROM logs_raw_mt
         WHERE {where_clause}
         ORDER BY ts DESC
-        LIMIT {limit} OFFSET {offset}
+        LIMIT {int(limit)} OFFSET {int(offset)}
         """
-        
-        result = clickhouse_client.query(query)
-        
+
+        result = clickhouse_client.query(query, parameters=params)
+
         # Convert to expected format
         logs = []
         for row in result.result_rows:
@@ -417,21 +748,26 @@ async def get_logs(
                 "trace_id": row[5],
                 "customer_id": row[6]
             })
-        
-        # Get total count for pagination
+
+        # Get total count for pagination (same bound predicate)
         count_query = f"""
         SELECT count() FROM logs_raw_mt WHERE {where_clause}
         """
-        total_result = clickhouse_client.query(count_query)
+        total_result = clickhouse_client.query(count_query, parameters=params)
         total = total_result.result_rows[0][0] if total_result.result_rows else 0
-        
+
         return {
             "logs": logs,
             "total": total,
             "limit": limit,
             "offset": offset,
+            # LF-017: the window actually queried, so the UI can display
+            # "showing last 1 hour" when it sent no explicit range.
+            "time_range": _time_range_payload(window_start, window_end),
             "customer_id": customer_id
         }
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Log retrieval failed: {str(e)}")
+        raise internal_error(e, "Log retrieval failed")
