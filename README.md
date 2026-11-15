@@ -216,7 +216,7 @@ The tenant admin password is auto-generated during creation. Here's how to retri
 **Option 2: Reset Password via API**
 ```bash
 # 1. Find the user by email
-curl -X GET "http://localhost:7080/v1/users?email=mitesh.pant@gmail.com" \
+curl -X GET "http://localhost:7080/v1/users?email=user@example.com" \
   -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
 
 # 2. Reset the password (creates new password)
@@ -233,7 +233,7 @@ curl -X POST "http://localhost:7080/v1/users/{user_id}/reset-password" \
 curl -X POST "http://localhost:7080/v1/auth/forgot-password" \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "mitesh.pant@gmail.com"
+    "email": "user@example.com"
   }'
 ```
 
