@@ -126,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               }
             }
             
-            setUser(userProfile.data)
+            setUser(userProfile.data ?? null)
             setTenant(tenantInfo)
             setTenantId(tenantId)
             setUserRole(userRole) // Use role from JWT
@@ -290,7 +290,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const userProfile = await AuthApi.getCurrentUser()
       
-      setUser(userProfile.data)
+      setUser(userProfile.data ?? null)
       setUserRole(userRole || 'user')
       setPermissions(permissions)
     } catch (error: any) {
@@ -306,7 +306,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const rolesResponse = await AuthApi.getCurrentUserRoles()
       
       if (rolesResponse.success && rolesResponse.data) {
-        setAvailableTenants(rolesResponse.data)
+        // /v1/auth/me/roles returns { user_id, roles: [...] }
+        setAvailableTenants(rolesResponse.data.roles ?? [])
       }
     } catch (error: any) {
       console.warn('Failed to load available tenants:', error)

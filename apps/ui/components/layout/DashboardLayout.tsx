@@ -328,7 +328,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                     </div>
                     <div className="flex-1 text-left">
                       <p className="text-sm font-medium text-white">
-                        {user?.full_name || user?.email || 'Loading...'}
+                        {user?.name || user?.email || 'Loading...'}
                       </p>
                       <p className="text-xs text-slate-400 capitalize" data-testid="current-tenant">
                         {userRole} • {tenant?.name}

@@ -30,6 +30,7 @@ interface TenantUsage {
   query_count: number
   api_calls: number
   billing_period: string
+  billing?: { total_cost?: number }
 }
 
 interface TenantStats {
@@ -531,7 +532,7 @@ function OnboardingModal({ isOpen, onClose, onSuccess }: OnboardingModalProps) {
 export default function TenantsPage() {
   const [showOnboardingModal, setShowOnboardingModal] = useState(false)
   const [tenants, setTenants] = useState<Tenant[]>([])
-  const [tenantUsages, setTenantUsages] = useState<Record<string, TenantUsage>>({})
+  const [tenantUsages, setTenantUsages] = useState<Record<string, TenantUsage | null>>({})
   const [tenantStats, setTenantStats] = useState<TenantStats[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')

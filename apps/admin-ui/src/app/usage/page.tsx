@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Select } from '@/components/ui/select'
+import { NativeSelect } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { ArrowLeft, Download, Receipt, TrendingUp, Database, Activity, DollarSign } from 'lucide-react'
 import { 
@@ -121,13 +121,13 @@ export default function UsageAnalyticsPage() {
           return sum + cost
         }, 0)
         
-        totalApiCalls = Object.values(combinedUsage).reduce((sum, usage: any) => 
+        totalApiCalls = Object.values(combinedUsage).reduce((sum: number, usage: any) => 
           sum + (usage?.api_calls || 0), 0)
         
-        totalStorage = Object.values(combinedUsage).reduce((sum, usage: any) => 
+        totalStorage = Object.values(combinedUsage).reduce((sum: number, usage: any) => 
           sum + (usage?.storage_used_gb || 0), 0)
           
-        totalDataIngested = Object.values(combinedUsage).reduce((sum, usage: any) => 
+        totalDataIngested = Object.values(combinedUsage).reduce((sum: number, usage: any) => 
           sum + (usage?.log_count_month || 0), 0)
       }
       
@@ -163,7 +163,7 @@ export default function UsageAnalyticsPage() {
       
     } catch (error) {
       console.error('Failed to fetch usage data:', error)
-      setApiError(`Critical error loading usage analytics: ${error.message || 'Unknown error'}. Please check API connectivity.`)
+      setApiError(`Critical error loading usage analytics: ${error instanceof Error ? error.message : 'Unknown error'}. Please check API connectivity.`)
       // Set fallback stats on error
       setUsageStats([
         { title: "Total Revenue", value: "$0", description: "API Error", icon: DollarSign },
@@ -253,7 +253,7 @@ export default function UsageAnalyticsPage() {
       setTimeout(() => setExportStatus(null), 4000)
     } catch (error) {
       console.error('Failed to generate bill:', error)
-      setApiError(`Failed to generate bill for ${tenantName}: ${error.message || 'Unknown error'}`)
+      setApiError(`Failed to generate bill for ${tenantName}: ${error instanceof Error ? error.message : 'Unknown error'}`)
       setExportStatus(null)
     }
   }
@@ -285,7 +285,7 @@ export default function UsageAnalyticsPage() {
       setTimeout(() => setExportStatus(null), 4000)
     } catch (error) {
       console.error('Failed to generate bills:', error)
-      setApiError(`Failed to generate bills: ${error.message || 'Unknown error'}`)
+      setApiError(`Failed to generate bills: ${error instanceof Error ? error.message : 'Unknown error'}`)
       setExportStatus(null)
     }
   }
@@ -346,7 +346,7 @@ export default function UsageAnalyticsPage() {
       <div className="flex justify-between items-center">
         <div className="flex items-center space-x-2">
           <label className="text-sm font-medium text-gray-700">Period:</label>
-          <Select
+          <NativeSelect
             value={selectedPeriod}
             onChange={(e) => setSelectedPeriod(e.target.value)}
           >
@@ -354,7 +354,7 @@ export default function UsageAnalyticsPage() {
             <option value="last_month">Last Month</option>
             <option value="last_3_months">Last 3 Months</option>
             <option value="custom">Custom Range</option>
-          </Select>
+          </NativeSelect>
         </div>
 
         <div className="flex space-x-2">
@@ -531,7 +531,7 @@ export default function UsageAnalyticsPage() {
             <div className="bg-blue-50 p-4 rounded-lg">
               <h4 className="text-sm font-medium text-blue-600">Log Ingestion</h4>
               <p className="text-xl font-bold text-blue-900">
-                {Object.values(tenantUsages).reduce((sum, usage: any) => sum + (usage?.log_count_month || 0), 0).toLocaleString()}
+                {Object.values(tenantUsages).reduce((sum: number, usage: any) => sum + (usage?.log_count_month || 0), 0).toLocaleString()}
               </p>
               <p className="text-xs text-blue-700">Total logs this month</p>
             </div>
@@ -539,7 +539,7 @@ export default function UsageAnalyticsPage() {
             <div className="bg-green-50 p-4 rounded-lg">
               <h4 className="text-sm font-medium text-green-600">Query Engine</h4>
               <p className="text-xl font-bold text-green-900">
-                {Object.values(tenantUsages).reduce((sum, usage: any) => sum + (usage?.query_count || 0), 0).toLocaleString()}
+                {Object.values(tenantUsages).reduce((sum: number, usage: any) => sum + (usage?.query_count || 0), 0).toLocaleString()}
               </p>
               <p className="text-xs text-green-700">Total queries executed</p>
             </div>
@@ -547,7 +547,7 @@ export default function UsageAnalyticsPage() {
             <div className="bg-purple-50 p-4 rounded-lg">
               <h4 className="text-sm font-medium text-purple-600">API Gateway</h4>
               <p className="text-xl font-bold text-purple-900">
-                {Object.values(tenantUsages).reduce((sum, usage: any) => sum + (usage?.api_calls || 0), 0).toLocaleString()}
+                {Object.values(tenantUsages).reduce((sum: number, usage: any) => sum + (usage?.api_calls || 0), 0).toLocaleString()}
               </p>
               <p className="text-xs text-purple-700">Total API calls</p>
             </div>
@@ -555,7 +555,7 @@ export default function UsageAnalyticsPage() {
             <div className="bg-orange-50 p-4 rounded-lg">
               <h4 className="text-sm font-medium text-orange-600">Data Storage</h4>
               <p className="text-xl font-bold text-orange-900">
-                {Object.values(tenantUsages).reduce((sum, usage: any) => sum + (usage?.storage_used_gb || 0), 0).toFixed(1)}GB
+                {Object.values(tenantUsages).reduce((sum: number, usage: any) => sum + (usage?.storage_used_gb || 0), 0).toFixed(1)}GB
               </p>
               <p className="text-xs text-orange-700">Total storage used</p>
             </div>

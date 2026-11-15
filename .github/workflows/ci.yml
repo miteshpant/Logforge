@@ -112,6 +112,11 @@ jobs:
     name: Security scan
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # gitleaks-action lists the PR's commits via the API; with only
+    # `contents: read` that call is refused (403) and the job fails.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -162,8 +167,8 @@ jobs:
         run: npm ci
 
       - name: Type check
+        # Blocking: both apps type-check cleanly, so a new error is a regression.
         working-directory: apps/${{ matrix.app }}
-        continue-on-error: true
         run: npx tsc --noEmit
 
       - name: Build

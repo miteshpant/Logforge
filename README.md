@@ -52,7 +52,7 @@ rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 | "AI" natural-language query and recommendations | 🧪 Keyword templates and canned output, no LLM | `apps/api/services/ai_service.py` |
 | Billing | 🟡 Usage metering and invoices computed, no payment provider | `apps/api/routers/usage_api.py` |
 | Tenant web UI (Next.js) | 🟡 Most screens are wired to the API; a few still show demo data | `apps/ui/` |
-| Platform admin UI (Next.js) | 🟡 Builds with type errors; billing, features and support pages are placeholders | `apps/admin-ui/` |
+| Platform admin UI (Next.js) | 🟡 Tenants, users, usage and audit work; billing, features and support pages are placeholders | `apps/admin-ui/` |
 
 ---
 

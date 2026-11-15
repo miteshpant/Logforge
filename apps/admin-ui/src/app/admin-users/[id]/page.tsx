@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
+import { NativeSelect } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { ArrowLeft, Save, UserX, Shield, Clock } from 'lucide-react'
 import { 
@@ -293,7 +293,7 @@ export default function AdminUserEditPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Role *
                 </label>
-                <Select
+                <NativeSelect
                   value={formData.role}
                   onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value }))}
                   disabled={saving}
@@ -302,14 +302,14 @@ export default function AdminUserEditPage() {
                   <option value="super_admin">Super Admin</option>
                   <option value="support_admin">Support Admin</option>
                   <option value="billing_admin">Billing Admin</option>
-                </Select>
+                </NativeSelect>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Status *
                 </label>
-                <Select
+                <NativeSelect
                   value={formData.status}
                   onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
                   disabled={saving}
@@ -317,7 +317,7 @@ export default function AdminUserEditPage() {
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                   <option value="pending">Pending</option>
-                </Select>
+                </NativeSelect>
               </div>
             </CardContent>
           </Card>

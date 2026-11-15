@@ -654,7 +654,7 @@ export default function MetricsExplorerPage() {
 
             {/* Refresh Button */}
             <button
-              onClick={queryMetrics}
+              onClick={() => queryMetrics()}
               disabled={isLoading || isStreaming}
               className="flex items-center gap-2 px-3 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
             >

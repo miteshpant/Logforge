@@ -12,10 +12,6 @@ markers).
 
 ## Bugs and broken things
 
-- **Admin UI type errors.** `cd apps/admin-ui && npm run build` compiles, but
-  the type check fails (for example `src/app/admin-users/[id]/page.tsx`: the
-  `Select` component has no `onChange` prop). Fix the types so the CI build
-  passes.
 - **Duplicate route.** `GET /v1/tenants/{tenant_id}/usage` is defined in both
   `apps/api/routers/tenant_api.py` and `apps/api/routers/subscription_api.py`.
   The tenant router is registered first, so the subscription version can never

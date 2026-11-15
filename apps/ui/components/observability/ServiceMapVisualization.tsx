@@ -12,7 +12,8 @@ interface ServiceMapVisualizationProps {
 }
 
 interface D3Node extends ServiceNode, d3.SimulationNodeDatum {}
-interface D3Link extends ServiceEdge, d3.SimulationLinkDatum<D3Node> {}
+// d3 replaces string source/target ids with node objects once the simulation starts.
+type D3Link = Omit<ServiceEdge, 'source' | 'target'> & d3.SimulationLinkDatum<D3Node>
 
 export default function ServiceMapVisualization({
   data,
@@ -180,7 +181,7 @@ export default function ServiceMapVisualization({
       .call(d3.drag<SVGGElement, D3Node>()
         .on('start', dragStarted)
         .on('drag', dragged)
-        .on('end', dragEnded))
+        .on('end', dragEnded) as any)
       .on('click', (event, d) => {
         event.stopPropagation()
         onNodeSelectRef.current(d)
