@@ -34,7 +34,10 @@ def test_full_app_imports_without_a_database():
 def test_app_has_routes_registered():
     """Importing must build the real router set, not a degraded subset."""
     main = importlib.import_module("main")
-    assert len(main.app.routes) > 100
+    # Count endpoints via the OpenAPI schema: since FastAPI 0.15x,
+    # `app.routes` holds one entry per included router rather than a flat
+    # list of endpoints, so its length no longer reflects what is served.
+    assert len(main.app.openapi()["paths"]) > 100
 
 
 @pytest.mark.parametrize(

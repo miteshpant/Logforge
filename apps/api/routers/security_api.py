@@ -1012,12 +1012,7 @@ async def get_threat_hunt_rules(
         logger.error(f"Failed to get threat hunt rules: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get threat hunt rules: {str(e)}")
 
-# Initialize default security content on startup
-@router.on_event("startup")
-async def initialize_security_content():
-    """Initialize default Sigma rules and threat intelligence"""
-    try:
-        await get_security_service().load_default_security_content("default")
-        logger.info("Default security content initialized")
-    except Exception as e:
-        logger.error(f"Failed to initialize default security content: {e}")
+# Default Sigma content is loaded at startup by mitre_default_loader, from the
+# app lifespan in dependencies.py. A router-level on_event("startup") hook used to live here,
+# but it never ran -- the app's custom lifespan bypassed router startup events --
+# and it called a SecurityService method that does not exist.

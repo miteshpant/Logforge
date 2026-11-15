@@ -10,7 +10,7 @@ from unittest.mock import Mock, AsyncMock, MagicMock
 from faker import Faker
 
 from fastapi.testclient import TestClient
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 
 # Import our modules.
 #
@@ -72,7 +72,8 @@ def client(app) -> Generator[TestClient, None, None]:
 @pytest.fixture
 async def async_client(app) -> AsyncClient:
     """Async test client"""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    # httpx 0.28 removed the app= shortcut; mount the app via ASGITransport.
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
 @pytest.fixture
