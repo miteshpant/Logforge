@@ -5,7 +5,9 @@ detection rules, and code changes are all welcome.
 
 ## Getting started
 
-1. Fork the repository and create a branch from `main`.
+1. Fork the repository (or, if you have write access, create a branch) and
+   branch off the latest `main`. Use a descriptive name such as
+   `fix/live-tail-endpoint` or `feat/mitre-coverage-api`.
 2. Bring up the local stack (ClickHouse, MinIO, RedPanda, Redis, API, UIs):
 
    ```bash
@@ -18,8 +20,8 @@ detection rules, and code changes are all welcome.
 ## Running tests
 
 ```bash
-# API tests
-pytest
+# API tests that need no infrastructure (run from the repo root)
+pytest tests/ --ignore=tests/routes_tests
 
 # UI end-to-end tests
 cd apps/ui && npx playwright test
@@ -40,6 +42,22 @@ Configure them with environment variables instead of editing the files:
 **Never commit real credentials, tokens, or personal data.**
 
 ## Pull requests
+
+`main` is a protected branch: nobody pushes to it directly, maintainers included.
+Every change lands through a pull request that
+
+- targets `main`,
+- passes CI (API tests, OpenAPI freshness check, lint, security scans, UI builds),
+- is approved by a maintainer (see [CODEOWNERS](./.github/CODEOWNERS)), and
+- is up to date with `main` before merging.
+
+If you changed an API endpoint, regenerate the published spec and commit it:
+
+```bash
+python scripts/export_openapi.py
+```
+
+Looking for something to work on? See [docs/ROADMAP.md](./docs/ROADMAP.md).
 
 - Keep PRs focused; one logical change per PR.
 - Add or update tests for behaviour changes. CI must pass.

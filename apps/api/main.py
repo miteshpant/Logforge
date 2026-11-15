@@ -86,19 +86,19 @@ from self_metrics import MetricsMiddleware
 app.add_middleware(MetricsMiddleware)
 
 # Include all routers
-app.include_router(health_router)
-app.include_router(ingestion_router)
-app.include_router(query_router)
-app.include_router(dashboard_router)
-app.include_router(storage_router)
-app.include_router(alerts_router)
+app.include_router(health_router, tags=["Health"])
+app.include_router(ingestion_router, tags=["Ingestion"])
+app.include_router(query_router, tags=["Query"])
+app.include_router(dashboard_router, tags=["Dashboards"])
+app.include_router(storage_router, tags=["Storage"])
+app.include_router(alerts_router, tags=["Alerts"])
 
 # Include M8 User Service routers
 app.include_router(user_router)
 app.include_router(auth_router)
 app.include_router(role_router)
 app.include_router(usage_router)
-app.include_router(quota_management_router)
+app.include_router(quota_management_router, tags=["Quota Management"])
 
 # Include additional API routers
 app.include_router(security_router)

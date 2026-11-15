@@ -16,6 +16,8 @@ lib64/
 # Exception: Allow Next.js UI lib directory
 !apps/ui/lib/
 !apps/ui/lib/**
+!apps/admin-ui/src/lib/
+!apps/admin-ui/src/lib/**
 parts/
 sdist/
 var/
