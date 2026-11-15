@@ -15,6 +15,7 @@ Target: 1000+ logs per second across multiple formats
 Environment: Technology company (TestOrg) - Enterprise tier
 """
 
+import os
 import asyncio
 import aiohttp
 import json
@@ -37,15 +38,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configuration
-LOGFORGE_API_BASE = "http://localhost:7080"
-TENANT_ID = "832f393c-d9de-4a80-a183-aa913ad27266"
+LOGFORGE_API_BASE = os.getenv("LOGFORGE_API_URL", "http://localhost:7080")
+TENANT_ID = os.getenv("LOGFORGE_TENANT_ID", "")
 TARGET_EPS = 1000  # Events per second
 BATCH_SIZE = 50    # Logs per batch request
 CONCURRENT_WORKERS = 20  # Parallel workers
 
 # Authentication
-AUTH_EMAIL = "shrutipande14@gmail.com"
-AUTH_PASSWORD = "I^f^1pkUXSoKcQ9g"
+AUTH_EMAIL = os.getenv("LOGFORGE_EMAIL", "")
+AUTH_PASSWORD = os.getenv("LOGFORGE_PASSWORD", "")
 
 @dataclass
 class SimulationMetrics:

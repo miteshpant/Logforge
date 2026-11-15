@@ -1,5 +1,7 @@
 # Logforge - Enterprise Observability Platform
 
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+
 Multi-tenant observability and SIEM platform with advanced log management, metrics, traces, and security analytics.
 
 ## Table of Contents
@@ -474,21 +476,27 @@ npm run dev
 
 ## Documentation
 
-- [API Reference](./docs/API_REFERENCE.md)
-- [Architecture](./docs/ARCHITECTURE.md)
-- [Deployment Guide](./DEPLOYMENT.md)
+- [Architecture](./docs/ARCHITECTURE_MINDMAP.md)
+- [Enhancements log](./docs/ENHANCEMENTS.md)
 - [Admin UI Guide](./apps/admin-ui/README.md)
+- API reference: interactive docs at http://localhost:7080/docs once the stack is running
+
+---
+
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md) and the
+[Code of Conduct](./CODE_OF_CONDUCT.md). Report security issues privately as
+described in [SECURITY.md](./SECURITY.md).
 
 ---
 
 ## License
 
-Proprietary - All rights reserved
+Logforge is licensed under the [Apache License 2.0](./LICENSE).
 
 ---
 
 ## Support
 
-For issues or questions:
-- Create an issue in the repository
-- Contact: support@logforge.com
+For bugs and feature requests, [open an issue](https://github.com/miteshpant/logforge/issues).

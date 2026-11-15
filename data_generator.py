@@ -5,6 +5,7 @@ Continuously sends logs, traces, metrics, and spans to populate streaming panel
 and trigger alert rules and Sigma security rules
 """
 
+import os
 import requests
 import time
 import random
@@ -13,9 +14,9 @@ from datetime import datetime, timedelta
 import json
 
 # Configuration
-API_BASE_URL = "http://localhost:7080"
-BEARER_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYjk5YTc4NGUtYTRkMS00OTRjLWI0NzQtYTM2OTE0ZTI3OTE3IiwidGVuYW50X2lkIjoiZTY1MWJkYzUtNjRkYS00ZWJiLWE3ZWEtYWQ3NDIwOTRjMmIxIiwidXNlcl9yb2xlIjoidGVuYW50X2FkbWluIiwiaWF0IjoxNzg2NTI5MDk5LjMxNzgxMTMsImV4cCI6MTc4NjU1Nzg5OS4zMTc4MTEzLCJ0eXBlIjoiYWNjZXNzX3Rva2VuIn0.GxjXU_hCjanZs8CnEzBRrh94j4JwgGkWIz7PaLtEa1E"
-CUSTOMER_ID = "e651bdc5-64da-4ebb-a7ea-ad742094c2b1"
+API_BASE_URL = os.getenv("LOGFORGE_API_URL", "http://localhost:7080")
+BEARER_TOKEN = os.getenv("LOGFORGE_TOKEN", "")  # JWT or lf_ API key
+CUSTOMER_ID = os.getenv("LOGFORGE_TENANT_ID", "")
 
 # Headers
 HEADERS = {

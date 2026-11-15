@@ -7,6 +7,7 @@ Quick test to verify log ingestion APIs work for tenant: bf084eec-d6ba-427a-a787
 Tests all available ingestion endpoints with sample data.
 """
 
+import os
 import asyncio
 import aiohttp
 import json
@@ -14,12 +15,12 @@ from datetime import datetime, timezone
 import uuid
 
 # Configuration
-LOGFORGE_API_BASE = "http://localhost:7080"
-TENANT_ID = "bf084eec-d6ba-427a-a787-98c4d809e54e"
+LOGFORGE_API_BASE = os.getenv("LOGFORGE_API_URL", "http://localhost:7080")
+TENANT_ID = os.getenv("LOGFORGE_TENANT_ID", "")
 
 # Authentication
-AUTH_EMAIL = "testuser@testorg.com"
-AUTH_PASSWORD = "TestUser123!"
+AUTH_EMAIL = os.getenv("LOGFORGE_EMAIL", "testuser@testorg.com")
+AUTH_PASSWORD = os.getenv("LOGFORGE_PASSWORD", "")
 
 async def login_and_get_token(session):
     """Login and get JWT token"""

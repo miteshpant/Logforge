@@ -23,8 +23,8 @@
           "// Set global variables",
           "pm.globals.set('base_url', 'http://localhost:7080');",
           "pm.globals.set('tenant_id', '832f393c-d9de-4a80-a183-aa913ad27266');",
-          "pm.globals.set('auth_email', 'shrutipande14@gmail.com');",
-          "pm.globals.set('auth_password', 'I^f^1pkUXSoKcQ9g');"
+          "pm.globals.set('auth_email', 'admin@example.com');",
+          "pm.globals.set('auth_password', 'CHANGE_ME');"
         ],
         "type": "text/javascript"
       }
@@ -43,12 +43,12 @@
     },
     {
       "key": "auth_email",
-      "value": "shrutipande14@gmail.com",
+      "value": "admin@example.com",
       "type": "string"
     },
     {
       "key": "auth_password",
-      "value": "I^f^1pkUXSoKcQ9g",
+      "value": "CHANGE_ME",
       "type": "string"
     }
   ],

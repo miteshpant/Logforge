@@ -135,3 +135,8 @@ clickhouse-data/
 minio-data/*.tsbuildinfo
 *.tsbuildinfo
 .claude/settings.local.json
+
+# Playwright output
+playwright-report/
+test-results/
+blob-report/

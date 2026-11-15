@@ -4,14 +4,15 @@ Test script for anomaly detection flow
 Sends metrics -> Triggers detection -> Verifies results
 """
 
+import os
 import requests
 import time
 from datetime import datetime
 
 # Configuration
-API_BASE_URL = "http://localhost:7080"
-BEARER_TOKEN = "lf_832f393c_-BTG4wbidMe8tjYdJZ02471eCRN9UBtN7r_w2EEMKJY"
-CUSTOMER_ID = "832f393c-d9de-4a80-a183-aa913ad27266"
+API_BASE_URL = os.getenv("LOGFORGE_API_URL", "http://localhost:7080")
+BEARER_TOKEN = os.getenv("LOGFORGE_TOKEN", "")  # JWT or lf_ API key
+CUSTOMER_ID = os.getenv("LOGFORGE_TENANT_ID", "")
 
 HEADERS = {
     "Authorization": f"Bearer {BEARER_TOKEN}",
