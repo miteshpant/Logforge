@@ -132,7 +132,8 @@ jobs:
         run: pip install pip-audit bandit
 
       - name: Dependency vulnerabilities
-        continue-on-error: true
+        # Blocking: the dependency set audits clean, so a new advisory fails CI
+        # and gets an upgrade PR instead of accumulating silently.
         run: pip-audit -r apps/api/requirements.txt
 
       - name: Static security analysis

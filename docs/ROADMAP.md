@@ -14,12 +14,11 @@ markers).
 
 ## Bugs and broken things
 
-- **🔴 Vulnerable Python dependencies.** `pip-audit -r apps/api/requirements.txt`
-  reports about 170 advisories (aiohttp 3.9.1, PyJWT, python-multipart,
-  Starlette/FastAPI, cryptography, python-jose, …). Upgrade them, starting with
-  FastAPI and Starlette, keep the test suite green, then remove
-  `continue-on-error` from the pip-audit step in CI. See
-  [CODE_ANALYSIS.md §6.1](./CODE_ANALYSIS.md#61-dependency-vulnerabilities--top-priority).
+- **Route tests are mostly not collected.** `pytest tests/routes_tests --co`
+  finds only 4 tests although the directory holds about 220 `test_*`
+  functions, most of them inside suites built on `base_test.BaseTestSuite`
+  rather than pytest classes. Convert them so pytest collects them, then run
+  them in CI with service containers.
 - **Duplicate route.** `GET /v1/tenants/{tenant_id}/usage` is defined in both
   `apps/api/routers/tenant_api.py` and `apps/api/routers/subscription_api.py`.
   The tenant router is registered first, so the subscription version can never

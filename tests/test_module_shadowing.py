@@ -68,7 +68,10 @@ def test_application_still_imports():
     """The removal must not break the app."""
     import main
 
-    assert len(main.app.routes) > 100
+    # Count endpoints via the OpenAPI schema: since FastAPI 0.15x,
+    # `app.routes` holds one entry per included router rather than a flat
+    # list of endpoints, so its length no longer reflects what is served.
+    assert len(main.app.openapi()["paths"]) > 100
 
 
 @pytest.mark.parametrize(

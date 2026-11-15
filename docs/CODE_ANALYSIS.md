@@ -20,7 +20,7 @@ The weak points are at the edges:
 | --- | --- |
 | Ingestion, storage, query, detection | **Solid.** Real implementations, bounded resources, tested. |
 | Auth and multi-tenancy | **Solid design, a few gaps.** Fail-closed middleware, production secret checks; setup tokens live only in memory. |
-| Python dependencies | **🔴 Highest risk.** About 170 known CVEs across 13 pinned packages (section 6.1). |
+| Python dependencies | **✅ Clean.** About 170 advisories were fixed by upgrading; pip-audit now blocks merges (section 6.1). |
 | Front ends | **Mixed.** Most screens call the real API. A few still fabricate data, and type errors had masked real bugs (now fixed). |
 | "AI" features | **Overstated.** Keyword templates and canned output, with no model behind them. |
 | Operability | **Development-grade.** UIs run `npm run dev` in containers; admin UI is not in compose; route tests are not in CI. |
@@ -134,25 +134,28 @@ client ──► /v1/ingest/* (auth, parse, validate)
 
 ## 6. Security posture
 
-### 6.1 Dependency vulnerabilities: 🔴 top priority
+### 6.1 Dependency vulnerabilities: ✅ resolved
 
-`pip-audit -r apps/api/requirements.txt` reports about 170 advisories:
+At the time of the analysis, `pip-audit -r apps/api/requirements.txt` reported
+about 170 advisories across 13 pinned packages. The worst were aiohttp 3.9.1
+(84), PyJWT (19), python-multipart (16), Starlette 0.27 via FastAPI 0.104
+(14) and cryptography 41 (14).
 
-| Package (pinned) | Advisories |
-| --- | --- |
-| aiohttp 3.9.1 | 84 |
-| pyjwt | 19 |
-| python-multipart | 16 |
-| starlette 0.27.0 (via fastapi 0.104.1) | 14 |
-| cryptography 41.0.7 | 14 |
-| python-jose 3.3.0 | 6 |
-| orjson, msgpack, ecdsa, anyio, pyarrow, pytest | 1–4 each |
+All of them were fixed by upgrading:
 
-The pins date from late 2023. Upgrading FastAPI and Starlette is a
-major-version move, so it needs a dedicated PR with the full test suite.
-`python-jose` is effectively unmaintained; consider using PyJWT alone. In CI,
-`pip-audit` is **advisory** (`continue-on-error`). Make it blocking once the
-baseline is clean.
+- **Web stack:** FastAPI 0.163, Starlette 1.10, uvicorn 0.54, pydantic 2.14, python-multipart 0.0.33, httpx 0.28.
+- **Security-related libraries:** aiohttp 3.14, PyJWT 2.15, cryptography 50.
+- **Data and serialisation:** orjson 3.13, msgpack 1.2, pyarrow 26.
+- **Test tooling:** pytest 9 with pytest-asyncio 1.5.
+- **Removed:** `python-jose`, which nothing imported and which had advisories with no fix, including through its `ecdsa` dependency.
+
+The audit now reports no known vulnerabilities, and the pip-audit step in CI
+is blocking.
+
+The FastAPI upgrade also changes how startup events behave: router-level
+`on_event("startup")` hooks now run alongside the app's custom lifespan.
+The only such hook (`routers/security_api.py`) had never run before and
+called a method that does not exist, so it was removed.
 
 ### 6.2 Static analysis (bandit, medium and high)
 
@@ -198,7 +201,7 @@ Recommendations:
 | --- | --- |
 | API tests | 845 pass, run without infrastructure, plus an OpenAPI freshness check |
 | API lint | Blocking on F821/F811, advisory otherwise |
-| Security scan | pip-audit and bandit advisory; gitleaks blocking (permissions fixed) |
+| Security scan | pip-audit and gitleaks blocking; bandit advisory |
 | UI build (ui, admin-ui) | `tsc` now **blocking** and clean; `next build` passes |
 | Publish API docs | Needs Settings → Pages → Source: GitHub Actions |
 
@@ -211,7 +214,7 @@ Gaps:
 
 | # | Priority | Item |
 | --- | --- | --- |
-| 1 | P0 | Upgrade the vulnerable Python dependencies (6.1); then make pip-audit blocking. |
+| 1 | ✅ | ~~Upgrade the vulnerable Python dependencies (6.1); make pip-audit blocking.~~ Done. |
 | 2 | P0 | Decide on git history (old development credentials and personal email) **before** making the repository public. |
 | 3 | P1 | Remove or clearly label fabricated UI data and the "AI" features, so users can trust what they see. |
 | 4 | P1 | Run `routes_tests` and Playwright in CI. |
