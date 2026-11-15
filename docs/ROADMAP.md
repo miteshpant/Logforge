@@ -5,13 +5,21 @@ claim one, open an issue (or comment on an existing one) so nobody duplicates
 the work. Items marked **good first issue** are self-contained and need little
 knowledge of the system.
 
-Historical design notes and the full enhancement log are in
+A full code analysis (architecture, security, quality, priorities) is in
+[CODE_ANALYSIS.md](./CODE_ANALYSIS.md). Historical design notes and the full
+enhancement log are in
 [ENHANCEMENTS.md](./ENHANCEMENTS.md). Its `Status` column is out of date: many
 of those tickets are already fixed in the code (look for `LF-0xx` / `ENH-0xx`
 markers).
 
 ## Bugs and broken things
 
+- **🔴 Vulnerable Python dependencies.** `pip-audit -r apps/api/requirements.txt`
+  reports about 170 advisories (aiohttp 3.9.1, PyJWT, python-multipart,
+  Starlette/FastAPI, cryptography, python-jose, …). Upgrade them, starting with
+  FastAPI and Starlette, keep the test suite green, then remove
+  `continue-on-error` from the pip-audit step in CI. See
+  [CODE_ANALYSIS.md §6.1](./CODE_ANALYSIS.md#61-dependency-vulnerabilities--top-priority).
 - **Duplicate route.** `GET /v1/tenants/{tenant_id}/usage` is defined in both
   `apps/api/routers/tenant_api.py` and `apps/api/routers/subscription_api.py`.
   The tenant router is registered first, so the subscription version can never

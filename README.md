@@ -104,7 +104,7 @@ flowchart LR
    - The **Sigma consumer** evaluates the detection rules and writes matches to `security_events_mt`.
 5. Queries, dashboards and alert rules read from ClickHouse. Every table is partitioned by tenant (`customer_id`).
 
-A deeper architecture map is in [docs/ARCHITECTURE_MINDMAP.md](./docs/ARCHITECTURE_MINDMAP.md).
+For a full assessment (architecture, security posture, code quality and priorities), read [docs/CODE_ANALYSIS.md](./docs/CODE_ANALYSIS.md). A deeper architecture map is in [docs/ARCHITECTURE_MINDMAP.md](./docs/ARCHITECTURE_MINDMAP.md).
 
 ---
 
