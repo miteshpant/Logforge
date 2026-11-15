@@ -33,7 +33,7 @@ export const PWASupport: React.FC<PWASupportProps> = ({ className = '' }) => {
     setIsBrowser(true)
 
     // Check share capability
-    if (typeof navigator !== 'undefined' && navigator.share) {
+    if (typeof navigator !== 'undefined' && 'share' in navigator) {
       setCanShare(true)
     }
 

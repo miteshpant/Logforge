@@ -159,4 +159,26 @@ const SelectItem = ({ value, children }: SelectItemProps) => {
   )
 }
 
-export { Select, SelectTrigger, SelectValue, SelectContent, SelectItem }
+/**
+ * A styled native <select>. Use it with plain <option> children and an
+ * onChange handler; the compound `Select` above is a custom dropdown driven by
+ * `onValueChange` and does not render <option> elements.
+ */
+const NativeSelect = React.forwardRef<
+  HTMLSelectElement,
+  React.SelectHTMLAttributes<HTMLSelectElement>
+>(({ className, children, ...props }, ref) => (
+  <select
+    ref={ref}
+    className={cn(
+      "flex h-9 w-full rounded-md border border-gray-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-600 disabled:cursor-not-allowed disabled:opacity-50",
+      className
+    )}
+    {...props}
+  >
+    {children}
+  </select>
+))
+NativeSelect.displayName = "NativeSelect"
+
+export { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, NativeSelect }

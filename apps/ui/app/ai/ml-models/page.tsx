@@ -115,7 +115,8 @@ export default function MLModelsPage() {
     try {
       setIsLoadingHealth(true)
       const response = await apiClient.get<{ models: ModelHealthItem[]; summary: ModelHealthSummary }>('/v1/ai/models/health')
-      const data = response?.data || response
+      // The endpoint may or may not wrap its payload in { data }.
+      const data: any = response?.data || response
       if (data?.models) {
         setModels(data.models)
       } else if (Array.isArray(data)) {

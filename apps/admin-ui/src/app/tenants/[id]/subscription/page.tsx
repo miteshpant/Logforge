@@ -32,6 +32,18 @@ interface BillingHistory {
   generated_at: string
   due_date: string
   status: string
+  // Older/alternate bill payloads use these names; the page tolerates both.
+  id?: string
+  invoice_id?: string
+  amount?: number
+  subscription_tier?: string
+  base_fee?: number
+  usage_charges?: number
+  tier_discount?: number
+  promo_discount?: number
+  promo_code?: string
+  usage_breakdown?: Record<string, any>
+  subtotal?: number
 }
 
 interface AvailableFeatures {
@@ -305,7 +317,7 @@ export default function SubscriptionManagementPage() {
           
           const breakdown = {
             bill_id: billId,
-            total_amount: billDetails.total_cost || existingBill?.total_amount || 0,
+            total_amount: billDetails.total_cost || 0,
             currency: billDetails.currency || 'USD',
             breakdown: billDetails.line_items || {}
           }
@@ -774,7 +786,7 @@ export default function SubscriptionManagementPage() {
                       <div className="flex items-center space-x-4">
                         <div className="flex items-center space-x-2">
                           <span className="font-mono text-sm font-medium">{billIdDisplay}</span>
-                          <Badge variant={bill.status === 'paid' ? 'green' : 'yellow'}>
+                          <Badge variant={bill.status === 'paid' ? 'green' : 'secondary'}>
                             {bill.status || 'pending'}
                           </Badge>
                         </div>
@@ -782,7 +794,7 @@ export default function SubscriptionManagementPage() {
                           {bill.billing_period || 'N/A'}
                         </div>
                         <div className="text-lg font-semibold text-gray-900">
-                          ${(bill.total_amount || bill.amount || 0).toFixed ? (bill.total_amount || bill.amount || 0).toFixed(2) : '0.00'}
+                          ${(Number(bill.total_amount || bill.amount || 0) || 0).toFixed(2)}
                         </div>
                       </div>
                       

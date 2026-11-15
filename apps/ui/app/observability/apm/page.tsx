@@ -168,7 +168,7 @@ export default function APMPage() {
         end_time
       })
 
-      const data = response?.data?.data || response?.data || response
+      const data: any = (response as any)?.data?.data || response?.data || response
       if (data && Array.isArray(data.services)) {
         setServices(data.services)
       } else if (Array.isArray(data)) {
@@ -200,7 +200,7 @@ export default function APMPage() {
         limit: 10
       })
 
-      const data = response?.data?.data || response?.data || response
+      const data: any = (response as any)?.data?.data || response?.data || response
       if (data && Array.isArray(data.endpoints)) {
         setEndpoints(data.endpoints)
       } else if (Array.isArray(data)) {
@@ -232,7 +232,7 @@ export default function APMPage() {
         interval: '5m'
       })
 
-      const data = response?.data?.data || response?.data || response
+      const data: any = (response as any)?.data?.data || response?.data || response
       if (data && Array.isArray(data.metrics)) {
         setErrorRates(data.metrics)
       } else if (Array.isArray(data)) {
@@ -264,7 +264,7 @@ export default function APMPage() {
         limit: 10
       })
 
-      const data = response?.data?.data || response?.data || response
+      const data: any = (response as any)?.data?.data || response?.data || response
       if (data && Array.isArray(data.transactions)) {
         setTransactions(data.transactions)
       } else if (Array.isArray(data)) {
@@ -296,7 +296,7 @@ export default function APMPage() {
         end_time
       })
 
-      const data = response?.data?.data || response?.data || response
+      const data: any = (response as any)?.data?.data || response?.data || response
       if (data) {
         // Backend returns nested structure: { trends: { trends: { traces_trend, performance_trend, ... } } }
         // Extract and flatten to { latency_trend, throughput_trend, error_rate_trend, apdex_trend }
@@ -341,7 +341,7 @@ export default function APMPage() {
         end_time: compRange.end_time
       })
 
-      const data = response?.data?.data || response?.data || response
+      const data: any = (response as any)?.data?.data || response?.data || response
       if (data && Array.isArray(data.services)) {
         setComparisonServices(data.services)
       } else if (Array.isArray(data)) {

@@ -309,7 +309,7 @@ export default function ServiceMapPage() {
       })
 
       // Handle various response wrapper formats
-      const data = response?.data?.data || response?.data || response
+      const data: any = (response as any)?.data?.data || response?.data || response
 
       // Handle API response with 'services' array
       if (data && (data as ApiServiceMapResponse).services && Array.isArray((data as ApiServiceMapResponse).services)) {

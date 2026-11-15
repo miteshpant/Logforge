@@ -52,7 +52,7 @@ rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 | "AI" natural-language query and recommendations | 🧪 Keyword templates and canned output, no LLM | `apps/api/services/ai_service.py` |
 | Billing | 🟡 Usage metering and invoices computed, no payment provider | `apps/api/routers/usage_api.py` |
 | Tenant web UI (Next.js) | 🟡 Most screens are wired to the API; a few still show demo data | `apps/ui/` |
-| Platform admin UI (Next.js) | 🟡 Builds with type errors; billing, features and support pages are placeholders | `apps/admin-ui/` |
+| Platform admin UI (Next.js) | 🟡 Tenants, users, usage and audit work; billing, features and support pages are placeholders | `apps/admin-ui/` |
 
 ---
 
@@ -104,7 +104,7 @@ flowchart LR
    - The **Sigma consumer** evaluates the detection rules and writes matches to `security_events_mt`.
 5. Queries, dashboards and alert rules read from ClickHouse. Every table is partitioned by tenant (`customer_id`).
 
-A deeper architecture map is in [docs/ARCHITECTURE_MINDMAP.md](./docs/ARCHITECTURE_MINDMAP.md).
+For a full assessment (architecture, security posture, code quality and priorities), read [docs/CODE_ANALYSIS.md](./docs/CODE_ANALYSIS.md). A deeper architecture map is in [docs/ARCHITECTURE_MINDMAP.md](./docs/ARCHITECTURE_MINDMAP.md).
 
 ---
 
