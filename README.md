@@ -1,493 +1,313 @@
-# Logforge - Enterprise Observability Platform
+# Logforge
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+[![CI](https://github.com/miteshpant/logforge/actions/workflows/ci.yml/badge.svg)](https://github.com/miteshpant/logforge/actions/workflows/ci.yml)
+[![API docs](https://img.shields.io/badge/API-OpenAPI%203.1-6BA539.svg)](./docs/api/openapi.json)
 
-Multi-tenant observability and SIEM platform with advanced log management, metrics, traces, and security analytics.
+**Logforge is an open-source, multi-tenant observability and SIEM platform.**
+It ingests logs, metrics and traces, stores them in ClickHouse, lets you query
+them with a pipe-style query language, raises alerts, and runs Sigma detection
+rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 
-## Table of Contents
+> **Project status: early / alpha.** The ingestion, storage, query, alerting and
+> detection paths are real and tested. Some UI screens and "AI" features are
+> still demos. See [Feature status](#feature-status) for an honest breakdown,
+> and [docs/ROADMAP.md](./docs/ROADMAP.md) for where help is needed.
 
-- [Quick Start](#quick-start)
+## Contents
+
+- [Feature status](#feature-status)
 - [Architecture](#architecture)
-- [Initial Setup](#initial-setup)
-- [Admin Functionality](#admin-functionality)
-- [Development](#development)
-- [Testing](#testing)
+- [Quick start](#quick-start)
+- [Authentication](#authentication)
+- [API reference](#api-reference)
+- [Shipping logs](#shipping-logs)
+- [Repository layout](#repository-layout)
+- [Configuration](#configuration)
+- [Development and testing](#development-and-testing)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
-## Quick Start
-
-### Prerequisites
-
-- Docker & Docker Compose
-- Node.js 18+ (for local UI development)
-- Python 3.11+ (for local API development)
-
-### 1. Start the Infrastructure
-
-```bash
-# Deploy all services (ClickHouse, MinIO, RedPanda, Redis, API, UI)
-./deploy.sh
-
-# Check service status
-docker compose -f infra/docker/compose.yml ps
-```
-
-**Services:**
-- API: http://localhost:7080
-- Main UI: http://localhost:3001
-- Admin UI: http://localhost:3002
-- ClickHouse: http://localhost:8124
-- MinIO Console: http://localhost:9004
-- RedPanda Console: http://localhost:18081
-
----
-
-## Initial Setup
-
-### Create First Platform Admin User
-
-After deploying the infrastructure, you need to create the first platform administrator to access the admin UI and manage the platform.
-
-#### Step 1: Generate Setup Token
-
-```bash
-curl -X POST http://localhost:7080/v1/auth/setup/init
-```
-
-**Response:**
-```json
-{
-  "setup_token": "AbCdEfGhIjKlMnOpQrStUvWxYz1234567890",
-  "expires_at": "2025-08-12T10:30:00Z"
-}
-```
-
-**Note:** The setup token expires in 24 hours and can only be used once.
-
-#### Step 2: Create First Admin User
-
-```bash
-curl -X POST http://localhost:7080/v1/auth/setup \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "admin@logforge.com",
-    "name": "Platform Admin",
-    "password": "YourSecurePassword123!",
-    "setup_token": "AbCdEfGhIjKlMnOpQrStUvWxYz1234567890"
-  }'
-```
-
-**Password Requirements:**
-- Minimum 12 characters
-- At least 1 uppercase letter
-- At least 1 lowercase letter
-- At least 1 number
-- At least 1 special character (!@#$%^&*(),.?":{}|<>)
-
-**Response:**
-```json
-{
-  "id": "user-uuid-123",
-  "email": "admin@logforge.com",
-  "name": "Platform Admin",
-  "status": "active",
-  "created_at": "2025-08-11T10:30:00Z",
-  "customer_id": "platform"
-}
-```
-
-#### Step 3: Login to Admin UI
-
-1. Navigate to Admin UI: http://localhost:3002
-2. Login with credentials:
-   - Email: `admin@logforge.com`
-   - Password: `YourSecurePassword123!`
-
-3. You should now have access to the Admin Dashboard
-
----
-
-## Admin Functionality
-
-### 1. Admin User Management
-
-**Endpoint:** `/v1/admin/users`
-
-#### Create Additional Admin Users
-
-Via Admin UI:
-1. Go to http://localhost:3002/admin-users
-2. Click "Add Admin User" button
-3. Fill in the form:
-   - Full Name
-   - Email Address
-   - Role (Admin, Super Admin, Support Admin, Billing Admin)
-   - Optional: Temporary Password (defaults to `TempPassword123!`)
-4. Click "Add User"
-
-Via API:
-```bash
-# Get your JWT token first by logging in
-curl -X POST http://localhost:7080/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "admin@logforge.com",
-    "password": "YourSecurePassword123!"
-  }'
-
-# Create new admin user
-curl -X POST http://localhost:7080/v1/admin/users \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "admin2@logforge.com",
-    "name": "Second Admin",
-    "password": "SecondAdminPass123!"
-  }'
-```
-
-#### List Admin Users
-
-```bash
-curl -X GET http://localhost:7080/v1/admin/users?page=1&page_size=50 \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
-```
-
-#### Update Admin User
-
-```bash
-curl -X PUT http://localhost:7080/v1/admin/users/{user_id} \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Updated Name",
-    "status": "active"
-  }'
-```
-
-#### Delete Admin User
-
-```bash
-curl -X DELETE http://localhost:7080/v1/admin/users/{user_id} \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
-```
-
-**Safeguards:**
-- Cannot delete your own admin account
-- Cannot delete the last super_admin (prevents lockout)
-- Automatically revokes all sessions for security
-
----
-
-### 2. Tenant Management
-
-#### Create Tenant
-
-Via Admin UI:
-1. Go to http://localhost:3002/tenants
-2. Click "Onboard New Tenant" button
-3. Fill in tenant details:
-   - Organization Name *
-   - Domain *
-   - Billing Email *
-   - **Admin Contact Name*** (will become the tenant admin user)
-   - **Admin Contact Email*** (will become the tenant admin login)
-   - Subscription Tier * (Startup, SMB, Enterprise, etc.)
-   - Industry, Region, Compliance Requirements (optional)
-4. Submit
-
-**Important:** When creating a tenant, the system automatically:
-- ✅ Creates a tenant record
-- ✅ Creates a tenant admin user with the contact email provided
-- ✅ Generates a **secure 16-character temporary password**
-- ✅ Assigns `tenant_admin` role to the user
-
-#### How to Get the Tenant User's Password
-
-The tenant admin password is auto-generated during creation. Here's how to retrieve it:
-
-**Option 1: Check Browser Console (During Creation)**
-1. Open browser DevTools (Press F12)
-2. Go to Console tab
-3. Look for logs showing: `✅ Admin user created: {...}`
-4. The temporary password is logged in the workflow result
-
-**Option 2: Reset Password via API**
-```bash
-# 1. Find the user by email
-curl -X GET "http://localhost:7080/v1/users?email=user@example.com" \
-  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
-
-# 2. Reset the password (creates new password)
-curl -X POST "http://localhost:7080/v1/users/{user_id}/reset-password" \
-  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "new_password": "NewSecurePassword123!"
-  }'
-```
-
-**Option 3: Send Password Reset Email** *(Recommended for production)*
-```bash
-curl -X POST "http://localhost:7080/v1/auth/forgot-password" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com"
-  }'
-```
-
-Via API:
-```bash
-curl -X POST http://localhost:7080/v1/tenants \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Acme Corporation",
-    "type": "enterprise",
-    "primary_contact_name": "John Doe",
-    "primary_contact_email": "john@acme.com",
-    "domain": "acme.com",
-    "status": "active"
-  }'
-```
-
-#### List Tenants
-
-```bash
-curl -X GET http://localhost:7080/v1/tenants?page=1&page_size=50 \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
-```
-
----
-
-### 3. Usage Analytics
-
-View platform-wide usage metrics:
-- Total tenants
-- Active users
-- Data ingestion rates
-- Storage usage
-- API usage
-
-Access via Admin UI: http://localhost:3002/usage
-
----
-
-### 4. Billing & Subscriptions
-
-Manage tenant subscriptions, billing, and payments.
-
-Access via Admin UI: http://localhost:3002/billing
-
----
-
-### 5. Feature Flags
-
-Enable/disable features for specific tenants or platform-wide.
-
-Access via Admin UI: http://localhost:3002/features
-
----
-
-### 6. Support Management
-
-Manage support tickets and customer inquiries.
-
-Access via Admin UI: http://localhost:3002/support
+## Feature status
+
+| Area | Status | Where |
+| --- | --- | --- |
+| Log ingestion: JSON, batch, OTLP, syslog, nginx, CEF, plain text | ✅ Implemented | `apps/api/routers/ingestion.py`, `parsers.py` |
+| Back-pressure (bounded worker pool, `429` + `Retry-After`) | ✅ Implemented | `apps/api/ingest_pipeline.py` |
+| Metrics and trace ingestion, APM, service map | ✅ Implemented | `apps/api/routers/observability_api.py` |
+| Query: JSON DSL, aggregations, time series | ✅ Implemented | `apps/api/query_engine.py` |
+| **LogforgeQL**, a pipe language (`error \| where service = "api" \| stats count() by host`) | ✅ Implemented | `apps/api/logql.py` |
+| Alerting: threshold, pattern, anomaly and saved-search rules | ✅ Implemented | `apps/api/alert_engine.py` |
+| Notifications: webhook, Slack, email, PagerDuty, Teams, Discord | ✅ Implemented (off by default) | `apps/api/services/notification_service.py` |
+| Sigma detection engine, with 243 vendored SigmaHQ rules | ✅ Implemented | `apps/api/sigma_engine.py`, `apps/api/content/rules/` |
+| Anomaly detection and forecasting (z-score / EWMA) | ✅ Implemented | `apps/api/services/anomaly_detector.py`, `predictive_analytics_service.py` |
+| Multi-tenancy, roles, API keys, quotas, subscription tiers | ✅ Implemented | `tenant_api.py`, `authn_authz_middleware.py`, `config/pricing.yml` |
+| Server-sent event streams (metrics, alerts, security, …) | ✅ Implemented | `apps/api/routers/streaming_api.py` |
+| Live log tail (`/v1/stream/logs`) | ❌ Missing (the UI already calls it) | [ROADMAP](./docs/ROADMAP.md) |
+| MITRE ATT&CK coverage endpoint | 🟡 Service exists, no route | [ROADMAP](./docs/ROADMAP.md) |
+| Threat-intel enrichment | 🟡 IOC CRUD only, no feed clients | `apps/api/threat_intel.py` |
+| Root-cause analysis | 🟡 Partly placeholder | `apps/api/services/rca_engine.py` |
+| "AI" natural-language query and recommendations | 🧪 Keyword templates and canned output, no LLM | `apps/api/services/ai_service.py` |
+| Billing | 🟡 Usage metering and invoices computed, no payment provider | `apps/api/routers/usage_api.py` |
+| Tenant web UI (Next.js) | 🟡 Most screens are wired to the API; a few still show demo data | `apps/ui/` |
+| Platform admin UI (Next.js) | 🟡 Builds with type errors; billing, features and support pages are placeholders | `apps/admin-ui/` |
 
 ---
 
 ## Architecture
 
-### Technology Stack
+```mermaid
+flowchart LR
+    subgraph Sources
+        A[Apps / agents<br/>Vector · Fluent Bit · OTLP]
+    end
+    subgraph API["Logforge API (FastAPI · :7080)"]
+        I[/v1/ingest/*/]
+        Q[/v1/query/*/]
+        AL[Alert engine]
+    end
+    subgraph Bus["RedPanda (Kafka API)"]
+        T1[(log-events)]
+        T2[(alert-events · usage-events · system-events …)]
+    end
+    subgraph Consumers
+        W[Write buffer]
+        N[Normalized writer]
+        S[Sigma consumer]
+    end
+    subgraph Storage
+        CH[(ClickHouse<br/>logs_raw_mt · logs_normalized_mt<br/>security_events_mt · metrics_mt · traces_mt)]
+        M[(MinIO / S3<br/>cold storage)]
+        R[(Redis<br/>rule cache · rate limits)]
+    end
+    UI[Tenant UI :3001] --> Q
+    ADM[Admin UI :3002] --> API
+    A --> I --> T1 --> W --> CH
+    W -- logs.normalized --> T1
+    T1 --> N --> CH
+    T1 --> S --> CH
+    S -.-> R
+    Q --> CH
+    AL --> CH
+    CH -.tiering.-> M
+```
 
-**Backend:**
-- FastAPI (Python 3.11)
-- ClickHouse (columnar database for logs/metrics)
-- RedPanda (Kafka-compatible message broker)
-- Redis (caching & session management)
-- MinIO (S3-compatible object storage)
+**How a log travels through the system:**
 
-**Frontend:**
-- Next.js 14 (Main UI)
-- Next.js 14 (Admin UI)
-- TypeScript
-- Tailwind CSS
-- shadcn/ui components
+1. A client sends `POST /v1/ingest/logs` (or `/batch`, `/otlp`, `/syslog`, …). The request is authenticated, parsed, validated and handed to a bounded worker pool.
+2. The worker publishes the batch to the `log-events` topic and waits for delivery confirmation.
+3. The log handler maps fields (`apps/api/config/field_mapping.yml`) and writes batches to `logs_raw_mt`. Writes it can't make go to a disk dead-letter queue.
+4. A `logs.normalized` event fans out:
+   - The **normalized writer** fills `logs_normalized_mt`.
+   - The **Sigma consumer** evaluates the detection rules and writes matches to `security_events_mt`.
+5. Queries, dashboards and alert rules read from ClickHouse. Every table is partitioned by tenant (`customer_id`).
 
-**Infrastructure:**
-- Docker & Docker Compose
-- Nginx (reverse proxy)
-
-### Services
-
-| Service | Port | Purpose |
-|---------|------|---------|
-| API | 7080 | Backend REST API |
-| Main UI | 3001 | Tenant-facing dashboard |
-| Admin UI | 3002 | Platform admin dashboard |
-| ClickHouse | 8124 | Database (HTTP), 9001 (Native) |
-| MinIO | 9003 (API), 9004 (Console) | Object storage |
-| RedPanda | 19092 (Kafka), 18081 (Schema Registry) | Message broker |
-| Redis | 6379 | Cache & sessions |
+A deeper architecture map is in [docs/ARCHITECTURE_MINDMAP.md](./docs/ARCHITECTURE_MINDMAP.md).
 
 ---
 
-## Development
+## Quick start
 
-### Running API Locally
+### Prerequisites
 
-```bash
-cd apps/api
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8080
-```
+- Docker with Docker Compose v2
+- About 4 GB of free RAM
+- `curl` and `jq` for the examples below
 
-### Running Main UI Locally
+### 1. Start the stack
 
 ```bash
-cd apps/ui
-npm install
-npm run dev
-# Access at http://localhost:3000
+git clone https://github.com/miteshpant/logforge.git
+cd logforge
+./deploy.sh
 ```
 
-### Running Admin UI Locally
+| Service | URL / port | Notes |
+| --- | --- | --- |
+| API | http://localhost:7080 | Interactive docs at http://localhost:7080/docs |
+| Tenant UI | http://localhost:3001 | |
+| ClickHouse | http://localhost:8124 (HTTP), `9001` (native) | user `logforge` / `logforge123` |
+| MinIO | http://localhost:9004 (console), `9003` (S3 API) | `minio` / `minio123` |
+| RedPanda | `19092` (Kafka), `18081` (schema registry), `18082` (HTTP proxy) | |
+| Redis | `6379` | |
+
+> ⚠️ These default credentials are for local development only. See [SECURITY.md](./SECURITY.md) before you expose Logforge anywhere.
+
+The admin UI is not part of `deploy.sh`. To run it, use `cd apps/admin-ui && npm install && npm run dev`, which serves http://localhost:3002.
+
+### 2. Create the first platform admin
 
 ```bash
-cd apps/admin-ui
-npm install
-npm run dev
-# Access at http://localhost:3002
+# Get a one-time setup token. It is valid for 24 h, held in memory, and lost if the API restarts.
+SETUP_TOKEN=$(curl -s -X POST http://localhost:7080/v1/auth/setup/init | jq -r .setup_token)
+
+curl -s -X POST http://localhost:7080/v1/auth/setup \
+  -H 'Content-Type: application/json' \
+  -d "{\"setup_token\":\"$SETUP_TOKEN\",\"name\":\"Admin\",\"email\":\"admin@example.com\",\"password\":\"Change-Me-Now-123!\"}"
 ```
+
+Passwords need at least 12 characters, with upper and lower case, a digit and a symbol.
+
+### 3. Log in, create a tenant and send your first log
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:7080/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com","password":"Change-Me-Now-123!"}' | jq -r .access_token)
+
+# Platform admins act on the special "platform" scope
+TENANT_ID=$(curl -s -X POST http://localhost:7080/v1/tenants \
+  -H "Authorization: Bearer $TOKEN" -H 'X-Customer-ID: platform' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Acme","type":"startup","primary_contact_name":"Ops","primary_contact_email":"ops@example.com"}' \
+  | jq -r .tenant_id)
+
+# Ingest a log into that tenant
+curl -s -X POST http://localhost:7080/v1/ingest/logs \
+  -H "Authorization: Bearer $TOKEN" -H "X-Customer-ID: $TENANT_ID" \
+  -H 'Content-Type: application/json' \
+  -d '{"service":"checkout","level":"error","msg":"payment declined","attrs":{"order_id":"42"}}'
+
+# Query it back with LogforgeQL
+curl -s -X POST http://localhost:7080/v1/query/logql \
+  -H "Authorization: Bearer $TOKEN" -H "X-Customer-ID: $TENANT_ID" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"error | where service = \"checkout\" | limit 10","since":"1h"}' | jq
+```
+
+Then open the tenant UI at http://localhost:3001.
+
+**Useful commands:** `make logs`, `make down`, `make clean` (this also deletes volumes), `make health`.
 
 ---
 
-## Testing
+## Authentication
 
-### API Tests
+Every request outside a small public set (`/health`, `/docs`, `/openapi.json`, `/v1/auth/login`, `/v1/auth/setup*`, …) needs `Authorization: Bearer <token>`.
 
-```bash
-cd apps/api
-pytest
-```
+| Token type | How to get it | Tenant selection |
+| --- | --- | --- |
+| **JWT** (contains `.`) | `POST /v1/auth/login` (refresh with `POST /v1/auth/refresh`) | **Required** `X-Customer-ID: <tenant_id>` header (`platform` for platform-wide admin calls). Server-sent event streams accept `?token=…&customer_id=…`. |
+| **API key** (`lf_…`) | `POST /v1/enterprise/auth/api-keys` | Taken from the key, so no header is needed. Use this for log shippers. |
 
-### UI Tests
+**Roles:**
 
-```bash
-cd apps/ui
-npm test
-```
+- **Platform:** `super_admin`, `admin`, `support_admin`, `billing_admin`.
+- **Tenant:** `tenant_admin`, `security_analyst`, `devops_engineer`, `compliance_officer`, `viewer`.
 
-### Admin UI Tests
-
-```bash
-cd apps/admin-ui
-npm test
-```
+Each endpoint is mapped to a permission such as `logs:write:tenant` in `apps/api/authn_authz_middleware.py`.
 
 ---
 
-## Environment Variables
+## API reference
 
-### API
+The API has **290 paths (335 operations)**. The OpenAPI 3.1 spec is generated from the code and committed to the repo:
 
-```bash
-CLICKHOUSE_HOST=localhost
-CLICKHOUSE_PORT=8123
-CLICKHOUSE_USER=logforge
-CLICKHOUSE_PASSWORD=logforge123
-CLICKHOUSE_DATABASE=logforge
+- **Spec file:** [`docs/api/openapi.json`](./docs/api/openapi.json). Import it into Postman or Insomnia, or generate a client with `openapi-generator`.
+- **Hosted reference:** once GitHub Pages is enabled, the [Publish API docs](./.github/workflows/pages.yml) workflow serves a Redoc rendering at `https://miteshpant.github.io/Logforge/`.
+- **On a running stack:** Swagger UI at http://localhost:7080/docs and ReDoc at http://localhost:7080/redoc.
 
-KAFKA_BOOTSTRAP_SERVERS=localhost:19092
-KAFKA_SECURITY_PROTOCOL=PLAINTEXT
-
-MINIO_ENDPOINT=localhost:9003
-MINIO_ACCESS_KEY=minio
-MINIO_SECRET_KEY=minio123
-
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_DB=0
-
-CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:3002
-```
-
-### UI
+If you change an endpoint, regenerate the spec. CI fails when it is stale:
 
 ```bash
-NEXT_PUBLIC_API_URL=http://localhost:7080
-```
-
-### Admin UI
-
-```bash
-NEXT_PUBLIC_API_URL=http://localhost:7080
-NEXT_PUBLIC_ADMIN_MODE=true
-```
-
----
-
-## Troubleshooting
-
-### Services Not Starting
-
-```bash
-# Check service status
-docker compose -f infra/docker/compose.yml ps
-
-# View logs
-docker compose -f infra/docker/compose.yml logs -f
-
-# Restart services
-docker compose -f infra/docker/compose.yml restart
-```
-
-### Database Connection Issues
-
-```bash
-# Check ClickHouse health
-docker exec logforge-clickhouse clickhouse-client --query "SELECT 1"
-
-# List databases
-docker exec logforge-clickhouse clickhouse-client --query "SHOW DATABASES"
-
-# List tables
-docker exec logforge-clickhouse clickhouse-client --query "SHOW TABLES FROM logforge"
-```
-
-### UI Permission Errors (Development Mode)
-
-If running UI in Docker and seeing permission errors:
-```bash
-# Stop UI container
-docker stop logforge-ui
-
-# Run UI locally instead
-cd apps/ui
-npm install
-npm run dev
+pip install -r apps/api/requirements.txt
+python scripts/export_openapi.py
 ```
 
 ---
 
-## Documentation
+## Shipping logs
 
-- [Architecture](./docs/ARCHITECTURE_MINDMAP.md)
-- [Enhancements log](./docs/ENHANCEMENTS.md)
-- [Admin UI Guide](./apps/admin-ui/README.md)
-- API reference: interactive docs at http://localhost:7080/docs once the stack is running
+Ready-made Vector and Fluent Bit configurations are in [`packages/shipper-recipes/`](./packages/shipper-recipes/). Point them at `/v1/ingest/logs/batch` and authenticate with an `lf_` API key.
+
+---
+
+## Repository layout
+
+```
+apps/
+  api/                FastAPI backend (Python 3.11+)
+    routers/          HTTP endpoints, one file per area
+    services/ dao/    Business logic and ClickHouse access
+    events/           Kafka publishers, consumers, handlers
+    config/           Field mappings, topics (events.yml), pricing, quotas, MITRE catalogue
+    content/rules/    Vendored SigmaHQ detection rules (DRL 1.1)
+  ui/                 Tenant web UI (Next.js 14)
+  admin-ui/           Platform admin UI (Next.js 14)
+packages/
+  rules/              Hand-written Sigma rules and content pack (currently used by tests only)
+  shipper-recipes/    Vector and Fluent Bit configs
+infra/docker/         compose.yml, ClickHouse schema (init_simple.sql) and migrations
+config/               Storage deployment profiles (S3, GCS, MinIO, GovCloud)
+docs/                 API spec, architecture map, roadmap, enhancement log
+scripts/              Developer tooling (OpenAPI export)
+tests/                pytest suites (tests/routes_tests needs live infrastructure)
+```
+
+The `*.py` scripts at the repository root (`simulate_tenant_logs.py`, `data_generator.py`, `test_*_flow.py`, …) are manual load and integration scripts that run against a live stack. pytest does not collect them. Configure them with the `LOGFORGE_*` variables listed in [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+---
+
+## Configuration
+
+These are the main environment variables for the API. In development none of them is required.
+
+| Variable | Purpose |
+| --- | --- |
+| `ENVIRONMENT` | `development` (default). In `production`, `staging` and similar, startup **fails** if any of the next three are left at their weak defaults. |
+| `JWT_SECRET` | Key used to sign JWTs. |
+| `CLICKHOUSE_HOST` / `CLICKHOUSE_PORT` / `CLICKHOUSE_PASSWORD` | ClickHouse connection. Outside Docker use `localhost` / `8124`. |
+| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | Object storage credentials. |
+| `LOGFORGE_SECRET_KEY` | Encrypts stored notification-channel credentials. |
+| `LOGFORGE_NOTIFICATIONS_ENABLED` | Turns on automatic alert delivery (off by default). |
+| `LOGFORGE_MAX_QUERY_WINDOW_DAYS` | Widest query time range allowed (default 31). |
+| `THREAT_INTEL_ENABLED` | Turns on IOC enrichment (off by default). |
+| `QUOTA_RESET_*` | Quota reset schedule; see [`.env.quota.example`](./.env.quota.example). |
+
+---
+
+## Development and testing
+
+```bash
+# API: unit tests that need no infrastructure (the same set CI runs). Run from the repo root.
+python -m venv .venv && . .venv/bin/activate
+pip install -r apps/api/requirements.txt
+pytest tests/ --ignore=tests/routes_tests
+
+# API: route tests (need the Docker stack running)
+pytest tests/routes_tests
+
+# API with hot reload against the Docker infrastructure
+cd apps/api && CLICKHOUSE_HOST=localhost CLICKHOUSE_PORT=8124 uvicorn main:app --reload --port 7080
+
+# Tenant UI
+cd apps/ui && npm install && npm run dev        # http://localhost:3000
+cd apps/ui && npx playwright test               # E2E; needs a running API
+
+# Admin UI
+cd apps/admin-ui && npm install && npm run dev  # http://localhost:3002
+```
+
+CI ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)) runs on every pull request:
+
+- API tests and the OpenAPI freshness check
+- Ruff lint
+- pip-audit, bandit and gitleaks
+- Production builds of both UIs
 
 ---
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md) and the
-[Code of Conduct](./CODE_OF_CONDUCT.md). Report security issues privately as
-described in [SECURITY.md](./SECURITY.md).
+Contributions are welcome! Here is the short version:
+
+1. **Fork** the repo (or create a branch if you have write access). Branch off `main`.
+2. Make your change, add tests, and regenerate the OpenAPI spec if you touched the API.
+3. **Open a pull request against `main`.** `main` is protected: every change needs a passing CI run and an approving review from a maintainer, and nobody pushes to it directly.
+
+Read [CONTRIBUTING.md](./CONTRIBUTING.md) for details, and see [docs/ROADMAP.md](./docs/ROADMAP.md) for concrete, scoped tasks, including good first issues. Please follow the [Code of Conduct](./CODE_OF_CONDUCT.md). Report security issues privately as described in [SECURITY.md](./SECURITY.md).
 
 ---
 
@@ -495,8 +315,4 @@ described in [SECURITY.md](./SECURITY.md).
 
 Logforge is licensed under the [Apache License 2.0](./LICENSE).
 
----
-
-## Support
-
-For bugs and feature requests, [open an issue](https://github.com/miteshpant/logforge/issues).
+The vendored SigmaHQ rules in `apps/api/content/rules/` remain under the [Detection Rule License 1.1](./apps/api/content/rules/LICENSE).

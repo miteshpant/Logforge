@@ -1,0 +1,4 @@
+# Every pull request requests a review from the maintainer(s) below.
+# Combined with the "Require review from Code Owners" branch rule, no change
+# lands on main without their approval.
+* @miteshpant

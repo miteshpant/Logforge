@@ -43,6 +43,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r apps/api/requirements.txt
 
+      - name: Check OpenAPI spec is up to date
+        # docs/api/openapi.json is the published API reference. If this fails,
+        # run `python scripts/export_openapi.py` and commit the result.
+        run: python scripts/export_openapi.py --check
+
       - name: Run tests
         # The routes_tests suite needs live ClickHouse/Kafka/Redis, which this
         # job does not provision. It is excluded here rather than allowed to
