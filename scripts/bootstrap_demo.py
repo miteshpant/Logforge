@@ -29,7 +29,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional, Tuple
 
 DEFAULTS = {
     "LOGFORGE_API_URL": "http://localhost:7080",
