@@ -192,6 +192,24 @@ services:
     networks:
       - logforge-network
 
+  # Platform administration UI (tenants, subscriptions, platform health).
+  admin-ui:
+    build:
+      context: ../../apps/admin-ui
+      dockerfile: Dockerfile
+      target: production
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:7080}
+    image: logforge/admin-ui:local
+    container_name: logforge-admin-ui
+    ports:
+      - "3002:3002"
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - logforge-network
+
 volumes:
   clickhouse-data:
   minio-data:

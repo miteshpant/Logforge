@@ -138,6 +138,7 @@ show_urls() {
     echo -e "${BLUE}🌐 Services available at:${NC}"
     echo "   API:        http://localhost:7080"
     echo "   UI:         http://localhost:3001"
+    echo "   Admin UI:   http://localhost:3002"
     echo "   ClickHouse: http://localhost:8124"
     echo "   MinIO:      http://localhost:9004 (minio/minio123)"
     echo "   RedPanda:   http://localhost:18081"
@@ -176,7 +177,7 @@ main() {
     
     # Step 5: Start application services
     print_status "Starting application services..."
-    docker compose -f infra/docker/compose.yml up -d api ui
+    docker compose -f infra/docker/compose.yml up -d api ui admin-ui
     
     # Step 6: Wait for application services
     print_status "Waiting for application services to start..."

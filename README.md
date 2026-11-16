@@ -141,14 +141,13 @@ The first run compiles MinIO from its official source (`infra/docker/minio/`), w
 | --- | --- | --- |
 | API | http://localhost:7080 | Interactive docs at http://localhost:7080/docs |
 | Tenant UI | http://localhost:3001 | |
+| Admin UI | http://localhost:3002 | Platform administration; sign in as a platform admin |
 | ClickHouse | http://localhost:8124 (HTTP), `9001` (native) | user `logforge` / `logforge123` |
 | MinIO | http://localhost:9004 (console), `9003` (S3 API) | `minio` / `minio123` |
 | RedPanda | `19092` (Kafka), `18081` (schema registry), `18082` (HTTP proxy) | |
 | Redis | `6379` | |
 
 > ⚠️ These default credentials are for local development only. See [SECURITY.md](./SECURITY.md) before you expose Logforge anywhere.
-
-The admin UI is not part of `deploy.sh`. To run it, use `cd apps/admin-ui && npm install && npm run dev`, which serves http://localhost:3002.
 
 ### 2. Create the first platform admin
 
