@@ -831,17 +831,25 @@ class ObservabilityDAO:
                 where_clauses.append("start_time <= %(end_time)s")
                 params["end_time"] = filters["end_time"]
 
+            # Duration filters apply to the TRACE (its longest span), so they go
+            # in HAVING. In WHERE, ClickHouse resolved `duration_ms` to the
+            # `max(duration_ms) AS duration_ms` alias below and rejected the
+            # query (ILLEGAL_AGGREGATION, code 184) -- every duration-filtered
+            # trace search returned 500.
+            having_clauses = []
             if filters.get("min_duration_ms"):
-                where_clauses.append("duration_ms >= %(min_duration_ms)s")
+                having_clauses.append("duration_ms >= %(min_duration_ms)s")
                 params["min_duration_ms"] = filters["min_duration_ms"]
 
             if filters.get("max_duration_ms"):
-                where_clauses.append("duration_ms <= %(max_duration_ms)s")
+                having_clauses.append("duration_ms <= %(max_duration_ms)s")
                 params["max_duration_ms"] = filters["max_duration_ms"]
 
             if filters.get("status"):
                 where_clauses.append("status = %(status)s")
                 params["status"] = filters["status"]
+
+            having_sql = f"HAVING {' AND '.join(having_clauses)}" if having_clauses else ""
 
             # Aggregate by trace_id to get trace summaries
             query = f"""
@@ -858,6 +866,7 @@ class ObservabilityDAO:
             FROM traces_mt
             WHERE {' AND '.join(where_clauses)}
             GROUP BY trace_id
+            {having_sql}
             ORDER BY trace_start_time DESC
             LIMIT %(limit)s
             """
