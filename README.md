@@ -148,9 +148,6 @@ The first run compiles MinIO from its official source (`infra/docker/minio/`), w
 
 > ⚠️ These default credentials are for local development only. See [SECURITY.md](./SECURITY.md) before you expose Logforge anywhere.
 
-> **Known setup issues** (see [docs/QA_REPORT.md](./docs/QA_REPORT.md)):
-> - **Linux: UI restart loop with `EACCES … /app/.next/cache`.** The UI container runs as uid 1000 and writes into your bind-mounted `apps/ui`. If your user isn't uid 1000, run `mkdir -p apps/ui/.next && sudo chown -R 1000:1000 apps/ui/.next`, then `docker restart logforge-ui`.
-
 The admin UI is not part of `deploy.sh`. To run it, use `cd apps/admin-ui && npm install && npm run dev`, which serves http://localhost:3002.
 
 ### 2. Create the first platform admin

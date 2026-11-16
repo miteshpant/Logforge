@@ -179,6 +179,10 @@ services:
     volumes:
       - ../../apps/ui:/app
       - /app/node_modules
+      # Build output lives in a container-owned volume, not the bind mount: the
+      # container runs as `node` (uid 1000), so on Linux hosts whose user isn't
+      # uid 1000 writing /app/.next failed with EACCES and the UI restart-looped.
+      - /app/.next
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:7080
     depends_on:
