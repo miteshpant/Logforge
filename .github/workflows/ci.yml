@@ -124,6 +124,84 @@ jobs:
         if: always()
         run: docker compose down -v
 
+  ui-e2e:
+    name: UI end-to-end (Playwright, live stack)
+    # Builds and starts the full compose stack (production UI image), seeds
+    # the demo tenant and user with scripts/bootstrap_demo.py, then runs the
+    # Playwright specs that cover real regressions. Specs 01-04 predate the
+    # current UI and are tracked in docs/ROADMAP.md for a rewrite.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      COMPOSE_FILE: infra/docker/compose.yml
+      PLAYWRIGHT_BASE_URL: http://localhost:3001
+      NEXT_PUBLIC_API_URL: http://localhost:7080
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/ui/package-lock.json
+
+      - name: Start infrastructure
+        run: |
+          pip install pyyaml
+          docker compose up -d --build --wait clickhouse minio redis redpanda
+          python infra/setup_kafka_topics.py --environment development --force-recreate
+
+      - name: Start API and UI
+        run: |
+          docker compose up -d --build api ui
+          for url in http://localhost:7080/health http://localhost:3001/login; do
+            for i in $(seq 1 90); do
+              curl -fsS "$url" > /dev/null && break
+              [ "$i" = 90 ] && { echo "$url never came up"; docker compose logs api ui | tail -200; exit 1; }
+              sleep 2
+            done
+          done
+
+      - name: Create demo tenant and user
+        run: python scripts/bootstrap_demo.py
+
+      - name: Install Playwright
+        working-directory: apps/ui
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run Playwright
+        working-directory: apps/ui
+        run: >
+          npx playwright test --project=chromium --trace off
+          tests/05-auth-hydration.spec.ts
+          tests/06-route-guard.spec.ts
+          tests/07-layout-overflow.spec.ts
+          tests/08-plan-badge.spec.ts
+
+      - name: Service logs on failure
+        if: failure()
+        run: docker compose logs --no-color api ui | tail -400
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/ui/playwright-report
+            apps/ui/test-results
+          if-no-files-found: ignore
+
+      - name: Stop stack
+        if: always()
+        run: docker compose down -v
+
   api-lint:
     name: API lint
     runs-on: ubuntu-latest

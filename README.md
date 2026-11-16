@@ -323,6 +323,8 @@ cd apps/api && CLICKHOUSE_HOST=localhost CLICKHOUSE_PORT=8124 uvicorn main:app -
 #   docker compose -f infra/docker/compose.yml -f infra/docker/compose.dev.yml up -d)
 cd apps/ui && npm install && npm run dev        # http://localhost:3000
 cd apps/ui && npx playwright test               # E2E; needs a running API
+# Against the compose stack, after `python scripts/bootstrap_demo.py`:
+#   PLAYWRIGHT_BASE_URL=http://localhost:3001 npx playwright test --project=chromium tests/0[5-8]-*.spec.ts
 
 # Admin UI
 cd apps/admin-ui && npm install && npm run dev  # http://localhost:3002
@@ -331,6 +333,7 @@ cd apps/admin-ui && npm install && npm run dev  # http://localhost:3002
 CI ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)) runs on every pull request:
 
 - API tests and the OpenAPI freshness check
+- Route tests and Playwright end-to-end tests against the full Docker stack
 - Ruff lint
 - pip-audit, bandit and gitleaks
 - Production builds of both UIs
