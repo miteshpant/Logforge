@@ -24,6 +24,27 @@ export interface ApiResponse<T = any> {
 }
 
 /**
+ * Human-readable message from an API error body.
+ *
+ * FastAPI's HTTPException responds with `{"detail": "..."}` and validation
+ * errors with `{"detail": [{"msg": ...}, ...]}`; some handlers use `error` or
+ * `message`. Reading only error/message turned every server explanation into
+ * a bare "HTTP 4xx" (and the login form into a generic "Login failed").
+ */
+export function describeApiError(data: any): string | undefined {
+  if (!data || typeof data !== 'object') return typeof data === 'string' && data ? data : undefined
+  if (typeof data.detail === 'string' && data.detail) return data.detail
+  if (Array.isArray(data.detail) && data.detail.length) {
+    return data.detail
+      .map((d: any) => (d?.loc ? `${d.loc.filter((x: any) => x !== 'body').join('.')}: ` : '') + (d?.msg ?? ''))
+      .join('; ')
+  }
+  if (typeof data.message === 'string' && data.message) return data.message
+  if (typeof data.error === 'string' && data.error) return data.error
+  return undefined
+}
+
+/**
  * Main API Client Class
  */
 class ApiClient {
@@ -127,7 +148,7 @@ class ApiClient {
 
         return {
           success: false,
-          error: data?.error || data?.message || `HTTP ${response.status}: ${response.statusText}`,
+          error: describeApiError(data) || `HTTP ${response.status}: ${response.statusText}`,
           data: undefined,
         }
       }

@@ -190,6 +190,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!tenantId) {
           throw new Error('No tenant_id found in JWT token')
         }
+
+        // Platform-scoped accounts (super_admin & co.) have no tenant to open
+        // here; their console is the admin UI. Without this the tenant lookup
+        // 404s and the user sees "Tenant data not found in expected format".
+        if (tenantId === 'platform') {
+          throw new Error(
+            'This is a platform administrator account. Sign in to the admin console instead; ' +
+            'the tenant console needs a tenant user.'
+          )
+        }
         
         if (!userRole) {
           throw new Error('No user_role found in JWT token')
@@ -246,10 +256,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Step 8: Redirect to centrum (default landing page)
         router.push('/centrum')
       } else {
-        throw new Error(loginResponse.message || 'Login failed')
+        throw new Error(loginResponse.error || loginResponse.message || 'Login failed')
       }
     } catch (error: any) {
       console.error('Login failed:', error)
+      // A failure after setAuth() (e.g. the tenant lookup) used to leave the
+      // token and tenant in localStorage, so the next page load ran with a
+      // half-established session. Clear everything a failed login may have set.
+      apiClient.logout()
+      setUser(null)
+      setTenant(null)
+      setTenantId(null)
+      setUserRole(null)
+      setIsAuthenticated(false)
       setError(error.message || 'Login failed. Please check your credentials.')
       throw error
     } finally {
