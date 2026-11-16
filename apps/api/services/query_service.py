@@ -14,6 +14,37 @@ from models import QueryResponse
 
 logger = structlog.get_logger()
 
+
+
+def _engine_fingerprint() -> str:
+    """Identify the code and schema that produce query results.
+
+    A hash of the modules that compile queries (query_engine, logql) and of
+    the schema migration file names. Any change to either yields a new
+    fingerprint, so cached results from the previous version stop matching.
+    """
+    from pathlib import Path
+
+    digest = hashlib.sha256()
+    api_dir = Path(__file__).resolve().parent.parent
+    for name in ("query_engine.py", "logql.py"):
+        try:
+            digest.update((api_dir / name).read_bytes())
+        except OSError:
+            digest.update(name.encode())
+    try:
+        from schema_migrations import _default_migrations_dir
+
+        migrations = _default_migrations_dir()
+        if migrations:
+            digest.update("\n".join(sorted(p.name for p in migrations.glob("*.sql"))).encode())
+    except Exception:
+        pass
+    return digest.hexdigest()[:16]
+
+
+ENGINE_FINGERPRINT = _engine_fingerprint()
+
 class QueryService:
     """Service layer for query operations and business logic"""
     
@@ -181,11 +212,16 @@ class QueryService:
             raise e
     
     def _generate_cache_key(self, query_data: Dict[str, Any], customer_id: str) -> str:
-        """Generate cache key for query"""
-        # Create deterministic key from query data
+        """Generate cache key for query.
+
+        Includes ENGINE_FINGERPRINT so results cached by an older build are
+        never served after a deploy that changes how queries compile or what
+        the schema holds (they used to be, for the 5-minute TTL).
+        """
         cache_content = {
             "customer_id": customer_id,
-            "query": query_data
+            "query": query_data,
+            "engine": ENGINE_FINGERPRINT,
         }
         cache_string = json.dumps(cache_content, sort_keys=True)
         return hashlib.md5(cache_string.encode()).hexdigest()
