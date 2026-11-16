@@ -26,7 +26,7 @@ export default function AdminHeader() {
               className="flex items-center space-x-2 text-gray-900 hover:text-blue-600 transition-colors"
             >
               <Home className="h-5 w-5" />
-              <span className="font-semibold text-lg">MrLogSec Admin</span>
+              <span className="font-semibold text-lg">Logforge Admin</span>
             </Link>
           </div>
 

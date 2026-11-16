@@ -33,7 +33,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900">MrLogSec Admin</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Logforge Admin</h1>
           <p className="mt-2 text-gray-600">Sign in to your administrator account</p>
         </div>
         
@@ -56,7 +56,7 @@ export default function LoginPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@mrlogsec.com"
+                  placeholder="admin@example.com"
                   required
                   className="w-full"
                 />
@@ -93,8 +93,11 @@ export default function LoginPage() {
             </form>
             
             <div className="mt-6 text-center text-sm text-gray-500">
-              <p>Demo Credentials:</p>
-              <p className="font-mono text-xs">admin@logforge.com / admin123</p>
+              <p>Sign in with the platform admin account created during setup.</p>
+              <p className="text-xs">
+                No account yet? See &ldquo;Create the first platform admin&rdquo; in the README,
+                or run <code className="font-mono">scripts/bootstrap_demo.py</code>.
+              </p>
             </div>
           </CardContent>
         </Card>

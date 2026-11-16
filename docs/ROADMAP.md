@@ -39,11 +39,6 @@ markers).
 - **Gzip request bodies are rejected.** Shippers can compress batches, but the
   API does not decode `Content-Encoding: gzip`, so the shipper recipes leave
   compression off. Add a request-decompression middleware with a size limit.
-- **Admin UI login page shows fake credentials and old branding**
-  (`apps/admin-ui/src/app/login/page.tsx`, `src/components/AdminHeader.tsx`):
-  "Demo Credentials: admin@logforge.com / admin123" (no such account exists)
-  and the title "MrLogSec Admin".
-  *(good first issue)*
 
 ## Remove demo / fake data from the UI
 
@@ -93,3 +88,5 @@ For reference, these were on this list and are now done:
 - Production UI images, the admin UI in compose and `deploy.sh`, and Python
   3.12 in the API image.
 - The OpenAPI spec is also published as `docs/api/openapi.yaml`.
+- The admin login page no longer shows non-existent demo credentials, and the
+  admin UI is branded Logforge (it said "MrLogSec").

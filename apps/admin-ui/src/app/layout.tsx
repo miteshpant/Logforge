@@ -4,8 +4,8 @@ import AuthGuard from '@/components/AuthGuard'
 import AdminLayout from '@/components/AdminLayout'
 
 export const metadata: Metadata = {
-  title: 'MrLogSec Admin Dashboard',
-  description: 'Administrative interface for MrLogSec platform management',
+  title: 'Logforge Admin',
+  description: 'Administrative interface for Logforge platform administration',
 }
 
 export default function RootLayout({
