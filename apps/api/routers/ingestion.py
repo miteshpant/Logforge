@@ -5,9 +5,9 @@ Log ingestion API endpoints - all formats and methods
 import json
 import time
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 from datetime import datetime, timezone
-from fastapi import APIRouter, BackgroundTasks, Request, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Body, Request, HTTPException
 from fastapi.responses import JSONResponse
 
 from models import (
@@ -173,13 +173,26 @@ async def ingest_logs(
         )
         raise internal_error(e, "Ingestion failed", customer_id=customer_id, endpoint="/logs")
 
+MAX_BATCH_LOGS = 1000
+
+
 @router.post("/logs/batch", response_model=BatchIngestResponse)
 async def ingest_logs_batch(
-    batch: BatchLogEntry,
     background_tasks: BackgroundTasks,
+    batch: Union[BatchLogEntry, List[LogEntry]] = Body(
+        ...,
+        description='Either {"logs": [...]} or a bare JSON array of log entries '
+                    '(what Vector, Fluent Bit and Fluentd send). At most 1000 per request.',
+    ),
     customer_id: str = MiddlewareTenant
 ):
     """Batch log entry ingestion"""
+    if isinstance(batch, list):
+        # Same limit as BatchLogEntry; checked before any work is done.
+        if len(batch) > MAX_BATCH_LOGS:
+            raise HTTPException(status_code=413, detail=f"Batch size cannot exceed {MAX_BATCH_LOGS} logs")
+        batch = BatchLogEntry.model_construct(logs=batch)
+
     # ENH-029: shed load honestly rather than accepting data we cannot persist.
     check_ingest_capacity()
 

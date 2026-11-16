@@ -14849,7 +14849,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/BatchLogEntry"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/BatchLogEntry"
+                  },
+                  {
+                    "items": {
+                      "$ref": "#/components/schemas/LogEntry"
+                    },
+                    "type": "array"
+                  }
+                ],
+                "description": "Either {\"logs\": [...]} or a bare JSON array of log entries (what Vector, Fluent Bit and Fluentd send). At most 1000 per request.",
+                "title": "Batch"
               }
             }
           },
