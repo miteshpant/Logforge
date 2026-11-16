@@ -135,6 +135,9 @@ services:
       # Read-only so the app can report migration state/drift; DDL is applied
       # by the clickhouse-migrations service, not the API.
       - ../../infra/docker/clickhouse/migrations:/migrations:ro
+      # Logforge's hand-written detection rules, loaded at startup alongside
+      # the vendored SigmaHQ content (mitre_default_loader).
+      - ../../packages/rules:/packages/rules:ro
     environment:
       - PYTHONPATH=/app
       - MIGRATIONS_DIR=/migrations
