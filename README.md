@@ -264,7 +264,7 @@ Ready-made Vector and Fluent Bit configurations are in [`packages/shipper-recipe
 
 ```
 apps/
-  api/                FastAPI backend (Python 3.11+)
+  api/                FastAPI backend (Python 3.12)
     routers/          HTTP endpoints, one file per area
     services/ dao/    Business logic and ClickHouse access
     events/           Kafka publishers, consumers, handlers
