@@ -5,7 +5,7 @@
 type = "kubernetes_logs"
 # Automatically discovers all pods
 auto_partial_merge = true
-pod_annotation_fields.namespace = "kubernetes.pod_namespace"
+pod_annotation_fields.pod_namespace = "kubernetes.pod_namespace"
 pod_annotation_fields.pod_name = "kubernetes.pod_name"
 pod_annotation_fields.container_name = "kubernetes.container_name"
 
@@ -66,11 +66,15 @@ condition = '''
 [sinks.logforge]
 type = "http"
 inputs = ["filter_noise"]
-uri = "http://logforge-api:8080/v1/ingest/logs"
+uri = "http://logforge-api:8080/v1/ingest/logs/batch"
 method = "post"
+# Logforge API key (lf_...), sent as "Authorization: Bearer <key>". Create one
+# under Settings -> API keys; it also selects the tenant, so no X-Customer-ID.
+auth.strategy = "bearer"
+auth.token = "${LOGFORGE_API_KEY}"
 encoding.codec = "json"
 
-[sinks.logforge.headers]
+[sinks.logforge.request.headers]
 Content-Type = "application/json"
 User-Agent = "Vector-Kubernetes/1.0"
 X-Logforge-Source = "kubernetes"
@@ -84,7 +88,7 @@ when_full = "drop_newest"
 # Aggressive batching for Kubernetes environments
 [sinks.logforge.batch]
 max_bytes = 2097152  # 2MB
-max_events = 2000
+max_events = 1000  # /v1/ingest/logs/batch accepts at most 1000
 timeout_secs = 2
 
 [sinks.logforge.request]
@@ -112,10 +116,14 @@ default = "true"
 [sinks.logforge_production]
 type = "http"
 inputs = ["route_by_namespace.production"]
-uri = "http://logforge-api:8080/v1/ingest/logs"
+uri = "http://logforge-api:8080/v1/ingest/logs/batch"
 method = "post"
+# Logforge API key (lf_...), sent as "Authorization: Bearer <key>". Create one
+# under Settings -> API keys; it also selects the tenant, so no X-Customer-ID.
+auth.strategy = "bearer"
+auth.token = "${LOGFORGE_API_KEY}"
 encoding.codec = "json"
 
-[sinks.logforge_production.headers]
+[sinks.logforge_production.request.headers]
 Content-Type = "application/json"
 X-Logforge-Environment = "production"

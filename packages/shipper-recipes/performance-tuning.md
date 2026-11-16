@@ -5,7 +5,7 @@ This guide provides optimization recommendations for high-throughput log shippin
 ## General Principles
 
 ### 1. Batching Configuration
-- **Batch Size**: Aim for 1000-5000 logs per batch
+- **Batch Size**: up to 1000 logs per batch (the limit of `/v1/ingest/logs/batch`)
 - **Batch Timeout**: 2-10 seconds depending on latency requirements
 - **Max Batch Size**: 1-5MB per batch for optimal network utilization
 
@@ -16,7 +16,7 @@ This guide provides optimization recommendations for high-throughput log shippin
 
 ### 3. Network Optimization
 - **Connection Pooling**: Enable HTTP keep-alive
-- **Compression**: Use gzip compression for large batches
+- **Compression**: leave request compression off; the API does not decode gzip bodies
 - **Retry Strategy**: Exponential backoff with max 3-5 attempts
 - **Timeout**: 30-60 seconds for request timeout
 
@@ -32,12 +32,14 @@ max_read_bytes = 2048000  # 2MB chunks
 [sinks.logforge_optimized]
 type = "http"
 inputs = ["transform"]
-uri = "http://logforge:8080/v1/ingest/logs"
+uri = "http://logforge:8080/v1/ingest/logs/batch"
+auth.strategy = "bearer"
+auth.token = "${LOGFORGE_API_KEY}"
 
 # Optimized batching
 [sinks.logforge_optimized.batch]
 max_bytes = 5242880      # 5MB
-max_events = 5000
+max_events = 1000        # batch endpoint limit
 timeout_secs = 5
 
 # High-performance buffer
@@ -82,7 +84,6 @@ concurrency = 10         # Parallel requests
     Workers           8
     Retry_Limit       3
     storage.total_limit_size  500M
-    Compress          gzip
 ```
 
 ### Memory Optimization

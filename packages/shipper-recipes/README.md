@@ -1,60 +1,71 @@
 # Logforge Shipper Configuration Recipes
 
-This directory contains production-ready configuration recipes for popular log shippers to send logs to Logforge.
+Configuration recipes for sending logs to Logforge from common log shippers.
+Each recipe below has been run end to end against a local Logforge stack with
+the shipper version listed.
 
-## Supported Shippers
+| Shipper | Files | Tested with |
+|---|---|---|
+| [Vector](https://vector.dev) | `vector/vector-basic.toml` (log files), `vector/vector-nginx.toml` (nginx access + error logs), `vector/vector-kubernetes.toml` (pod logs) | 0.41.1 |
+| [Fluent Bit](https://fluentbit.io) | `fluent-bit/fluent-bit-basic.conf` (log files), `fluent-bit/fluent-bit-kubernetes.conf` (pod, nginx, syslog), plus the Lua transforms and `parsers.conf` they load | 3.1.9 |
+| [Fluentd](https://www.fluentd.org) | `fluentd/fluentd-basic.conf` (log files, built-in `out_http`) | 1.17.1 |
 
-- **Vector** - High-performance log shipper
-- **Fluent Bit** - Lightweight log processor  
-- **Fluentd** - Data collector for unified logging layer
-- **Filebeat** - Elastic's log shipper
-- **Logstash** - Elasticsearch data processing pipeline
+`vector-basic`, `fluent-bit-basic` and `fluentd-basic` were run end to end;
+the Kubernetes and nginx recipes pass the shippers' own config validation
+(`vector validate`, `fluent-bit --dry-run`).
 
-## Configuration Files
+## Authentication
 
-### Vector Configurations
-- `vector/` - Vector configuration files
-  - `vector-basic.toml` - Basic file monitoring
-  - `vector-nginx.toml` - Nginx access log parsing
-  - `vector-syslog.toml` - Syslog collection
-  - `vector-kubernetes.toml` - Kubernetes logs
-  - `vector-docker.toml` - Docker container logs
+Every recipe authenticates with a Logforge **API key** (`lf_...`) read from the
+`LOGFORGE_API_KEY` environment variable and sent as
+`Authorization: Bearer <key>`. Create one in the UI under **Settings →
+Authentication** (API keys), or with `POST /v1/enterprise/auth/api-keys`. The key belongs to a
+tenant, so shippers do not send an `X-Customer-ID` header.
 
-### Fluent Bit Configurations
-- `fluent-bit/` - Fluent Bit configuration files
-  - `fluent-bit-basic.conf` - Basic log collection
-  - `fluent-bit-nginx.conf` - Nginx log processing
-  - `fluent-bit-kubernetes.conf` - Kubernetes environment
-  - `fluent-bit-docker.conf` - Docker containers
+```bash
+export LOGFORGE_API_KEY=lf_your_key_here
+```
 
-### Fluentd Configurations
-- `fluentd/` - Fluentd configuration files
-  - `fluentd-basic.conf` - Basic setup
-  - `fluentd-multi-source.conf` - Multiple log sources
+## Endpoint
 
-## Quick Start
+JSON logs go to `POST /v1/ingest/logs/batch`. It accepts the JSON array that
+the shippers' HTTP outputs produce (or `{"logs": [...]}`), up to **1000
+entries per request**; the recipes cap their batches at that size. Each entry
+needs `service` and `msg`; `level`, `host`, `ts`, `trace_id`, `attrs` and the
+other `LogEntry` fields are optional. See `docs/api/openapi.yaml` for the full
+schema.
 
-1. Choose the appropriate configuration for your environment
-2. Update the Logforge API endpoint URL
-3. Configure authentication if required
-4. Test with your log sources
-5. Deploy to production
+Other ingest endpoints, used by the nginx and syslog recipes:
 
-## API Endpoints
+- `/v1/ingest/nginx`, `/v1/ingest/syslog`, `/v1/ingest/cef`, `/v1/ingest/text`
+  (and `/batch` variants of each) for raw text formats
+- `/v1/ingest/otlp` for OpenTelemetry logs
 
-Logforge supports multiple ingestion endpoints:
+Request bodies must not be gzip-compressed: the API does not decode
+`Content-Encoding: gzip`, so the recipes leave compression off.
 
-- `/v1/ingest/logs` - Generic JSON logs
-- `/v1/ingest/nginx` - Nginx access logs  
-- `/v1/ingest/syslog` - Syslog messages
-- `/v1/ingest/cef` - Common Event Format
-- `/v1/ingest/text` - Plain text logs
-- `/v1/ingest/otlp` - OpenTelemetry logs
+## Quick start
 
-## Performance Tuning
+1. Pick a recipe and set `LOGFORGE_API_KEY`.
+2. Point it at your API: the recipes use `http://localhost:7080` (the compose
+   stack), or `http://logforge-api:8080` inside Kubernetes. Fluentd reads
+   `LOGFORGE_URL`.
+3. Start the shipper and check the Log Explorer.
 
-See the `performance-tuning.md` file for optimization guidelines for high-throughput environments.
+For example, Vector against a local stack:
+
+```bash
+docker run --rm --network host -e LOGFORGE_API_KEY \
+  -v "$PWD/vector/vector-basic.toml:/etc/vector/vector.toml:ro" \
+  -v /var/log:/var/log:ro \
+  timberio/vector:0.41.1-alpine --config /etc/vector/vector.toml
+```
+
+## Performance tuning
+
+See `performance-tuning.md` for high-throughput settings.
 
 ## Support
 
-For issues with these configurations, please open an issue in the main Logforge repository.
+For problems with these configurations, open an issue in the Logforge
+repository.

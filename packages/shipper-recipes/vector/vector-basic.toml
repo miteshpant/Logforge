@@ -17,7 +17,9 @@ source = '''
   .host = get_hostname!()
   
   # Set service from file path
-  .service = replace(string!(.file), r'/var/log/([^/]+)/', "$1") ?? "unknown"
+  # /var/log/<service>/... -> <service>
+  parsed = parse_regex(string!(.file), r'^/var/log/(?P<service>[^/]+)/') ?? {}
+  .service = string(parsed.service) ?? "unknown"
   
   # Set message field (required by Logforge)
   .msg = .message
@@ -33,11 +35,15 @@ source = '''
 [sinks.logforge]
 type = "http"
 inputs = ["parse_logs"]
-uri = "http://localhost:7080/v1/ingest/logs"
+uri = "http://localhost:7080/v1/ingest/logs/batch"
 method = "post"
+# Logforge API key (lf_...), sent as "Authorization: Bearer <key>". Create one
+# under Settings -> API keys; it also selects the tenant, so no X-Customer-ID.
+auth.strategy = "bearer"
+auth.token = "${LOGFORGE_API_KEY}"
 encoding.codec = "json"
 
-[sinks.logforge.headers]
+[sinks.logforge.request.headers]
 Content-Type = "application/json"
 User-Agent = "Vector-Logforge/1.0"
 
@@ -50,7 +56,7 @@ when_full = "block"
 # Batch configuration
 [sinks.logforge.batch]
 max_bytes = 1048576  # 1MB
-max_events = 1000
+max_events = 1000  # /v1/ingest/logs/batch accepts at most 1000
 timeout_secs = 5
 
 # Request configuration
