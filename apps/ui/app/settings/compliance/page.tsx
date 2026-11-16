@@ -56,6 +56,51 @@ interface Control {
   remediation?: string
 }
 
+/** Frameworks implemented by EnterpriseService.generate_compliance_report. */
+const SUPPORTED_FRAMEWORKS = [
+  { id: 'sox', name: 'Sarbanes-Oxley Act', shortName: 'SOX', description: 'Internal controls over financial reporting: access control, audit trail and data integrity.' },
+  { id: 'gdpr', name: 'General Data Protection Regulation', shortName: 'GDPR', description: 'EU personal-data protection: lawful processing, retention and access to personal data.' },
+  { id: 'pci_dss', name: 'Payment Card Industry Data Security Standard', shortName: 'PCI DSS', description: 'Protection of cardholder data and the systems that process it.' },
+  { id: 'hipaa', name: 'Health Insurance Portability and Accountability Act', shortName: 'HIPAA', description: 'Safeguards for protected health information.' },
+] as const
+
+const CHECK_STATUS: Record<string, Control['status']> = {
+  compliant: 'pass',
+  non_compliant: 'fail',
+  partial: 'warning',
+  not_applicable: 'not_applicable',
+}
+
+/** Map an API compliance report onto the framework card model. */
+function reportToFramework(
+  fw: (typeof SUPPORTED_FRAMEWORKS)[number],
+  report: { compliance_score: number; generated_at: string; findings: Record<string, { checks?: any[] }> }
+): ComplianceFramework {
+  const score = Math.round(report.compliance_score ?? 0)
+  return {
+    id: fw.id,
+    name: fw.name,
+    shortName: fw.shortName,
+    description: fw.description,
+    enabled: true,
+    status: score >= 90 ? 'compliant' : score >= 50 ? 'partial' : 'non_compliant',
+    lastAssessment: report.generated_at,
+    overallScore: score,
+    controls: Object.entries(report.findings || {}).map(([section, body]) => ({
+      id: section,
+      name: section.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      controls: (body?.checks || []).map((c: any, i: number) => ({
+        id: `${section}-${i}`,
+        name: c.control || c.check || `Check ${i + 1}`,
+        description: c.description || c.evidence || '',
+        status: CHECK_STATUS[c.status] || 'warning',
+        evidence: c.evidence ? [String(c.evidence)] : undefined,
+        remediation: c.remediation,
+      })),
+    })),
+  }
+}
+
 interface AuditLogEntry {
   id: string
   timestamp: string
@@ -109,12 +154,19 @@ export default function CompliancePage() {
       setIsLoading(true)
       const now = new Date()
       const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+      const period = { period_start: monthAgo.toISOString(), period_end: now.toISOString() }
       const [fwRes, auditRes, retRes, holdRes] = await Promise.allSettled([
-        apiClient.get('/v1/enterprise/compliance/reports', {
-          compliance_framework: 'SOC2',
-          period_start: monthAgo.toISOString(),
-          period_end: now.toISOString()
-        }),
+        // One report per framework the API implements. Reports are computed on
+        // the fly (nothing is stored). This used to request "SOC2", which the
+        // API doesn't implement (500), and read a `frameworks` list the
+        // endpoint never returns -- so the tab was always empty.
+        Promise.all(SUPPORTED_FRAMEWORKS.map(async (fw) => {
+          const res = await apiClient.get('/v1/enterprise/compliance/reports', {
+            compliance_framework: fw.id,
+            ...period,
+          })
+          return res.success && res.data?.report ? reportToFramework(fw, res.data.report) : null
+        })),
         apiClient.get('/v1/enterprise/audit-logs', {
           start_time: monthAgo.toISOString(),
           end_time: now.toISOString()
@@ -123,9 +175,8 @@ export default function CompliancePage() {
         apiClient.get('/v1/enterprise/compliance/legal-holds')
       ])
 
-      if (fwRes.status === 'fulfilled' && fwRes.value?.data) {
-        const data = fwRes.value.data
-        setFrameworks(data.frameworks || data.reports || (Array.isArray(data) ? data : []))
+      if (fwRes.status === 'fulfilled') {
+        setFrameworks(fwRes.value.filter((f): f is ComplianceFramework => f !== null))
       }
 
       if (auditRes.status === 'fulfilled' && auditRes.value?.data) {

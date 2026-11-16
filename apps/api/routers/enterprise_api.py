@@ -301,6 +301,10 @@ async def update_tenant_settings(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Frameworks EnterpriseService.generate_compliance_report() implements.
+SUPPORTED_COMPLIANCE_FRAMEWORKS = ("sox", "gdpr", "pci_dss", "hipaa")
+
+
 @router.get("/compliance/reports")
 async def generate_compliance_report(
     compliance_framework: str = Query(..., description="Compliance framework"),
@@ -309,10 +313,28 @@ async def generate_compliance_report(
     sections: List[str] = Query(default=["access_controls", "audit_trail", "data_integrity"], description="Report sections"),
     customer_id: str = Header(..., alias="X-Customer-ID")
 ):
-    """Generate automated compliance report"""
+    """Generate a compliance report for one framework.
+
+    `compliance_framework` is one of sox, gdpr, pci_dss or hipaa
+    (case-insensitive). Unsupported frameworks and malformed or inverted
+    periods return 400.
+    """
+    # Bad input is a 400, not a 500: the UI used to send "SOC2", get a 500,
+    # and show an empty Frameworks tab.
+    if compliance_framework.lower() not in SUPPORTED_COMPLIANCE_FRAMEWORKS:
+        raise HTTPException(
+            status_code=400,
+            detail=(f"Unsupported compliance framework: {compliance_framework}. "
+                    f"Supported: {', '.join(SUPPORTED_COMPLIANCE_FRAMEWORKS)}"),
+        )
     try:
         start_dt = datetime.fromisoformat(period_start.replace('Z', '+00:00'))
         end_dt = datetime.fromisoformat(period_end.replace('Z', '+00:00'))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="period_start and period_end must be ISO-8601 timestamps")
+    if end_dt <= start_dt:
+        raise HTTPException(status_code=400, detail="period_end must be after period_start")
+    try:
         enterprise_service = EnterpriseService()
         result = await enterprise_service.generate_compliance_report(customer_id, compliance_framework, start_dt, end_dt, sections)
         return result
