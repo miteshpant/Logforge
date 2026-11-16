@@ -49,10 +49,7 @@ jobs:
         run: python scripts/export_openapi.py --check
 
       - name: Run tests
-        # The routes_tests suite needs live ClickHouse/Kafka/Redis, which this
-        # job does not provision. It is excluded here rather than allowed to
-        # fail, so a red run always means a real regression.
-        # Wiring up service containers for it is tracked as follow-up.
+        # tests/routes_tests needs the full stack; the route-tests job runs it.
         run: |
           pytest tests/ \
             --ignore=tests/routes_tests \
@@ -65,6 +62,67 @@ jobs:
         with:
           name: api-test-results
           path: junit-api.xml
+
+  route-tests:
+    name: API route tests (live stack)
+    # The ~220 route tests in tests/routes_tests drive the real API over HTTP
+    # against ClickHouse, Redpanda, Redis and MinIO started from the same
+    # compose file as ./deploy.sh.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      COMPOSE_FILE: infra/docker/compose.yml
+      LOGFORGE_API_URL: http://localhost:7080
+      # Fail, not skip, if the API never came up.
+      LOGFORGE_REQUIRE_API: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r apps/api/requirements.txt pyyaml
+
+      - name: Start infrastructure
+        run: docker compose up -d --build --wait clickhouse minio redis redpanda
+
+      - name: Create Kafka topics
+        run: python infra/setup_kafka_topics.py --environment development --force-recreate
+
+      - name: Start API
+        run: |
+          docker compose up -d --build api
+          for i in $(seq 1 90); do
+            if curl -fsS "$LOGFORGE_API_URL/health" > /dev/null; then
+              echo "API is up after ${i}x2s"; exit 0
+            fi
+            sleep 2
+          done
+          echo "API did not become healthy"; docker compose logs api | tail -200; exit 1
+
+      - name: Run route tests
+        working-directory: tests/routes_tests
+        run: pytest . -v --junitxml=../../junit-routes.xml
+
+      - name: API logs on failure
+        if: failure()
+        run: docker compose logs --no-color api clickhouse-migrations | tail -400
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: route-test-results
+          path: junit-routes.xml
+
+      - name: Stop stack
+        if: always()
+        run: docker compose down -v
 
   api-lint:
     name: API lint

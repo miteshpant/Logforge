@@ -21,7 +21,9 @@ This plugin keeps the author's execution model and makes the outcome honest:
 * a method that ``run_all_tests()`` never calls is reported as skipped, not
   silently green;
 * every item is marked ``integration`` and skips when the API at
-  ``LOGFORGE_API_URL`` (default http://localhost:7080) is not reachable.
+  ``LOGFORGE_API_URL`` (default http://localhost:7080) is not reachable --
+  unless ``LOGFORGE_REQUIRE_API=1`` (set in CI), where that is a failure so a
+  stack that failed to start can never produce a green run.
 """
 
 from __future__ import annotations
@@ -36,6 +38,7 @@ import httpx
 import pytest
 
 API_URL = os.getenv("LOGFORGE_API_URL", "http://localhost:7080")
+REQUIRE_API = os.getenv("LOGFORGE_REQUIRE_API") == "1"
 
 _api_available: Optional[bool] = None
 
@@ -166,7 +169,10 @@ class RouteSuiteMethod(pytest.Item):
 
     def runtest(self) -> None:
         if not _api_is_up():
-            pytest.skip(f"API not reachable at {API_URL} (start the stack with ./deploy.sh)")
+            message = f"API not reachable at {API_URL} (start the stack with ./deploy.sh)"
+            if REQUIRE_API:
+                pytest.fail(message, pytrace=False)
+            pytest.skip(message)
 
         run = self.suite_run
         run.ensure_ran()
