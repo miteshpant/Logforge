@@ -1,5 +1,5 @@
 # Logforge Makefile
-.PHONY: help up down logs build clean seed-demo test-log health
+.PHONY: help up down logs build clean seed-demo test-log health require-token
 
 # Default target
 help:
@@ -9,8 +9,8 @@ help:
 	@echo "  make logs        - Show service logs"
 	@echo "  make build       - Build all containers"
 	@echo "  make clean       - Clean up containers and volumes"
-	@echo "  make seed-demo   - Seed demo data"
-	@echo "  make test-log    - Send a test log entry"
+	@echo "  make seed-demo   - Seed demo data (needs LOGFORGE_TOKEN [+ LOGFORGE_TENANT_ID])"
+	@echo "  make test-log    - Send a test log entry (needs LOGFORGE_TOKEN [+ LOGFORGE_TENANT_ID])"
 	@echo "  make health      - Check system health"
 
 # Start all services
@@ -39,11 +39,19 @@ clean:
 	docker compose -f infra/docker/compose.yml down -v
 	docker system prune -f
 
+# Ingestion requires auth. Set LOGFORGE_TOKEN (an lf_ API key, or a JWT plus
+# LOGFORGE_TENANT_ID) -- see "Quick start" in README.md.
+LOGFORGE_API_URL ?= http://localhost:7080
+AUTH_HEADERS = -H "Authorization: Bearer $(LOGFORGE_TOKEN)" $(if $(LOGFORGE_TENANT_ID),-H "X-Customer-ID: $(LOGFORGE_TENANT_ID)",)
+
+require-token:
+	@test -n "$(LOGFORGE_TOKEN)" || { echo "Set LOGFORGE_TOKEN (and LOGFORGE_TENANT_ID for a JWT). See README.md > Quick start."; exit 1; }
+
 # Seed demo data
-seed-demo:
+seed-demo: require-token
 	@echo "🌱 Seeding demo data..."
 	@for i in $$(seq 1 10); do \
-		curl -X POST http://localhost:7080/v1/ingest/logs \
+		curl -sf -X POST $(LOGFORGE_API_URL)/v1/ingest/logs $(AUTH_HEADERS) \
 			-H 'Content-Type: application/json' \
 			-d "{\"service\":\"demo-app\",\"level\":\"info\",\"msg\":\"Demo log entry $$i\",\"trace_id\":\"demo-$$i\",\"attrs\":{\"iteration\":$$i}}"; \
 		sleep 0.5; \
@@ -51,9 +59,9 @@ seed-demo:
 	@echo "\n✅ Demo data seeded!"
 
 # Send a test log
-test-log:
+test-log: require-token
 	@echo "📝 Sending test log..."
-	curl -X POST http://localhost:7080/v1/ingest/logs \
+	curl -sf -X POST $(LOGFORGE_API_URL)/v1/ingest/logs $(AUTH_HEADERS) \
 		-H 'Content-Type: application/json' \
 		-d '{"service":"test","level":"info","msg":"Test log from Makefile","trace_id":"test-'$$(date +%s)'","attrs":{"source":"makefile"}}'
 	@echo "\n✅ Test log sent!"
