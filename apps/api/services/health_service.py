@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any
 import clickhouse_connect
 import structlog
+from app_config import clickhouse_settings
 from database_layer import DatabaseLayer, DatabaseError, SecurityError
 
 logger = structlog.get_logger()
@@ -149,8 +150,8 @@ class HealthService:
                 "status": status,
                 "response_time_ms": round(response_time, 2),
                 "tables": tables_check,
-                "host": os.getenv('CLICKHOUSE_HOST', 'clickhouse'),
-                "database": os.getenv('CLICKHOUSE_DATABASE', 'logforge')
+                "host": clickhouse_settings()["host"],
+                "database": clickhouse_settings()["database"]
             }
             
         except (DatabaseError, SecurityError) as e:

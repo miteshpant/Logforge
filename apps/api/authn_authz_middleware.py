@@ -44,12 +44,15 @@ JWT_SECRET = os.getenv("JWT_SECRET", "logforge-jwt-secret-key-change-in-producti
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 SESSION_EXPIRY_HOURS = int(os.getenv("SESSION_EXPIRY_HOURS", "8"))
 
-# ClickHouse configuration from environment variables
-CLICKHOUSE_HOST = os.getenv("CLICKHOUSE_HOST", "clickhouse")
-CLICKHOUSE_PORT = int(os.getenv("CLICKHOUSE_PORT", "8123"))
-CLICKHOUSE_USER = os.getenv("CLICKHOUSE_USER", "logforge")
-CLICKHOUSE_PASSWORD = os.getenv("CLICKHOUSE_PASSWORD", "logforge123")
-CLICKHOUSE_DATABASE = os.getenv("CLICKHOUSE_DATABASE", "logforge")
+# ClickHouse configuration (single source: app_config.clickhouse_settings)
+from app_config import clickhouse_settings as _clickhouse_settings
+
+_CH = _clickhouse_settings()
+CLICKHOUSE_HOST = _CH["host"]
+CLICKHOUSE_PORT = _CH["port"]
+CLICKHOUSE_USER = _CH["username"]
+CLICKHOUSE_PASSWORD = _CH["password"]
+CLICKHOUSE_DATABASE = _CH["database"]
 
 # =================================================================
 # USAGE TRACKING SYSTEM (ASYNC ZERO-LATENCY)

@@ -801,21 +801,12 @@ def get_query_engine():
     global _query_engine_instance
     if _query_engine_instance is None:
         import clickhouse_connect
-        import os
-        
-        # Get connection details from environment variables
-        host = 'clickhouse'
-        port = 8123
-        username = os.getenv('CLICKHOUSE_USER', 'logforge')
-        password = os.getenv('CLICKHOUSE_PASSWORD', 'logforge123')
-        database = os.getenv('CLICKHOUSE_DATABASE', 'logforge')
-        
-        client = clickhouse_connect.get_client(
-            host=host,
-            port=port,
-            username=username,
-            password=password,
-            database=database
-        )
+
+        from app_config import clickhouse_settings
+
+        # Host and port used to be hard-coded (clickhouse:8123), ignoring
+        # CLICKHOUSE_HOST/PORT -- so a locally run API queried a host that
+        # didn't exist.
+        client = clickhouse_connect.get_client(**clickhouse_settings())
         _query_engine_instance = AdvancedQueryEngine(client)
     return _query_engine_instance

@@ -20,13 +20,9 @@ logger = structlog.get_logger(__name__)
 
 def _clickhouse_config() -> Dict[str, Any]:
     """Connection parameters, read once per client construction."""
-    return {
-        'host': os.getenv('CLICKHOUSE_HOST', 'clickhouse'),
-        'port': int(os.getenv('CLICKHOUSE_PORT', '8123')),
-        'username': os.getenv('CLICKHOUSE_USER', 'logforge'),
-        'password': os.getenv('CLICKHOUSE_PASSWORD', 'logforge123'),
-        'database': os.getenv('CLICKHOUSE_DATABASE', 'logforge'),
-    }
+    from app_config import clickhouse_settings
+
+    return clickhouse_settings()
 
 
 # ---------------------------------------------------------------------------
