@@ -209,7 +209,7 @@ curl -s -X POST http://localhost:7080/v1/users/$USER_ID/roles \
   -H 'Content-Type: application/json' \
   -d "{\"tenant_id\":\"$TENANT_ID\",\"role\":\"tenant_admin\"}"
 
-# New users start as "pending"; activate the user so their sessions are accepted
+# New users start as "pending" and can't log in (403) until activated
 curl -s -X PUT http://localhost:7080/v1/users/$USER_ID \
   -H "Authorization: Bearer $TOKEN" -H 'X-Customer-ID: platform' \
   -H 'Content-Type: application/json' -d '{"status":"active"}'

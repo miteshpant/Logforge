@@ -131,7 +131,21 @@ async def login_user(
             # Deliberately identical to the "unknown account" response: the
             # message must not disclose whether the email exists.
             raise HTTPException(401, "Invalid email or password")
-        
+
+        # The credentials are valid, but the account must also be usable.
+        # validate_session() only accepts ACTIVE users, so issuing a token to a
+        # pending/inactive/suspended account produced a "successful" login whose
+        # every request then failed with 401 "Invalid or expired session".
+        # Checked only AFTER the password, so status never helps enumerate
+        # accounts; not counted as a failed attempt (the password was right).
+        if user.status != UserStatus.ACTIVE:
+            logger.warning("Login refused for non-active account",
+                           user_id=user.id, status=user.status.value)
+            raise HTTPException(
+                403,
+                f"Account is {user.status.value}. Ask an administrator to activate it.",
+            )
+
         # Get user's tenant roles to determine primary tenant context
         from services.role_service import RoleService
         role_service = RoleService()
