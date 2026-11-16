@@ -13606,7 +13606,7 @@
     },
     "/v1/enterprise/compliance/reports": {
       "get": {
-        "description": "Generate automated compliance report",
+        "description": "Generate a compliance report for one framework.\n\n`compliance_framework` is one of sox, gdpr, pci_dss or hipaa\n(case-insensitive). Unsupported frameworks and malformed or inverted\nperiods return 400.",
         "operationId": "generate_compliance_report_v1_enterprise_compliance_reports_get",
         "parameters": [
           {

@@ -87,10 +87,83 @@ ALLOWED_QUERY_FIELDS = frozenset({
     "attrs", "parser_version",
     # logs_normalized_mt only
     "date", "hour",
-    # Normalized/extracted fields referenced by _select_optimal_table
+    # Derived fields, computed from `attrs` at query time (DERIVED_FIELD_SQL)
     "extracted_user_id", "extracted_ip", "http_method", "http_uri",
     "http_status", "http_response_time_ms", "error_code", "is_error", "is_slow",
 })
+
+# Derived fields. These are the computed columns of the legacy single-tenant
+# `logs_normalized` table (infra/docker/clickhouse/init_simple.sql). The
+# multi-tenant tables the engine queries never gained them, so they used to pass
+# the allow-list and then fail inside ClickHouse ("Missing columns"), surfacing
+# as a 500. They are now computed at query time from logs_raw_mt's `attrs` JSON
+# with the same extraction rules (plus `latency_ms`, a common alias), so they
+# work for every tenant. Expressions are constants -- no caller input.
+#
+# Note: logs_raw_mt.attrs holds the whole ingested log envelope, with the
+# caller's own attributes nested under "attrs". Keys are therefore looked up at
+# the top level first, then under "attrs".
+def _json_has(key: str) -> str:
+    return f"(JSONHas(attrs, '{key}') OR JSONHas(attrs, 'attrs', '{key}'))"
+
+
+def _json_uint(key: str) -> str:
+    return (f"if(JSONHas(attrs, '{key}'), JSONExtractUInt(attrs, '{key}'), "
+            f"JSONExtractUInt(attrs, 'attrs', '{key}'))")
+
+
+def _json_str(key: str) -> str:
+    return (f"if(JSONHas(attrs, '{key}'), JSONExtractString(attrs, '{key}'), "
+            f"JSONExtractString(attrs, 'attrs', '{key}'))")
+
+
+_HTTP_STATUS_SQL = (
+    f"if({_json_has('status')}, {_json_uint('status')}, "
+    f"if({_json_has('statusCode')}, {_json_uint('statusCode')}, status))"
+)
+_HTTP_RESPONSE_TIME_SQL = (
+    f"if({_json_has('duration_ms')}, {_json_uint('duration_ms')}, "
+    f"if({_json_has('responseTime')}, {_json_uint('responseTime')}, "
+    f"{_json_uint('latency_ms')}))"
+)
+DERIVED_FIELD_SQL = {
+    "date": "toDate(ts)",
+    "hour": "toStartOfHour(ts)",
+    "extracted_user_id": (
+        f"coalesce(nullIf({_json_str('user_id')}, ''), "
+        f"nullIf({_json_str('userId')}, ''), user_id)"
+    ),
+    "extracted_ip": (
+        f"coalesce(nullIf({_json_str('ip')}, ''), "
+        f"nullIf({_json_str('clientIP')}, ''), src_ip)"
+    ),
+    "http_method": f"upper({_json_str('method')})",
+    "http_uri": _json_str("uri"),
+    "http_status": _HTTP_STATUS_SQL,
+    "http_response_time_ms": _HTTP_RESPONSE_TIME_SQL,
+    "error_code": _json_str("error_code"),
+    "is_error": (
+        f"multiIf(lower(level) IN ('error', 'critical', 'fatal'), 1, "
+        f"({_HTTP_STATUS_SQL}) >= 400, 1, 0)"
+    ),
+    "is_slow": f"if(({_HTTP_RESPONSE_TIME_SQL}) > 1000, 1, 0)",
+}
+
+# Fields aggregated directly; anything else goes through toFloat64OrZero()
+# (which only accepts strings, so numeric expressions must be listed here).
+NUMERIC_FIELDS = frozenset({
+    "severity_num", "status", "facility",
+    "http_status", "http_response_time_ms", "is_error", "is_slow",
+})
+
+
+def field_sql(field: str) -> str:
+    """SQL for an allow-listed field: the column itself, or a derived field's
+    expression (parenthesised)."""
+    field = validate_identifier(field)
+    expr = DERIVED_FIELD_SQL.get(field)
+    return f"({expr})" if expr else field
+
 
 # Aggregation aliases are generated internally, so they follow a known-safe
 # shape. Anything else is rejected.
@@ -211,10 +284,17 @@ class QueryFilter:
                     raise QueryFieldError(f"Empty JSON key in field: {field!r}")
                 key_param = f"{param_prefix}_jsonkey"
                 params[key_param] = json_key
-                column = "attrs" if prefix == "attrs." else "raw_data"
-                return f"JSONExtractString({column}, %({key_param})s)"
+                if prefix == "attrs.":
+                    # Caller attributes are nested under "attrs" in the stored
+                    # envelope; fall back to that level (see _json_has).
+                    return (
+                        f"if(JSONHas(attrs, %({key_param})s), "
+                        f"JSONExtractString(attrs, %({key_param})s), "
+                        f"JSONExtractString(attrs, 'attrs', %({key_param})s))"
+                    )
+                return f"JSONExtractString(raw_data, %({key_param})s)"
 
-        return validate_identifier(field)
+        return field_sql(field)
 
 
 @dataclass
@@ -247,9 +327,10 @@ class QueryAggregation:
                 raise QueryFieldError(
                     f"Invalid JSON key in aggregation field: {field_name!r}"
                 )
-            field_name = f"JSONExtractString(attrs, '{json_field}')"
+            field_name = _json_str(json_field)
         elif field_name != "*":
-            field_name = validate_identifier(field_name)
+            field_name = field_sql(field_name)
+        numeric = self.field in NUMERIC_FIELDS
 
         if self.type == AggregationType.COUNT:
             if field_name == "*":
@@ -258,13 +339,13 @@ class QueryAggregation:
             
         elif self.type == AggregationType.SUM:
             # Use direct aggregation for known numeric fields, toFloat64OrZero for string fields
-            if field_name in ['severity_num', 'status', 'facility']:
+            if numeric:
                 return f"sum({field_name}) AS {alias}"
             return f"sum(toFloat64OrZero({field_name})) AS {alias}"
             
         elif self.type == AggregationType.AVG:
             # Use direct aggregation for known numeric fields, toFloat64OrZero for string fields
-            if field_name in ['severity_num', 'status', 'facility']:
+            if numeric:
                 return f"avg({field_name}) AS {alias}"
             return f"avg(toFloat64OrZero({field_name})) AS {alias}"
             
@@ -277,7 +358,7 @@ class QueryAggregation:
         elif self.type == AggregationType.PERCENTILE:
             percentile = self.percentile_value or 0.95
             # Use direct aggregation for known numeric fields, toFloat64OrZero for string fields
-            if field_name in ['severity_num', 'status', 'facility']:
+            if numeric:
                 return f"quantile({percentile})({field_name}) AS {alias}"
             return f"quantile({percentile})(toFloat64OrZero({field_name})) AS {alias}"
             
@@ -433,6 +514,11 @@ class AdvancedQueryEngine:
 
     def _select_optimal_table(self, query: AdvancedQueryRequest) -> str:
         """Select the optimal table for the query"""
+        # Derived fields are computed from logs_raw_mt's `attrs`, which the
+        # normalized table doesn't have.
+        if self._uses_derived_fields(query):
+            return self.base_table
+
         # Check if this is a multi-tenant query (has customer_id filter)
         has_customer_filter = any(f.field == "customer_id" for f in query.filters)
         
@@ -443,21 +529,19 @@ class AdvancedQueryEngine:
                 return self.base_table  # Already has _mt suffix
             return self.normalized_table
         
-        # Check if we need fields only available in normalized table
-        normalized_fields = {'extracted_user_id', 'extracted_ip', 'http_method', 
-                           'http_uri', 'http_status', 'http_response_time_ms', 
-                           'error_code', 'is_error', 'is_slow'}
-        
-        for filter_obj in query.filters:
-            if filter_obj.field in normalized_fields:
-                return self.normalized_table
-        
-        if query.include_fields:
-            if any(field in normalized_fields for field in query.include_fields):
-                return self.normalized_table
-        
         # Default to raw table for simple queries
         return self.base_table
+
+    @staticmethod
+    def _uses_derived_fields(query: "AdvancedQueryRequest") -> bool:
+        referenced = (
+            [f.field for f in query.filters]
+            + [a.field for a in query.aggregations]
+            + list(query.group_by)
+            + list(query.include_fields or [])
+            + [query.sort_field]
+        )
+        return any(f in DERIVED_FIELD_SQL for f in referenced)
     
     def _build_sql_query(
         self,
@@ -479,9 +563,13 @@ class AdvancedQueryEngine:
         # fails cleanly before any SQL is assembled.
         group_by_fields = [validate_identifier(f) for f in query.group_by]
 
-        # SELECT clause
+        # SELECT clause. Derived group-by fields are selected under their own
+        # name, so GROUP BY / ORDER BY can refer to the alias.
         if query.aggregations:
-            select_parts = list(group_by_fields)
+            select_parts = [
+                f"{field_sql(f)} AS {f}" if f in DERIVED_FIELD_SQL else f
+                for f in group_by_fields
+            ]
 
             # Add time series grouping
             if query.time_series:
@@ -501,7 +589,8 @@ class AdvancedQueryEngine:
             # Regular log query
             if query.include_fields:
                 select_clause = ", ".join(
-                    validate_identifier(f) for f in query.include_fields
+                    f"{field_sql(f)} AS {f}" if f in DERIVED_FIELD_SQL else validate_identifier(f)
+                    for f in query.include_fields
                 )
             else:
                 select_clause = "*"
@@ -567,7 +656,7 @@ class AdvancedQueryEngine:
                 order_by_clause = f"ORDER BY {first_agg_alias} {sort_direction}"
         else:
             order_by_clause = (
-                f"ORDER BY {validate_identifier(query.sort_field)} {sort_direction}"
+                f"ORDER BY {field_sql(query.sort_field)} {sort_direction}"
             )
 
         # LIMIT clause -- coerced to int, so no string can reach the statement.

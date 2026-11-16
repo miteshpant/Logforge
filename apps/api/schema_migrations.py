@@ -41,6 +41,14 @@ logger = structlog.get_logger(__name__)
 
 MIGRATIONS_TABLE = "schema_migrations"
 
+# Recorded by run_migrations.sh, which stores no checksum: drift can't be
+# checked for those entries, so they are trusted as applied.
+UNKNOWN_CHECKSUM = ""
+
+# "<version>_<name>" (or "-"), as in migration file stems and in the
+# migration_name column written by run_migrations.sh.
+_VERSIONED_NAME_RE = re.compile(r"^(\d+)[_-](.+)$")
+
 # Statements that can destroy data. Refused unless explicitly allowed.
 DESTRUCTIVE_PATTERN = re.compile(
     r"\b(DROP\s+(TABLE|DATABASE|VIEW)|TRUNCATE\s+TABLE|DELETE\s+FROM)\b",
@@ -88,7 +96,7 @@ def discover_migrations(directory: Path) -> List[Migration]:
 
     migrations = []
     for path in sorted(directory.glob("*.sql")):
-        match = re.match(r"^(\d+)[_-](.+)$", path.stem)
+        match = _VERSIONED_NAME_RE.match(path.stem)
         if not match:
             logger.warning(
                 "Skipping file with no version prefix", file=path.name
@@ -170,17 +178,45 @@ class MigrationRunner:
         )
 
     def applied_migrations(self) -> Dict[str, str]:
-        """{version: checksum} for migrations already applied successfully."""
+        """{version: checksum} for migrations already applied successfully.
+
+        Two writers share `schema_migrations`. The compose stack's
+        infra/docker/clickhouse/run_migrations.sh creates it first, as
+        (migration_name, executed_at) with no version/checksum/success columns,
+        so the versioned query fails on every real deployment. That used to be
+        logged and treated as "nothing applied": every migration looked pending
+        (with RUN_MIGRATIONS_ON_STARTUP=true they would all re-run, then fail to
+        record). Fall back to that format: the version is the migration_name
+        prefix, and no checksum is known (UNKNOWN_CHECKSUM skips drift checks).
+        """
         try:
             result = self.client.query(
                 f"SELECT version, checksum FROM {MIGRATIONS_TABLE} WHERE success = 1"
             )
+            self._history_format = "versioned"
             return {row[0]: row[1] for row in result.result_rows}
-        except Exception as exc:
-            logger.warning("Could not read migration history", error=str(exc))
-            return {}
+        except Exception as versioned_exc:
+            try:
+                result = self.client.query(f"SELECT migration_name FROM {MIGRATIONS_TABLE}")
+            except Exception:
+                logger.warning("Could not read migration history", error=str(versioned_exc))
+                return {}
+            self._history_format = "shell"
+            applied = {}
+            for (migration_name,) in result.result_rows:
+                match = _VERSIONED_NAME_RE.match(str(migration_name))
+                if match:
+                    applied[match.group(1)] = UNKNOWN_CHECKSUM
+            return applied
 
     def _record(self, migration: Migration) -> None:
+        if getattr(self, "_history_format", "versioned") == "shell":
+            self.client.insert(
+                MIGRATIONS_TABLE,
+                [[f"{migration.version}_{migration.name}"]],
+                column_names=["migration_name"],
+            )
+            return
         self.client.insert(
             MIGRATIONS_TABLE,
             [[migration.version, migration.name, migration.checksum, 1]],
@@ -210,7 +246,7 @@ class MigrationRunner:
             recorded = applied.get(migration.version)
             if recorded is None:
                 pending.append(migration)
-            elif recorded != migration.checksum:
+            elif recorded != migration.checksum and recorded != UNKNOWN_CHECKSUM:
                 # Applied, but the file has changed since. Re-running could be
                 # destructive and ignoring it hides real drift, so it is
                 # surfaced for a human decision.

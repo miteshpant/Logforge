@@ -58,7 +58,7 @@ interface SlowEndpoint {
 }
 
 interface SecurityPattern {
-  source_ip: string
+  src_ip: string
   service: string
   security_events: number
 }
@@ -77,7 +77,8 @@ function buildErrorsByServiceQuery(startTime: string, endTime: string) {
     start_time: startTime,
     end_time: endTime,
     filters: [
-      { field: 'level', operator: 'in', value: ['ERROR', 'CRITICAL'] }
+      // is_error is case-insensitive on level and also counts HTTP >= 400.
+      { field: 'is_error', operator: 'eq', value: 1 }
     ],
     group_by: ['service'],
     aggregations: [
@@ -94,8 +95,8 @@ function buildResponseTimeTrendsQuery(startTime: string, endTime: string) {
     end_time: endTime,
     interval: '5m',
     aggregations: [
-      { type: 'avg', field: 'response_time', alias: 'avg_response_time' },
-      { type: 'percentile', field: 'response_time', percentile: 95, alias: 'p95_response_time' }
+      { type: 'avg', field: 'http_response_time_ms', alias: 'avg_response_time' },
+      { type: 'percentile', field: 'http_response_time_ms', percentile: 95, alias: 'p95_response_time' }
     ]
   }
 }
@@ -116,7 +117,8 @@ function buildTopErrorMessagesQuery(startTime: string, endTime: string) {
     start_time: startTime,
     end_time: endTime,
     filters: [
-      { field: 'level', operator: 'in', value: ['ERROR', 'CRITICAL'] }
+      // is_error is case-insensitive on level and also counts HTTP >= 400.
+      { field: 'is_error', operator: 'eq', value: 1 }
     ],
     group_by: ['msg'],
     aggregations: [
@@ -144,13 +146,13 @@ function buildSlowestEndpointsQuery(startTime: string, endTime: string) {
     start_time: startTime,
     end_time: endTime,
     filters: [
-      { field: 'response_time', operator: 'gte', value: 100 }
+      { field: 'http_response_time_ms', operator: 'gte', value: 100 }
     ],
     group_by: ['service'],
     aggregations: [
-      { type: 'avg', field: 'response_time', alias: 'avg_response_time' },
-      { type: 'percentile', field: 'response_time', percentile: 95, alias: 'p95_response_time' },
-      { type: 'max', field: 'response_time', alias: 'max_response_time' },
+      { type: 'avg', field: 'http_response_time_ms', alias: 'avg_response_time' },
+      { type: 'percentile', field: 'http_response_time_ms', percentile: 95, alias: 'p95_response_time' },
+      { type: 'max', field: 'http_response_time_ms', alias: 'max_response_time' },
       { type: 'count', field: '*', alias: 'request_count' }
     ],
     order_by: [{ field: 'p95_response_time', direction: 'desc' }],
@@ -164,9 +166,10 @@ function buildSecurityPatternsQuery(startTime: string, endTime: string) {
     end_time: endTime,
     filters: [
       { field: 'msg', operator: 'regex', value: '(failed|denied|unauthorized|forbidden|rejected|blocked)' },
-      { field: 'level', operator: 'in', value: ['WARN', 'ERROR'] }
+      // Levels are stored as ingested (usually lowercase); match either case.
+      { field: 'level', operator: 'in', value: ['WARN', 'WARNING', 'ERROR', 'warn', 'warning', 'error'] }
     ],
-    group_by: ['source_ip', 'service'],
+    group_by: ['src_ip', 'service'],
     aggregations: [
       { type: 'count', field: '*', alias: 'security_events' }
     ],
@@ -175,21 +178,35 @@ function buildSecurityPatternsQuery(startTime: string, endTime: string) {
   }
 }
 
-function buildInfraUtilizationQuery(startTime: string, endTime: string) {
-  return {
-    start_time: startTime,
-    end_time: endTime,
-    filters: [
-      { field: 'metric_name', operator: 'in', value: ['cpu_usage', 'memory_usage', 'disk_usage'] }
-    ],
-    group_by: ['host', 'metric_name'],
-    aggregations: [
-      { type: 'avg', field: 'metric_value', alias: 'avg_value' },
-      { type: 'max', field: 'metric_value', alias: 'peak_value' }
-    ],
-    order_by: [{ field: 'avg_value', direction: 'desc' }],
-    limit: 15
-  }
+/**
+ * Infrastructure metrics live in metrics_mt, not the logs table, so they come
+ * from the metrics API, not /v1/query/advanced. (The old query asked the logs
+ * engine for metric_name / metric_value and always got 400 "Unknown query
+ * field".) Names are the canonical ones from metric_name_mappings.yml; metrics
+ * carry no host dimension, so values are tenant-wide.
+ */
+const INFRA_METRICS = ['cpu_usage', 'memory_usage', 'disk_usage'] as const
+
+async function loadInfraUtilization(startTime: string, endTime: string): Promise<InfraMetric[]> {
+  const results = await Promise.all(INFRA_METRICS.map(async (metric): Promise<InfraMetric | null> => {
+    const res = await apiClient.post('/v1/observability/metrics/query', {
+      start_time: startTime,
+      end_time: endTime,
+      metric_name: metric,
+      aggregation: 'avg',
+      granularity: '1h',
+    })
+    const points: { value: number }[] = res?.data?.metrics?.[metric] || []
+    if (!points.length) return null
+    const values = points.map(p => Number(p.value) || 0)
+    return {
+      host: 'All services',
+      metric_name: metric,
+      avg_value: values.reduce((a, b) => a + b, 0) / values.length,
+      peak_value: Math.max(...values),
+    }
+  }))
+  return results.filter((m): m is InfraMetric => m !== null)
 }
 
 // ─── Helper Functions ─────────────────────────────────────────────────────────
@@ -487,7 +504,7 @@ function SecurityPatternsWidget({ data, isLoading }: { data: SecurityPattern[]; 
             {data.map((item, idx) => (
               <div key={idx} className="flex items-center justify-between p-2 bg-red-500/10 rounded-lg">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-mono text-slate-300">{item.source_ip || 'unknown'}</p>
+                  <p className="text-xs font-mono text-slate-300">{item.src_ip || 'unknown'}</p>
                   <p className="text-[10px] text-slate-400">{item.service}</p>
                 </div>
                 <span className="text-xs font-bold text-red-400 bg-red-500/20 px-2 py-0.5 rounded">
@@ -613,10 +630,10 @@ export default function SystemIntelligenceDashboard() {
     setLoadingAggregate(true)
     const aggregateQueries = Promise.allSettled([
       apiClient.post('/v1/query/aggregate', buildServiceHealthQuery(start_time, end_time)),
-      apiClient.post('/v1/query/advanced', buildInfraUtilizationQuery(start_time, end_time))
+      loadInfraUtilization(start_time, end_time)
     ]).then(([healthRes, infraRes]) => {
       if (healthRes.status === 'fulfilled') setServiceHealth(extractArrayData(healthRes.value))
-      if (infraRes.status === 'fulfilled') setInfraMetrics(extractArrayData(infraRes.value))
+      if (infraRes.status === 'fulfilled') setInfraMetrics(infraRes.value)
       setLoadingAggregate(false)
     })
 

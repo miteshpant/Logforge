@@ -72,13 +72,13 @@ export default function CostAnalyticsPage() {
 
     try {
       setIsLoading(true)
-      const { start_time, end_time } = getApiTimeRange()
 
-      const [usageRes, costRes, billingRes, trendsRes] = await Promise.allSettled([
+      // (No /v1/analytics/usage-trends here: it is platform-admin only, so a
+      // tenant user always got 403, and its result was never used.)
+      const [usageRes, costRes, billingRes] = await Promise.allSettled([
         apiClient.get(`/v1/usage/current/${tenant.id}`),
         apiClient.get(`/v1/costs/breakdown/${tenant.id}`),
         apiClient.get(`/v1/billing/estimate/${tenant.id}`),
-        apiClient.get('/v1/analytics/usage-trends', { start_time, end_time })
       ])
 
       // Process current usage - backend returns {api_calls, feature_breakdown, cost_estimate, billing_period}

@@ -24,6 +24,27 @@ export interface ApiResponse<T = any> {
 }
 
 /**
+ * Human-readable message from an API error body.
+ *
+ * FastAPI's HTTPException responds with `{"detail": "..."}` and validation
+ * errors with `{"detail": [{"msg": ...}, ...]}`; some handlers use `error` or
+ * `message`. Reading only error/message turned every server explanation into
+ * a bare "HTTP 4xx" (and the login form into a generic "Login failed").
+ */
+export function describeApiError(data: any): string | undefined {
+  if (!data || typeof data !== 'object') return typeof data === 'string' && data ? data : undefined
+  if (typeof data.detail === 'string' && data.detail) return data.detail
+  if (Array.isArray(data.detail) && data.detail.length) {
+    return data.detail
+      .map((d: any) => (d?.loc ? `${d.loc.filter((x: any) => x !== 'body').join('.')}: ` : '') + (d?.msg ?? ''))
+      .join('; ')
+  }
+  if (typeof data.message === 'string' && data.message) return data.message
+  if (typeof data.error === 'string' && data.error) return data.error
+  return undefined
+}
+
+/**
  * Main API Client Class
  */
 class ApiClient {
@@ -41,6 +62,37 @@ class ApiClient {
   }
 
   /**
+   * Restore auth headers from localStorage if they are not set yet.
+   *
+   * On a full page load React runs child effects before parent effects, so a
+   * page's data-fetching effect fires before AuthContext has restored the
+   * session. Those first requests went out with no Authorization or
+   * X-Customer-ID header, got 401s, and triggered a token refresh: a burst of
+   * avoidable failures on every reload or deep link. Hydrating here makes the
+   * client usable as soon as it is called. It never overrides headers that
+   * were set explicitly (e.g. by setAuth after login or a tenant switch).
+   */
+  private hydrateAuthFromStorage() {
+    if (typeof window === 'undefined') return
+    try {
+      if (!this.defaultHeaders['Authorization']) {
+        const token = localStorage.getItem('auth_token')
+        if (token) this.setAuthToken(token)
+      }
+      if (!this.defaultHeaders['X-Customer-ID']) {
+        const tenantId = localStorage.getItem('tenant_id')
+        if (tenantId) this.setCustomerId(tenantId)
+      }
+      if (!this.defaultHeaders['X-User-Role']) {
+        const userRole = localStorage.getItem('user_role')
+        if (userRole) this.setHeader('X-User-Role', userRole)
+      }
+    } catch {
+      // Storage can be unavailable (privacy mode); requests proceed unauthenticated.
+    }
+  }
+
+  /**
    * Core request method with error handling
    */
   async request<T = any>(
@@ -48,6 +100,7 @@ class ApiClient {
     options: RequestInit = {},
     isRetryAfterRefresh: boolean = false
   ): Promise<ApiResponse<T>> {
+    this.hydrateAuthFromStorage()
     const url = endpoint.startsWith('http') ? endpoint : `${this.baseURL}${endpoint}`
 
     const config: RequestInit = {
@@ -95,7 +148,7 @@ class ApiClient {
 
         return {
           success: false,
-          error: data?.error || data?.message || `HTTP ${response.status}: ${response.statusText}`,
+          error: describeApiError(data) || `HTTP ${response.status}: ${response.statusText}`,
           data: undefined,
         }
       }
@@ -227,6 +280,7 @@ class ApiClient {
     onData: (data: any) => void,
     onError?: (error: Error) => void
   ): Promise<() => void> {
+    this.hydrateAuthFromStorage()
     const url = endpoint.startsWith('http') ? endpoint : `${this.baseURL}${endpoint}`
 
     // Build URL with auth params for SSE (EventSource can't send headers)

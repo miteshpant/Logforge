@@ -376,7 +376,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 lg:ml-64">
+      {/* min-w-0: a flex item defaults to min-width:auto, so wide page content
+          (e.g. the 14-tactic MITRE row on SIEM) stretched this column past the
+          viewport and cut off headers and actions on the right. */}
+      <div className="flex-1 min-w-0 lg:ml-64">
         {/* Top header */}
         <header className="sticky top-0 z-40 bg-slate-900/80 backdrop-blur-xl border-b border-white/5 px-4 lg:px-6 py-4">
           <div className="flex items-center justify-between">

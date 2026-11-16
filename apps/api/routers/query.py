@@ -394,6 +394,7 @@ async def aggregate_logs(query_data: Dict[str, Any], customer_id: str = Middlewa
 
         if cached_result:
             return {
+                "results": cached_result.get('results', []),
                 "aggregations": cached_result.get('aggregations', {}),
                 "group_by": query_data.get("group_by", []),
                 "total_groups": cached_result.get('total_count', 0),
@@ -404,8 +405,11 @@ async def aggregate_logs(query_data: Dict[str, Any], customer_id: str = Middlewa
         # Build aggregation query
         result = await query_engine.execute_query(query_request)
         
-        # Cache the result
+        # The grouped rows come back in `result.logs` (one row per group);
+        # `result.aggregations` is only filled for ungrouped totals. Returning
+        # just the latter reported total_groups=N with no data at all.
         result_dict = {
+            "results": result.logs or [],
             "aggregations": result.aggregations or {},
             "total_count": result.total_count or 0,
             "execution_time_ms": result.execution_time_ms or 0
@@ -418,6 +422,7 @@ async def aggregate_logs(query_data: Dict[str, Any], customer_id: str = Middlewa
         )
         
         return {
+            "results": result.logs or [],
             "aggregations": result.aggregations or {},
             "group_by": query_data.get("group_by", []),
             "total_groups": result.total_count or 0,

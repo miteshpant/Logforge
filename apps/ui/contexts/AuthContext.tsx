@@ -36,6 +36,24 @@ interface AuthProviderState {
 
 const AuthContext = createContext<AuthProviderState | undefined>(undefined)
 
+/**
+ * The tenant's actual subscription tier, for the header plan badge.
+ *
+ * This used to show `tenant.type` -- the organisation category chosen at
+ * creation (startup/smb/enterprise/...) -- so a tenant upgraded to
+ * enterprise still showed "startup". Falls back to the type if the
+ * subscription can't be read (e.g. a role without access).
+ */
+async function resolveSubscriptionTier(tenant: any): Promise<string> {
+  try {
+    const res = await apiClient.get<{ subscription_tier?: string }>(`/v1/tenants/${tenant.tenant_id}/subscription`)
+    if (res.success && res.data?.subscription_tier) return res.data.subscription_tier
+  } catch {
+    // fall through
+  }
+  return tenant.type || 'unknown'
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -116,7 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const tenantInfo: TenantInfo = {
               id: tenant.tenant_id,
               name: tenant.name,
-              subscription_tier: tenant.type,
+              subscription_tier: await resolveSubscriptionTier(tenant),
               features: ['logs', 'analytics', 'alerts', 'dashboards', 'security'],
               limits: {
                 users: 100,
@@ -190,6 +208,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!tenantId) {
           throw new Error('No tenant_id found in JWT token')
         }
+
+        // Platform-scoped accounts (super_admin & co.) have no tenant to open
+        // here; their console is the admin UI. Without this the tenant lookup
+        // 404s and the user sees "Tenant data not found in expected format".
+        if (tenantId === 'platform') {
+          throw new Error(
+            'This is a platform administrator account. Sign in to the admin console instead; ' +
+            'the tenant console needs a tenant user.'
+          )
+        }
         
         if (!userRole) {
           throw new Error('No user_role found in JWT token')
@@ -225,7 +253,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const tenantInfo: TenantInfo = {
           id: tenant.tenant_id,
           name: tenant.name,
-          subscription_tier: tenant.type,
+          subscription_tier: await resolveSubscriptionTier(tenant),
           features: ['logs', 'analytics', 'alerts', 'dashboards', 'security'],
           limits: {
             users: 100,
@@ -243,13 +271,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setPermissions(['logs:read', 'analytics:read', 'dashboards:read'])
         setIsAuthenticated(true)
 
-        // Step 8: Redirect to centrum (default landing page)
-        router.push('/centrum')
+        // Step 8: Return to the page that sent the user to /login (AuthGate
+        // sets ?next=), else the default landing page. Same-origin paths only,
+        // so `next` can't be used as an open redirect.
+        const next = new URLSearchParams(window.location.search).get('next')
+        const safeNext = next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/login')
+        router.push(safeNext ? next : '/centrum')
       } else {
-        throw new Error(loginResponse.message || 'Login failed')
+        throw new Error(loginResponse.error || loginResponse.message || 'Login failed')
       }
     } catch (error: any) {
       console.error('Login failed:', error)
+      // A failure after setAuth() (e.g. the tenant lookup) used to leave the
+      // token and tenant in localStorage, so the next page load ran with a
+      // half-established session. Clear everything a failed login may have set.
+      apiClient.logout()
+      setUser(null)
+      setTenant(null)
+      setTenantId(null)
+      setUserRole(null)
+      setIsAuthenticated(false)
       setError(error.message || 'Login failed. Please check your credentials.')
       throw error
     } finally {
@@ -354,7 +395,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const newTenantInfo: TenantInfo = {
         id: tenant.tenant_id,
         name: tenant.name,
-        subscription_tier: tenant.type,
+        subscription_tier: await resolveSubscriptionTier(tenant),
         features: ['logs', 'analytics', 'alerts', 'dashboards', 'security'],
         limits: {
           users: 100,

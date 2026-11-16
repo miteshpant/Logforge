@@ -208,6 +208,16 @@ class AlertService:
             logger.error(f"Failed to list alert rules for customer {customer_id}: {e}")
             raise
     
+    async def get_alert_rules_for_customer(self, customer_id: str) -> List[Dict[str, Any]]:
+        """Enabled alert rules for one tenant, in the same parsed shape the rule
+        cache warms with (`get_all_alert_rules`).
+
+        This is the AlertRuleCache's database fallback on a cache miss. The cache
+        called it, but it did not exist, so every miss raised AttributeError,
+        the cache returned [], and no alert rule was evaluated on ingest.
+        """
+        return await self.alert_dao.list_alert_rules(customer_id, enabled=True)
+
     async def get_all_alert_rules(self, enabled_only: bool = True) -> List[Dict[str, Any]]:
         """Get all alert rules across all customers for cache initialization"""
         try:

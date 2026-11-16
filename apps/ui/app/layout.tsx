@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { TimeRangeProvider } from '@/contexts/TimeRangeContext'
+import { AuthGate } from '@/components/auth/AuthGate'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -20,9 +21,11 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <AuthProvider>
-          <TimeRangeProvider defaultRange="24h">
-            {children}
-          </TimeRangeProvider>
+          <AuthGate>
+            <TimeRangeProvider defaultRange="24h">
+              {children}
+            </TimeRangeProvider>
+          </AuthGate>
         </AuthProvider>
       </body>
     </html>
