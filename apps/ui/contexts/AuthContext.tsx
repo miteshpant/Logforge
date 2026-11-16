@@ -253,8 +253,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setPermissions(['logs:read', 'analytics:read', 'dashboards:read'])
         setIsAuthenticated(true)
 
-        // Step 8: Redirect to centrum (default landing page)
-        router.push('/centrum')
+        // Step 8: Return to the page that sent the user to /login (AuthGate
+        // sets ?next=), else the default landing page. Same-origin paths only,
+        // so `next` can't be used as an open redirect.
+        const next = new URLSearchParams(window.location.search).get('next')
+        const safeNext = next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/login')
+        router.push(safeNext ? next : '/centrum')
       } else {
         throw new Error(loginResponse.error || loginResponse.message || 'Login failed')
       }
