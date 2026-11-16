@@ -193,18 +193,8 @@ async def check_feature_access(
 # Usage & Billing
 # =====================================
 
-@router.get("/tenants/{tenant_id}/usage")
-async def get_tenant_usage(
-    tenant_id: str,
-    period: str = "current",
-    _: str = RequiredTenant
-):
-    """Get tenant usage summary"""
-    try:
-        usage = await get_subscription_service().get_tenant_usage(tenant_id, period)
-        return usage
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get usage: {str(e)}")
+# GET /tenants/{tenant_id}/usage is served by routers/tenant_api.py (registered
+# first). A second handler here could never be reached and was removed.
 
 @router.get("/tenants/{tenant_id}/usage/detailed", response_model=UsageBreakdownResponse)
 async def get_detailed_usage(
