@@ -16,6 +16,28 @@ from models import LogEntry
 
 logger = logging.getLogger(__name__)
 
+
+def _attrs_json(log) -> str:
+    """JSON for logs_raw_mt.attrs: the caller's attributes only.
+
+    These two raw-write paths serialised the whole LogEntry (ts, host,
+    service, msg, ...) into `attrs`, nesting the real attributes under
+    attrs.attrs -- duplicating every row's columns and forcing every
+    JSONExtract to look in two places. The dual-write path already stored
+    just `attrs`; now all three agree.
+    """
+    attrs = getattr(log, "attrs", None)
+    return json.dumps(attrs if isinstance(attrs, dict) else {}, default=str)
+
+
+def _status(log) -> int:
+    """The log's status code (UInt16); these paths used to hard-code 0."""
+    try:
+        value = int(getattr(log, "status", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+    return value if 0 <= value <= 65535 else 0
+
 # Global config access
 config = None
 
@@ -80,8 +102,8 @@ async def process_log_batch_internal(logs: List[LogEntry], client, customer_id: 
             log.msg or "",  # msg
             log.trace_id or "",  # trace_id
             log.span_id or "",  # span_id
-            json.dumps(log.model_dump(mode='json'), default=str) if hasattr(log, 'model_dump') else json.dumps(log.__dict__, default=str),  # attrs
-            0,  # status (UInt16, default 0)
+            _attrs_json(log),  # attrs: the caller's attributes only
+            _status(log),  # status
             getattr(log, 'src_ip', ''),  # src_ip
             getattr(log, 'user_id', ''),  # user_id
             log.ingested_at or datetime.now(timezone.utc),  # ingested_at
@@ -148,8 +170,8 @@ async def process_log_batch(logs: List[LogEntry], customer_id: str) -> bool:
                     log.msg or "",  # msg
                     log.trace_id or "",  # trace_id
                     log.span_id or "",  # span_id
-                    json.dumps(log.model_dump(mode='json'), default=str) if hasattr(log, 'model_dump') else json.dumps(log.__dict__, default=str),  # attrs
-                    0,  # status (UInt16, default 0)
+                    _attrs_json(log),  # attrs: the caller's attributes only
+                    _status(log),  # status
                     getattr(log, 'src_ip', ''),  # src_ip
                     getattr(log, 'user_id', ''),  # user_id
                     log.ingested_at or datetime.now(timezone.utc),  # ingested_at
