@@ -11,7 +11,7 @@ test.describe('User Story 1: Platform Health Monitoring', () => {
           access_token: 'mock-token-123',
           user: {
             id: 'admin-1',
-            email: 'admin@mrlogsec.com',
+            email: 'admin@example.com',
             full_name: 'Admin User',
             role: 'admin'
           }
@@ -69,13 +69,13 @@ test.describe('User Story 1: Platform Health Monitoring', () => {
     await expect(page).toHaveURL('http://localhost:3002/login');
     
     // Verify login page elements
-    await expect(page.locator('h1')).toContainText('MrLogSec Admin');
+    await expect(page.locator('h1')).toContainText('Logforge Admin');
     await expect(page.locator('input[type="email"]')).toBeVisible();
     await expect(page.locator('input[type="password"]')).toBeVisible();
     
     // Fill in credentials
-    await page.fill('input[type="email"]', 'admin@mrlogsec.com');
-    await page.fill('input[type="password"]', 'admin123');
+    await page.fill('input[type="email"]', 'admin@example.com');
+    await page.fill('input[type="password"]', 'mock-password');
     
     // Click login
     await page.click('button[type="submit"]');
@@ -87,15 +87,15 @@ test.describe('User Story 1: Platform Health Monitoring', () => {
   test('Admin views Platform Dashboard with statistics', async ({ page }) => {
     // Login first
     await page.goto('http://localhost:3002/login');
-    await page.fill('input[type="email"]', 'admin@mrlogsec.com');
-    await page.fill('input[type="password"]', 'admin123');
+    await page.fill('input[type="email"]', 'admin@example.com');
+    await page.fill('input[type="password"]', 'mock-password');
     await page.click('button[type="submit"]');
     
     // Wait for dashboard to load
     await page.waitForURL('http://localhost:3002/');
     
     // Verify dashboard title
-    await expect(page.locator('h1')).toContainText('MrLogSec Admin Dashboard');
+    await expect(page.locator('h1')).toContainText('Platform Dashboard');
     
     // Verify platform statistics cards are present
     await expect(page.locator('text=Active Tenants')).toBeVisible();
@@ -117,8 +117,8 @@ test.describe('User Story 1: Platform Health Monitoring', () => {
   test('Admin checks System Health', async ({ page }) => {
     // Login and navigate to dashboard
     await page.goto('http://localhost:3002/login');
-    await page.fill('input[type="email"]', 'admin@mrlogsec.com');
-    await page.fill('input[type="password"]', 'admin123');
+    await page.fill('input[type="email"]', 'admin@example.com');
+    await page.fill('input[type="password"]', 'mock-password');
     await page.click('button[type="submit"]');
     await page.waitForURL('http://localhost:3002/');
     
@@ -135,8 +135,8 @@ test.describe('User Story 1: Platform Health Monitoring', () => {
   test('Admin sees navigation cards for all functions', async ({ page }) => {
     // Login and navigate to dashboard
     await page.goto('http://localhost:3002/login');
-    await page.fill('input[type="email"]', 'admin@mrlogsec.com');
-    await page.fill('input[type="password"]', 'admin123');
+    await page.fill('input[type="email"]', 'admin@example.com');
+    await page.fill('input[type="password"]', 'mock-password');
     await page.click('button[type="submit"]');
     await page.waitForURL('http://localhost:3002/');
     
@@ -152,8 +152,8 @@ test.describe('User Story 1: Platform Health Monitoring', () => {
   test('Admin can logout successfully', async ({ page }) => {
     // Login and navigate to dashboard
     await page.goto('http://localhost:3002/login');
-    await page.fill('input[type="email"]', 'admin@mrlogsec.com');
-    await page.fill('input[type="password"]', 'admin123');
+    await page.fill('input[type="email"]', 'admin@example.com');
+    await page.fill('input[type="password"]', 'mock-password');
     await page.click('button[type="submit"]');
     await page.waitForURL('http://localhost:3002/');
     
@@ -173,8 +173,8 @@ test.describe('User Story 1: Platform Health Monitoring', () => {
   test('Platform statistics load correctly without horizontal scroll', async ({ page }) => {
     // Login and navigate to dashboard
     await page.goto('http://localhost:3002/login');
-    await page.fill('input[type="email"]', 'admin@mrlogsec.com');
-    await page.fill('input[type="password"]', 'admin123');
+    await page.fill('input[type="email"]', 'admin@example.com');
+    await page.fill('input[type="password"]', 'mock-password');
     await page.click('button[type="submit"]');
     await page.waitForURL('http://localhost:3002/');
     
