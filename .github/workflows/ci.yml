@@ -130,7 +130,9 @@ jobs:
     # the demo tenant and user with scripts/bootstrap_demo.py, then runs the
     # Playwright specs that cover real regressions. Specs 01-04 predate the
     # current UI and are tracked in docs/ROADMAP.md for a rewrite.
-    runs-on: ubuntu-latest
+    # Pinned: Playwright 1.55 (apps/ui) has no browser builds for the
+    # ubuntu-latest image (26.04). Move with a Playwright upgrade.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       COMPOSE_FILE: infra/docker/compose.yml
