@@ -41,6 +41,11 @@ Other ingest endpoints, used by the nginx and syslog recipes:
   (and `/batch` variants of each) for raw text formats
 - `/v1/ingest/otlp` for OpenTelemetry logs
 
+Batch ingestion is a plan feature: tenants on the default `startup` plan get
+`403 feature_not_subscribed` from `/v1/ingest/logs/batch`. A platform admin
+can change the plan with `PUT /v1/admin/tenants/{tenant_id}/subscription`
+(`scripts/bootstrap_demo.py` does this for the demo tenant).
+
 Request bodies must not be gzip-compressed: the API does not decode
 `Content-Encoding: gzip`, so the recipes leave compression off.
 

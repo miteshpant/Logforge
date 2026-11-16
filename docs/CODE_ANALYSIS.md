@@ -5,6 +5,12 @@ the code, by reading it or by running tests, linters and scanners. File paths
 are relative to the repository root. If you fix something listed here, update
 this file or [ROADMAP.md](./ROADMAP.md) in the same PR.*
 
+> **Update:** many findings below (dead code, the duplicate route, fake UI
+> data, development-mode containers, route tests outside CI, in-memory setup
+> tokens, unused `packages/rules/`) have since been fixed. See
+> [ROADMAP.md → Recently completed](./ROADMAP.md#recently-completed) for the
+> list; the sections below are left as the original snapshot.
+
 ## 1. Executive summary
 
 Logforge is a substantial, mostly genuine observability and SIEM backend: about

@@ -152,7 +152,7 @@ The first run compiles MinIO from its official source (`infra/docker/minio/`), w
 ### 2. Create the first platform admin
 
 ```bash
-# Get a one-time setup token. It is valid for 24 h, held in memory, and lost if the API restarts.
+# Get a one-time setup token. It is valid for 24 h and can be used once.
 SETUP_TOKEN=$(curl -s -X POST http://localhost:7080/v1/auth/setup/init | jq -r .setup_token)
 
 curl -s -X POST http://localhost:7080/v1/auth/setup \
@@ -212,6 +212,8 @@ curl -s -X PUT http://localhost:7080/v1/users/$USER_ID \
 ```
 
 Open http://localhost:3001 and sign in as `dana@acme.example`.
+
+`python scripts/bootstrap_demo.py` runs steps 2–4 for you (idempotently) and also puts the tenant on the enterprise plan.
 
 New tenants start on the `startup` plan, which doesn't include batch ingestion (`/v1/ingest/logs/batch` returns `403 feature_not_subscribed`). A platform admin can change a tenant's plan with `PUT /v1/admin/tenants/{tenant_id}/subscription`.
 
