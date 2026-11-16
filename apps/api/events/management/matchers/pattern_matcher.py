@@ -62,7 +62,14 @@ class PatternMatcher(BaseAlertMatcher):
                 return False
             
             condition_config = self._parse_rule_condition(rule)
-            
+
+            # Field-condition list: {"conditions": [{field, operator, value}],
+            # "filters": [...]} -- the format the alerts API documents and its
+            # tests use. It used to fall through to the pattern_type branch
+            # (default "regex", no pattern), so such rules never fired.
+            if self._is_condition_list(condition_config):
+                return self._match_condition_list(logs, condition_config)
+
             # Check if this is a nested condition (new format) or simple pattern (old format)
             if 'operator' in condition_config and condition_config.get('operator') in ['AND', 'OR', 'NOT']:
                 # New nested condition format - use base matcher evaluation
@@ -97,6 +104,40 @@ class PatternMatcher(BaseAlertMatcher):
             self.logger.error(f"Error evaluating pattern rule {rule.get('id')}: {e}")
             return False
     
+    @staticmethod
+    def _is_condition_list(condition_config: Dict[str, Any]) -> bool:
+        return (
+            isinstance(condition_config.get('conditions'), list)
+            and bool(condition_config.get('conditions'))
+            and 'pattern_type' not in condition_config
+            and 'pattern' not in condition_config
+            and 'patterns' not in condition_config
+            and str(condition_config.get('operator', '')).upper() not in ('AND', 'OR', 'NOT')
+        )
+
+    def _match_condition_list(self, logs: List[Dict[str, Any]], condition_config: Dict[str, Any]) -> bool:
+        """True if a single log satisfies every condition and every filter.
+
+        All clauses must hold for the SAME log: the nested AND evaluator matches
+        each clause against any log independently, which for alerting would
+        fire "level = error AND service = checkout" on an unrelated pair.
+        """
+        clauses = list(condition_config.get('filters') or []) + list(condition_config['conditions'])
+        for clause in clauses:
+            if not isinstance(clause, dict) or not clause.get('field'):
+                self.logger.error(f"Invalid condition in pattern rule: {clause!r}")
+                return False
+
+        for log in logs:
+            if all(
+                self._evaluate_single_log_condition(
+                    log, c['field'], str(c.get('operator', 'eq')).lower(), c.get('value')
+                )
+                for c in clauses
+            ):
+                return True
+        return False
+
     async def _evaluate_regex_pattern(self, logs: List[Dict[str, Any]], condition: Dict[str, Any]) -> bool:
         """
         Evaluate regex pattern matching.
