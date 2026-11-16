@@ -325,7 +325,7 @@ export class ApiClient {
   // ========== HEALTH CHECK ==========
 
   async healthCheck() {
-    return this.makeRequest('/v1/health')
+    return this.makeRequest('/health')
   }
 
   // ========== UTILITY METHODS ==========
