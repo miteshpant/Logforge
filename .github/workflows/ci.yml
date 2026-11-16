@@ -44,7 +44,7 @@ jobs:
           pip install -r apps/api/requirements.txt
 
       - name: Check OpenAPI spec is up to date
-        # docs/api/openapi.json is the published API reference. If this fails,
+        # docs/api/openapi.{json,yaml} are the published API reference. If this fails,
         # run `python scripts/export_openapi.py` and commit the result.
         run: python scripts/export_openapi.py --check
 

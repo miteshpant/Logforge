@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 [![CI](https://github.com/miteshpant/logforge/actions/workflows/ci.yml/badge.svg)](https://github.com/miteshpant/logforge/actions/workflows/ci.yml)
-[![API docs](https://img.shields.io/badge/API-OpenAPI%203.1-6BA539.svg)](./docs/api/openapi.json)
+[![API docs](https://img.shields.io/badge/API-OpenAPI%203.1-6BA539.svg)](./docs/api/openapi.yaml)
 
 **Logforge is an open-source, multi-tenant observability and SIEM platform.**
 It ingests logs, metrics and traces, stores them in ClickHouse, lets you query
@@ -239,13 +239,13 @@ Each endpoint is mapped to a permission such as `logs:write:tenant` in `apps/api
 
 ## API reference
 
-The API has **290 paths (335 operations)**. The OpenAPI 3.1 spec is generated from the code and committed to the repo:
+The API has **294 paths (339 operations)**. The OpenAPI 3.1 spec is generated from the code and committed in two equivalent forms:
 
-- **Spec file:** [`docs/api/openapi.json`](./docs/api/openapi.json). Import it into Postman or Insomnia, or generate a client with `openapi-generator`.
-- **Hosted reference:** once GitHub Pages is enabled, the [Publish API docs](./.github/workflows/pages.yml) workflow serves a Redoc rendering at `https://miteshpant.github.io/Logforge/`.
+- **[`docs/api/openapi.yaml`](./docs/api/openapi.yaml)** and **[`docs/api/openapi.json`](./docs/api/openapi.json)**. Import either into Postman, Insomnia or Swagger Editor, or generate a client with `openapi-generator`. GitHub displays these files as source rather than as rendered API docs.
+- **Hosted reference:** once GitHub Pages is enabled, the [Publish API docs](./.github/workflows/pages.yml) workflow serves a Redoc rendering at `https://miteshpant.github.io/Logforge/` (with both spec files alongside it).
 - **On a running stack:** Swagger UI at http://localhost:7080/docs and ReDoc at http://localhost:7080/redoc.
 
-If you change an endpoint, regenerate the spec. CI fails when it is stale:
+If you change an endpoint, regenerate both files. CI fails when either is stale:
 
 ```bash
 pip install -r apps/api/requirements.txt

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Export the Logforge API's OpenAPI spec to docs/api/openapi.json.
+"""Export the Logforge API's OpenAPI spec to docs/api/openapi.json and .yaml.
+
+Both files hold the same document; YAML is the form most API tooling and
+reviewers expect, JSON is what Redoc (docs/api/index.html) loads.
 
 The FastAPI app imports without live infrastructure (see
 tests/test_offline_app_import.py), so this runs anywhere the API's Python
@@ -7,7 +10,7 @@ dependencies are installed:
 
     pip install -r apps/api/requirements.txt
     python scripts/export_openapi.py          # write the spec
-    python scripts/export_openapi.py --check  # fail if the committed spec is stale
+    python scripts/export_openapi.py --check  # fail if a committed spec is stale
 """
 
 import json
@@ -18,6 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "api" / "openapi.json"
+OUT_YAML = OUT.with_suffix(".yaml")
 
 
 def build_spec() -> dict:
@@ -31,19 +35,41 @@ def build_spec() -> dict:
     return spec
 
 
+def render(spec: dict) -> dict:
+    """The committed files, keyed by path."""
+    import yaml
+
+    as_json = json.dumps(spec, indent=2, sort_keys=True) + "\n"
+    # Dump the JSON round-trip so both files describe exactly the same data.
+    # Nested keys stay sorted (stable diffs); top-level keys follow the usual
+    # OpenAPI order so the file opens with `openapi` and `info`.
+    data = json.loads(as_json)
+    first = ["openapi", "info", "servers", "tags", "paths", "components"]
+    ordered = {k: data[k] for k in first if k in data}
+    ordered.update({k: v for k, v in data.items() if k not in ordered})
+    as_yaml = yaml.safe_dump(ordered, sort_keys=False, allow_unicode=True, width=100)
+    return {OUT: as_json, OUT_YAML: as_yaml}
+
+
 def main_cli() -> int:
-    rendered = json.dumps(build_spec(), indent=2, sort_keys=True) + "\n"
+    spec = build_spec()
+    files = render(spec)
     if "--check" in sys.argv:
-        if not OUT.exists() or OUT.read_text() != rendered:
-            print(f"{OUT.relative_to(ROOT)} is out of date. Run: python scripts/export_openapi.py")
+        stale = [p for p, text in files.items() if not p.exists() or p.read_text() != text]
+        if stale:
+            names = ", ".join(str(p.relative_to(ROOT)) for p in stale)
+            print(f"{names} out of date. Run: python scripts/export_openapi.py")
             return 1
         print("OpenAPI spec is up to date.")
         return 0
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(rendered)
-    spec = json.loads(rendered)
+    for path, text in files.items():
+        path.write_text(text)
     ops = sum(len(v) for v in spec["paths"].values())
-    print(f"Wrote {OUT.relative_to(ROOT)} ({len(spec['paths'])} paths, {ops} operations)")
+    print(
+        f"Wrote {OUT.relative_to(ROOT)} and {OUT_YAML.relative_to(ROOT)} "
+        f"({len(spec['paths'])} paths, {ops} operations)"
+    )
     return 0
 
 
