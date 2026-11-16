@@ -49,6 +49,8 @@ export default function SecurityEventsPage() {
   const [severityFilter, setSeverityFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [isActionLoading, setIsActionLoading] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+  useEffect(() => { setActionError(null) }, [selectedEvent?.id])
   const [newNote, setNewNote] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [isBulkLoading, setIsBulkLoading] = useState(false)
@@ -87,106 +89,53 @@ export default function SecurityEventsPage() {
     loadEvents()
   }, [severityFilter, statusFilter, refreshTrigger])
 
-  const handleAcknowledge = async (eventId: string) => {
+  // Run an event action and reflect it only once the API confirms it.
+  // apiClient reports HTTP errors as { success: false } instead of throwing.
+  const runEventAction = async (
+    eventId: string,
+    action: 'acknowledge' | 'investigate' | 'resolve' | 'false-positive',
+    body: Record<string, unknown>,
+    status: SecurityEvent['status'],
+  ) => {
     setIsActionLoading(true)
+    setActionError(null)
     try {
-      await apiClient.post(`/v1/security/${eventId}/acknowledge`, { notes: newNote || undefined })
+      const response = await apiClient.post(`/v1/security/${eventId}/${action}`, body)
+      if (!response.success) {
+        throw new Error(response.error || `Failed to ${action} event`)
+      }
+      if (action === 'investigate' && response.data) {
+        setInvestigationData(prev => ({ ...prev, [eventId]: response.data }))
+      }
       await loadEvents()
       if (selectedEvent?.id === eventId) {
-        setSelectedEvent(prev => prev ? { ...prev, status: 'investigating' } : null)
+        setSelectedEvent(prev => prev ? { ...prev, status } : null)
       }
+      setNewNote('')
     } catch (error) {
-      console.error('Failed to acknowledge event:', error)
-      // Update locally for demo
-      setEvents(prev => prev.map(e =>
-        e.id === eventId ? { ...e, status: 'investigating' as const } : e
-      ))
-      if (selectedEvent?.id === eventId) {
-        setSelectedEvent(prev => prev ? { ...prev, status: 'investigating' } : null)
-      }
+      console.error(`Failed to ${action} event:`, error)
+      // Keep the event as it was and keep the note so the user can retry.
+      setActionError(error instanceof Error ? error.message : `Failed to ${action} event`)
     } finally {
       setIsActionLoading(false)
-      setNewNote('')
     }
   }
 
-  const handleResolve = async (eventId: string) => {
-    setIsActionLoading(true)
-    try {
-      await apiClient.post(`/v1/security/${eventId}/resolve`, {
-        resolution_notes: newNote || 'Resolved - no further action required'
-      })
-      await loadEvents()
-      if (selectedEvent?.id === eventId) {
-        setSelectedEvent(prev => prev ? { ...prev, status: 'resolved' } : null)
-      }
-    } catch (error) {
-      console.error('Failed to resolve event:', error)
-      // Update locally for demo
-      setEvents(prev => prev.map(e =>
-        e.id === eventId ? { ...e, status: 'resolved' as const } : e
-      ))
-      if (selectedEvent?.id === eventId) {
-        setSelectedEvent(prev => prev ? { ...prev, status: 'resolved' } : null)
-      }
-    } finally {
-      setIsActionLoading(false)
-      setNewNote('')
-    }
-  }
+  const handleAcknowledge = (eventId: string) =>
+    runEventAction(eventId, 'acknowledge', { notes: newNote || undefined }, 'investigating')
 
-  const handleFalsePositive = async (eventId: string) => {
-    setIsActionLoading(true)
-    try {
-      await apiClient.post(`/v1/security/${eventId}/false-positive`, {
-        resolution_notes: newNote || 'Marked as false positive'
-      })
-      await loadEvents()
-      if (selectedEvent?.id === eventId) {
-        setSelectedEvent(prev => prev ? { ...prev, status: 'false_positive' } : null)
-      }
-    } catch (error) {
-      console.error('Failed to mark as false positive:', error)
-      // Update locally for demo
-      setEvents(prev => prev.map(e =>
-        e.id === eventId ? { ...e, status: 'false_positive' as const } : e
-      ))
-      if (selectedEvent?.id === eventId) {
-        setSelectedEvent(prev => prev ? { ...prev, status: 'false_positive' } : null)
-      }
-    } finally {
-      setIsActionLoading(false)
-      setNewNote('')
-    }
-  }
+  const handleResolve = (eventId: string) =>
+    runEventAction(eventId, 'resolve', {
+      resolution_notes: newNote || 'Resolved - no further action required'
+    }, 'resolved')
 
-  const handleInvestigate = async (eventId: string) => {
-    try {
-      setIsActionLoading(true)
-      const response = await apiClient.post(`/v1/security/${eventId}/investigate`, {
-        notes: newNote || undefined
-      })
-      const data = response?.data || response
-      if (data) {
-        setInvestigationData(prev => ({ ...prev, [eventId]: data }))
-      }
-      await loadEvents()
-      if (selectedEvent?.id === eventId) {
-        setSelectedEvent(prev => prev ? { ...prev, status: 'investigating' } : null)
-      }
-    } catch (error) {
-      console.error('Failed to start investigation:', error)
-      setEvents(prev => prev.map(e =>
-        e.id === eventId ? { ...e, status: 'investigating' as const } : e
-      ))
-      if (selectedEvent?.id === eventId) {
-        setSelectedEvent(prev => prev ? { ...prev, status: 'investigating' } : null)
-      }
-    } finally {
-      setIsActionLoading(false)
-      setNewNote('')
-    }
-  }
+  const handleFalsePositive = (eventId: string) =>
+    runEventAction(eventId, 'false-positive', {
+      resolution_notes: newNote || 'Marked as false positive'
+    }, 'false_positive')
+
+  const handleInvestigate = (eventId: string) =>
+    runEventAction(eventId, 'investigate', { notes: newNote || undefined }, 'investigating')
 
   const toggleSelection = (eventId: string) => {
     setSelectedIds(prev => {
@@ -515,6 +464,11 @@ export default function SecurityEventsPage() {
 
             {/* Detail Content */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {actionError && (
+                <div role="alert" data-testid="event-action-error" className="p-3 rounded-lg border border-red-500/30 bg-red-500/10 text-sm text-red-400">
+                  {actionError}
+                </div>
+              )}
               {/* Quick Actions */}
               {selectedEvent.status !== 'resolved' && selectedEvent.status !== 'false_positive' && (
                 <div className="p-4 bg-slate-800/50 rounded-lg border border-white/5">

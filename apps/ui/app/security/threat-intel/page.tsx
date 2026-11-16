@@ -58,6 +58,8 @@ export default function ThreatIntelPage() {
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [severityFilter, setSeverityFilter] = useState<string>('all')
   const [isAddingIndicator, setIsAddingIndicator] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [listError, setListError] = useState<string | null>(null)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -95,35 +97,37 @@ export default function ThreatIntelPage() {
     loadIndicators()
   }, [typeFilter])
 
+  // apiClient reports HTTP errors as { success: false } instead of throwing.
+  // Indicators are only shown once the API has stored or deleted them.
   const handleAddIndicator = async () => {
+    setFormError(null)
     try {
-      await apiClient.post('/v1/security/threat-intel', formData)
+      const response = await apiClient.post('/v1/security/threat-intel', formData)
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to add indicator')
+      }
       await loadIndicators()
       setIsAddingIndicator(false)
       resetForm()
     } catch (error) {
       console.error('Failed to add indicator:', error)
-      // Add locally for demo
-      const newIndicator: ThreatIndicator = {
-        id: `ioc-${Date.now()}`,
-        ...formData,
-        first_seen: new Date().toISOString(),
-        last_seen: new Date().toISOString()
-      }
-      setIndicators(prev => [newIndicator, ...prev])
-      setIsAddingIndicator(false)
-      resetForm()
+      // Keep the form open with its values so the user can fix and retry.
+      setFormError(error instanceof Error ? error.message : 'Failed to add indicator')
     }
   }
 
   const handleDeleteIndicator = async (id: string) => {
     if (!confirm('Delete this threat indicator?')) return
+    setListError(null)
     try {
-      await apiClient.delete(`/v1/security/threat-intel/${id}`)
+      const response = await apiClient.delete(`/v1/security/threat-intel/${id}`)
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to delete indicator')
+      }
       await loadIndicators()
     } catch (error) {
       console.error('Failed to delete indicator:', error)
-      setIndicators(prev => prev.filter(i => i.id !== id))
+      setListError(error instanceof Error ? error.message : 'Failed to delete indicator')
     }
   }
 
@@ -191,6 +195,11 @@ export default function ThreatIntelPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {listError && (
+          <div role="alert" className="p-3 rounded-lg border border-red-500/30 bg-red-500/10 text-sm text-red-400">
+            {listError}
+          </div>
+        )}
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
@@ -539,10 +548,16 @@ export default function ThreatIntelPage() {
                 </div>
               </div>
 
+              {formError && (
+                <div role="alert" data-testid="indicator-form-error" className="mt-4 p-3 rounded-lg border border-red-500/30 bg-red-500/10 text-sm text-red-400">
+                  {formError}
+                </div>
+              )}
+
               {/* Actions */}
               <div className="flex gap-3 mt-6 pt-4 border-t border-white/5">
                 <button
-                  onClick={() => { setIsAddingIndicator(false); resetForm(); }}
+                  onClick={() => { setIsAddingIndicator(false); setFormError(null); resetForm(); }}
                   className="flex-1 px-4 py-2 border border-white/10 rounded-lg font-medium text-slate-300 hover:bg-white/5"
                 >
                   Cancel
