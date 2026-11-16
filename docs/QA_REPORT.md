@@ -63,9 +63,10 @@ user activation, without which nobody can log into the tenant UI.
 ## Open issues found (not fixed here)
 
 ### Deploy and setup
-1. **🔴 `minio/minio` is gone from Docker Hub.** The pinned tag and `latest`
-   both return "not found", so `./deploy.sh` fails on every fresh machine.
-   Options are listed in the ROADMAP.
+1. ✅ *Fixed:* **`minio/minio` is gone from Docker Hub.** The pinned tag and
+   `latest` both returned "not found", so `./deploy.sh` failed on every fresh
+   machine. MinIO is now built from official source
+   (`infra/docker/minio/Dockerfile`).
 2. **Linux bind-mount permissions.** The UI container runs as uid 1000 and
    writes `.next/` into the bind-mounted `apps/ui`. On hosts where the user
    isn't uid 1000 the UI restart-loops with `EACCES`. A workaround is in the

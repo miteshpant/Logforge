@@ -135,6 +135,8 @@ cd logforge
 ./deploy.sh
 ```
 
+The first run compiles MinIO from its official source (`infra/docker/minio/`), which takes a couple of minutes. The upstream image is no longer published on Docker Hub.
+
 | Service | URL / port | Notes |
 | --- | --- | --- |
 | API | http://localhost:7080 | Interactive docs at http://localhost:7080/docs |
@@ -147,7 +149,6 @@ cd logforge
 > ⚠️ These default credentials are for local development only. See [SECURITY.md](./SECURITY.md) before you expose Logforge anywhere.
 
 > **Known setup issues** (see [docs/QA_REPORT.md](./docs/QA_REPORT.md)):
-> - **MinIO image removed from Docker Hub.** `minio/minio` no longer exists on Docker Hub, so `./deploy.sh` fails while pulling it. Until the compose file is updated ([ROADMAP](./docs/ROADMAP.md)), provide an image tagged `minio/minio:RELEASE.2023-09-07T02-05-02Z` yourself. For example, build official MinIO from source (`go install github.com/minio/minio@latest`) and wrap the binary in an image that has `sh` and `curl` for the healthcheck.
 > - **Linux: UI restart loop with `EACCES … /app/.next/cache`.** The UI container runs as uid 1000 and writes into your bind-mounted `apps/ui`. If your user isn't uid 1000, run `mkdir -p apps/ui/.next && sudo chown -R 1000:1000 apps/ui/.next`, then `docker restart logforge-ui`.
 
 The admin UI is not part of `deploy.sh`. To run it, use `cd apps/admin-ui && npm install && npm run dev`, which serves http://localhost:3002.

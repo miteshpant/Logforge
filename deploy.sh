@@ -139,7 +139,7 @@ show_urls() {
     echo "   API:        http://localhost:7080"
     echo "   UI:         http://localhost:3001"
     echo "   ClickHouse: http://localhost:8124"
-    echo "   MinIO:      http://localhost:9004 (admin/admin123)"
+    echo "   MinIO:      http://localhost:9004 (minio/minio123)"
     echo "   RedPanda:   http://localhost:18081"
     echo ""
     echo -e "${BLUE}📋 Created Topics:${NC}"

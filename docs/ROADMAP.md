@@ -14,16 +14,6 @@ markers).
 
 ## Bugs and broken things
 
-- **🔴 `deploy.sh` fails on a fresh machine: `minio/minio` was removed from
-  Docker Hub** (the pinned tag and `latest` are both "not found"). Choose a
-  replacement for `infra/docker/compose.yml`:
-  (a) a community rebuild such as `pgsty/minio`, pinned to a release tag;
-  (b) a small Dockerfile that builds official MinIO from source
-  (`go install github.com/minio/minio@<version>`) on a base with `sh` and
-  `curl` for the healthcheck;
-  (c) another S3-compatible store, which means checking `storage_service.py`
-  and `config/` profiles still work.
-  Then update `deploy.sh` and the README.
 - **Issues from the [QA run](./QA_REPORT.md#open-issues-found-not-fixed-here)**,
   each with its symptom and location in the report:
   - Alert rules are not evaluated on ingest: `AlertService` has no
