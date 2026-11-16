@@ -5,6 +5,7 @@ Combined authn/authz layer providing authentication, authorization, feature acce
 
 import asyncio
 import time
+import hashlib
 import secrets
 import bcrypt
 import jwt
@@ -550,37 +551,41 @@ class SetupTokenManager:
     """
     Manages initial platform setup tokens.
 
-    KNOWN LIMITATION (ENH-014, partially addressed): tokens are held in process
-    memory, so they do not survive a restart and are not shared across replicas.
-    A multi-replica deployment can therefore issue a token on one pod and reject
-    it on another. Persisting them requires a new table, which is a schema
-    change and is deliberately out of scope here -- it is folded into ENH-021's
-    migration work.
+    Tokens are persisted in ClickHouse (`platform_setup_tokens_mt`, migration
+    015) so they survive restarts and work across API replicas. Only the
+    SHA-256 hash of a token is stored. A token expires after
+    SETUP_TOKEN_TTL_HOURS and can be used once.
 
-    What IS fixed here: construction failure and setup-status errors no longer
-    fall back to fabricated answers. See `get_setup_token_manager()`.
+    Construction failure and setup-status errors propagate rather than
+    falling back to fabricated answers. See `get_setup_token_manager()`.
     """
 
+    TABLE = "platform_setup_tokens_mt"
+    SETUP_TOKEN_TTL_HOURS = 24
+
     def __init__(self):
-        # Use database storage instead of memory
         from database_layer import DatabaseLayer
         self.db = DatabaseLayer("PlatformSetup", "platform-setup-key")
-        # In-process token store -- see the class docstring for the limitation.
-        self.setup_tokens = {}
+
+    @staticmethod
+    def _hash(token: str) -> str:
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
     def generate_setup_token(self) -> Dict[str, Any]:
-        """Generate initial setup token"""
+        """Issue a setup token and store its hash with an expiry."""
         token = generate_secure_token(32)
-        expires_at = datetime.utcnow() + timedelta(hours=24)
+        expires_at = datetime.utcnow() + timedelta(hours=self.SETUP_TOKEN_TTL_HOURS)
 
-        # Store in memory for now (TODO: Store in database instead)
-        self.setup_tokens[token] = {
-            "token": token,
-            "expires_at": expires_at,
-            "used": False,
-            "created_at": datetime.utcnow()
-        }
-
+        # Timestamps are computed server-side so the expiry check below never
+        # depends on the API host's clock or timezone handling.
+        self.db.client.command(
+            f"""
+            INSERT INTO {self.TABLE} (token_hash, created_at, expires_at, used_at)
+            SELECT {{token_hash:String}}, now64(3),
+                   now64(3) + INTERVAL {self.SETUP_TOKEN_TTL_HOURS} HOUR, NULL
+            """,
+            parameters={"token_hash": self._hash(token)},
+        )
         logger.debug("Setup token generated", expires_at=expires_at)
 
         return {
@@ -589,21 +594,34 @@ class SetupTokenManager:
         }
 
     def validate_setup_token(self, token: str) -> bool:
-        """Validate and consume setup token"""
-        token_data = self.setup_tokens.get(token)
-        if not token_data:
+        """Validate and consume a setup token (single use)."""
+        if not token:
+            return False
+        token_hash = self._hash(token)
+
+        result = self.db.client.query(
+            f"""
+            SELECT count() FROM {self.TABLE}
+            WHERE token_hash = {{token_hash:String}}
+              AND used_at IS NULL
+              AND expires_at > now64(3)
+            """,
+            parameters={"token_hash": token_hash},
+        )
+        if not result.result_rows or result.result_rows[0][0] == 0:
             return False
 
-        if token_data["used"]:
-            return False
-
-        if datetime.utcnow() > token_data["expires_at"]:
-            return False
-
-        # Mark token as used
-        token_data["used"] = True
+        # Consume it. mutations_sync=2 waits until every replica has applied
+        # the update, so a second request cannot see the token as unused.
+        self.db.client.command(
+            f"""
+            ALTER TABLE {self.TABLE} UPDATE used_at = now64(3)
+            WHERE token_hash = {{token_hash:String}} AND used_at IS NULL
+            SETTINGS mutations_sync = 2
+            """,
+            parameters={"token_hash": token_hash},
+        )
         logger.debug("Setup token consumed", token=token[:8] + "...")
-
         return True
 
     def has_setup_completed(self) -> bool:
