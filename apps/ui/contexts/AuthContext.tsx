@@ -36,6 +36,24 @@ interface AuthProviderState {
 
 const AuthContext = createContext<AuthProviderState | undefined>(undefined)
 
+/**
+ * The tenant's actual subscription tier, for the header plan badge.
+ *
+ * This used to show `tenant.type` -- the organisation category chosen at
+ * creation (startup/smb/enterprise/...) -- so a tenant upgraded to
+ * enterprise still showed "startup". Falls back to the type if the
+ * subscription can't be read (e.g. a role without access).
+ */
+async function resolveSubscriptionTier(tenant: any): Promise<string> {
+  try {
+    const res = await apiClient.get<{ subscription_tier?: string }>(`/v1/tenants/${tenant.tenant_id}/subscription`)
+    if (res.success && res.data?.subscription_tier) return res.data.subscription_tier
+  } catch {
+    // fall through
+  }
+  return tenant.type || 'unknown'
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -116,7 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const tenantInfo: TenantInfo = {
               id: tenant.tenant_id,
               name: tenant.name,
-              subscription_tier: tenant.type,
+              subscription_tier: await resolveSubscriptionTier(tenant),
               features: ['logs', 'analytics', 'alerts', 'dashboards', 'security'],
               limits: {
                 users: 100,
@@ -235,7 +253,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const tenantInfo: TenantInfo = {
           id: tenant.tenant_id,
           name: tenant.name,
-          subscription_tier: tenant.type,
+          subscription_tier: await resolveSubscriptionTier(tenant),
           features: ['logs', 'analytics', 'alerts', 'dashboards', 'security'],
           limits: {
             users: 100,
@@ -377,7 +395,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const newTenantInfo: TenantInfo = {
         id: tenant.tenant_id,
         name: tenant.name,
-        subscription_tier: tenant.type,
+        subscription_tier: await resolveSubscriptionTier(tenant),
         features: ['logs', 'analytics', 'alerts', 'dashboards', 'security'],
         limits: {
           users: 100,
