@@ -14,8 +14,19 @@ rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 > still demos. See [Feature status](#feature-status) for an honest breakdown,
 > and [docs/ROADMAP.md](./docs/ROADMAP.md) for where help is needed.
 
+## Screenshots
+
+<sub>Captured from a fresh `./deploy.sh` during the [QA run](./docs/QA_REPORT.md), with a tenant seeded with an hour of synthetic logs, traces and metrics.</sub>
+
+| | |
+| --- | --- |
+| **Centrum** (tenant overview)<br>![Centrum](./docs/images/centrum.png) | **Log Explorer**<br>![Log Explorer](./docs/images/log-explorer.png) |
+| **Tracing**<br>![Tracing](./docs/images/tracing.png) | **APM** (latency, error rate, Apdex)<br>![APM](./docs/images/apm.png) |
+| **Service Map** (built from trace spans)<br>![Service Map](./docs/images/service-map.png) | **Sigma Detection Rules** (243 vendored SigmaHQ rules)<br>![Detection Rules](./docs/images/detection-rules.png) |
+
 ## Contents
 
+- [Screenshots](#screenshots)
 - [Feature status](#feature-status)
 - [Architecture](#architecture)
 - [Quick start](#quick-start)
@@ -38,7 +49,7 @@ rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 | Back-pressure (bounded worker pool, `429` + `Retry-After`) | ✅ Implemented | `apps/api/ingest_pipeline.py` |
 | Metrics and trace ingestion, APM, service map | ✅ Implemented | `apps/api/routers/observability_api.py` |
 | Query: JSON DSL, aggregations, time series | ✅ Implemented | `apps/api/query_engine.py` |
-| **LogforgeQL**, a pipe language (`error \| where service = "api" \| stats count() by host`) | ✅ Implemented | `apps/api/logql.py` |
+| **LogforgeQL**, a pipe language (`timeout \| where service = "api" \| limit 50`) | ✅ Implemented | `apps/api/logql.py` |
 | Alerting: threshold, pattern, anomaly and saved-search rules | ✅ Implemented | `apps/api/alert_engine.py` |
 | Notifications: webhook, Slack, email, PagerDuty, Teams, Discord | ✅ Implemented (off by default) | `apps/api/services/notification_service.py` |
 | Sigma detection engine, with 243 vendored SigmaHQ rules | ✅ Implemented | `apps/api/sigma_engine.py`, `apps/api/content/rules/` |
@@ -135,6 +146,10 @@ cd logforge
 
 > ⚠️ These default credentials are for local development only. See [SECURITY.md](./SECURITY.md) before you expose Logforge anywhere.
 
+> **Known setup issues** (see [docs/QA_REPORT.md](./docs/QA_REPORT.md)):
+> - **MinIO image removed from Docker Hub.** `minio/minio` no longer exists on Docker Hub, so `./deploy.sh` fails while pulling it. Until the compose file is updated ([ROADMAP](./docs/ROADMAP.md)), provide an image tagged `minio/minio:RELEASE.2023-09-07T02-05-02Z` yourself. For example, build official MinIO from source (`go install github.com/minio/minio@latest`) and wrap the binary in an image that has `sh` and `curl` for the healthcheck.
+> - **Linux: UI restart loop with `EACCES … /app/.next/cache`.** The UI container runs as uid 1000 and writes into your bind-mounted `apps/ui`. If your user isn't uid 1000, run `mkdir -p apps/ui/.next && sudo chown -R 1000:1000 apps/ui/.next`, then `docker restart logforge-ui`.
+
 The admin UI is not part of `deploy.sh`. To run it, use `cd apps/admin-ui && npm install && npm run dev`, which serves http://localhost:3002.
 
 ### 2. Create the first platform admin
@@ -170,14 +185,38 @@ curl -s -X POST http://localhost:7080/v1/ingest/logs \
   -H 'Content-Type: application/json' \
   -d '{"service":"checkout","level":"error","msg":"payment declined","attrs":{"order_id":"42"}}'
 
-# Query it back with LogforgeQL
+# Query it back with LogforgeQL. A leading bare word is a full-text search on
+# the message, so start with `where` to filter on fields only.
 curl -s -X POST http://localhost:7080/v1/query/logql \
   -H "Authorization: Bearer $TOKEN" -H "X-Customer-ID: $TENANT_ID" \
   -H 'Content-Type: application/json' \
-  -d '{"query":"error | where service = \"checkout\" | limit 10","since":"1h"}' | jq
+  -d '{"query":"where service = \"checkout\" and level = \"error\" | limit 10","since":"1h"}' | jq
 ```
 
-Then open the tenant UI at http://localhost:3001.
+### 4. Create a tenant user and open the UI
+
+The tenant UI is for tenant users. A platform admin can't log into it, because there is no tenant called `platform`.
+
+```bash
+USER_ID=$(curl -s -X POST http://localhost:7080/v1/users \
+  -H "Authorization: Bearer $TOKEN" -H 'X-Customer-ID: platform' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Dana Ops","email":"dana@acme.example","password":"Acme-Demo-Pass-123!"}' | jq -r .id)
+
+curl -s -X POST http://localhost:7080/v1/users/$USER_ID/roles \
+  -H "Authorization: Bearer $TOKEN" -H 'X-Customer-ID: platform' \
+  -H 'Content-Type: application/json' \
+  -d "{\"tenant_id\":\"$TENANT_ID\",\"role\":\"tenant_admin\"}"
+
+# New users start as "pending"; activate the user so their sessions are accepted
+curl -s -X PUT http://localhost:7080/v1/users/$USER_ID \
+  -H "Authorization: Bearer $TOKEN" -H 'X-Customer-ID: platform' \
+  -H 'Content-Type: application/json' -d '{"status":"active"}'
+```
+
+Open http://localhost:3001 and sign in as `dana@acme.example`.
+
+New tenants start on the `startup` plan, which doesn't include batch ingestion (`/v1/ingest/logs/batch` returns `403 feature_not_subscribed`). A platform admin can change a tenant's plan with `PUT /v1/admin/tenants/{tenant_id}/subscription`.
 
 **Useful commands:** `make logs`, `make down`, `make clean` (this also deletes volumes), `make health`.
 
@@ -220,7 +259,7 @@ python scripts/export_openapi.py
 
 ## Shipping logs
 
-Ready-made Vector and Fluent Bit configurations are in [`packages/shipper-recipes/`](./packages/shipper-recipes/). Point them at `/v1/ingest/logs/batch` and authenticate with an `lf_` API key.
+Ready-made Vector and Fluent Bit configurations are in [`packages/shipper-recipes/`](./packages/shipper-recipes/). Point them at `/v1/ingest/logs/batch` and authenticate with an `lf_` API key. Batch ingestion needs a plan that includes the `ingestion.batch` feature; the default `startup` plan doesn't.
 
 ---
 

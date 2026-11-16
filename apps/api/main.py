@@ -57,15 +57,6 @@ app = FastAPI(
 # Reduces bandwidth by 60-80% for JSON responses
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=config["cors_origins"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Add unified authentication & authorization middleware
 from authn_authz_middleware import setup_unified_auth_middleware
 setup_unified_auth_middleware(app)
@@ -84,6 +75,20 @@ setup_request_limits(app)
 # which are exactly the ones an on-call engineer needs to see.
 from self_metrics import MetricsMiddleware
 app.add_middleware(MetricsMiddleware)
+
+# CORS is registered LAST so it is the OUTERMOST layer. Every response then
+# carries CORS headers -- including the 401/403/429 that the auth and
+# rate-limit middleware return without reaching a route. Registered earlier
+# (inside those layers), such errors reached the browser without
+# Access-Control-Allow-Origin and surfaced as an opaque "CORS error", so the UI
+# could not see the 401 and react to it (e.g. by sending the user to /login).
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=config["cors_origins"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Include all routers
 app.include_router(health_router, tags=["Health"])
