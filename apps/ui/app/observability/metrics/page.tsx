@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
 import { apiClient } from '@/lib/api'
+import CustomMetricsPanel from '@/components/observability/CustomMetricsPanel'
 import {
   Activity,
   Clock,
@@ -876,6 +877,8 @@ export default function MetricsExplorerPage() {
             </div>
           )
         })}
+
+        <CustomMetricsPanel aggregation={aggregation} />
 
         {/* Summary Footer */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

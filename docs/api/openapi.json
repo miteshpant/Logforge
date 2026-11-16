@@ -15972,6 +15972,61 @@
         ]
       }
     },
+    "/v1/observability/metrics/names": {
+      "get": {
+        "description": "List the metric names this tenant has actually sent.\n\nEach entry says whether the name is a standard metric\n(see /v1/observability/metrics/standard). Non-standard names are stored as\nsent and are queryable through /metrics/query, but the Metrics Explorer\nonly charts standard names unless it lists these.",
+        "operationId": "get_metric_names_v1_observability_metrics_names_get",
+        "parameters": [
+          {
+            "description": "Look-back window in days",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "description": "Look-back window in days",
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Metric Names",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
     "/v1/observability/metrics/query": {
       "post": {
         "description": "Query time series metrics with aggregation and granularity support",

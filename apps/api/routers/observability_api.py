@@ -759,6 +759,51 @@ async def get_metrics_services(
         raise HTTPException(status_code=500, detail=f"Failed to get metrics services: {str(e)}")
 
 
+@router.get("/metrics/names")
+async def get_metric_names(
+    days: int = Query(7, ge=1, le=90, description="Look-back window in days"),
+    customer_id: str = Header(..., alias="X-Customer-ID")
+):
+    """List the metric names this tenant has actually sent.
+
+    Each entry says whether the name is a standard metric
+    (see /v1/observability/metrics/standard). Non-standard names are stored as
+    sent and are queryable through /metrics/query, but the Metrics Explorer
+    only charts standard names unless it lists these.
+    """
+    try:
+        from dao.observability_dao import ObservabilityDAO
+        from services.metric_normalizer import get_metric_normalizer
+
+        dao = ObservabilityDAO()
+        query = """
+        SELECT metric_name, count() AS points, max(timestamp) AS last_seen
+        FROM metrics_mt
+        WHERE customer_id = %(customer_id)s
+          AND timestamp >= now() - INTERVAL %(days)s DAY
+        GROUP BY metric_name
+        ORDER BY metric_name
+        LIMIT 500
+        """
+        results = await dao.db.execute_query(query, {"customer_id": customer_id, "days": days})
+
+        standard = {m["name"] for m in get_metric_normalizer().get_standard_metrics()}
+        metrics = [
+            {
+                "name": row["metric_name"],
+                "points": int(row["points"]),
+                "last_seen": row["last_seen"].isoformat() if hasattr(row["last_seen"], "isoformat") else row["last_seen"],
+                "standard": row["metric_name"] in standard,
+            }
+            for row in (results or [])
+        ]
+        return {"metrics": metrics, "count": len(metrics), "customer_id": customer_id}
+
+    except Exception as e:
+        logger.error("Failed to list metric names", error=str(e), customer_id=customer_id)
+        raise HTTPException(status_code=500, detail="Failed to list metric names")
+
+
 @router.post("/metrics/query")
 async def query_metrics(
     query: MetricQueryRequest,
