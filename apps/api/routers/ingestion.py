@@ -14,6 +14,7 @@ from models import (
     LogEntry, BatchLogEntry, OTLPLogsData,
     IngestResponse, BatchIngestResponse
 )
+from error_handling import internal_error
 from parsers import ParserFactory
 from storage_config import get_customer_id
 from tenant_dependencies import TenantOrDefault, RequiredTenant, MiddlewareTenant
@@ -170,7 +171,7 @@ async def ingest_logs(
             get_ingestion_service().track_ingestion_error,
             customer_id, "/logs", "processing_error", str(e)
         )
-        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+        raise internal_error(e, "Ingestion failed", customer_id=customer_id, endpoint="/logs")
 
 @router.post("/logs/batch", response_model=BatchIngestResponse)
 async def ingest_logs_batch(
@@ -225,7 +226,7 @@ async def ingest_logs_batch(
             get_ingestion_service().track_ingestion_error,
             customer_id, "/logs/batch", "processing_error", str(e)
         )
-        raise HTTPException(status_code=500, detail=f"Batch ingestion failed: {str(e)}")
+        raise internal_error(e, "Batch ingestion failed", customer_id=customer_id, endpoint="/logs/batch")
 
 @router.post("/logs/bulk", response_model=BatchIngestResponse)
 async def ingest_logs_bulk(
@@ -261,8 +262,12 @@ async def ingest_logs_bulk(
         )
     except HTTPException:
         raise
+    except ValueError as e:
+        # A malformed entry (pydantic ValidationError is a ValueError) is the
+        # caller's error: 400 with what was wrong, not a 500.
+        raise HTTPException(status_code=400, detail=f"Invalid log entry: {e}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Bulk ingestion failed: {str(e)}")
+        raise internal_error(e, "Bulk ingestion failed", customer_id=customer_id, endpoint="/logs/bulk")
 
 @router.post("/otlp", response_model=BatchIngestResponse)
 async def ingest_otlp_logs(
@@ -328,7 +333,7 @@ async def ingest_otlp_logs(
             get_ingestion_service().track_ingestion_error,
             customer_id, "/otlp", "processing_error", str(e), str(otlp_data)[:500], "application/json"
         )
-        raise HTTPException(status_code=500, detail=f"OTLP ingestion failed: {str(e)}")
+        raise internal_error(e, "OTLP ingestion failed", customer_id=customer_id, endpoint="/otlp")
 
 @router.post("/syslog", response_model=IngestResponse)
 async def ingest_syslog(
