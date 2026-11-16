@@ -119,6 +119,18 @@ class RedisManager:
         except Exception as e:
             logger.error(f"Error closing Redis connection: {e}")
 
+    @property
+    def client(self):
+        """The raw ``redis.asyncio`` client once connected, else ``None``.
+
+        request_limits, auth_cache and login_throttle resolve their client with
+        ``getattr(manager, "client", None) or manager``. Without this property
+        they always fell back to the manager itself, which then lacked
+        ``incr`` -- silently disabling per-tenant rate limiting, the auth cache
+        and the login brute-force throttle.
+        """
+        return self._client if self._connected else None
+
     @asynccontextmanager
     async def get_client(self):
         """
@@ -175,7 +187,8 @@ class RedisManager:
             }
 
     # Key-Value Operations
-    async def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
+    async def set(self, key: str, value: Any, ttl: Optional[int] = None,
+                  ex: Optional[int] = None) -> bool:
         """
         Set a key-value pair with optional TTL.
 
@@ -183,10 +196,13 @@ class RedisManager:
             key: Redis key
             value: Value to store (will be JSON serialized)
             ttl: Time to live in seconds
+            ex: Alias for ``ttl``, matching redis-py's ``set(..., ex=)`` so
+                callers holding either the manager or the raw client work.
 
         Returns:
             True if successful
         """
+        ttl = ttl if ttl is not None else ex
         try:
             async with self.get_client() as client:
                 # Serialize complex objects to JSON
@@ -197,7 +213,6 @@ class RedisManager:
                     return await client.setex(key, ttl, value)
                 else:
                     return await client.set(key, value)
-                logger.info(f"set cuccessfully {key} to {value}")
         except Exception as e:
             logger.error(f"Redis SET failed for key {key}: {e}")
             return False
@@ -227,6 +242,16 @@ class RedisManager:
         except Exception as e:
             logger.error(f"Redis GET failed for key {key}: {e}")
             return default
+
+    async def incr(self, key: str, amount: int = 1) -> int:
+        """Atomically increment an integer counter and return the new value.
+
+        Unlike most helpers here this does NOT swallow errors: the counters
+        behind rate limiting and the login throttle must let their callers
+        decide whether to fail open or closed.
+        """
+        async with self.get_client() as client:
+            return int(await client.incr(key, amount))
 
     async def delete(self, *keys: str) -> int:
         """
