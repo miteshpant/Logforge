@@ -9,7 +9,8 @@ from typing import Optional, Dict, Any, List
 import structlog
 import json
 import asyncio
-from datetime import datetime, timedelta
+from collections import deque
+from datetime import datetime, timedelta, timezone
 import random
 
 from services.observability_service import ObservabilityService
@@ -1115,6 +1116,104 @@ async def stream_alerts(
     except Exception as e:
         logger.error("Failed to start alerts stream", error=str(e), customer_id=customer_id)
         raise HTTPException(status_code=500, detail=f"Failed to start alerts stream: {str(e)}")
+
+
+LOG_TAIL_POLL_SECONDS = 2
+LOG_TAIL_BATCH = 200
+LOG_TAIL_OVERLAP = timedelta(seconds=5)
+LOG_TAIL_HEARTBEAT_SECONDS = 15
+LOG_TAIL_SEEN_MAX = 5000
+
+
+def _log_tail_key(row: Dict[str, Any]) -> str:
+    return "|".join(str(row.get(k, "")) for k in ("ingested_at", "ts", "service", "trace_id", "span_id", "msg"))
+
+
+@router.get("/logs")
+async def stream_logs(
+    service: Optional[str] = Query(None, description="Only logs from this service"),
+    level: Optional[str] = Query(None, description="Only logs at this level (case-insensitive)"),
+    customer_id: str = Depends(get_customer_id_for_sse)
+):
+    """Live tail: stream newly ingested logs as `log_event` SSE messages.
+
+    Starts at "now" (no replay). Polls logs_raw_mt by ingestion time through
+    the regular query engine, so tenant scoping, field validation and
+    parameter binding are the same as for /v1/query. Each poll re-reads a
+    short overlap window, because the write buffer can flush an earlier-stamped
+    row after a later one; rows already sent are skipped. Sends `heartbeat`
+    events while idle so proxies keep the connection open.
+    """
+    from routers import query as query_router
+    from routers.query import build_query_request
+
+    async def generate_logs():
+        connection_manager = get_streaming_connection_manager()
+        connection_id = connection_manager.register_connection("logs", customer_id)
+        cursor = datetime.now(timezone.utc)
+        seen: deque = deque(maxlen=LOG_TAIL_SEEN_MAX)
+        seen_set: set = set()
+        last_heartbeat = datetime.now(timezone.utc)
+        try:
+            yield format_sse_message("connected", {"stream": "logs", "service": service, "level": level})
+            while not connection_manager.is_shutting_down:
+                engine = query_router.query_engine
+                if engine is None:
+                    yield format_sse_message("error", {"message": "Query engine not available"})
+                    break
+
+                now = datetime.now(timezone.utc)
+                filters: List[Dict[str, Any]] = [
+                    {"field": "ingested_at", "operator": "gt", "value": cursor - LOG_TAIL_OVERLAP}
+                ]
+                if service:
+                    filters.append({"field": "service", "operator": "eq", "value": service})
+                if level:
+                    filters.append({"field": "level", "operator": "in",
+                                    "value": sorted({level, level.lower(), level.upper()})})
+                request = build_query_request({
+                    # ts window only bounds the scan; ingestion time drives the tail.
+                    "start_time": now - timedelta(days=1),
+                    "end_time": now + timedelta(minutes=5),
+                    "filters": filters,
+                    "sort_field": "ingested_at",
+                    "sort_order": "asc",
+                    "limit": LOG_TAIL_BATCH,
+                }, customer_id)
+
+                try:
+                    result = await engine.execute_query(request)
+                except Exception as e:
+                    logger.error("Live tail query failed", error=str(e), customer_id=customer_id)
+                    yield format_sse_message("error", {"message": "Live tail query failed"})
+                    break
+
+                for row in result.logs or []:
+                    key = _log_tail_key(row)
+                    if key in seen_set:
+                        continue
+                    if len(seen) == seen.maxlen:
+                        seen_set.discard(seen[0])
+                    seen.append(key)
+                    seen_set.add(key)
+                    ingested = row.get("ingested_at")
+                    if isinstance(ingested, datetime):
+                        ingested = ingested if ingested.tzinfo else ingested.replace(tzinfo=timezone.utc)
+                        cursor = max(cursor, ingested)
+                    yield format_sse_message("log_event", {"log": json.loads(json.dumps(row, default=str))})
+
+                if (now - last_heartbeat).total_seconds() >= LOG_TAIL_HEARTBEAT_SECONDS:
+                    last_heartbeat = now
+                    yield format_sse_message("heartbeat", {"timestamp": now.isoformat()})
+                await asyncio.sleep(LOG_TAIL_POLL_SECONDS)
+        finally:
+            connection_manager.unregister_connection(connection_id)
+
+    return StreamingResponse(
+        generate_logs(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
 
 
 @router.get("/usage")

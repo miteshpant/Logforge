@@ -20015,6 +20015,106 @@
         ]
       }
     },
+    "/v1/stream/logs": {
+      "get": {
+        "description": "Live tail: stream newly ingested logs as `log_event` SSE messages.\n\nStarts at \"now\" (no replay). Polls logs_raw_mt by ingestion time through\nthe regular query engine, so tenant scoping, field validation and\nparameter binding are the same as for /v1/query. Each poll re-reads a\nshort overlap window, because the write buffer can flush an earlier-stamped\nrow after a later one; rows already sent are skipped. Sends `heartbeat`\nevents while idle so proxies keep the connection open.",
+        "operationId": "stream_logs_v1_stream_logs_get",
+        "parameters": [
+          {
+            "description": "Only logs from this service",
+            "in": "query",
+            "name": "service",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only logs from this service",
+              "title": "Service"
+            }
+          },
+          {
+            "description": "Only logs at this level (case-insensitive)",
+            "in": "query",
+            "name": "level",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only logs at this level (case-insensitive)",
+              "title": "Level"
+            }
+          },
+          {
+            "in": "query",
+            "name": "customer_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Customer Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Customer-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Logs",
+        "tags": [
+          "streaming"
+        ]
+      }
+    },
     "/v1/stream/metrics": {
       "get": {
         "description": "Stream real-time metrics data - Pure event-driven, no polling",
