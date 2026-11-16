@@ -22,6 +22,7 @@ Grammar
 Examples
 --------
     error timeout | where level = "error" | limit 100
+    * | where service = "api" | stats count() by level
     | where service = "api" and http_status >= 500 | stats count() by service
     | where msg contains "panic" | sort ts desc | limit 50
     | last 15m | where level = "error"
@@ -351,7 +352,11 @@ def parse(query: str) -> ParsedQuery:
     keywords = ("where", "stats", "sort", "limit", "last")
     first_word = first.split()[0].lower() if first else ""
 
-    if first and first_word not in keywords:
+    if first == "*":
+        # `*` is the conventional match-all selector (SPL/KQL); it was searched
+        # for literally, so `* | where ...` silently returned nothing.
+        stages = stages[1:]
+    elif first and first_word not in keywords:
         parsed.text_search = first
         stages = stages[1:]
     elif not first:

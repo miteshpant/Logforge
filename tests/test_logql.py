@@ -359,3 +359,35 @@ def test_endpoint_returns_400_for_a_syntax_error():
 
     assert "status_code=400" in source
     assert "LogQLSyntaxError" in source
+
+
+# --- `*` match-all selector -------------------------------------------------
+# QA found `* | where service = "checkout"` returned nothing: the `*` was sent
+# as a literal full-text search term.
+
+def test_star_selector_means_match_all():
+    from logql import compile_to_request_payload
+
+    payload = compile_to_request_payload('* | where service = "checkout" | limit 10')
+    assert "text_search" not in payload
+    assert payload["filters"][0]["field"] == "service"
+
+
+def test_star_alone_is_match_all():
+    from logql import compile_to_request_payload
+
+    assert "text_search" not in compile_to_request_payload("*")
+
+
+def test_star_with_stats_by_keeps_grouping():
+    from logql import compile_to_request_payload
+
+    payload = compile_to_request_payload("* | stats count() by service")
+    assert "text_search" not in payload
+    assert payload["group_by"] == ["service"]
+
+
+def test_star_inside_a_search_term_is_still_text():
+    from logql import compile_to_request_payload
+
+    assert compile_to_request_payload("err*r")["text_search"] == "err*r"
