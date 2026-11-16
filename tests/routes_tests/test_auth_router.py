@@ -47,6 +47,8 @@ class AuthRouterTestSuite(BaseTestSuite):
             }
             
             created_user = await user_service.create_user(user_data)
+            
+            await self.grant_tenant_role(created_user.id)  # login requires a tenant role
             self.add_cleanup_item("custom", ("users_mt", "id", created_user.id))
             
             # Valid login request
@@ -142,6 +144,8 @@ class AuthRouterTestSuite(BaseTestSuite):
             }
             
             created_user = await user_service.create_user(user_data)
+            
+            await self.grant_tenant_role(created_user.id)  # login requires a tenant role
             self.add_cleanup_item("custom", ("users_mt", "id", created_user.id))
             
             # Login to get a valid session
@@ -195,15 +199,17 @@ class AuthRouterTestSuite(BaseTestSuite):
             # Use httpx directly to avoid default tenant headers from make_authenticated_request
             import httpx
             
-            refresh_headers = {
-                "Authorization": f"Bearer {self.auth_token}"
-                # Explicitly NO X-Customer-ID header - refresh should work without tenant context
-            }
-            
+            # Refresh exchanges the refresh token issued at login (LF-015
+            # rotation); it no longer accepts a bare session bearer token.
             async with httpx.AsyncClient(timeout=30.0) as client:
+                login = await client.post(
+                    f"{self.base_url}/v1/auth/login",
+                    json={"email": self.test_user_email, "password": f"TestPass{self.test_id}!"},
+                )
+                assert login.status_code == 200, f"Login failed: {login.status_code}: {login.text}"
                 response = await client.post(
                     f"{self.base_url}/v1/auth/refresh",
-                    headers=refresh_headers
+                    json={"refresh_token": login.json()["refresh_token"]},
                 )
 
             # Validate API response
@@ -248,6 +254,8 @@ class AuthRouterTestSuite(BaseTestSuite):
             }
             
             created_user = await user_service.create_user(user_data)
+            
+            await self.grant_tenant_role(created_user.id)  # login requires a tenant role
             self.add_cleanup_item("custom", ("users_mt", "id", created_user.id))
             
             # Login to get a valid session
@@ -467,6 +475,8 @@ class AuthRouterTestSuite(BaseTestSuite):
             }
             
             created_user = await user_service.create_user(user_data)
+            
+            await self.grant_tenant_role(created_user.id)  # login requires a tenant role
             self.add_cleanup_item("custom", ("users_mt", "id", created_user.id))
             
             # Login to get a valid session
@@ -542,6 +552,8 @@ class AuthRouterTestSuite(BaseTestSuite):
             }
             
             created_user = await user_service.create_user(user_data)
+            
+            await self.grant_tenant_role(created_user.id)  # login requires a tenant role
             self.add_cleanup_item("custom", ("users_mt", "id", created_user.id))
             
             # Assign tenant admin role to enable invitations
@@ -681,6 +693,8 @@ class AuthRouterTestSuite(BaseTestSuite):
             }
             
             created_user = await user_service.create_user(user_data)
+            
+            await self.grant_tenant_role(created_user.id)  # login requires a tenant role
             self.add_cleanup_item("custom", ("users_mt", "id", created_user.id))
             
             # Login to get a valid session
@@ -752,6 +766,8 @@ class AuthRouterTestSuite(BaseTestSuite):
             }
             
             created_user = await user_service.create_user(user_data)
+            
+            await self.grant_tenant_role(created_user.id)  # login requires a tenant role
             self.add_cleanup_item("custom", ("users_mt", "id", created_user.id))
             
             # Login to get a valid session
@@ -824,6 +840,8 @@ class AuthRouterTestSuite(BaseTestSuite):
             }
             
             created_user = await user_service.create_user(user_data)
+            
+            await self.grant_tenant_role(created_user.id)  # login requires a tenant role
             self.add_cleanup_item("custom", ("users_mt", "id", created_user.id))
             
             # Login to get a valid session
@@ -896,6 +914,8 @@ class AuthRouterTestSuite(BaseTestSuite):
             }
             
             created_user = await user_service.create_user(user_data)
+            
+            await self.grant_tenant_role(created_user.id)  # login requires a tenant role
             self.add_cleanup_item("custom", ("users_mt", "id", created_user.id))
             
             # Login to get a valid session
@@ -961,6 +981,8 @@ class AuthRouterTestSuite(BaseTestSuite):
             }
             
             created_user = await user_service.create_user(user_data)
+            
+            await self.grant_tenant_role(created_user.id)  # login requires a tenant role
             self.add_cleanup_item("custom", ("users_mt", "id", created_user.id))
             
             # Login to get a valid session
@@ -1027,6 +1049,8 @@ class AuthRouterTestSuite(BaseTestSuite):
             }
             
             created_user = await user_service.create_user(user_data)
+            
+            await self.grant_tenant_role(created_user.id)  # login requires a tenant role
             self.add_cleanup_item("custom", ("users_mt", "id", created_user.id))
             
             # Login to get a valid session
@@ -1091,6 +1115,8 @@ class AuthRouterTestSuite(BaseTestSuite):
             }
             
             created_user = await user_service.create_user(user_data)
+            
+            await self.grant_tenant_role(created_user.id)  # login requires a tenant role
             self.add_cleanup_item("custom", ("users_mt", "id", created_user.id))
             
             # Login to get a valid session
@@ -1166,6 +1192,8 @@ class AuthRouterTestSuite(BaseTestSuite):
             }
             
             created_user = await user_service.create_user(user_data)
+            
+            await self.grant_tenant_role(created_user.id)  # login requires a tenant role
             self.add_cleanup_item("custom", ("users_mt", "id", created_user.id))
             
             # Assign platform admin role to enable tenant onboarding
@@ -1327,6 +1355,8 @@ class AuthRouterTestSuite(BaseTestSuite):
             }
             
             weak_created_user = await user_service.create_user(weak_user_data)
+            
+            await self.grant_tenant_role(weak_created_user.id)  # login requires a tenant role
             self.add_cleanup_item("custom", ("users_mt", "id", weak_created_user.id))
             
             # Login to get valid session
@@ -1421,6 +1451,8 @@ class AuthRouterTestSuite(BaseTestSuite):
             }
             
             created_user = await user_service.create_user(user_data)
+            
+            await self.grant_tenant_role(created_user.id)  # login requires a tenant role
             self.add_cleanup_item("custom", ("users_mt", "id", created_user.id))
 
             # 2. Login with the new user
@@ -1459,7 +1491,7 @@ class AuthRouterTestSuite(BaseTestSuite):
             async with httpx.AsyncClient(timeout=30.0) as client:
                 refresh_response = await client.post(
                     f"{self.base_url}/v1/auth/refresh",
-                    headers=flow_headers
+                    json={"refresh_token": login_data["refresh_token"]},
                 )
 
             assert refresh_response.status_code == 200, f"Session refresh failed: {refresh_response.status_code}: {refresh_response.text}"

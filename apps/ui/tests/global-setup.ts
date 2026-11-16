@@ -20,7 +20,7 @@ async function globalSetup(config: FullConfig) {
   try {
     // 1. Verify API is accessible
     console.log('🔍 Verifying API connectivity...')
-    const healthResponse = await page.request.get('http://localhost:7080/v1/health')
+    const healthResponse = await page.request.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7080'}/health`)
     
     if (!healthResponse.ok()) {
       throw new Error(`API health check failed: ${healthResponse.status()}`)

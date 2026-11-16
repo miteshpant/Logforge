@@ -324,6 +324,7 @@ class ApiClient {
       'traces_event',    // Note: backend sends 'traces_event' (plural)
       'metrics_event',   // Note: backend sends 'metrics_event' (plural)
       'anomaly_event',
+      'log_event',       // GET /v1/stream/logs (live tail)
       'usage',
       'ai_insights',
       'connected',

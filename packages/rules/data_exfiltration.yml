@@ -55,3 +55,12 @@ fields:
     - port
     - duration
     - timestamp
+# Verified by the rule loader before the rule is enabled: the positive event
+# must match, the negative must not (and neither may the benign corpus).
+fixtures:
+    true_positive:
+        protocol: ftp
+        bytes_out: '200000'
+    true_negative:
+        protocol: https
+        bytes_out: '200000'

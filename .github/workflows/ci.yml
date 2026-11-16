@@ -44,15 +44,12 @@ jobs:
           pip install -r apps/api/requirements.txt
 
       - name: Check OpenAPI spec is up to date
-        # docs/api/openapi.json is the published API reference. If this fails,
+        # docs/api/openapi.{json,yaml} are the published API reference. If this fails,
         # run `python scripts/export_openapi.py` and commit the result.
         run: python scripts/export_openapi.py --check
 
       - name: Run tests
-        # The routes_tests suite needs live ClickHouse/Kafka/Redis, which this
-        # job does not provision. It is excluded here rather than allowed to
-        # fail, so a red run always means a real regression.
-        # Wiring up service containers for it is tracked as follow-up.
+        # tests/routes_tests needs the full stack; the route-tests job runs it.
         run: |
           pytest tests/ \
             --ignore=tests/routes_tests \
@@ -65,6 +62,147 @@ jobs:
         with:
           name: api-test-results
           path: junit-api.xml
+
+  route-tests:
+    name: API route tests (live stack)
+    # The ~220 route tests in tests/routes_tests drive the real API over HTTP
+    # against ClickHouse, Redpanda, Redis and MinIO started from the same
+    # compose file as ./deploy.sh.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      COMPOSE_FILE: infra/docker/compose.yml
+      LOGFORGE_API_URL: http://localhost:7080
+      # Fail, not skip, if the API never came up.
+      LOGFORGE_REQUIRE_API: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r apps/api/requirements.txt pyyaml
+
+      - name: Start infrastructure
+        run: docker compose up -d --build --wait clickhouse minio redis redpanda
+
+      - name: Create Kafka topics
+        run: python infra/setup_kafka_topics.py --environment development --force-recreate
+
+      - name: Start API
+        run: |
+          docker compose up -d --build api
+          for i in $(seq 1 90); do
+            if curl -fsS "$LOGFORGE_API_URL/health" > /dev/null; then
+              echo "API is up after ${i}x2s"; exit 0
+            fi
+            sleep 2
+          done
+          echo "API did not become healthy"; docker compose logs api | tail -200; exit 1
+
+      - name: Run route tests
+        working-directory: tests/routes_tests
+        run: pytest . -v --junitxml=../../junit-routes.xml
+
+      - name: API logs on failure
+        if: failure()
+        run: docker compose logs --no-color api clickhouse-migrations | tail -400
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: route-test-results
+          path: junit-routes.xml
+
+      - name: Stop stack
+        if: always()
+        run: docker compose down -v
+
+  ui-e2e:
+    name: UI end-to-end (Playwright, live stack)
+    # Builds and starts the full compose stack (production UI image), seeds
+    # the demo tenant and user with scripts/bootstrap_demo.py, then runs the
+    # Playwright specs that cover real regressions. Specs 01-04 predate the
+    # current UI and are tracked in docs/ROADMAP.md for a rewrite.
+    # Pinned: Playwright 1.55 (apps/ui) has no browser builds for the
+    # ubuntu-latest image (26.04). Move with a Playwright upgrade.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      COMPOSE_FILE: infra/docker/compose.yml
+      PLAYWRIGHT_BASE_URL: http://localhost:3001
+      NEXT_PUBLIC_API_URL: http://localhost:7080
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/ui/package-lock.json
+
+      - name: Start infrastructure
+        run: |
+          pip install pyyaml
+          docker compose up -d --build --wait clickhouse minio redis redpanda
+          python infra/setup_kafka_topics.py --environment development --force-recreate
+
+      - name: Start API and UI
+        run: |
+          docker compose up -d --build api ui
+          for url in http://localhost:7080/health http://localhost:3001/login; do
+            for i in $(seq 1 90); do
+              curl -fsS "$url" > /dev/null && break
+              [ "$i" = 90 ] && { echo "$url never came up"; docker compose logs api ui | tail -200; exit 1; }
+              sleep 2
+            done
+          done
+
+      - name: Create demo tenant and user
+        run: python scripts/bootstrap_demo.py
+
+      - name: Install Playwright
+        working-directory: apps/ui
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run Playwright
+        working-directory: apps/ui
+        run: >
+          npx playwright test --project=chromium --trace off
+          tests/05-auth-hydration.spec.ts
+          tests/06-route-guard.spec.ts
+          tests/07-layout-overflow.spec.ts
+          tests/08-plan-badge.spec.ts
+
+      - name: Service logs on failure
+        if: failure()
+        run: docker compose logs --no-color api ui | tail -400
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/ui/playwright-report
+            apps/ui/test-results
+          if-no-files-found: ignore
+
+      - name: Stop stack
+        if: always()
+        run: docker compose down -v
 
   api-lint:
     name: API lint

@@ -14,15 +14,19 @@ FROM golang:${GO_VERSION}-alpine AS build
 
 ARG MINIO_VERSION=v0.0.0-20260212201848-7aac2a2c5b7c
 # Override these behind a corporate module mirror. Checksum verification stays
-# on by default; GOSUMDB can point at the same sumdb via another URL, e.g.
-#   --build-arg GOSUMDB="sum.golang.org https://proxy.golang.org/sumdb/sum.golang.org"
+# on by default; GOSUMDB can point at the same sumdb via another URL.
 ARG GOPROXY=https://proxy.golang.org,direct
 ARG GOSUMDB=sum.golang.org
 ENV CGO_ENABLED=0 \
     GOTOOLCHAIN=auto \
     GOPROXY=${GOPROXY} \
     GOSUMDB=${GOSUMDB}
-RUN go install -trimpath -ldflags "-s -w" github.com/minio/minio@${MINIO_VERSION}
+# Several hundred modules are downloaded; retry so one dropped connection does
+# not fail the build. Each attempt reuses what the previous one fetched.
+RUN for attempt in 1 2 3 4; do \
+      go install -trimpath -ldflags "-s -w" github.com/minio/minio@${MINIO_VERSION} && exit 0; \
+      echo "go install failed (attempt $attempt), retrying"; sleep $((attempt * 10)); \
+    done; exit 1
 
 # Plain Alpine: no packages to install. The compose healthcheck uses busybox
 # `wget`, which Alpine ships, so the runtime needs nothing beyond the binary.

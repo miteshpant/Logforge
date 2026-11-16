@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 [![CI](https://github.com/miteshpant/logforge/actions/workflows/ci.yml/badge.svg)](https://github.com/miteshpant/logforge/actions/workflows/ci.yml)
-[![API docs](https://img.shields.io/badge/API-OpenAPI%203.1-6BA539.svg)](./docs/api/openapi.json)
+[![API docs](https://img.shields.io/badge/API-OpenAPI%203.1-6BA539.svg)](./docs/api/openapi.yaml)
 
 **Logforge is an open-source, multi-tenant observability and SIEM platform.**
 It ingests logs, metrics and traces, stores them in ClickHouse, lets you query
@@ -141,6 +141,7 @@ The first run compiles MinIO from its official source (`infra/docker/minio/`), w
 | --- | --- | --- |
 | API | http://localhost:7080 | Interactive docs at http://localhost:7080/docs |
 | Tenant UI | http://localhost:3001 | |
+| Admin UI | http://localhost:3002 | Platform administration; sign in as a platform admin |
 | ClickHouse | http://localhost:8124 (HTTP), `9001` (native) | user `logforge` / `logforge123` |
 | MinIO | http://localhost:9004 (console), `9003` (S3 API) | `minio` / `minio123` |
 | RedPanda | `19092` (Kafka), `18081` (schema registry), `18082` (HTTP proxy) | |
@@ -148,12 +149,10 @@ The first run compiles MinIO from its official source (`infra/docker/minio/`), w
 
 > ⚠️ These default credentials are for local development only. See [SECURITY.md](./SECURITY.md) before you expose Logforge anywhere.
 
-The admin UI is not part of `deploy.sh`. To run it, use `cd apps/admin-ui && npm install && npm run dev`, which serves http://localhost:3002.
-
 ### 2. Create the first platform admin
 
 ```bash
-# Get a one-time setup token. It is valid for 24 h, held in memory, and lost if the API restarts.
+# Get a one-time setup token. It is valid for 24 h and can be used once.
 SETUP_TOKEN=$(curl -s -X POST http://localhost:7080/v1/auth/setup/init | jq -r .setup_token)
 
 curl -s -X POST http://localhost:7080/v1/auth/setup \
@@ -214,6 +213,8 @@ curl -s -X PUT http://localhost:7080/v1/users/$USER_ID \
 
 Open http://localhost:3001 and sign in as `dana@acme.example`.
 
+`python scripts/bootstrap_demo.py` runs steps 2–4 for you (idempotently) and also puts the tenant on the enterprise plan.
+
 New tenants start on the `startup` plan, which doesn't include batch ingestion (`/v1/ingest/logs/batch` returns `403 feature_not_subscribed`). A platform admin can change a tenant's plan with `PUT /v1/admin/tenants/{tenant_id}/subscription`.
 
 **Useful commands:** `make logs`, `make down`, `make clean` (this also deletes volumes), `make health`.
@@ -240,13 +241,13 @@ Each endpoint is mapped to a permission such as `logs:write:tenant` in `apps/api
 
 ## API reference
 
-The API has **290 paths (335 operations)**. The OpenAPI 3.1 spec is generated from the code and committed to the repo:
+The API has **294 paths (339 operations)**. The OpenAPI 3.1 spec is generated from the code and committed in two equivalent forms:
 
-- **Spec file:** [`docs/api/openapi.json`](./docs/api/openapi.json). Import it into Postman or Insomnia, or generate a client with `openapi-generator`.
-- **Hosted reference:** once GitHub Pages is enabled, the [Publish API docs](./.github/workflows/pages.yml) workflow serves a Redoc rendering at `https://miteshpant.github.io/Logforge/`.
+- **[`docs/api/openapi.yaml`](./docs/api/openapi.yaml)** and **[`docs/api/openapi.json`](./docs/api/openapi.json)**. Import either into Postman, Insomnia or Swagger Editor, or generate a client with `openapi-generator`. GitHub displays these files as source rather than as rendered API docs.
+- **Hosted reference:** once GitHub Pages is enabled, the [Publish API docs](./.github/workflows/pages.yml) workflow serves a Redoc rendering at `https://miteshpant.github.io/Logforge/` (with both spec files alongside it).
 - **On a running stack:** Swagger UI at http://localhost:7080/docs and ReDoc at http://localhost:7080/redoc.
 
-If you change an endpoint, regenerate the spec. CI fails when it is stale:
+If you change an endpoint, regenerate both files. CI fails when either is stale:
 
 ```bash
 pip install -r apps/api/requirements.txt
@@ -265,7 +266,7 @@ Ready-made Vector and Fluent Bit configurations are in [`packages/shipper-recipe
 
 ```
 apps/
-  api/                FastAPI backend (Python 3.11+)
+  api/                FastAPI backend (Python 3.12)
     routers/          HTTP endpoints, one file per area
     services/ dao/    Business logic and ClickHouse access
     events/           Kafka publishers, consumers, handlers
@@ -319,9 +320,13 @@ pytest tests/routes_tests
 # API with hot reload against the Docker infrastructure
 cd apps/api && CLICKHOUSE_HOST=localhost CLICKHOUSE_PORT=8124 uvicorn main:app --reload --port 7080
 
-# Tenant UI
+# Tenant UI (deploy.sh serves a production build on :3001; for hot reload in
+# Docker add the dev override:
+#   docker compose -f infra/docker/compose.yml -f infra/docker/compose.dev.yml up -d)
 cd apps/ui && npm install && npm run dev        # http://localhost:3000
 cd apps/ui && npx playwright test               # E2E; needs a running API
+# Against the compose stack, after `python scripts/bootstrap_demo.py`:
+#   PLAYWRIGHT_BASE_URL=http://localhost:3001 npx playwright test --project=chromium tests/0[5-8]-*.spec.ts
 
 # Admin UI
 cd apps/admin-ui && npm install && npm run dev  # http://localhost:3002
@@ -330,6 +335,7 @@ cd apps/admin-ui && npm install && npm run dev  # http://localhost:3002
 CI ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)) runs on every pull request:
 
 - API tests and the OpenAPI freshness check
+- Route tests and Playwright end-to-end tests against the full Docker stack
 - Ruff lint
 - pip-audit, bandit and gitleaks
 - Production builds of both UIs

@@ -25,22 +25,6 @@ import {
   Redo,
   Copy
 } from 'lucide-react'
-import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  AreaChart,
-  Area,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer
-} from 'recharts'
 
 interface Widget {
   id: string
@@ -99,127 +83,29 @@ const AGGREGATIONS = [
   { value: 'p99', label: 'P99' }
 ]
 
-const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
-
-// Generate sample preview data
-const generatePreviewData = (type: string) => {
-  if (type === 'line_chart' || type === 'area_chart') {
-    return Array.from({ length: 10 }, (_, i) => ({
-      time: i,
-      value: Math.random() * 50 + 50
-    }))
-  }
-  if (type === 'bar_chart') {
-    return [
-      { name: 'A', value: 40 },
-      { name: 'B', value: 60 },
-      { name: 'C', value: 35 },
-      { name: 'D', value: 75 }
-    ]
-  }
-  if (type === 'pie_chart') {
-    return [
-      { name: 'A', value: 40 },
-      { name: 'B', value: 30 },
-      { name: 'C', value: 20 },
-      { name: 'D', value: 10 }
-    ]
-  }
-  return []
-}
-
-// Widget Preview Component
+// Editor preview: a schematic of what the widget will show. Real values come
+// from GET /v1/dashboards/{id}/data and are rendered on the dashboard page
+// (the Preview button), so nothing here is invented.
 function WidgetPreview({ widget }: { widget: Widget }) {
-  const data = generatePreviewData(widget.type)
+  const typeInfo = WIDGET_TYPES.find(t => t.type === widget.type)
+  const Icon = typeInfo?.icon ?? Activity
+  const q = widget.query_definition || {}
+  const metric = METRICS.find(m => m.value === q.metric)?.label || q.metric || q.metrics?.join(', ') || q.query
+  const aggregation = AGGREGATIONS.find(a => a.value === q.aggregation)?.label
 
-  if (widget.type === 'stat') {
-    return (
-      <div className="h-full flex flex-col items-center justify-center">
-        <div className="text-2xl font-bold text-white">{Math.round(Math.random() * 500)}</div>
-        <div className="text-xs text-emerald-400">↑ 12.5%</div>
+  return (
+    <div
+      className="h-full flex flex-col items-center justify-center gap-1 text-center rounded border border-dashed border-slate-600/50 px-2"
+      data-testid="widget-preview"
+    >
+      <Icon className="w-6 h-6 text-slate-500" />
+      <div className="text-xs font-medium text-slate-300">{typeInfo?.name ?? widget.type}</div>
+      <div className="text-[11px] text-slate-500 truncate max-w-full">
+        {metric ? `${aggregation ? `${aggregation} of ` : ''}${metric}` : 'No metric selected'}
+        {q.group_by ? ` by ${q.group_by}` : ''}
       </div>
-    )
-  }
-
-  if (widget.type === 'gauge') {
-    const value = 65
-    return (
-      <div className="h-full flex flex-col items-center justify-center">
-        <div className="relative w-20 h-10">
-          <svg viewBox="0 0 100 50" className="w-full h-full">
-            <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#334155" strokeWidth="8" />
-            <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#3b82f6" strokeWidth="8" strokeDasharray={`${value * 1.26} 126`} />
-          </svg>
-        </div>
-        <div className="text-lg font-bold text-white">{value}%</div>
-      </div>
-    )
-  }
-
-  if (widget.type === 'line_chart') {
-    return (
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
-          <Line type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
-    )
-  }
-
-  if (widget.type === 'area_chart') {
-    return (
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data}>
-          <Area type="monotone" dataKey="value" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.2} />
-        </AreaChart>
-      </ResponsiveContainer>
-    )
-  }
-
-  if (widget.type === 'bar_chart') {
-    return (
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data}>
-          <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-    )
-  }
-
-  if (widget.type === 'pie_chart') {
-    return (
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie data={data} cx="50%" cy="50%" innerRadius={15} outerRadius={30} dataKey="value">
-            {data.map((_, i) => (
-              <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-            ))}
-          </Pie>
-        </PieChart>
-      </ResponsiveContainer>
-    )
-  }
-
-  if (widget.type === 'table') {
-    return (
-      <div className="text-xs text-slate-400 p-2">
-        <div className="grid grid-cols-3 gap-1 border-b border-slate-700 pb-1 mb-1">
-          <div>Col 1</div>
-          <div>Col 2</div>
-          <div>Col 3</div>
-        </div>
-        {[1, 2, 3].map(i => (
-          <div key={i} className="grid grid-cols-3 gap-1 text-slate-500">
-            <div>Data</div>
-            <div>Data</div>
-            <div>Data</div>
-          </div>
-        ))}
-      </div>
-    )
-  }
-
-  return null
+    </div>
+  )
 }
 
 export default function DashboardEditPage() {
@@ -239,6 +125,8 @@ export default function DashboardEditPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
   const [draggedWidget, setDraggedWidget] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   // Fetch existing dashboard
   useEffect(() => {
@@ -246,6 +134,10 @@ export default function DashboardEditPage() {
       const fetchDashboard = async () => {
         try {
           const response = await apiClient.get(`/v1/dashboards/${params.id}`)
+          // apiClient reports HTTP errors as { success: false }, not by throwing.
+          if (!response.success || !response.data) {
+            throw new Error(response.error || 'Dashboard not found')
+          }
           const data = response.data
           // Ensure widgets is always an array
           setDashboard({
@@ -256,7 +148,9 @@ export default function DashboardEditPage() {
           })
         } catch (err) {
           console.error('Failed to fetch dashboard:', err)
-          // Keep default for demo
+          // Saving the empty default would overwrite the real dashboard, so
+          // saving stays disabled until it loads.
+          setLoadError('Could not load this dashboard. Saving is disabled so it is not overwritten.')
         }
       }
       fetchDashboard()
@@ -325,19 +219,27 @@ export default function DashboardEditPage() {
 
   // Save dashboard
   const saveDashboard = async () => {
+    if (loadError) return
     setIsSaving(true)
+    setSaveError(null)
     try {
       if (isNew) {
         const response = await apiClient.post('/v1/dashboards', dashboard)
+        if (!response.success || !response.data?.id) {
+          throw new Error(response.error || 'Save failed')
+        }
         router.push(`/dashboards/${response.data.id}`)
       } else {
-        await apiClient.put(`/v1/dashboards/${params.id}`, dashboard)
+        const response = await apiClient.put(`/v1/dashboards/${params.id}`, dashboard)
+        if (!response.success) {
+          throw new Error(response.error || 'Save failed')
+        }
       }
       setHasChanges(false)
     } catch (err) {
       console.error('Failed to save dashboard:', err)
-      // For demo, just mark as saved
-      setHasChanges(false)
+      // Keep "Unsaved changes" so the user knows nothing was stored.
+      setSaveError('Save failed. Your changes are not saved yet; try again.')
     } finally {
       setIsSaving(false)
     }
@@ -383,7 +285,13 @@ export default function DashboardEditPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              {hasChanges && (
+              {loadError && (
+                <span className="text-sm text-red-400" role="alert">{loadError}</span>
+              )}
+              {saveError && (
+                <span className="text-sm text-red-400" role="alert" data-testid="save-error">{saveError}</span>
+              )}
+              {hasChanges && !loadError && !saveError && (
                 <span className="text-sm text-amber-400">Unsaved changes</span>
               )}
               <button
@@ -395,7 +303,7 @@ export default function DashboardEditPage() {
               </button>
               <button
                 onClick={saveDashboard}
-                disabled={isSaving || !hasChanges}
+                disabled={isSaving || !hasChanges || !!loadError}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-lg font-medium hover:bg-blue-500/30 transition-colors disabled:opacity-50"
               >
                 <Save className="w-4 h-4" />

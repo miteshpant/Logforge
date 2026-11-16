@@ -135,6 +135,9 @@ services:
       # Read-only so the app can report migration state/drift; DDL is applied
       # by the clickhouse-migrations service, not the API.
       - ../../infra/docker/clickhouse/migrations:/migrations:ro
+      # Logforge's hand-written detection rules, loaded at startup alongside
+      # the vendored SigmaHQ content (mitre_default_loader).
+      - ../../packages/rules:/packages/rules:ro
     environment:
       - PYTHONPATH=/app
       - MIGRATIONS_DIR=/migrations
@@ -168,23 +171,39 @@ services:
     networks:
       - logforge-network
 
-  # Next.js Frontend
+  # Next.js Frontend (production build; infra/docker/compose.dev.yml runs
+  # `next dev` with the source mounted instead).
   ui:
     build:
       context: ../../apps/ui
       dockerfile: Dockerfile
+      target: production
+      args:
+        # Inlined into the browser bundle at build time.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:7080}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:7080}
+    image: logforge/ui:local
     container_name: logforge-ui
     ports:
       - "3001:3000"
-    volumes:
-      - ../../apps/ui:/app
-      - /app/node_modules
-      # Build output lives in a container-owned volume, not the bind mount: the
-      # container runs as `node` (uid 1000), so on Linux hosts whose user isn't
-      # uid 1000 writing /app/.next failed with EACCES and the UI restart-looped.
-      - /app/.next
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:7080
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - logforge-network
+
+  # Platform administration UI (tenants, subscriptions, platform health).
+  admin-ui:
+    build:
+      context: ../../apps/admin-ui
+      dockerfile: Dockerfile
+      target: production
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:7080}
+    image: logforge/admin-ui:local
+    container_name: logforge-admin-ui
+    ports:
+      - "3002:3002"
     depends_on:
       - api
     restart: unless-stopped

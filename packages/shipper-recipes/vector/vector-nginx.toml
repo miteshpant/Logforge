@@ -69,10 +69,14 @@ type = "http"
 inputs = ["nginx_access_parse"]
 uri = "http://localhost:7080/v1/ingest/nginx"
 method = "post"
+# Logforge API key (lf_...), sent as "Authorization: Bearer <key>". Create one
+# under Settings -> API keys; it also selects the tenant, so no X-Customer-ID.
+auth.strategy = "bearer"
+auth.token = "${LOGFORGE_API_KEY}"
 encoding.codec = "text"
 encoding.only_fields = ["log_line"]
 
-[sinks.logforge_nginx_access.headers]
+[sinks.logforge_nginx_access.request.headers]
 Content-Type = "text/plain"
 User-Agent = "Vector-Nginx-Access/1.0"
 
@@ -80,11 +84,15 @@ User-Agent = "Vector-Nginx-Access/1.0"
 [sinks.logforge_nginx_error]
 type = "http"
 inputs = ["nginx_error_parse"]
-uri = "http://localhost:7080/v1/ingest/logs"
+uri = "http://localhost:7080/v1/ingest/logs/batch"
 method = "post"
+# Logforge API key (lf_...), sent as "Authorization: Bearer <key>". Create one
+# under Settings -> API keys; it also selects the tenant, so no X-Customer-ID.
+auth.strategy = "bearer"
+auth.token = "${LOGFORGE_API_KEY}"
 encoding.codec = "json"
 
-[sinks.logforge_nginx_error.headers]
+[sinks.logforge_nginx_error.request.headers]
 Content-Type = "application/json"
 User-Agent = "Vector-Nginx-Error/1.0"
 
@@ -101,12 +109,12 @@ when_full = "block"
 
 [sinks.logforge_nginx_access.batch]
 max_bytes = 524288  # 512KB
-max_events = 500
+max_events = 500  # /v1/ingest/logs/batch accepts at most 1000
 timeout_secs = 3
 
 [sinks.logforge_nginx_error.batch]
 max_bytes = 524288
-max_events = 500
+max_events = 500  # /v1/ingest/logs/batch accepts at most 1000
 timeout_secs = 3
 
 [sinks.logforge_nginx_access.request]

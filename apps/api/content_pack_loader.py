@@ -66,9 +66,18 @@ OUT_OF_SCOPE_TECHNIQUES = frozenset({
     "T1200",
 })
 
-DEFAULT_PACK_PATH = (
-    Path(__file__).resolve().parents[2] / "packages" / "rules" / "content_pack.yml"
-)
+def _default_pack_path() -> Path:
+    # parents[2] is the repo root in a checkout; inside the API container the
+    # code is /app (no parents[2]) and packages/rules is mounted at /packages.
+    here = Path(__file__).resolve()
+    if len(here.parents) > 2:
+        candidate = here.parents[2] / "packages" / "rules" / "content_pack.yml"
+        if candidate.exists():
+            return candidate
+    return Path("/packages/rules/content_pack.yml")
+
+
+DEFAULT_PACK_PATH = _default_pack_path()
 
 
 class ContentPackError(RuntimeError):

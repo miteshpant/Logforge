@@ -14849,7 +14849,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/BatchLogEntry"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/BatchLogEntry"
+                  },
+                  {
+                    "items": {
+                      "$ref": "#/components/schemas/LogEntry"
+                    },
+                    "type": "array"
+                  }
+                ],
+                "description": "Either {\"logs\": [...]} or a bare JSON array of log entries (what Vector, Fluent Bit and Fluentd send). At most 1000 per request.",
+                "title": "Batch"
               }
             }
           },
@@ -15967,6 +15979,61 @@
           }
         },
         "summary": "Ingest Metrics",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
+    "/v1/observability/metrics/names": {
+      "get": {
+        "description": "List the metric names this tenant has actually sent.\n\nEach entry says whether the name is a standard metric\n(see /v1/observability/metrics/standard). Non-standard names are stored as\nsent and are queryable through /metrics/query, but the Metrics Explorer\nonly charts standard names unless it lists these.",
+        "operationId": "get_metric_names_v1_observability_metrics_names_get",
+        "parameters": [
+          {
+            "description": "Look-back window in days",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "description": "Look-back window in days",
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Metric Names",
         "tags": [
           "observability"
         ]
@@ -17649,6 +17716,105 @@
           }
         },
         "summary": "Security Health",
+        "tags": [
+          "security-analytics"
+        ]
+      }
+    },
+    "/v1/security/mitre-attack/techniques": {
+      "get": {
+        "description": "The ATT&CK techniques Logforge knows about (its built-in catalogue).",
+        "operationId": "list_mitre_techniques_v1_security_mitre_attack_techniques_get",
+        "parameters": [
+          {
+            "description": "Only techniques in this tactic, e.g. credential-access",
+            "in": "query",
+            "name": "tactic",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only techniques in this tactic, e.g. credential-access",
+              "title": "Tactic"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Mitre Techniques V1 Security Mitre Attack Techniques Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Mitre Techniques",
+        "tags": [
+          "security-analytics"
+        ]
+      }
+    },
+    "/v1/security/mitre-coverage": {
+      "get": {
+        "description": "MITRE ATT&CK coverage matrix for the tenant.\n\nOne entry per technique in the catalogue or referenced by a rule:\ntechnique_id, technique_name, tactic(s), rule_count, enabled_rule_count,\nhas_fixtures, last_detection_at. Only enabled, fixture-tested rules count\nas covered; rules without verified fixtures are listed in\n`awaiting_content`. Cached per tenant for 5 minutes.",
+        "operationId": "get_mitre_coverage_v1_security_mitre_coverage_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Mitre Coverage V1 Security Mitre Coverage Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Mitre Coverage",
         "tags": [
           "security-analytics"
         ]
@@ -19960,6 +20126,106 @@
         ]
       }
     },
+    "/v1/stream/logs": {
+      "get": {
+        "description": "Live tail: stream newly ingested logs as `log_event` SSE messages.\n\nStarts at \"now\" (no replay). Polls logs_raw_mt by ingestion time through\nthe regular query engine, so tenant scoping, field validation and\nparameter binding are the same as for /v1/query. Each poll re-reads a\nshort overlap window, because the write buffer can flush an earlier-stamped\nrow after a later one; rows already sent are skipped. Sends `heartbeat`\nevents while idle so proxies keep the connection open.",
+        "operationId": "stream_logs_v1_stream_logs_get",
+        "parameters": [
+          {
+            "description": "Only logs from this service",
+            "in": "query",
+            "name": "service",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only logs from this service",
+              "title": "Service"
+            }
+          },
+          {
+            "description": "Only logs at this level (case-insensitive)",
+            "in": "query",
+            "name": "level",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only logs at this level (case-insensitive)",
+              "title": "Level"
+            }
+          },
+          {
+            "in": "query",
+            "name": "customer_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Customer Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Customer-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Logs",
+        "tags": [
+          "streaming"
+        ]
+      }
+    },
     "/v1/stream/metrics": {
       "get": {
         "description": "Stream real-time metrics data - Pure event-driven, no polling",
@@ -21941,7 +22207,7 @@
     },
     "/v1/tenants/{tenant_id}/usage": {
       "get": {
-        "description": "Get tenant usage summary",
+        "description": "Get tenant usage statistics and billing data",
         "operationId": "get_tenant_usage_v1_tenants__tenant_id__usage_get",
         "parameters": [
           {
@@ -21952,32 +22218,15 @@
               "title": "Tenant Id",
               "type": "string"
             }
-          },
-          {
-            "in": "query",
-            "name": "period",
-            "required": false,
-            "schema": {
-              "default": "current",
-              "title": "Period",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Customer-ID",
-            "required": true,
-            "schema": {
-              "title": "X-Customer-Id",
-              "type": "string"
-            }
           }
         ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TenantUsageResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -21995,7 +22244,7 @@
         },
         "summary": "Get Tenant Usage",
         "tags": [
-          "subscription"
+          "tenants"
         ]
       }
     },

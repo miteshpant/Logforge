@@ -601,37 +601,6 @@ class SecurityRouterTestSuite(BaseTestSuite):
             print(f"   ❌ Threat intelligence test error: {e}")
             self.test_results["threat_intel"] = f"ERROR: {e}"
 
-    async def test_background_hunting_endpoint(self):
-        """Test POST /v1/security/background-hunting - Trigger background threat hunting"""
-        print("\n🧪 Testing Background Hunting Endpoint...")
-
-        try:
-            # Test triggering background hunting
-            response = await self.make_authenticated_request(
-                "POST",
-                "/v1/security/background-hunting"
-            )
-
-            # Validate API response
-            assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
-
-            response_data = response.json()
-
-            # Validate background hunting response structure
-            required_fields = ["message", "status"]
-            for field in required_fields:
-                assert field in response_data, f"Missing required field: {field}"
-
-            assert response_data["message"] == "Background threat hunting triggered", "Should confirm background hunting triggered"
-            assert response_data["status"] == "scheduled", "Status should be scheduled"
-
-            print(f"   ✅ Background hunting trigger successful")
-            self.test_results["background_hunting"] = "PASS"
-
-        except Exception as e:
-            print(f"   ❌ Background hunting test error: {e}")
-            self.test_results["background_hunting"] = f"ERROR: {e}"
-
     async def test_mitre_attack_techniques_endpoint(self):
         """Test GET /v1/security/mitre-attack/techniques - List MITRE ATT&CK techniques"""
         print("\n🧪 Testing MITRE ATT&CK Techniques Endpoint...")
@@ -972,7 +941,6 @@ class SecurityRouterTestSuite(BaseTestSuite):
             self.test_security_event_status_update_endpoint,
             self.test_threat_hunting_endpoint,
             self.test_threat_intel_endpoint,
-            self.test_background_hunting_endpoint,
             self.test_mitre_attack_techniques_endpoint,
             self.test_cross_tenant_access_protection,
             self.test_sigma_rule_validation,

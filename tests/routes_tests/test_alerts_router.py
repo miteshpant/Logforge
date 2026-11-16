@@ -344,16 +344,16 @@ class AlertsRouterTestSuite(BaseTestSuite):
                     test_data = test_response.json()
 
                     # Validate test response structure
-                    required_fields = ["rule_id", "triggered", "query_result", "evaluation_time_ms", "test_result", "customer_id"]
+                    required_fields = ["rule_id", "would_trigger", "matched_count", "evaluation_time_ms", "sample_matches", "customer_id"]
                     for field in required_fields:
                         assert field in test_data, f"Missing required field: {field}"
 
                     assert test_data["rule_id"] == rule_id, "Rule ID should match"
                     assert test_data["customer_id"] == self.test_tenant_id, "Customer ID should match"
-                    assert isinstance(test_data["triggered"], bool), "Triggered should be boolean"
+                    assert isinstance(test_data["would_trigger"], bool), "would_trigger should be boolean"
                     assert isinstance(test_data["evaluation_time_ms"], (int, float)), "Evaluation time should be numeric"
 
-                    print(f"   ✅ Test alert rule successful: {rule_id} (triggered: {test_data['triggered']})")
+                    print(f"   ✅ Test alert rule successful: {rule_id} (would_trigger: {test_data['would_trigger']})")
                 else:
                     print(f"   ⚠️ Rule not found for test (acceptable): {rule_id}")
 

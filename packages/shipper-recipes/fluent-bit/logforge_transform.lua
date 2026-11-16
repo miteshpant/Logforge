@@ -103,13 +103,13 @@ function transform_nginx_for_logforge(tag, timestamp, record)
         
         -- Add parsed fields to attrs
         new_record["attrs"] = {
-            "remote_addr" = record["remote_addr"],
-            "method" = record["method"],
-            "path" = record["path"],
-            "status" = record["status"],
-            "bytes_sent" = record["bytes_sent"],
-            "http_user_agent" = record["http_user_agent"],
-            "http_referer" = record["http_referer"]
+            remote_addr = record["remote_addr"],
+            method = record["method"],
+            path = record["path"],
+            status = record["status"],
+            bytes_sent = record["bytes_sent"],
+            http_user_agent = record["http_user_agent"],
+            http_referer = record["http_referer"]
         }
         
         return 1, timestamp, new_record

@@ -111,6 +111,26 @@ class BaseTestSuite:
             print(f"❌ Failed to create test user and tenant: {e}")
             raise
     
+    async def grant_tenant_role(self, user_id: str, role: str = 'tenant_admin') -> str:
+        """Grant `role` in this suite's test tenant to an ad-hoc test user.
+
+        Login requires at least one tenant role assignment ("User has no tenant
+        role assignments"), so a user created mid-test without one can never
+        log in. The role row is registered for cleanup.
+        """
+        from database_layer import DatabaseLayer
+
+        db = DatabaseLayer('TestService', 'test-service-key')
+        role_id = await db.create_user_role({
+            'user_id': user_id,
+            'tenant_id': self.test_tenant_id,
+            'role': role,
+            'granted_by': self.test_user_id or user_id,
+            'customer_id': self.test_tenant_id,
+        })
+        self.test_cleanup_data.append(('role', role_id))
+        return role_id
+
     def _primary_granted_role(self) -> dict:
         """
         The role/tenant pair a session token should carry (ENH-032).

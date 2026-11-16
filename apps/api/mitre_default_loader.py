@@ -37,6 +37,7 @@ import hashlib
 import json
 import re
 from datetime import datetime, timezone
+import os
 from itertools import combinations
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -57,6 +58,21 @@ DEFAULT_RULE_TENANT = "default"
 # pinned upstream commit and the selection criteria.
 CONTENT_RULES_DIR = Path(__file__).resolve().parent / "content" / "rules"
 SIGMAHQ_PINNED_COMMIT = "3c0d35188942eb6a8c373e4f4973ac7e84116993"
+
+# Logforge's own hand-written rules: standalone files plus content_pack.yml.
+# They already use Logforge field names, so they are not translated.
+def packaged_rules_dir() -> Path:
+    """`packages/rules/`: $PACKAGED_RULES_DIR, the repo checkout, or the
+    compose mount at /packages/rules (the API container's code is /app)."""
+    configured = os.getenv("PACKAGED_RULES_DIR")
+    if configured:
+        return Path(configured)
+    here = Path(__file__).resolve()
+    if len(here.parents) > 2:
+        repo_dir = here.parents[2] / "packages" / "rules"
+        if repo_dir.is_dir():
+            return repo_dir
+    return Path("/packages/rules")
 
 # SigmaHQ field name -> LogForge normalized field name. The normalizer
 # (`services/high_performance_normalizer.py` + `config/field_mapping.yml`)
@@ -466,6 +482,130 @@ class MitreDefaultLoader:
         return rows, awaiting
 
     # ------------------------------------------------------------------
+    # Logforge's own rules (packages/rules/)
+    # ------------------------------------------------------------------
+
+    def _verify_fixtures(self, detection: Dict[str, Any], fixtures: Any) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """Check a rule's hand-written fixtures with the same standard as
+        synthesised ones: the positive must fire, the negative and the benign
+        corpus must not."""
+        if not isinstance(fixtures, dict):
+            return None, "fixtures must be a mapping"
+        positive = fixtures.get("true_positive")
+        negative = fixtures.get("true_negative")
+        if not isinstance(positive, dict) or not isinstance(negative, dict):
+            return None, "fixtures need true_positive and true_negative events"
+        if not self._rule_matches(detection, positive):
+            return None, "true_positive fixture does not match"
+        if self._rule_matches(detection, negative):
+            return None, "true_negative fixture matches"
+        for benign in BENIGN_EVENTS:
+            if self._rule_matches(detection, benign):
+                return None, "fires on the benign event corpus"
+        return {"true_positive": positive, "true_negative": negative}, None
+
+    def _packaged_rule_to_row(self, rule: Any, source: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """Validate one Logforge rule (Sigma shape, Logforge field names)."""
+        if not isinstance(rule, dict):
+            return None, "not a mapping"
+        rule_id, title, level = rule.get("id"), rule.get("title"), rule.get("level")
+        detection = rule.get("detection")
+        if not rule_id or not title or not isinstance(detection, dict):
+            return None, "missing id, title or detection"
+        if level not in ("low", "medium", "high", "critical"):
+            return None, f"unsupported level {level!r}"
+
+        tags = [str(t) for t in (rule.get("tags") or [])]
+        techniques = [
+            m.group(1).upper()
+            for m in (_TECHNIQUE_TAG_RE.match(t) for t in tags)
+            if m
+        ]
+        if not techniques:
+            return None, "no MITRE technique tag"
+        tactics = [
+            t.split(".", 1)[1].replace("_", "-")
+            for t in tags
+            if t.lower().startswith("attack.") and not _TECHNIQUE_TAG_RE.match(t)
+        ]
+
+        condition = str(detection.get("condition", ""))
+        if "count(" in condition:
+            # A single-event fixture cannot prove a threshold rule; it needs a
+            # batch fixture the gate does not support yet.
+            return None, "aggregation rule (count) cannot be verified with single-event fixtures"
+
+        if "fixtures" in rule:
+            fixtures, reason = self._verify_fixtures(detection, rule["fixtures"])
+        else:
+            fixtures, reason = self._validate_detection(detection)
+        if fixtures is None:
+            return None, reason
+
+        rule_content = {
+            "detection": detection,
+            "logsource": rule.get("logsource", {}),
+            "tags": tags,
+            "kill_chain_phases": tactics,
+            "references": rule.get("references", []),
+            "falsepositives": rule.get("falsepositives", []),
+            "author": rule.get("author", "Logforge Security Team"),
+            "date": str(rule.get("date", "")),
+            "fixtures": fixtures,
+            "source": {"origin": "logforge", "file": source},
+        }
+        return {
+            "id": f"logforge_{rule_id}",
+            "customer_id": DEFAULT_RULE_TENANT,
+            "name": str(title),
+            "description": str(rule.get("description", "")).strip(),
+            "rule_content": json.dumps(rule_content),
+            "mitre_techniques": techniques,
+            "severity": level,
+            "is_enabled": True,
+            "created_by": "system",
+        }, None
+
+    def _load_packaged_rules(self) -> Tuple[List[Dict[str, Any]], List[str]]:
+        """Parse and validate packages/rules/*.yml and its content pack."""
+        import yaml
+        from content_pack_loader import ContentPackError, load_pack
+
+        rows: List[Dict[str, Any]] = []
+        awaiting: List[str] = []
+        rules_dir = packaged_rules_dir()
+        if not rules_dir.is_dir():
+            logger.warning(f"Packaged rules directory not found: {rules_dir}")
+            return rows, awaiting
+
+        candidates: List[Tuple[Any, str]] = []
+        for path in sorted(rules_dir.glob("*.yml")):
+            if path.name == "content_pack.yml":
+                continue
+            try:
+                candidates.append((yaml.safe_load(path.read_text(encoding="utf-8")), path.name))
+            except yaml.YAMLError as exc:
+                awaiting.append(f"{path.name}: invalid YAML ({exc})")
+
+        pack_path = rules_dir / "content_pack.yml"
+        if pack_path.exists():
+            try:
+                for pack_rule in load_pack(pack_path):
+                    candidates.append((pack_rule.to_sigma(), f"content_pack.yml#{pack_rule.id}"))
+            except ContentPackError as exc:
+                logger.error(f"Content pack not loadable: {exc}")
+                awaiting.append(f"content_pack.yml: {exc}")
+
+        for rule, source in candidates:
+            row, reason = self._packaged_rule_to_row(rule, source)
+            if row is None:
+                logger.warning(f"Packaged rule not loadable ({reason}): {source}")
+                awaiting.append(f"{source}: {reason}")
+            else:
+                rows.append(row)
+        return rows, awaiting
+
+    # ------------------------------------------------------------------
     # Main entry point
     # ------------------------------------------------------------------
 
@@ -485,6 +625,15 @@ class MitreDefaultLoader:
                 f"📦 Vendored content: {len(content_rows)} rules validated, "
                 f"{len(awaiting_content)} awaiting content"
             )
+
+            # 1b. Logforge's own hand-written rules and content pack.
+            packaged_rows, packaged_awaiting = self._load_packaged_rules()
+            logger.info(
+                f"📦 packages/rules: {len(packaged_rows)} rules validated, "
+                f"{len(packaged_awaiting)} awaiting content"
+            )
+            content_rows += packaged_rows
+            awaiting_content += packaged_awaiting
 
             # 2. Metadata-synthesised technique rules (ENH-038) — same gate.
             metadata = generate_production_metadata()

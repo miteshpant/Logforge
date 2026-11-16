@@ -5,15 +5,16 @@ Log ingestion API endpoints - all formats and methods
 import json
 import time
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 from datetime import datetime, timezone
-from fastapi import APIRouter, BackgroundTasks, Request, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Body, Request, HTTPException
 from fastapi.responses import JSONResponse
 
 from models import (
     LogEntry, BatchLogEntry, OTLPLogsData,
     IngestResponse, BatchIngestResponse
 )
+from error_handling import internal_error
 from parsers import ParserFactory
 from storage_config import get_customer_id
 from tenant_dependencies import TenantOrDefault, RequiredTenant, MiddlewareTenant
@@ -170,17 +171,30 @@ async def ingest_logs(
             get_ingestion_service().track_ingestion_error,
             customer_id, "/logs", "processing_error", str(e)
         )
-        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+        raise internal_error(e, "Ingestion failed", customer_id=customer_id, endpoint="/logs")
+
+MAX_BATCH_LOGS = 1000
+
 
 @router.post("/logs/batch", response_model=BatchIngestResponse)
 async def ingest_logs_batch(
-    batch: BatchLogEntry,
     background_tasks: BackgroundTasks,
+    batch: Union[BatchLogEntry, List[LogEntry]] = Body(
+        ...,
+        description='Either {"logs": [...]} or a bare JSON array of log entries '
+                    '(what Vector, Fluent Bit and Fluentd send). At most 1000 per request.',
+    ),
     customer_id: str = MiddlewareTenant
 ):
     """Batch log entry ingestion"""
     # ENH-029: shed load honestly rather than accepting data we cannot persist.
     check_ingest_capacity()
+
+    if isinstance(batch, list):
+        # Same limit as BatchLogEntry.
+        if len(batch) > MAX_BATCH_LOGS:
+            raise HTTPException(status_code=413, detail=f"Batch size cannot exceed {MAX_BATCH_LOGS} logs")
+        batch = BatchLogEntry.model_construct(logs=batch)
 
     start_time = time.time()
 
@@ -225,7 +239,7 @@ async def ingest_logs_batch(
             get_ingestion_service().track_ingestion_error,
             customer_id, "/logs/batch", "processing_error", str(e)
         )
-        raise HTTPException(status_code=500, detail=f"Batch ingestion failed: {str(e)}")
+        raise internal_error(e, "Batch ingestion failed", customer_id=customer_id, endpoint="/logs/batch")
 
 @router.post("/logs/bulk", response_model=BatchIngestResponse)
 async def ingest_logs_bulk(
@@ -261,8 +275,12 @@ async def ingest_logs_bulk(
         )
     except HTTPException:
         raise
+    except ValueError as e:
+        # A malformed entry (pydantic ValidationError is a ValueError) is the
+        # caller's error: 400 with what was wrong, not a 500.
+        raise HTTPException(status_code=400, detail=f"Invalid log entry: {e}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Bulk ingestion failed: {str(e)}")
+        raise internal_error(e, "Bulk ingestion failed", customer_id=customer_id, endpoint="/logs/bulk")
 
 @router.post("/otlp", response_model=BatchIngestResponse)
 async def ingest_otlp_logs(
@@ -328,7 +346,7 @@ async def ingest_otlp_logs(
             get_ingestion_service().track_ingestion_error,
             customer_id, "/otlp", "processing_error", str(e), str(otlp_data)[:500], "application/json"
         )
-        raise HTTPException(status_code=500, detail=f"OTLP ingestion failed: {str(e)}")
+        raise internal_error(e, "OTLP ingestion failed", customer_id=customer_id, endpoint="/otlp")
 
 @router.post("/syslog", response_model=IngestResponse)
 async def ingest_syslog(

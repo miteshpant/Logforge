@@ -86,10 +86,41 @@ def test_manager_is_cached_after_successful_construction(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+class _TokenTableClient:
+    """In-memory stand-in for platform_setup_tokens_mt.
+
+    Implements just the three statements SetupTokenManager issues, keyed on
+    the bound token_hash parameter, and records every statement.
+    """
+
+    def __init__(self):
+        self.rows = {}  # token_hash -> {"expired": bool, "used": bool}
+        self.statements = []
+
+    def command(self, sql, parameters=None):
+        self.statements.append((sql, parameters))
+        token_hash = parameters["token_hash"]
+        if sql.lstrip().startswith("INSERT"):
+            self.rows[token_hash] = {"expired": False, "used": False}
+        elif "UPDATE used_at" in sql and token_hash in self.rows:
+            self.rows[token_hash]["used"] = True
+
+    def query(self, sql, parameters=None):
+        self.statements.append((sql, parameters))
+        row = self.rows.get(parameters["token_hash"])
+        valid = bool(row) and not row["used"] and not row["expired"]
+        return _QueryResult([[1 if valid else 0]])
+
+
+class _TokenTableDB:
+    def __init__(self):
+        self.client = _TokenTableClient()
+
+
 def _manager_without_db():
-    """A SetupTokenManager with __init__ bypassed, so no database is needed."""
+    """A SetupTokenManager with __init__ bypassed and an in-memory token table."""
     mgr = SetupTokenManager.__new__(SetupTokenManager)
-    mgr.setup_tokens = {}
+    mgr.db = _TokenTableDB()
     return mgr
 
 
@@ -175,21 +206,40 @@ def test_unknown_token_is_rejected():
 
 
 def test_expired_token_is_rejected():
-    from datetime import datetime, timedelta
-
     mgr = _manager_without_db()
     token = mgr.generate_setup_token()["setup_token"]
-    mgr.setup_tokens[token]["expires_at"] = datetime.utcnow() - timedelta(seconds=1)
+    mgr.db.client.rows[SetupTokenManager._hash(token)]["expired"] = True
 
     assert mgr.validate_setup_token(token) is False
 
 
-def test_known_limitation_is_documented():
-    """
-    Tokens are still process-local. That is a real multi-replica limitation and
-    must stay documented until ENH-021 adds persistence, rather than being
-    quietly forgotten.
-    """
-    doc = (SetupTokenManager.__doc__ or "").lower()
-    assert "limitation" in doc
-    assert "memory" in doc or "in-process" in doc
+def test_tokens_are_persisted_as_hashes_not_plaintext():
+    mgr = _manager_without_db()
+    token = mgr.generate_setup_token()["setup_token"]
+
+    assert list(mgr.db.client.rows) == [SetupTokenManager._hash(token)]
+    for sql, params in mgr.db.client.statements:
+        assert token not in sql and token not in str(params), (
+            "The plaintext bootstrap token must never reach the database."
+        )
+
+
+def test_token_issued_by_one_instance_validates_on_another():
+    """Restarts and other replicas share the table, not process memory."""
+    issuer = _manager_without_db()
+    token = issuer.generate_setup_token()["setup_token"]
+
+    other = SetupTokenManager.__new__(SetupTokenManager)
+    other.db = issuer.db  # same table, different process
+    assert not hasattr(other, "setup_tokens")
+    assert other.validate_setup_token(token) is True
+    assert issuer.validate_setup_token(token) is False
+
+
+def test_consumption_waits_for_the_mutation():
+    mgr = _manager_without_db()
+    token = mgr.generate_setup_token()["setup_token"]
+    mgr.validate_setup_token(token)
+
+    update = [sql for sql, _ in mgr.db.client.statements if "UPDATE used_at" in sql]
+    assert update and "mutations_sync = 2" in update[0]

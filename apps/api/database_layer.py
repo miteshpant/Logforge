@@ -181,13 +181,9 @@ class DatabaseLayer:
                 from utils.connection_pool import get_shared_client
                 self.client = get_shared_client()
             else:
-                self.client = clickhouse_connect.get_client(
-                    host=os.getenv('CLICKHOUSE_HOST', 'clickhouse'),
-                    port=int(os.getenv('CLICKHOUSE_PORT', '8123')),
-                    username=os.getenv('CLICKHOUSE_USER', 'logforge'),
-                    password=os.getenv('CLICKHOUSE_PASSWORD', 'logforge123'),
-                    database=os.getenv('CLICKHOUSE_DATABASE', 'logforge')
-                )
+                from app_config import clickhouse_settings
+
+                self.client = clickhouse_connect.get_client(**clickhouse_settings())
                 logger.info("ClickHouse client initialized", service=service_name)
         except Exception as e:
             logger.error("Failed to initialize ClickHouse client", service=service_name, error=str(e))

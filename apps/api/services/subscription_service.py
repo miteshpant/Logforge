@@ -149,6 +149,7 @@ class SubscriptionService:
             "/v1/security/threat-hunting": "security.hunting",
             "/v1/security/threat-intel": "security.intelligence",
             "/v1/security/mitre-attack/*": "security.mitre",
+            "/v1/security/mitre-coverage": "security.mitre",
 
             # Observability endpoints
             "/v1/observability/health": "observability.basic",

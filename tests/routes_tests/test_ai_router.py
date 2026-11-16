@@ -145,7 +145,7 @@ class AIRouterTestSuite(BaseTestSuite):
             # Validate NLQueryResult structure
             required_fields = [
                 "query_id", "original_question", "generated_sql",
-                "explanation", "results", "suggestions",
+                "answer", "results", "suggestions",  # NLQueryResult: `answer` (was `explanation`)
                 "confidence_score", "execution_time_ms", "customer_id"
             ]
             for field in required_fields:
@@ -230,7 +230,8 @@ class AIRouterTestSuite(BaseTestSuite):
                 assert field in start_data, f"Missing required field: {field}"
 
             investigation_id = start_data["investigation_id"]
-            assert start_data["status"] == "running", "Investigation should start in running status"
+            # Investigations now run synchronously and usually return completed.
+            assert start_data["status"] in ("running", "completed"), f"Unexpected status: {start_data['status']}"
 
             # 2. Get investigation status
             status_response = await self.make_authenticated_request(
@@ -266,7 +267,7 @@ class AIRouterTestSuite(BaseTestSuite):
 
             analysis_response = await self.make_authenticated_request(
                 "POST",
-                "/v1/ai/analyze",
+                "/v1/ai/analyze-incident",  # /analyze was folded into /analyze-incident
                 json=analysis_request
             )
 
@@ -275,7 +276,7 @@ class AIRouterTestSuite(BaseTestSuite):
 
             # Validate analysis response
             analysis_fields = [
-                "analysis_id", "incident_id", "primary_cause",
+                "analysis_id", "incident_id", "root_cause",
                 "contributing_factors", "timeline", "business_impact",
                 "recommendations", "similar_incidents", "customer_id"
             ]
@@ -495,7 +496,10 @@ class AIRouterTestSuite(BaseTestSuite):
             for field in required_fields:
                 assert field in insights_data, f"Missing required field: {field}"
 
-            assert isinstance(insights_data["insights"], list), "Insights should be a list"
+            # Insights are grouped by severity (the Centrum UI reads them this way).
+            assert isinstance(insights_data["insights"], dict), "Insights should be grouped by severity"
+            for group in ("critical", "warnings", "informational"):
+                assert isinstance(insights_data["insights"].get(group), list), f"Missing insights group: {group}"
             assert isinstance(insights_data["recommendations"], list), "Recommendations should be a list"
 
             # 2. Test event correlation

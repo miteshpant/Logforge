@@ -38,7 +38,8 @@ export default defineConfig({
   // Shared settings for all the projects below
   use: {
     // Base URL for all tests
-    baseURL: 'http://localhost:3000',
+    // The compose stack serves the UI on :3001; `npm run dev` uses :3000.
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
     
     // Collect trace when retrying the failed test
     trace: 'on-first-retry',

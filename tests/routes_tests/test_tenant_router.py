@@ -812,68 +812,7 @@ async def run_tenant_router_tests():
 
     return passed_tests == total_tests
 
-# Pytest-compatible test functions for PyCharm debugging
-import pytest
-
-@pytest.mark.asyncio
-async def test_tenant_crud_operations():
-    """Pytest-compatible test for tenant CRUD operations"""
-    suite = TenantRouterTestSuite()
-    await suite.create_test_user_and_tenant(['super_admin'])
-    await suite.setup_auth()
-    suite.tenant_id = "platform"
-    suite.auth_headers["X-Customer-ID"] = "platform"
-
-    await suite.test_tenant_crud_operations()
-    await suite.cleanup_test_data()
-
-    # Assert test passed
-    assert suite.test_results.get("tenant_crud_operations") == "PASS"
-
-@pytest.mark.asyncio
-async def test_tenant_decommissioning():
-    """Pytest-compatible test for tenant decommissioning"""
-    suite = TenantRouterTestSuite()
-    await suite.create_test_user_and_tenant(['super_admin'])
-    await suite.setup_auth()
-    suite.tenant_id = "platform"
-    suite.auth_headers["X-Customer-ID"] = "platform"
-
-    await suite.test_tenant_decommissioning()
-    await suite.cleanup_test_data()
-
-    # Assert test passed
-    assert suite.test_results.get("tenant_decommissioning") == "PASS"
-
-@pytest.mark.asyncio
-async def test_tenant_list_filtering():
-    """Pytest-compatible test for tenant list filtering"""
-    suite = TenantRouterTestSuite()
-    await suite.create_test_user_and_tenant(['super_admin'])
-    await suite.setup_auth()
-    suite.tenant_id = "platform"
-    suite.auth_headers["X-Customer-ID"] = "platform"
-
-    await suite.test_tenant_list_filtering()
-    await suite.cleanup_test_data()
-
-    # Assert test passed
-    assert suite.test_results.get("tenant_list_filtering") == "PASS"
-
-@pytest.mark.asyncio
-async def test_error_handling():
-    """Pytest-compatible test for error handling"""
-    suite = TenantRouterTestSuite()
-    await suite.create_test_user_and_tenant(['super_admin'])
-    await suite.setup_auth()
-    suite.tenant_id = "platform"
-    suite.auth_headers["X-Customer-ID"] = "platform"
-
-    await suite.test_error_handling()
-    await suite.cleanup_test_data()
-
-    # Assert test passed
-    assert suite.test_results.get("error_handling") == "PASS"
+# pytest collects TenantRouterTestSuite's methods via suite_collection.py.
 
 async def main():
     """Main test runner"""
