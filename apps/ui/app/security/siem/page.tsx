@@ -49,6 +49,34 @@ interface SigmaRule {
   tags: string[]
 }
 
+interface MitreCoverageTechnique {
+  technique_id: string
+  technique_name: string
+  tactic: string
+  tactics: string[]
+  rule_count: number
+  enabled_rule_count: number
+  has_fixtures: boolean
+  last_detection_at: string | null
+}
+
+interface MitreCoverage {
+  techniques: MitreCoverageTechnique[]
+  awaiting_content: string[]
+  summary: {
+    total_techniques: number
+    covered_techniques: number
+    awaiting_content: number
+    total_rules: number
+  }
+}
+
+interface TacticCoverage {
+  covered: number
+  total: number
+  enabledRules: number
+}
+
 interface SecurityDashboard {
   total_events: number
   events_by_severity: Record<string, number>
@@ -89,6 +117,7 @@ export default function SIEMDashboardPage() {
   const { getApiTimeRange } = useTimeRange()
   const [dashboard, setDashboard] = useState<SecurityDashboard | null>(null)
   const [rules, setRules] = useState<SigmaRule[]>([])
+  const [coverage, setCoverage] = useState<MitreCoverage | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [selectedSeverity, setSelectedSeverity] = useState<string>('all')
   const [selectedEvent, setSelectedEvent] = useState<SecurityEvent | null>(null)
@@ -131,7 +160,7 @@ export default function SIEMDashboardPage() {
       setIsLoading(true)
       const { start_time, end_time } = getApiTimeRange()
 
-      const [dashboardRes, rulesRes] = await Promise.allSettled([
+      const [dashboardRes, rulesRes, coverageRes] = await Promise.allSettled([
         apiClient.get<SecurityDashboard>('/v1/security/dashboard', {
           params: { start_time, end_time }
         }),
@@ -139,8 +168,18 @@ export default function SIEMDashboardPage() {
         apiClient.get<{ rules: SigmaRule[]; total: number; limit: number; offset: number }>(
           '/v1/security/sigma-rules',
           { params: { limit: 500, offset: 0 } }
-        )
+        ),
+        // Server-side ATT&CK matrix: technique -> tactic mapping and
+        // fixture-tested coverage come from the API, not the browser.
+        apiClient.get<MitreCoverage>('/v1/security/mitre-coverage')
       ])
+
+      if (coverageRes.status === 'fulfilled') {
+        const data: any = coverageRes.value?.data || coverageRes.value
+        setCoverage(Array.isArray(data?.techniques) ? (data as MitreCoverage) : null)
+      } else {
+        setCoverage(null)
+      }
 
       if (dashboardRes.status === 'fulfilled') {
         const data = dashboardRes.value?.data || dashboardRes.value
@@ -170,6 +209,7 @@ export default function SIEMDashboardPage() {
       console.error('Failed to load security data:', error)
       setDashboard(null)
       setRules([])
+      setCoverage(null)
     } finally {
       setIsLoading(false)
     }
@@ -210,88 +250,33 @@ export default function SIEMDashboardPage() {
     return date.toLocaleString()
   }
 
-  // Calculate MITRE coverage from rules. Techniques with no known tactic are
-  // counted under 'unmapped' — never assigned a tactic they don't belong to.
-  const getMITRECoverage = () => {
-    const coverage: Record<string, number> = {}
-    MITRE_TACTICS.forEach(t => coverage[t.id] = 0)
-    coverage['unmapped'] = 0
-
-    rules.forEach(rule => {
-      rule.attack_techniques?.forEach(tech => {
-        const tactic = mapTechniqueToTactic(tech)
-        if (coverage[tactic] !== undefined) {
-          coverage[tactic]++
-        }
+  // Per-tactic coverage from GET /v1/security/mitre-coverage. A technique
+  // counts as covered only when an enabled, fixture-tested rule detects it.
+  // Techniques in several tactics count toward each of them.
+  const getMITRECoverage = (): Record<string, TacticCoverage> => {
+    const byTactic: Record<string, TacticCoverage> = {}
+    MITRE_TACTICS.forEach(t => { byTactic[t.id] = { covered: 0, total: 0, enabledRules: 0 } })
+    coverage?.techniques.forEach(tech => {
+      const covered = tech.has_fixtures && tech.enabled_rule_count > 0
+      tech.tactics.forEach(tactic => {
+        const entry = byTactic[tactic]
+        if (!entry) return
+        entry.total++
+        entry.enabledRules += tech.enabled_rule_count
+        if (covered) entry.covered++
       })
     })
-
-    return coverage
-  }
-
-  const mapTechniqueToTactic = (technique: string): string => {
-    // Static technique -> primary-tactic mapping for common ATT&CK techniques.
-    // The authoritative mapping belongs server-side (LF-040,
-    // GET /v1/security/mitre-coverage); until that lands, anything not in this
-    // table is reported honestly as 'unmapped' — never guessed.
-    const tacticMap: Record<string, string> = {
-      // Reconnaissance
-      'T1595': 'reconnaissance', 'T1592': 'reconnaissance', 'T1589': 'reconnaissance',
-      'T1590': 'reconnaissance', 'T1598': 'reconnaissance',
-      // Resource Development
-      'T1583': 'resource-development', 'T1586': 'resource-development', 'T1588': 'resource-development',
-      // Initial Access
-      'T1190': 'initial-access', 'T1133': 'initial-access', 'T1566': 'initial-access',
-      'T1189': 'initial-access', 'T1091': 'initial-access', 'T1195': 'initial-access',
-      // Execution
-      'T1059': 'execution', 'T1047': 'execution', 'T1053': 'execution',
-      'T1204': 'execution', 'T1129': 'execution', 'T1203': 'execution',
-      // Persistence
-      'T1078': 'persistence', 'T1098': 'persistence', 'T1136': 'persistence',
-      'T1543': 'persistence', 'T1547': 'persistence', 'T1505': 'persistence',
-      // Privilege Escalation
-      'T1055': 'privilege-escalation', 'T1548': 'privilege-escalation', 'T1068': 'privilege-escalation',
-      'T1134': 'privilege-escalation', 'T1484': 'privilege-escalation',
-      // Defense Evasion
-      'T1070': 'defense-evasion', 'T1027': 'defense-evasion', 'T1036': 'defense-evasion',
-      'T1562': 'defense-evasion', 'T1112': 'defense-evasion', 'T1218': 'defense-evasion',
-      'T1140': 'defense-evasion', 'T1553': 'defense-evasion',
-      // Credential Access
-      'T1003': 'credential-access', 'T1110': 'credential-access', 'T1555': 'credential-access',
-      'T1552': 'credential-access', 'T1558': 'credential-access', 'T1539': 'credential-access',
-      'T1556': 'credential-access',
-      // Discovery
-      'T1087': 'discovery', 'T1082': 'discovery', 'T1083': 'discovery',
-      'T1046': 'discovery', 'T1057': 'discovery', 'T1018': 'discovery',
-      'T1069': 'discovery', 'T1033': 'discovery',
-      // Lateral Movement
-      'T1021': 'lateral-movement', 'T1570': 'lateral-movement', 'T1550': 'lateral-movement',
-      'T1080': 'lateral-movement',
-      // Collection
-      'T1560': 'collection', 'T1005': 'collection', 'T1039': 'collection',
-      'T1114': 'collection', 'T1113': 'collection', 'T1056': 'collection',
-      // Command and Control
-      'T1071': 'command-and-control', 'T1105': 'command-and-control', 'T1572': 'command-and-control',
-      'T1090': 'command-and-control', 'T1573': 'command-and-control', 'T1219': 'command-and-control',
-      // Exfiltration
-      'T1048': 'exfiltration', 'T1041': 'exfiltration', 'T1567': 'exfiltration',
-      'T1030': 'exfiltration', 'T1020': 'exfiltration',
-      // Impact
-      'T1486': 'impact', 'T1485': 'impact', 'T1490': 'impact',
-      'T1489': 'impact', 'T1498': 'impact', 'T1529': 'impact', 'T1531': 'impact'
-    }
-    // Sub-techniques (e.g. T1059.001) inherit the parent technique's tactic
-    const base = technique?.split('.')[0]?.toUpperCase() ?? ''
-    return tacticMap[base] || 'unmapped'
+    return byTactic
   }
 
   const mitreCoverage = getMITRECoverage()
-  // Intensity scale excludes 'unmapped' — it is not tactic coverage
   const maxCoverage = Math.max(
-    ...MITRE_TACTICS.map(t => mitreCoverage[t.id]),
+    ...MITRE_TACTICS.map(t => mitreCoverage[t.id].covered),
     1
   )
-  const unmappedCount = mitreCoverage['unmapped'] || 0
+  // Techniques that rules reference but the ATT&CK catalogue has no tactic for
+  const unmappedCount = coverage?.techniques.filter(t => t.rule_count > 0 && t.tactics.length === 0).length ?? 0
+  const awaitingCount = coverage?.summary.awaiting_content ?? 0
 
   return (
     <DashboardLayout>
@@ -395,7 +380,7 @@ export default function SIEMDashboardPage() {
           </h2>
           <div className="flex gap-1 overflow-x-auto pb-2">
             {MITRE_TACTICS.map((tactic) => {
-              const count = mitreCoverage[tactic.id]
+              const { covered: count, total, enabledRules } = mitreCoverage[tactic.id]
               const intensity = count / maxCoverage
               const bgColor = count > 0
                 ? `rgba(59, 130, 246, ${0.2 + intensity * 0.6})`
@@ -406,7 +391,7 @@ export default function SIEMDashboardPage() {
                   key={tactic.id}
                   className="flex-1 min-w-[80px] p-3 rounded-lg text-center border border-white/5 hover:border-blue-400 transition-colors cursor-pointer"
                   style={{ backgroundColor: bgColor }}
-                  title={`${tactic.name}: ${count} rules`}
+                  title={`${tactic.name}: ${count} of ${total} techniques covered by fixture-tested rules (${enabledRules} enabled rule${enabledRules === 1 ? '' : 's'})`}
                 >
                   <p className="text-xs font-medium text-slate-300 truncate">{tactic.shortName}</p>
                   <p className="text-lg font-bold text-white">{count}</p>
@@ -416,7 +401,7 @@ export default function SIEMDashboardPage() {
             {unmappedCount > 0 && (
               <div
                 className="flex-1 min-w-[80px] p-3 rounded-lg text-center border border-dashed border-slate-500/40 bg-slate-500/5"
-                title={`Unmapped: ${unmappedCount} technique reference${unmappedCount === 1 ? '' : 's'} without a known tactic mapping — excluded from coverage`}
+                title={`Unmapped: ${unmappedCount} technique${unmappedCount === 1 ? '' : 's'} referenced by rules but not in the ATT&CK catalogue — excluded from coverage`}
               >
                 <p className="text-xs font-medium text-slate-500 truncate italic">Unmapped</p>
                 <p className="text-lg font-bold text-slate-400">{unmappedCount}</p>
@@ -425,8 +410,16 @@ export default function SIEMDashboardPage() {
           </div>
           {unmappedCount > 0 && (
             <p className="text-xs text-slate-500 mt-2">
-              {unmappedCount} technique reference{unmappedCount === 1 ? '' : 's'} could not be mapped to a tactic and {unmappedCount === 1 ? 'is' : 'are'} excluded from coverage.
+              {unmappedCount} technique{unmappedCount === 1 ? '' : 's'} referenced by rules could not be mapped to a tactic and {unmappedCount === 1 ? 'is' : 'are'} excluded from coverage.
             </p>
+          )}
+          {coverage ? (
+            <p className="text-xs text-slate-500 mt-2">
+              {coverage.summary.covered_techniques} of {coverage.summary.total_techniques} techniques covered by enabled, fixture-tested rules
+              {awaitingCount > 0 && ` · ${awaitingCount} awaiting content (rules without verified fixtures)`}
+            </p>
+          ) : (
+            <p className="text-xs text-slate-500 mt-2">Coverage unavailable</p>
           )}
         </div>
 

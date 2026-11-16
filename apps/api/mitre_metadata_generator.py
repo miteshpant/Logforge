@@ -61,6 +61,11 @@ class MitreTechniqueMetadata:
         return asdict(self)
 
 
+# Version of Logforge's built-in technique catalogue (not an ATT&CK release
+# number: the catalogue is curated here, not synced from MITRE's STIX feed).
+CATALOGUE_VERSION = "1.0"
+
+
 class MitreMetadataGenerator:
     """Production-ready MITRE metadata generator with intelligent mapping"""
     
@@ -443,7 +448,7 @@ class MitreMetadataGenerator:
             
             # Convert to serializable format
             export_data = {
-                "metadata_version": "1.0",
+                "metadata_version": CATALOGUE_VERSION,
                 "generated_techniques": len(all_metadata),
                 "techniques": {
                     technique_id: metadata.to_dict() 

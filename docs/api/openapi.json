@@ -17709,6 +17709,105 @@
         ]
       }
     },
+    "/v1/security/mitre-attack/techniques": {
+      "get": {
+        "description": "The ATT&CK techniques Logforge knows about (its built-in catalogue).",
+        "operationId": "list_mitre_techniques_v1_security_mitre_attack_techniques_get",
+        "parameters": [
+          {
+            "description": "Only techniques in this tactic, e.g. credential-access",
+            "in": "query",
+            "name": "tactic",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only techniques in this tactic, e.g. credential-access",
+              "title": "Tactic"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Mitre Techniques V1 Security Mitre Attack Techniques Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Mitre Techniques",
+        "tags": [
+          "security-analytics"
+        ]
+      }
+    },
+    "/v1/security/mitre-coverage": {
+      "get": {
+        "description": "MITRE ATT&CK coverage matrix for the tenant.\n\nOne entry per technique in the catalogue or referenced by a rule:\ntechnique_id, technique_name, tactic(s), rule_count, enabled_rule_count,\nhas_fixtures, last_detection_at. Only enabled, fixture-tested rules count\nas covered; rules without verified fixtures are listed in\n`awaiting_content`. Cached per tenant for 5 minutes.",
+        "operationId": "get_mitre_coverage_v1_security_mitre_coverage_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Mitre Coverage V1 Security Mitre Coverage Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Mitre Coverage",
+        "tags": [
+          "security-analytics"
+        ]
+      }
+    },
     "/v1/security/rules/{rule_id}/acknowledge-all": {
       "post": {
         "description": "Acknowledge all new events for a specific rule",

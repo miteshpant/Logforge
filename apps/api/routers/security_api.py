@@ -15,6 +15,7 @@ import json
 from services.security_service import SecurityService, AttackTechnique
 from authn_authz_middleware import get_current_user
 from models import User
+from error_handling import internal_error
 
 logger = structlog.get_logger(__name__)
 
@@ -252,6 +253,52 @@ async def get_security_dashboard(
     except Exception as e:
         logger.error(f"Failed to get security dashboard: {e}")
         raise HTTPException(status_code=500, detail=f"Dashboard error: {str(e)}")
+
+@router.get("/mitre-coverage")
+async def get_mitre_coverage(
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+) -> Dict[str, Any]:
+    """MITRE ATT&CK coverage matrix for the tenant.
+
+    One entry per technique in the catalogue or referenced by a rule:
+    technique_id, technique_name, tactic(s), rule_count, enabled_rule_count,
+    has_fixtures, last_detection_at. Only enabled, fixture-tested rules count
+    as covered; rules without verified fixtures are listed in
+    `awaiting_content`. Cached per tenant for 5 minutes.
+    """
+    try:
+        return await get_security_service().get_mitre_coverage(customer_id)
+    except Exception as e:
+        raise internal_error(e, "Failed to build MITRE coverage", customer_id=customer_id)
+
+
+@router.get("/mitre-attack/techniques")
+async def list_mitre_techniques(
+    tactic: Optional[str] = Query(None, description="Only techniques in this tactic, e.g. credential-access"),
+) -> Dict[str, Any]:
+    """The ATT&CK techniques Logforge knows about (its built-in catalogue)."""
+    from mitre_metadata_generator import CATALOGUE_VERSION, generate_production_metadata
+
+    techniques = [
+        {
+            "id": meta.technique_id,
+            "name": meta.name,
+            "description": meta.description,
+            "tactics": list(meta.tactics),
+            "platforms": list(meta.platforms),
+            "severity": meta.severity,
+            "data_sources": list(meta.data_sources),
+        }
+        for meta in sorted(generate_production_metadata().values(), key=lambda m: m.technique_id)
+        if tactic is None or tactic in meta.tactics
+    ]
+    return {
+        "techniques": techniques,
+        "total_count": len(techniques),
+        "framework": "MITRE ATT&CK Enterprise",
+        "framework_version": f"logforge-catalogue-{CATALOGUE_VERSION}",
+    }
+
 
 @router.get("/sigma-rules")
 async def list_sigma_rules(
