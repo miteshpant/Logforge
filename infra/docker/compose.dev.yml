@@ -1,0 +1,21 @@
+# Development override: hot-reloading UI with the source mounted.
+#
+#   docker compose -f infra/docker/compose.yml -f infra/docker/compose.dev.yml up -d
+#
+# The base compose.yml builds production images (`next build` + standalone
+# server); this switches the UI to the Dockerfiles' `development` target.
+services:
+  ui:
+    build:
+      target: development
+    image: logforge/ui:dev
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:7080}
+    volumes:
+      - ../../apps/ui:/app
+      - /app/node_modules
+      # Build output lives in a container-owned volume, not the bind mount: the
+      # container runs as `node` (uid 1000), so on hosts whose user isn't uid
+      # 1000 writing /app/.next would fail with EACCES.
+      - /app/.next
+

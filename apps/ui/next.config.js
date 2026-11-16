@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Self-contained server for the production Docker image (see Dockerfile).
+  output: 'standalone',
   // App directory is now stable in Next.js 14 - no experimental flag needed
   typescript: {
     // Allow production builds to succeed even if there are type errors

@@ -319,7 +319,9 @@ pytest tests/routes_tests
 # API with hot reload against the Docker infrastructure
 cd apps/api && CLICKHOUSE_HOST=localhost CLICKHOUSE_PORT=8124 uvicorn main:app --reload --port 7080
 
-# Tenant UI
+# Tenant UI (deploy.sh serves a production build on :3001; for hot reload in
+# Docker add the dev override:
+#   docker compose -f infra/docker/compose.yml -f infra/docker/compose.dev.yml up -d)
 cd apps/ui && npm install && npm run dev        # http://localhost:3000
 cd apps/ui && npx playwright test               # E2E; needs a running API
 

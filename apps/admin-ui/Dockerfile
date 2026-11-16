@@ -1,61 +1,43 @@
-# Multi-stage Dockerfile for Logforge Admin UI
-# Development: docker build --target development
-# Production: docker build --target production
+# Logforge Admin UI
+#
+#   production (default): next build, served by the standalone Node server
+#   development:          next dev with hot reload (infra/docker/compose.dev.yml)
+#
+# NEXT_PUBLIC_* values are inlined into the browser bundle at build time, so
+# the API URL is a build argument, not a runtime setting.
 
-FROM node:18-alpine AS base
+FROM node:20-alpine AS deps
 WORKDIR /app
-
-# Install dependencies
-COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
-
-# Development stage - for testing in Docker with hot reload
-FROM node:18-alpine AS development
-WORKDIR /app
-
-# Copy package files and install all dependencies (including dev)
 COPY package*.json ./
 RUN npm ci
 
-# Copy source code
+FROM deps AS development
 COPY . .
-
-# Expose port 3002 for admin UI
+# .next and node_modules are container-owned volumes in the dev override.
+RUN mkdir -p .next && chown -R node:node /app
+USER node
 EXPOSE 3002
-
-# Start development server
 CMD ["npm", "run", "dev"]
 
-# Build stage
-FROM base AS builder
-WORKDIR /app
-
-# Install all dependencies for build
-COPY package*.json ./
-RUN npm ci
-
-# Copy source and build
+FROM deps AS builder
+ARG NEXT_PUBLIC_API_URL=http://localhost:7080
+ARG NEXT_PUBLIC_WS_URL=ws://localhost:7080
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
+    NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL \
+    NEXT_TELEMETRY_DISABLED=1
 COPY . .
 RUN npm run build
 
-# Production stage
-FROM node:18-alpine AS production
+FROM node:20-alpine AS production
 WORKDIR /app
-
-# Create non-root user
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
-# Copy built application
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
-USER nextjs
-
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3002 \
+    HOSTNAME=0.0.0.0
+# output: 'standalone' (next.config.js) emits a minimal server plus only the
+# node_modules it needs; static assets are copied alongside it.
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+USER node
 EXPOSE 3002
-
-ENV PORT 3002
-ENV HOSTNAME "0.0.0.0"
-
 CMD ["node", "server.js"]
