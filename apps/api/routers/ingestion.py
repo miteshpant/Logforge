@@ -187,14 +187,14 @@ async def ingest_logs_batch(
     customer_id: str = MiddlewareTenant
 ):
     """Batch log entry ingestion"""
+    # ENH-029: shed load honestly rather than accepting data we cannot persist.
+    check_ingest_capacity()
+
     if isinstance(batch, list):
-        # Same limit as BatchLogEntry; checked before any work is done.
+        # Same limit as BatchLogEntry.
         if len(batch) > MAX_BATCH_LOGS:
             raise HTTPException(status_code=413, detail=f"Batch size cannot exceed {MAX_BATCH_LOGS} logs")
         batch = BatchLogEntry.model_construct(logs=batch)
-
-    # ENH-029: shed load honestly rather than accepting data we cannot persist.
-    check_ingest_capacity()
 
     start_time = time.time()
 
