@@ -276,35 +276,17 @@ class StorageRouterTestSuite(BaseTestSuite):
             
             print(f"   ✅ Customer storage health endpoint successful")
 
-            # Test 2: Infrastructure Health (admin-level access - currently accessible for testing)
-            print("   🏗️ Testing infrastructure health endpoint...")
+            # Test 2: Infrastructure Health is platform-admin only; the suite
+            # user is a tenant admin, so it must be refused.
+            print("   🏗️ Testing infrastructure health access control...")
             infra_health_response = await self.make_authenticated_request(
                 "GET",
                 "/v1/storage/health/infrastructure"
             )
+            assert infra_health_response.status_code == 403, f"Expected 403, got {infra_health_response.status_code}: {infra_health_response.text}"
+            assert "Platform admin access required" in infra_health_response.json().get("detail", ""), infra_health_response.text
 
-            # Validate infrastructure health API response
-            assert infra_health_response.status_code == 200, f"Expected 200, got {infra_health_response.status_code}: {infra_health_response.text}"
-
-            infra_data = infra_health_response.json()
-            assert isinstance(infra_data, dict), "Infrastructure health response should be a dictionary"
-
-            # Validate infrastructure health structure
-            infra_expected_fields = ["infrastructure_health", "access_level", "checked_at"]
-            for field in infra_expected_fields:
-                assert field in infra_data, f"Missing required field: {field}"
-
-            assert infra_data["access_level"] == "admin", "Access level should be admin"
-            
-            # Validate infrastructure health details
-            infra_health = infra_data["infrastructure_health"]
-            assert isinstance(infra_health, dict), "Infrastructure health should be a dictionary"
-            
-            infra_sections = ["storage_backend", "capacity", "performance", "system_status"]
-            for section in infra_sections:
-                assert section in infra_health, f"Missing infrastructure section: {section}"
-            
-            print(f"   ✅ Infrastructure health endpoint successful")
+            print(f"   ✅ Infrastructure health refused for tenant user")
 
             # Test 3: Specific Customer Health (with proper access control)
             print("   👤 Testing specific customer health endpoint...")

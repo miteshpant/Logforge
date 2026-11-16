@@ -164,20 +164,20 @@ class ObservabilityRouterTestSuite(BaseTestSuite):
             response_data = response.json()
 
             # Validate ingestion response structure
-            required_fields = ["message", "spans_ingested", "customer_id", "errors"]
+            required_fields = ["message", "spans_accepted", "processing_status", "customer_id", "errors"]  # async: 202 accepted
             for field in required_fields:
                 assert field in response_data, f"Missing required field: {field}"
 
             assert response_data["customer_id"] == self.test_tenant_id, "Customer ID should match"
-            assert response_data["spans_ingested"] >= 0, f"Should have ingested spans, got {response_data['spans_ingested']}"
+            assert response_data["spans_accepted"] >= 1, f"Should have accepted spans, got {response_data['spans_accepted']}"
             assert isinstance(response_data["errors"], list), "Errors should be a list"
 
             # If we got errors, check if it's just database table issues
-            if response_data["spans_ingested"] == 0 and response_data["errors"]:
+            if response_data["spans_accepted"] == 0 and response_data["errors"]:
                 print(f"   ⚠️ Trace ingestion had errors: {response_data['errors'][:3]}")  # Show first 3 errors
                 # Continue test - table creation issues are common in test env
 
-            print(f"   ✅ Trace ingestion successful: {response_data['spans_ingested']} spans")
+            print(f"   ✅ Trace ingestion accepted: {response_data['spans_accepted']} spans")
             self.test_results["trace_ingestion"] = "PASS"
 
         except Exception as e:
@@ -239,15 +239,15 @@ class ObservabilityRouterTestSuite(BaseTestSuite):
             response_data = response.json()
 
             # Validate ingestion response structure
-            required_fields = ["message", "metrics_ingested", "customer_id", "errors"]
+            required_fields = ["message", "metrics_accepted", "processing_status", "customer_id", "errors"]  # async: 202 accepted
             for field in required_fields:
                 assert field in response_data, f"Missing required field: {field}"
 
             assert response_data["customer_id"] == self.test_tenant_id, "Customer ID should match"
-            assert response_data["metrics_ingested"] == 2, "Should have ingested 2 metrics"
+            assert response_data["metrics_accepted"] == 2, "Should have accepted 2 metrics"
             assert isinstance(response_data["errors"], list), "Errors should be a list"
 
-            print(f"   ✅ Metrics ingestion successful: {response_data['metrics_ingested']} metrics")
+            print(f"   ✅ Metrics ingestion accepted: {response_data['metrics_accepted']} metrics")
             self.test_results["metrics_ingestion"] = "PASS"
 
         except Exception as e:

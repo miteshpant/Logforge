@@ -125,7 +125,7 @@ class IngestionRouterTestSuite(BaseTestSuite):
             for field in required_fields:
                 assert field in response_data, f"Missing required field: {field}"
 
-            assert response_data["status"] == "success", f"Expected success, got {response_data['status']}"
+            assert response_data["status"] == "accepted", f"Expected accepted (processed asynchronously), got {response_data['status']}"
             assert response_data["processed_count"] == 1, f"Expected 1 processed, got {response_data['processed_count']}"
             assert "log_id" in response_data, "Missing log_id field"
 

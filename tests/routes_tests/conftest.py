@@ -361,3 +361,7 @@ def benchmark_data():
         "large_batch": 1000,
         "stress_batch": 10000
     }
+
+# Collect the BaseTestSuite classes as individual pytest tests (see
+# suite_collection.py for why plain collection is not enough).
+from suite_collection import pytest_pycollect_makeitem  # noqa: E402,F401
