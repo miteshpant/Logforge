@@ -557,3 +557,54 @@ def test_disabled_with_missing_dir_reports_unavailable(monkeypatch, tmp_path):
     assert result["unavailable"] is True
     assert result["applied_now"] == []
     assert client.commands == []
+
+
+# ---------------------------------------------------------------------------
+# Shared history table written by run_migrations.sh
+# ---------------------------------------------------------------------------
+# The compose stack's shell runner creates schema_migrations as
+# (migration_name, executed_at). The versioned query failed against it on every
+# real deployment, so every migration looked pending: with
+# RUN_MIGRATIONS_ON_STARTUP=true they would all have re-run.
+
+
+class _ShellHistoryClient(_FakeClient):
+    """schema_migrations as created by run_migrations.sh."""
+
+    def __init__(self, names):
+        super().__init__()
+        self._names = names
+
+    def query(self, sql, *args, **kwargs):
+        if "SELECT version" in sql:
+            raise RuntimeError("Code: 47. Missing columns: 'success' 'checksum' 'version'")
+        names = self._names
+
+        class _Result:
+            result_rows = [[n] for n in names]
+
+        return _Result()
+
+
+def test_shell_runner_history_counts_as_applied(migrations_dir):
+    _write(migrations_dir, "001_a.sql", "CREATE TABLE a (x String) ENGINE=Memory;")
+    _write(migrations_dir, "002_b.sql", "CREATE TABLE b (x String) ENGINE=Memory;")
+
+    client = _ShellHistoryClient(["001_a"])
+    plan = MigrationRunner(client, migrations_dir).plan()
+
+    assert plan["applied"] == ["001"]
+    assert plan["pending"] == ["002"]
+    assert plan["drifted"] == []  # no checksum recorded -> not reported as drift
+
+
+def test_shell_runner_history_is_not_reapplied_and_is_recorded_compatibly(migrations_dir):
+    _write(migrations_dir, "001_a.sql", "CREATE TABLE a (x String) ENGINE=Memory;")
+    _write(migrations_dir, "002_b.sql", "CREATE TABLE b (x String) ENGINE=Memory;")
+
+    client = _ShellHistoryClient(["001_a"])
+    result = MigrationRunner(client, migrations_dir).run()
+
+    assert result["applied_now"] == ["002"]
+    assert not any("CREATE TABLE a" in c for c in client.commands)
+    assert client.inserts == [("schema_migrations", [["002_b"]])]
