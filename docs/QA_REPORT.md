@@ -60,59 +60,43 @@ The README quick start was corrected too. Its LogforgeQL example
 full-text search on the message. Two steps were also missing: a tenant user and
 user activation, without which nobody can log into the tenant UI.
 
-## Open issues found (not fixed here)
+## Findings and resolution
 
-### Deploy and setup
-1. ✅ *Fixed:* **`minio/minio` is gone from Docker Hub.** The pinned tag and
-   `latest` both returned "not found", so `./deploy.sh` failed on every fresh
-   machine. MinIO is now built from official source
-   (`infra/docker/minio/Dockerfile`).
-2. **Linux bind-mount permissions.** The UI container runs as uid 1000 and
-   writes `.next/` into the bind-mounted `apps/ui`. On hosts where the user
-   isn't uid 1000 the UI restart-loops with `EACCES`. A workaround is in the
-   README.
-3. **Startup warning:** "Could not read migration history". `schema_migrations`
-   lacks the `version`, `checksum` and `success` columns the API queries.
+The issues below were found in this QA run and fixed in a follow-up PR, one
+commit each, with a regression test. Every row was re-verified on the
+running stack. A full re-run of the browser pass afterwards recorded
+**0 failed API calls, 0 page errors and 0 crashes across all 28 routes**.
+The first run recorded 63 failed calls.
 
-### Backend
-4. **Alert rules are not evaluated on ingest.** On every batch the log shows:
-   `'AlertService' object has no attribute 'get_alert_rules_for_customer'`
-   (`events/management/cache/alert_rule_cache.py`).
-5. **Rate limiting fails open.** `'RedisManager' object has no attribute
-   'incr'`, so per-tenant rate limits are never enforced.
-6. **The auth cache never writes.** `RedisManager.set()` doesn't accept `ex=`.
-7. **Login succeeds for `pending` users**, but every later request returns
-   `401 Invalid or expired session`. Login should either reject pending users
-   or accept their sessions.
-8. **LogforgeQL `*` is not a wildcard.** `* | where …` searches for a literal
-   `*`.
+| # | Finding | Resolution |
+| --- | --- | --- |
+| 1 | `minio/minio` removed from Docker Hub; `./deploy.sh` failed on every fresh machine | ✅ MinIO built from official source (`infra/docker/minio/Dockerfile`) |
+| 2 | Linux: UI restart loop with `EACCES` on `/app/.next` | ✅ `/app/.next` is a container-owned volume |
+| 3 | "Could not read migration history" on every start; every migration reported pending | ✅ The runner reads the shell runner's history format |
+| 4 | Alert rules never evaluated on ingest (`get_alert_rules_for_customer` missing) | ✅ Method added; a pattern rule now fires end to end |
+| 5–6 | Rate limiting failed open, the auth cache never wrote, and **the login brute-force throttle never tripped** (12 wrong passwords, all 401) | ✅ `RedisManager.client` / `incr` / `set(ex=)`; the throttle now returns 429 after 5 failures |
+| 7 | Login succeeded for `pending` users whose every request then failed | ✅ Login returns 403 with the account status |
+| 8 | LogforgeQL `* \| where …` searched for a literal `*` | ✅ A leading `*` means match-all |
+| 9 | 59 unauthenticated API calls (401) on full page loads | ✅ The API client restores auth before every request; a route guard keeps pages from mounting without a session |
+| 10 | Login errors unclear, and a failed login left a half-established session | ✅ The real server message is shown and state is cleared. *Correction:* the error banner did render; the original report was wrong to call it silent |
+| 11a | Costs page called a platform-admin-only endpoint (403) | ✅ Dead call removed |
+| 11b | Compliance: unsupported "SOC2" gave a 500, and the Frameworks tab was always empty | ✅ 400 for bad input; the tab shows the four supported frameworks |
+| 11c | System Intelligence: 8 failing queries | ✅ Derived fields computed from `attrs`, the aggregate endpoint returns its rows, and UI field names fixed |
+| 12 | Metrics Explorer "No data" | ➖ **Not a code bug.** The QA data used unregistered metric names (`cpu.utilization`). With canonical names (`response_time`, `cpu_usage`, …) the explorer charts correctly. The UI gives no hint about non-canonical names; see ROADMAP |
+| 13 | SIEM and Detection Rules pages overflow at 1440 px | ✅ `min-w-0` on the layout column; the rules table scrolls |
+| 14 | Plan badge showed the tenant type, not the subscription tier | ✅ Badge reads `/v1/tenants/{id}/subscription` |
 
-### Tenant UI
-9. **Every full page load fires API calls before auth state is restored from
-   `localStorage`.** They go out without `Authorization`, get 401s, and the UI
-   then calls `/v1/auth/refresh`; later calls succeed. There were 59
-   avoidable 401s across 28 routes. Gate data fetching on auth hydration.
-10. **A failed login shows no message.** For example, a platform admin logging
-    into the tenant UI (tenant `platform` → 404) stays on the login page with
-    only a console error.
-11. **Endpoint mismatches:**
-    - *Settings → Costs* calls `/v1/analytics/usage-trends`, which is
-      platform-admin only (403).
-    - *Settings → Compliance* omits the required `compliance_framework`,
-      `period_start` and `period_end` (500).
-    - *System Intelligence* (`/dashboards/system`) sends bodies that
-      `/v1/query/advanced` and `/timeseries` reject (400).
-12. **The Metrics Explorer shows "No data"** even when `metrics_mt` holds points
-    for the selected range.
-13. **The SIEM and Detection Rules pages overflow horizontally** at 1440 px:
-    the header, filters and "Create Rule" button are cut off.
-14. **The header plan badge shows the tenant *type*** ("startup") rather than
-    the current subscription tier.
+Also found while fixing these, and fixed in the same PR:
+- metric ingestion and trace durations (F1, F2 above);
+- the `/v1/query/aggregate` endpoint dropped grouped rows;
+- `attrs.<key>` filters missed caller attributes nested in the stored envelope;
+- there was no route guard (deep links rendered an empty shell);
+- `ApiClient` ignored FastAPI's `detail`, so the UI showed "HTTP 4xx" instead of the server's message.
 
 ## Reproducing
 
 ```bash
-./deploy.sh                       # see the README for the MinIO and Linux workarounds
+./deploy.sh
 # then follow README "Quick start" steps 2-4
 ```
 
