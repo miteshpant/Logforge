@@ -299,7 +299,7 @@ async def trigger_storage_quota_sync(customer_id: str = MiddlewareTenant):
 async def trigger_all_storage_quota_sync(request: Request, requesting_customer: str = MiddlewareTenant):
     """Trigger manual storage quota sync for all tenants (Platform Admin only)"""
     try:
-        await _require_platform_role(
+        user_id = await _require_platform_role(
             request,
             ('super_admin', 'admin'),
             "Platform admin access required for system-wide storage quota sync",

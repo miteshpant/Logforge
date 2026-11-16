@@ -68,3 +68,22 @@ def test_audit_user_id_comes_from_the_user_object():
 
     assert storage._request_user_id(_request("u-9")) == "u-9"
     assert storage._request_user_id(_request(None)) is None
+
+
+@pytest.mark.asyncio
+async def test_platform_admin_can_sync_all_quotas():
+    """Regression: the handler referenced user_id after the guard stopped assigning it."""
+    import sys
+    import types
+
+    from routers import storage
+
+    svc = _user_service([{"tenant_id": "platform", "role": "super_admin"}])
+    sync = types.SimpleNamespace(trigger_manual_sync=AsyncMock(return_value={"tenants": 3}))
+    fake_module = types.SimpleNamespace(storage_quota_sync_service=sync)
+    with patch("authn_authz_middleware.get_user_service", return_value=svc), \
+         patch.dict(sys.modules, {"services.storage_quota_sync_service": fake_module}):
+        out = await storage.trigger_all_storage_quota_sync(_request("admin-1"), requesting_customer="platform")
+
+    assert out["user_id"] == "admin-1"
+    assert out["sync_result"] == {"tenants": 3}
