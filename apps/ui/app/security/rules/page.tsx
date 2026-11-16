@@ -365,8 +365,9 @@ export default function SigmaRulesPage() {
           </div>
         )}
 
-        {/* Rules Table */}
-        <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 overflow-hidden">
+        {/* Rules Table. overflow-x-auto (not overflow-hidden): at narrower widths
+            the Actions column was clipped instead of scrollable. */}
+        <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-xl border border-white/5 overflow-x-auto">
           <table className="w-full">
             <thead className="bg-slate-800/50 border-b border-white/5">
               <tr>
