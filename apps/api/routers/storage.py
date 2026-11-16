@@ -28,6 +28,36 @@ def get_storage_service() -> StorageService:
     return _storage_service_instance
 
 
+def _request_user_id(request: Request) -> Optional[str]:
+    """The authenticated user's id.
+
+    The auth middleware stores the user object as ``request.state.user``; it
+    never sets ``request.state.user_id``.
+    """
+    user = getattr(request.state, "user", None)
+    return getattr(user, "id", None)
+
+
+async def _require_platform_role(request: Request, allowed_roles, detail: str) -> str:
+    """403 unless the caller holds one of ``allowed_roles`` in the platform scope.
+
+    Returns the caller's user id.
+    """
+    user_id = _request_user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=403, detail="User context not found")
+
+    from authn_authz_middleware import get_user_service
+
+    roles = await get_user_service().get_user_tenant_roles(user_id, "platform")
+    if not any(
+        r.get("tenant_id") == "platform" and r.get("role") in allowed_roles
+        for r in roles
+    ):
+        raise HTTPException(status_code=403, detail=detail)
+    return user_id
+
+
 def __getattr__(name: str):
     """Resolve `storage_service` lazily (PEP 562)."""
     if name == "storage_service":
@@ -188,29 +218,11 @@ async def archive_old_data(customer_id: str, requesting_customer: str = Middlewa
 async def get_infrastructure_health(request: Request, customer_id: str = MiddlewareTenant):
     """Get system-wide infrastructure health (Platform Admin only)"""
     try:
-        # Enforce platform admin access for infrastructure health
-        from services.user_service import UserService
-        user_service = UserService()
-        
-        # Get user ID from request context (set by auth middleware)
-        user_id = getattr(request.state, 'user_id', None)
-        if not user_id:
-            raise HTTPException(status_code=403, detail="User context not found")
-        
-        # Check if user has platform admin role
-        user_roles = await user_service.get_user_roles(user_id)
-        platform_admin_roles = ['super_admin', 'admin', 'support_admin']
-        
-        has_platform_admin_access = any(
-            role.get('role_name') in platform_admin_roles and role.get('tenant_id') == 'platform'
-            for role in user_roles
+        user_id = await _require_platform_role(
+            request,
+            ('super_admin', 'admin', 'support_admin'),
+            "Platform admin access required for infrastructure health check",
         )
-        
-        if not has_platform_admin_access:
-            raise HTTPException(
-                status_code=403, 
-                detail="Platform admin access required for infrastructure health check"
-            )
         
         # Get infrastructure health information using storage service
         health_info = await get_storage_service().get_infrastructure_health()
@@ -248,26 +260,11 @@ async def get_specific_customer_health(target_customer_id: str, request: Request
     try:
         # Basic tenant isolation check
         if requesting_customer != target_customer_id:
-            # Check if requesting user has admin privileges
-            from services.user_service import UserService
-            user_service = UserService()
-            
-            # Get user ID from request context (set by auth middleware)
-            user_id = getattr(request.state, 'user_id', None)
-            if not user_id:
-                raise HTTPException(status_code=403, detail="User context not found")
-            
-            # Check if user has platform admin role
-            user_roles = await user_service.get_user_roles(user_id)
-            admin_roles = ['super_admin', 'admin', 'support_admin']
-            
-            has_admin_access = any(
-                role.get('role_name') in admin_roles and role.get('tenant_id') == 'platform'
-                for role in user_roles
+            await _require_platform_role(
+                request,
+                ('super_admin', 'admin', 'support_admin'),
+                "Admin access required to view other tenant's storage health",
             )
-            
-            if not has_admin_access:
-                raise HTTPException(status_code=403, detail="Admin access required to view other tenant's storage health")
         
         # Get storage health for the target customer
         health_info = await get_storage_service().get_storage_health(target_customer_id)
@@ -302,29 +299,11 @@ async def trigger_storage_quota_sync(customer_id: str = MiddlewareTenant):
 async def trigger_all_storage_quota_sync(request: Request, requesting_customer: str = MiddlewareTenant):
     """Trigger manual storage quota sync for all tenants (Platform Admin only)"""
     try:
-        # Enforce platform admin access for system-wide operations
-        from services.user_service import UserService
-        user_service = UserService()
-        
-        # Get user ID from request context (set by auth middleware)
-        user_id = getattr(request.state, 'user_id', None)
-        if not user_id:
-            raise HTTPException(status_code=403, detail="User context not found")
-        
-        # Check if user has platform admin role
-        user_roles = await user_service.get_user_roles(user_id)
-        platform_admin_roles = ['super_admin', 'admin']
-        
-        has_platform_admin_access = any(
-            role.get('role_name') in platform_admin_roles and role.get('tenant_id') == 'platform'
-            for role in user_roles
+        await _require_platform_role(
+            request,
+            ('super_admin', 'admin'),
+            "Platform admin access required for system-wide storage quota sync",
         )
-        
-        if not has_platform_admin_access:
-            raise HTTPException(
-                status_code=403, 
-                detail="Platform admin access required for system-wide storage quota sync"
-            )
         
         from services.storage_quota_sync_service import storage_quota_sync_service
         
@@ -413,7 +392,7 @@ async def download_archive(
     """Generate presigned URL or direct download for archived data"""
     try:
         # Get user ID from request context
-        user_id = getattr(request.state, 'user_id', 'unknown')
+        user_id = _request_user_id(request) or 'unknown'
         
         download_info = await get_storage_service().generate_archive_download(
             archive_key=archive_key,
@@ -444,7 +423,7 @@ async def query_archived_data(
         limit = query_request.get("limit", 1000)
         
         # Get user ID from request context
-        user_id = getattr(request.state, 'user_id', 'unknown')
+        user_id = _request_user_id(request) or 'unknown'
         
         results = await get_storage_service().query_archived_data(
             customer_id=requesting_customer,
