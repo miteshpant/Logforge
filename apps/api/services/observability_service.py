@@ -128,8 +128,9 @@ class ObservabilityService:
         # Generate unique span ID if not provided
         span_id = span_data.get('span_id', str(uuid.uuid4()))
 
-        # Calculate duration if end_time is provided
-        duration_ms = 0
+        # Use the client-supplied duration_ms (a documented SpanRequest field);
+        # derive it from end_time - start_time when both are present.
+        duration_ms = int(span_data.get('duration_ms') or 0)
         if span_data.get('end_time') and span_data.get('start_time'):
             start = datetime.fromisoformat(span_data['start_time'].replace('Z', '+00:00'))
             end = datetime.fromisoformat(span_data['end_time'].replace('Z', '+00:00'))

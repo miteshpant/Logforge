@@ -14,6 +14,33 @@ markers).
 
 ## Bugs and broken things
 
+- **🔴 `deploy.sh` fails on a fresh machine: `minio/minio` was removed from
+  Docker Hub** (the pinned tag and `latest` are both "not found"). Choose a
+  replacement for `infra/docker/compose.yml`:
+  (a) a community rebuild such as `pgsty/minio`, pinned to a release tag;
+  (b) a small Dockerfile that builds official MinIO from source
+  (`go install github.com/minio/minio@<version>`) on a base with `sh` and
+  `curl` for the healthcheck;
+  (c) another S3-compatible store, which means checking `storage_service.py`
+  and `config/` profiles still work.
+  Then update `deploy.sh` and the README.
+- **Issues from the [QA run](./QA_REPORT.md#open-issues-found-not-fixed-here)**,
+  each with its symptom and location in the report:
+  - Alert rules are not evaluated on ingest: `AlertService` has no
+    `get_alert_rules_for_customer`.
+  - `RedisManager` lacks `incr` (rate limiting fails open), and its `set()`
+    rejects `ex=` (the auth cache never writes).
+  - The UI fires API calls before restoring auth on every full page load,
+    causing a burst of 401s. Gate fetches on auth hydration.
+  - Login succeeds for `pending` users whose sessions are then rejected.
+  - Silent failure when login is rejected in the tenant UI.
+  - Four UI/API endpoint mismatches: Costs, Compliance, System Intelligence and
+    the Metrics Explorer.
+  - The SIEM and Detection Rules pages overflow at 1440 px *(good first issue)*.
+  - The header plan badge shows the tenant type instead of the subscription tier
+    *(good first issue)*.
+  - LogforgeQL `*` is not treated as a wildcard *(good first issue)*.
+  - `schema_migrations` lacks the columns the API's drift check reads.
 - **Route tests are mostly not collected.** `pytest tests/routes_tests --co`
   finds only 4 tests although the directory holds about 220 `test_*`
   functions, most of them inside suites built on `base_test.BaseTestSuite`

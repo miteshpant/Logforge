@@ -271,6 +271,14 @@ class ObservabilityDAO:
             metric_data["id"] = metric_id
             metric_data["ingested_at"] = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
+            # labels / resource / service_name are optional in the public
+            # MetricRequest schema; default them instead of raising KeyError
+            # (which made every metric without them fail silently with a 202).
+            metric_data.setdefault("labels", {})
+            metric_data.setdefault("resource", {})
+            if not metric_data.get("service_name"):
+                metric_data["service_name"] = ""
+
             # Ensure JSON fields are properly serialized
             if "labels" in metric_data and not isinstance(metric_data["labels"], str):
                 metric_data["labels"] = json.dumps(metric_data["labels"])
