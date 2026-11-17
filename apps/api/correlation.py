@@ -69,6 +69,8 @@ class CorrelationRule:
     threshold: Optional[float] = None
     field: Optional[str] = None
     tags: List[str] = dc_field(default_factory=list)
+    #: Name other correlations can reference this one by (chaining).
+    name: Optional[str] = None
 
     @property
     def techniques(self) -> List[str]:
@@ -134,6 +136,7 @@ class CorrelationRule:
             threshold=threshold,
             field=value_field,
             tags=[str(t) for t in data.get("tags") or []],
+            name=str(data["name"]) if data.get("name") else None,
         )
 
 
@@ -301,6 +304,10 @@ class CorrelationStore:
         alerts: List[CorrelationAlert] = []
         if not matched:
             return alerts
+        # A firing correlation counts as a match of its id/name for the rules
+        # after it, so correlations can chain (callers order rules so that
+        # referenced correlations come first).
+        matched = set(matched)
         for rule in rules:
             hits = matched.intersection(rule.rules)
             if not hits:
@@ -319,10 +326,38 @@ class CorrelationStore:
                     rule=rule, tenant_id=tenant_id, group=group, value=value,
                     first_seen=first_seen, last_seen=state.newest, events=list(state.sample)))
                 state.reset()
+                matched.add(rule.id)
+                if rule.name:
+                    matched.add(rule.name)
             while len(self._groups) > self.max_groups:
                 self._groups.popitem(last=False)
                 self.evictions += 1
         return alerts
+
+
+def order_for_chaining(rules: List[CorrelationRule]) -> List[CorrelationRule]:
+    """Order rules so a correlation comes after any correlation it references.
+    Rules in a reference cycle are dropped (they could never fire)."""
+    labels = {}
+    for r in rules:
+        labels[r.id] = r
+        if r.name:
+            labels[r.name] = r
+    ordered: List[CorrelationRule] = []
+    placed: Set[str] = set()
+    pending = list(rules)
+    while pending:
+        progress = False
+        for r in list(pending):
+            deps = {labels[ref].id for ref in r.rules if ref in labels and labels[ref] is not r}
+            if deps <= placed:
+                ordered.append(r)
+                placed.add(r.id)
+                pending.remove(r)
+                progress = True
+        if not progress:
+            break
+    return ordered
 
 
 _store: Optional[CorrelationStore] = None

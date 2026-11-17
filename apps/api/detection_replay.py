@@ -139,6 +139,8 @@ def replay(rules: List[Dict[str, Any]], events: List[Dict[str, Any]],
         if compiled and matched:
             for alert in store.process(tenant_id, compiled, event, matched, ts):
                 source = meta.get(alert.rule.id, {})
+                if source.get("generate") is False:
+                    continue  # building block: feeds other correlations only
                 alerts.append(ReplayAlert(alert.rule.id, ts, group=alert.group, value=alert.value,
                                           techniques=_techniques(source) or alert.rule.techniques,
                                           event=event))

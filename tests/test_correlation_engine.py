@@ -170,3 +170,20 @@ def test_soak_state_stays_bounded():
         store.process("t1", rules, event, {"failed_login"}, T0 + timedelta(seconds=i * 0.01))
     assert store.group_count() <= 5000
     assert store.max_entries_per_group() <= 20
+
+
+# --- chained correlations ------------------------------------------------------
+
+def test_a_correlation_can_feed_another_in_the_same_event():
+    """`brute force, then a success from the same source`: the burst is itself a
+    correlation (by name), and the chain consumes it like a base rule."""
+    burst = CorrelationRule.from_dict({"id": "burst", "name": "brute_burst", "title": "b", "level": "low",
+                                       "correlation": {"type": "event_count", "rules": ["failed_login"],
+                                                       "group-by": ["src_ip"], "timespan": "5m",
+                                                       "condition": {"gte": 3}}})
+    chain = rule("temporal_ordered", rules=["brute_burst", "success"], timespan="15m", rid="chain")
+    store = CorrelationStore()
+    events = [(i, fail(), ["failed_login"]) for i in range(3)] + [(60, fail(), ["success"])]
+    alerts = feed(store, [burst, chain], events)
+    assert [a.rule.id for a in alerts] == ["burst", "chain"]
+    assert burst.name == "brute_burst"

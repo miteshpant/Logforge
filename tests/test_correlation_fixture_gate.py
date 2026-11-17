@@ -122,3 +122,30 @@ def test_count_rule_fixtures_respect_the_timeframe(loader):
                          "true_negative_batch": [SUCCESS]}}
     _, awaiting = load(loader, [rule])
     assert awaiting == ["t-count.yml: true_positive_batch does not reach the threshold"]
+
+
+def test_correlations_can_reference_correlations_in_any_order(loader):
+    burst = {"id": "lf-burst", "name": "brute_burst", "title": "burst", "level": "low", "generate": False,
+             "tags": ["attack.t1110"],
+             "correlation": {"type": "event_count", "rules": ["auth_failed"], "group-by": ["src_ip"],
+                             "timespan": "5m", "condition": {"gte": 3}},
+             "fixtures": {"true_positive_batch": [{"repeat": 3, "event": FAILED}],
+                          "true_negative_batch": [{"repeat": 2, "event": FAILED}]}}
+    chain = correlation(rules=("brute_burst", "auth_ok"),
+                        positive=[{"repeat": 3, "event": FAILED}, SUCCESS],
+                        negative=[FAILED, SUCCESS])
+    rows, awaiting = load(loader, [chain] + BASES + [burst])
+    assert awaiting == []
+    by_id = {r["id"]: json.loads(r["rule_content"]) for r in rows}
+    assert by_id["logforge_bf-success"]["correlation"]["rules"] == ["brute_burst", "auth_ok"]
+    assert by_id["logforge_lf-burst"]["generate"] is False and by_id["logforge_lf-burst"]["name"] == "brute_burst"
+
+
+def test_a_correlation_cycle_is_rejected(loader):
+    a = correlation(rules=("auth_failed", "b_rule"))
+    a.update(id="a", name="a_rule")
+    b = correlation(rules=("auth_failed", "a_rule"))
+    b.update(id="b", name="b_rule")
+    _, awaiting = load(loader, BASES + [a, b])
+    assert sorted(awaiting) == ["a.yml: references unknown base rule 'b_rule'",
+                                "b.yml: references unknown base rule 'a_rule'"]

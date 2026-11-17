@@ -122,3 +122,22 @@ def test_dao_passes_correlation_fields_through():
     assert rule["correlation"] == {"type": "event_count"}
     assert rule["name"] == "auth_failed"
     assert rule["generate"] is False
+
+
+AUTH_OK = rule_dict("base-ok", {"selection": {"event_type": "authentication", "result": "success"},
+                                "condition": "selection"}, name="auth_ok", generate=False)
+BURST = rule_dict("burst", name="brute_burst", generate=False, correlation={
+    "type": "event_count", "rules": ["auth_failed"], "group-by": ["src_ip"], "timespan": "5m",
+    "condition": {"gte": 3}})
+CHAIN = rule_dict("bf-success", attack_techniques=["T1110", "T1078"], correlation={
+    "type": "temporal_ordered", "rules": ["brute_burst", "auth_ok"], "group-by": ["src_ip"],
+    "timespan": "15m"})
+
+
+def test_chained_correlations_and_generate_false_correlations(engine):
+    success = [{"ts": (T0 + timedelta(seconds=60)).isoformat(), "src_ip": "203.0.113.9",
+                "attrs": {"event_type": "authentication", "result": "success"}}]
+    rules = [CHAIN, AUTH_FAILED, AUTH_OK, BURST]  # order must not matter
+    assert run(engine, logs(3), rules) == []  # the burst fires but doesn't alert
+    assert [m.rule_id for m in run(engine, success, rules)] == ["bf-success"]
+    assert [m.rule_id for m in engine.published] == ["bf-success"]

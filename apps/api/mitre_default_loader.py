@@ -609,7 +609,14 @@ class MitreDefaultLoader:
         correlation["rules"] = [base["ref"] for base in referenced]
         candidate = {"id": "candidate", "title": str(title), "severity": level,
                      "tags": list(rule.get("tags") or []), "correlation": correlation}
-        replay_rules = [base["replay"] for base in referenced] + [candidate]
+        # Each base brings the rules it needs (a chained correlation brings
+        # its own base rules).
+        replay_rules: List[Dict[str, Any]] = []
+        for base in referenced:
+            for dependency in base["replay"]:
+                if all(dependency["id"] != r["id"] for r in replay_rules):
+                    replay_rules.append(dependency)
+        replay_rules.append(candidate)
 
         fixtures = rule.get("fixtures")
         if not isinstance(fixtures, dict) or not fixtures.get("true_positive_batch") \
@@ -619,7 +626,8 @@ class MitreDefaultLoader:
             return None, "true_positive_batch does not fire"
         if self._replay_fires(replay_rules, fixtures["true_negative_batch"], "candidate"):
             return None, "true_negative_batch fires"
-        if self._replay_fires(replay_rules, list(BENIGN_EVENTS), "candidate"):
+        generate = rule.get("generate", True) is not False
+        if generate and self._replay_fires(replay_rules, list(BENIGN_EVENTS), "candidate"):
             return None, "fires on the benign event corpus"
 
         tags = [str(t) for t in rule.get("tags") or []]
@@ -637,6 +645,10 @@ class MitreDefaultLoader:
             "fixtures": {"true_positive_batch": fixtures["true_positive_batch"],
                          "true_negative_batch": fixtures["true_negative_batch"]},
             "source": {"origin": "logforge", "file": source},
+            "name": rule.get("name"),
+            "generate": generate,
+            # What the rule needs to be replayed (gate, backtest).
+            "replay_rules": [r["id"] for r in replay_rules if r["id"] != "candidate"],
         }
         return {
             "id": f"logforge_{rule_id}",
@@ -673,20 +685,43 @@ class MitreDefaultLoader:
                 continue  # aggregations aren't base rules
             name = rule.get("name")
             ref = str(name) if name else row["id"]
-            base = {"ref": ref, "replay": {"id": row["id"], "name": name, "generate": rule.get("generate", True),
-                                           "detection": detection}}
+            base = {"ref": ref, "replay": [{"id": row["id"], "name": name,
+                                            "generate": rule.get("generate", True), "detection": detection}]}
             bases[str(rule["id"])] = base
             if name:
                 bases[str(name)] = base
 
-        for rule, source in correlations:
-            row, reason = self._correlation_rule_to_row(rule, source, bases)
-            if row is None:
-                logger.warning(f"Correlation rule not loadable ({reason}): {source}")
-                awaiting.append(f"{source}: {reason}")
-            else:
+        # Correlations may reference correlations: load in passes, each pass
+        # taking the rules whose references have all loaded. What's left
+        # (unknown references, cycles) is rejected with the reason.
+        pending = list(correlations)
+        while pending:
+            ready = [(r, src) for r, src in pending
+                     if all(str(ref) in bases for ref in self._references(r))]
+            final = not ready
+            for rule, source in list(pending if final else ready):
+                pending.remove((rule, source))
+                row, reason = self._correlation_rule_to_row(rule, source, bases)
+                if row is None:
+                    logger.warning(f"Correlation rule not loadable ({reason}): {source}")
+                    awaiting.append(f"{source}: {reason}")
+                    continue
                 rows.append(row)
+                content = json.loads(row["rule_content"])
+                name = rule.get("name")
+                own = {"id": row["id"], "name": name, "generate": content["generate"],
+                       "tags": content["tags"], "correlation": content["correlation"]}
+                deps = [r for ref in self._references(rule) for r in bases[str(ref)]["replay"]]
+                base = {"ref": str(name) if name else row["id"], "replay": deps + [own]}
+                bases[str(rule["id"])] = base
+                if name:
+                    bases[str(name)] = base
         return rows, awaiting
+
+    @staticmethod
+    def _references(rule: Dict[str, Any]) -> List[Any]:
+        refs = (rule.get("correlation") or {}).get("rules") or []
+        return [refs] if isinstance(refs, str) else list(refs)
 
     def _packaged_rule_to_row(self, rule: Any, source: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Validate one Logforge rule (Sigma shape, Logforge field names)."""

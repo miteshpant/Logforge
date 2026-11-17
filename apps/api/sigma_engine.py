@@ -16,7 +16,8 @@ import structlog
 
 # Import security analytics components
 from security_analytics import SigmaRule, DetectionSeverity, SecurityDetection
-from correlation import CorrelationRule, CorrelationRuleError, get_correlation_store, parse_timespan
+from correlation import (CorrelationRule, CorrelationRuleError, get_correlation_store, order_for_chaining,
+                         parse_timespan)
 from events.publishers.security_publisher import SecurityEventPublisher
 from events.constants import EVENT_SECURITY_DETECTION_TRIGGERED
 from services.high_performance_normalizer import normalize_log_fast
@@ -416,7 +417,8 @@ def compile_correlation_rules(correlation_dicts, count_rules):
             threshold=float(count_condition.threshold), tags=list(rule_dict.get("tags") or []))
         compiled.append(rule)
         meta[rule.id] = rule_dict
-    return compiled, meta
+    # Referenced correlations first, so chains resolve within one event.
+    return order_for_chaining(compiled), meta
 
 
 def _count_rule_name(rule_dict: Dict[str, Any]) -> str:
@@ -602,6 +604,8 @@ class SigmaRuleEngine:
                         customer_id, correlation_rules, normalized_log, matched_names,
                         _event_time(normalized_log))
                     for alert in alerts:
+                        if correlation_meta.get(alert.rule.id, {}).get('generate') is False:
+                            continue  # building block: feeds other correlations only
                         match = self._correlation_match(alert, correlation_meta.get(alert.rule.id, {}),
                                                         normalized_log, customer_id)
                         matches.append(match)

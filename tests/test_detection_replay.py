@@ -105,3 +105,15 @@ def test_events_are_replayed_in_time_order():
     early = [dict(FAILED, ts=f"2026-01-01T00:0{i}:00+00:00") for i in range(3)]
     alerts = replay([AUTH_FAILED, AUTH_OK, BRUTE_THEN_SUCCESS], [late] + early)
     assert [a.rule_id for a in alerts] == ["bf-success"]
+
+
+def test_chained_correlation_with_a_silent_burst():
+    burst = rule("burst", name="brute_burst", generate=False, correlation={
+        "type": "event_count", "rules": ["auth_failed"], "group-by": ["src_ip"], "timespan": "5m",
+        "condition": {"gte": 3}})
+    chain = rule("chain", correlation={"type": "temporal_ordered", "rules": ["brute_burst", "auth_ok"],
+                                       "group-by": ["src_ip"], "timespan": "15m"})
+    rules = [chain, AUTH_FAILED, AUTH_OK, burst]
+    assert replay(rules, expand_timeline([FAILED, SUCCESS])) == []  # one typo, then success
+    alerts = replay(rules, expand_timeline([{"repeat": 3, "event": FAILED}, SUCCESS]))
+    assert [a.rule_id for a in alerts] == ["chain"]
