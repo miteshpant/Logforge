@@ -18,18 +18,6 @@ markers).
 
 ## Bugs and gaps
 
-- **Playwright specs 01–04 are out of date.** `apps/ui/tests/01-04-*.spec.ts`
-  expect a seeded `test@example.com` user and selectors the current UI no
-  longer has; 44 of their tests fail against a live stack. CI runs specs 05–08
-  only. Rewrite 01–04 against `scripts/bootstrap_demo.py`'s demo user (as
-  05–08 do), or delete the ones that duplicate newer coverage, then add them to
-  the `ui-e2e` job in `.github/workflows/ci.yml`.
-- **`apiClient` errors are easy to miss.** `apps/ui/lib/api.ts` reports HTTP
-  errors as `{ success: false }` instead of throwing, so a `try/catch` around a
-  call never sees a 4xx/5xx. The dashboard editor and security pages now check
-  `success`; about 25 other files under `apps/ui/app` and
-  `apps/ui/components` call `post`/`put`/`delete` and should be audited the
-  same way (or the client changed to throw, with every caller updated).
 - **OpenTelemetry metric aliases ignore units.** `cpu.utilization` is a 0–1
   ratio while the canonical `cpu_usage` is a percentage. Mapping one to the
   other needs a unit conversion in `metric_name_mappings.yml` and the
@@ -85,6 +73,9 @@ For reference, these were on this list and are now done:
 - The OpenAPI spec is also published as `docs/api/openapi.yaml`.
 - `count()` rules load through batch fixtures (the brute-force rule now fires),
   and Sigma rules see fields kept under `attrs`.
+- Failed UI mutations reject (`ApiError`), every call site is checked by a
+  test, and `get()` no longer drops `{ params }` filters.
+- Playwright specs 01–04 rewritten; the whole suite (43 tests) runs in CI.
 - gzip-compressed request bodies are accepted (bounded), and the shipper
   recipes compress.
 - The admin login page no longer shows non-existent demo credentials, and the
