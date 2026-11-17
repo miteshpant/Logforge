@@ -5,6 +5,10 @@ claim one, open an issue (or comment on an existing one) so nobody duplicates
 the work. Items marked **good first issue** are self-contained and need little
 knowledge of the system.
 
+The long-range product plan (phased path to a unified, AI-assisted security
+and observability platform) is in [PLATFORM_ROADMAP.md](./PLATFORM_ROADMAP.md).
+This file lists the short, claimable tasks.
+
 A full code analysis (architecture, security, quality, priorities) is in
 [CODE_ANALYSIS.md](./CODE_ANALYSIS.md). Historical design notes and the full
 enhancement log are in

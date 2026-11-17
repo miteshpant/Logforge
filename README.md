@@ -10,9 +10,11 @@ them with a pipe-style query language, raises alerts, and runs Sigma detection
 rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 
 > **Project status: early / alpha.** The ingestion, storage, query, alerting and
-> detection paths are real and tested. Some UI screens and "AI" features are
-> still demos. See [Feature status](#feature-status) for an honest breakdown,
-> and [docs/ROADMAP.md](./docs/ROADMAP.md) for where help is needed.
+> detection paths are real and tested. The "AI" features are still keyword
+> templates without a language model, and a few admin pages are placeholders. See [Feature status](#feature-status) for an honest breakdown,
+> [docs/ROADMAP.md](./docs/ROADMAP.md) for where help is needed, and
+> [docs/PLATFORM_ROADMAP.md](./docs/PLATFORM_ROADMAP.md) for the phased plan
+> toward a unified, AI-assisted platform.
 
 ## Screenshots
 
@@ -52,17 +54,17 @@ rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 | **LogforgeQL**, a pipe language (`timeout \| where service = "api" \| limit 50`) | ✅ Implemented | `apps/api/logql.py` |
 | Alerting: threshold, pattern, anomaly and saved-search rules | ✅ Implemented | `apps/api/alert_engine.py` |
 | Notifications: webhook, Slack, email, PagerDuty, Teams, Discord | ✅ Implemented (off by default) | `apps/api/services/notification_service.py` |
-| Sigma detection engine, with 243 vendored SigmaHQ rules | ✅ Implemented | `apps/api/sigma_engine.py`, `apps/api/content/rules/` |
+| Sigma detection engine: ~270 fixture-verified rules (vendored SigmaHQ + Logforge's own `packages/rules/`) | ✅ Implemented | `apps/api/sigma_engine.py`, `apps/api/content/rules/`, `packages/rules/` |
 | Anomaly detection and forecasting (z-score / EWMA) | ✅ Implemented | `apps/api/services/anomaly_detector.py`, `predictive_analytics_service.py` |
 | Multi-tenancy, roles, API keys, quotas, subscription tiers | ✅ Implemented | `tenant_api.py`, `authn_authz_middleware.py`, `config/pricing.yml` |
 | Server-sent event streams (metrics, alerts, security, …) | ✅ Implemented | `apps/api/routers/streaming_api.py` |
-| Live log tail (`/v1/stream/logs`) | ❌ Missing (the UI already calls it) | [ROADMAP](./docs/ROADMAP.md) |
-| MITRE ATT&CK coverage endpoint | 🟡 Service exists, no route | [ROADMAP](./docs/ROADMAP.md) |
+| Live log tail (`/v1/stream/logs`) | ✅ Implemented | `apps/api/routers/streaming_api.py` |
+| MITRE ATT&CK coverage (`/v1/security/mitre-coverage`), shown on the SIEM page | ✅ Implemented | `apps/api/routers/security_api.py` |
 | Threat-intel enrichment | 🟡 IOC CRUD only, no feed clients | `apps/api/threat_intel.py` |
 | Root-cause analysis | 🟡 Partly placeholder | `apps/api/services/rca_engine.py` |
 | "AI" natural-language query and recommendations | 🧪 Keyword templates and canned output, no LLM | `apps/api/services/ai_service.py` |
 | Billing | 🟡 Usage metering and invoices computed, no payment provider | `apps/api/routers/usage_api.py` |
-| Tenant web UI (Next.js) | 🟡 Most screens are wired to the API; a few still show demo data | `apps/ui/` |
+| Tenant web UI (Next.js) | ✅ Screens are wired to the API | `apps/ui/` |
 | Platform admin UI (Next.js) | 🟡 Tenants, users, usage and audit work; billing, features and support pages are placeholders | `apps/admin-ui/` |
 
 ---
