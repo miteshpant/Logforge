@@ -32,7 +32,7 @@ import re
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field as dc_field
 from datetime import datetime, timedelta
-from typing import Any, Deque, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any, Deque, Dict, Iterable, List, Optional, Set, Tuple
 
 TYPES = ("event_count", "value_count", "value_sum", "temporal", "temporal_ordered")
 _THRESHOLD_TYPES = ("event_count", "value_count", "value_sum")
