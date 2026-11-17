@@ -31,10 +31,17 @@ def client(monkeypatch):
     async def fake_run(db, rules, rule_id, tenant_id, start, end, **kwargs):
         calls.update(rule_id=rule_id, start=start, end=end, kwargs=kwargs, rules=rules)
         from backtest import run_backtest as real
+        kwargs = {k: v for k, v in kwargs.items() if k != "tuning"}
         return await real(_EmptyDB(), rules, rule_id, tenant_id, start, end, **kwargs)
 
     monkeypatch.setattr(security_api, "_backtest_rules", rules_for)
     monkeypatch.setattr(security_api, "_backtest_db", lambda: _EmptyDB())
+
+    async def tuning_for(tenant):
+        calls["tuning_tenant"] = tenant
+        return "TUNING"
+
+    monkeypatch.setattr(security_api, "_backtest_tuning", tuning_for)
     monkeypatch.setattr(security_api, "run_backtest", fake_run)
     app = FastAPI()
     app.include_router(security_api.router)
@@ -67,7 +74,14 @@ def test_explicit_range_and_limits(client):
     response = client.post("/v1/security/rules/bf/backtest", headers=HEADERS, json={
         "start": "2026-11-01T00:00:00Z", "end": "2026-11-02T00:00:00Z", "max_events": 1000, "sample_limit": 5})
     assert response.status_code == 200, response.text
-    assert client.calls["kwargs"] == {"max_events": 1000, "sample_limit": 5}
+    assert client.calls["kwargs"] == {"max_events": 1000, "sample_limit": 5, "tuning": "TUNING"}
+
+
+def test_tuning_is_applied_unless_turned_off(client):
+    client.post("/v1/security/rules/bf/backtest", json={}, headers=HEADERS)
+    assert client.calls["kwargs"]["tuning"] == "TUNING" and client.calls["tuning_tenant"] == "t1"
+    client.post("/v1/security/rules/bf/backtest", json={"apply_tuning": False}, headers=HEADERS)
+    assert client.calls["kwargs"]["tuning"] is None
 
 
 def test_unknown_rule_is_404(client):

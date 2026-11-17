@@ -452,6 +452,13 @@ class SigmaRuleEngine:
         self.condition_evaluator = SigmaConditionEvaluator()
         # Process-wide streaming state for correlation and count() rules.
         self.correlation_store = get_correlation_store()
+        # Tuning (exclusions, throttles): provider returns the tenant's
+        # TuningSet; the throttler keeps bounded last-alert state.
+        from detection_tuning import Throttler
+        from tuning_cache import get_tuning
+
+        self.throttler = Throttler()
+        self.tuning_provider = get_tuning
         self.security_publisher = None  # Initialize later when needed
         # Import here to avoid circular imports
         from services.subscription_service import SubscriptionService
@@ -560,6 +567,7 @@ class SigmaRuleEngine:
                     simple_rules.append(rule_dict)
 
             correlation_rules, correlation_meta = self._compile_correlations(correlation_dicts, count_rules)
+            tuning = await self._tuning(customer_id)
 
             for original_log, normalized_log in normalized_logs:
                 # Names of the base rules this event matched (rule `name` and
@@ -583,6 +591,9 @@ class SigmaRuleEngine:
                                 matched_names.add(str(rule_dict['name']))
                             # `generate: false` base rules only feed correlations.
                             if rule_dict.get('generate') is False:
+                                continue
+                            if self._suppressed(tuning, customer_id, str(rule_dict.get('id')),
+                                                normalized_log, {}, _event_time(normalized_log)):
                                 continue
                             matches.append(match_result)
                             logger.info(f"🚨 Sigma rule match: {rule.id} - {rule.title}")
@@ -608,6 +619,9 @@ class SigmaRuleEngine:
                     for alert in alerts:
                         if correlation_meta.get(alert.rule.id, {}).get('generate') is False:
                             continue  # building block: feeds other correlations only
+                        if self._suppressed(tuning, customer_id, alert.rule.id, normalized_log,
+                                            alert.group, alert.last_seen):
+                            continue
                         match = self._correlation_match(alert, correlation_meta.get(alert.rule.id, {}),
                                                         normalized_log, customer_id)
                         matches.append(match)
@@ -620,6 +634,33 @@ class SigmaRuleEngine:
         except Exception as e:
             logger.error(f"Error in Sigma rule evaluation: {e}")
             return []
+
+    async def _tuning(self, customer_id: str):
+        """The tenant's tuning; never lets a tuning failure stop detection."""
+        provider = getattr(self, "tuning_provider", None)
+        if provider is None:
+            return None
+        try:
+            return await provider(customer_id)
+        except Exception as e:
+            logger.warning(f"Tuning unavailable for {customer_id}, alerting without it: {e}")
+            return None
+
+    def _suppressed(self, tuning, customer_id: str, rule_id: str, event: Dict[str, Any],
+                    group: Dict[str, Any], ts: datetime) -> bool:
+        """True if an exclusion matches the alert or a throttle holds it back."""
+        if not tuning:
+            return False
+        exclusion = tuning.exclusion_for(rule_id, event, ts)
+        if exclusion:
+            logger.debug(f"Alert for {rule_id} suppressed by exclusion {exclusion}")
+            return True
+        throttler = getattr(self, "throttler", None)
+        if throttler is not None and not throttler.allow(customer_id, rule_id, tuning.throttle_for(rule_id),
+                                                         event, group, ts):
+            logger.debug(f"Alert for {rule_id} throttled")
+            return True
+        return False
 
     def _compile_correlations(self, correlation_dicts, count_rules):
         return compile_correlation_rules(correlation_dicts, count_rules)

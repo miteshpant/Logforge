@@ -19,6 +19,7 @@ from typing import Any, Dict, List
 
 from correlation import CorrelationStore
 from detection_replay import replay
+from detection_tuning import Throttler
 from sigma_sql import compile_prefilter
 
 MAX_RANGE = timedelta(days=31)
@@ -116,7 +117,8 @@ def _prefilter(rules: List[Dict[str, Any]]) -> tuple:
 
 async def run_backtest(db, rules: List[Dict[str, Any]], rule_id: str, tenant_id: str,
                        start: datetime, end: datetime, max_events: int = DEFAULT_MAX_EVENTS,
-                       sample_limit: int = 50, chunk: timedelta = DEFAULT_CHUNK) -> Dict[str, Any]:
+                       sample_limit: int = 50, chunk: timedelta = DEFAULT_CHUNK,
+                       tuning=None) -> Dict[str, Any]:
     if end <= start:
         raise BacktestError("end must be after start")
     if end - start > MAX_RANGE:
@@ -132,6 +134,8 @@ async def run_backtest(db, rules: List[Dict[str, Any]], rule_id: str, tenant_id:
 
     began = time.monotonic()
     store = CorrelationStore()
+    throttler = Throttler()
+    suppressed = 0
     scanned = 0
     truncated = False
     alerts: List[Dict[str, Any]] = []
@@ -150,6 +154,12 @@ async def run_backtest(db, rules: List[Dict[str, Any]], rule_id: str, tenant_id:
         for alert in replay(replayed, events, store=store, tenant_id=tenant_id):
             if alert.rule_id != target["id"]:
                 continue
+            # The tenant's exclusions and throttles, as the live path applies them.
+            if tuning and (tuning.exclusion_for(alert.rule_id, alert.event, alert.ts)
+                           or not throttler.allow(tenant_id, alert.rule_id, tuning.throttle_for(alert.rule_id),
+                                                  alert.event, alert.group, alert.ts)):
+                suppressed += 1
+                continue
             total += 1
             by_day[alert.ts.date().isoformat()] += 1
             if len(alerts) < sample_limit:
@@ -165,6 +175,7 @@ async def run_backtest(db, rules: List[Dict[str, Any]], rule_id: str, tenant_id:
         "end": end.isoformat(),
         "events_scanned": scanned,
         "alerts_total": total,
+        "alerts_suppressed": suppressed,
         "alerts": alerts,
         "by_day": dict(sorted(by_day.items())),
         "rules_replayed": [r["id"] for r in replayed],

@@ -1074,6 +1074,7 @@ class BacktestRequest(BaseModel):
     end: Optional[datetime] = Field(None, description="Range end (default: now)")
     max_events: int = Field(2_000_000, ge=1, le=20_000_000, description="Stop after scanning this many events")
     sample_limit: int = Field(50, ge=0, le=500, description="Alerts returned in full (all are counted)")
+    apply_tuning: bool = Field(True, description="Apply the tenant's exclusions and throttles (reported as alerts_suppressed)")
 
 
 async def _backtest_rules(customer_id: str) -> List[Dict[str, Any]]:
@@ -1081,6 +1082,12 @@ async def _backtest_rules(customer_id: str) -> List[Dict[str, Any]]:
     from events.management.cache.sigma_rule_cache import SigmaRuleCache
 
     return await SigmaRuleCache().get_customer_rules(customer_id, include_defaults=True)
+
+
+async def _backtest_tuning(customer_id: str):
+    from tuning_cache import get_tuning
+
+    return await get_tuning(customer_id)
 
 
 def _backtest_db():
@@ -1113,8 +1120,10 @@ async def backtest_rule(
         end = end.replace(tzinfo=timezone.utc)
     try:
         rules = await _backtest_rules(customer_id)
+        tuning = await _backtest_tuning(customer_id) if request.apply_tuning else None
         return await run_backtest(_backtest_db(), rules, rule_id, customer_id, start, end,
-                                  max_events=request.max_events, sample_limit=request.sample_limit)
+                                  max_events=request.max_events, sample_limit=request.sample_limit,
+                                  tuning=tuning)
     except RuleNotFound:
         raise HTTPException(status_code=404, detail=f"Rule {rule_id} not found")
     except BacktestError as e:
@@ -1123,3 +1132,95 @@ async def backtest_rule(
         raise
     except Exception as e:
         raise internal_error(e, f"Backtest of {rule_id} failed", rule_id=rule_id)
+
+
+# ---------------------------------------------------------------------------
+# Tuning: exclusions and throttles (Phase 1)
+# ---------------------------------------------------------------------------
+
+class TuningRecordRequest(BaseModel):
+    rule_id: str = Field(..., description="Rule id, or '*' for every rule")
+    kind: str = Field(..., description="exclusion | throttle")
+    spec: Dict[str, Any] = Field(..., description="exclusion: {conditions, expires_at?}; throttle: {window, group_by}")
+    reason: str = Field("", max_length=1000)
+
+
+def _tuning_dao():
+    from dao.tuning_dao import TuningDAO
+
+    return TuningDAO()
+
+
+@router.get("/tuning")
+async def list_tuning(
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """The tenant's exclusions and throttles."""
+    try:
+        return {"records": await _tuning_dao().list_records(customer_id)}
+    except Exception as e:
+        raise internal_error(e, "Failed to list tuning records")
+
+
+@router.post("/tuning", status_code=201)
+async def create_tuning(
+    request: TuningRecordRequest,
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Add an exclusion (field conditions in Sigma selection syntax, optional
+    expires_at) or a throttle (window, group_by) for one rule or all ('*').
+    Suppressed alerts are not raised, but still feed correlations."""
+    from detection_tuning import TuningError, validate_record
+    from tuning_cache import invalidate
+
+    try:
+        validate_record(request.model_dump())
+        record = await _tuning_dao().create(customer_id, request.model_dump(), str(current_user.id))
+    except TuningError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise internal_error(e, "Failed to create tuning record")
+    invalidate(customer_id)
+    return record
+
+
+@router.delete("/tuning/{record_id}", status_code=204)
+async def delete_tuning(
+    record_id: str,
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user),
+):
+    from tuning_cache import invalidate
+
+    try:
+        deleted = await _tuning_dao().delete(customer_id, record_id)
+    except Exception as e:
+        raise internal_error(e, "Failed to delete tuning record")
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Tuning record not found")
+    invalidate(customer_id)
+
+
+@router.get("/rules/{rule_id}/tuning-suggestion")
+async def tuning_suggestion(
+    rule_id: str,
+    days: int = Query(30, ge=1, le=90),
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Propose an exclusion from the rule's detections that analysts marked
+    false positive (field values most of them share), and how many of its
+    other detections it would also suppress. Review before saving it."""
+    from detection_tuning import suggest_exclusion
+
+    try:
+        false_positives, others = await _tuning_dao().detections_by_verdict(customer_id, rule_id, days=days)
+    except Exception as e:
+        raise internal_error(e, "Failed to read detections for the suggestion")
+    suggestion = suggest_exclusion(false_positives, others)
+    suggestion["record"] = ({"rule_id": rule_id, "kind": "exclusion",
+                             "spec": {"conditions": suggestion["conditions"]}}
+                            if suggestion["conditions"] else None)
+    return suggestion

@@ -638,6 +638,12 @@
       },
       "BacktestRequest": {
         "properties": {
+          "apply_tuning": {
+            "default": true,
+            "description": "Apply the tenant's exclusions and throttles (reported as alerts_suppressed)",
+            "title": "Apply Tuning",
+            "type": "boolean"
+          },
           "end": {
             "anyOf": [
               {
@@ -5891,6 +5897,39 @@
           "peak_count"
         ],
         "title": "TrendSummary",
+        "type": "object"
+      },
+      "TuningRecordRequest": {
+        "properties": {
+          "kind": {
+            "description": "exclusion | throttle",
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Reason",
+            "type": "string"
+          },
+          "rule_id": {
+            "description": "Rule id, or '*' for every rule",
+            "title": "Rule Id",
+            "type": "string"
+          },
+          "spec": {
+            "additionalProperties": true,
+            "description": "exclusion: {conditions, expires_at?}; throttle: {window, group_by}",
+            "title": "Spec",
+            "type": "object"
+          }
+        },
+        "required": [
+          "rule_id",
+          "kind",
+          "spec"
+        ],
+        "title": "TuningRecordRequest",
         "type": "object"
       },
       "UsageBreakdownResponse": {
@@ -18299,6 +18338,77 @@
         ]
       }
     },
+    "/v1/security/rules/{rule_id}/tuning-suggestion": {
+      "get": {
+        "description": "Propose an exclusion from the rule's detections that analysts marked\nfalse positive (field values most of them share), and how many of its\nother detections it would also suppress. Review before saving it.",
+        "operationId": "tuning_suggestion_v1_security_rules__rule_id__tuning_suggestion_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Tuning Suggestion V1 Security Rules  Rule Id  Tuning Suggestion Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Tuning Suggestion",
+        "tags": [
+          "security-analytics"
+        ]
+      }
+    },
     "/v1/security/sigma-rules": {
       "get": {
         "description": "List all Sigma detection rules",
@@ -19052,6 +19162,163 @@
           }
         },
         "summary": "Delete Threat Indicator",
+        "tags": [
+          "security-analytics"
+        ]
+      }
+    },
+    "/v1/security/tuning": {
+      "get": {
+        "description": "The tenant's exclusions and throttles.",
+        "operationId": "list_tuning_v1_security_tuning_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Tuning V1 Security Tuning Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Tuning",
+        "tags": [
+          "security-analytics"
+        ]
+      },
+      "post": {
+        "description": "Add an exclusion (field conditions in Sigma selection syntax, optional\nexpires_at) or a throttle (window, group_by) for one rule or all ('*').\nSuppressed alerts are not raised, but still feed correlations.",
+        "operationId": "create_tuning_v1_security_tuning_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TuningRecordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Tuning V1 Security Tuning Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Tuning",
+        "tags": [
+          "security-analytics"
+        ]
+      }
+    },
+    "/v1/security/tuning/{record_id}": {
+      "delete": {
+        "operationId": "delete_tuning_v1_security_tuning__record_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Tuning",
         "tags": [
           "security-analytics"
         ]
