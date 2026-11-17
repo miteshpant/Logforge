@@ -135,3 +135,191 @@ class CorrelationRule:
             field=value_field,
             tags=[str(t) for t in data.get("tags") or []],
         )
+
+
+# ---------------------------------------------------------------------------
+# Streaming engine
+# ---------------------------------------------------------------------------
+
+#: value_sum can't be bounded by its threshold (many small values add up); it
+#: keeps at most this many contributions per group. Dropping the oldest can
+#: only under-count, never invent an alert.
+MAX_SUM_ENTRIES = 1000
+#: Timestamps kept per base rule for temporal correlations.
+MAX_TEMPORAL_ENTRIES = 50
+#: Sample events attached to an alert.
+SAMPLE_EVENTS = 10
+
+
+def field_value(event: Dict[str, Any], name: str) -> Any:
+    """Top-level field, then `attrs` (where ingestion keeps caller fields);
+    dotted names walk nested objects."""
+    if "." in name:
+        current: Any = event
+        for part in name.split("."):
+            if not isinstance(current, dict) or part not in current:
+                return None
+            current = current[part]
+        return current
+    if name in event:
+        return event[name]
+    attrs = event.get("attrs")
+    return attrs.get(name) if isinstance(attrs, dict) else None
+
+
+@dataclass
+class CorrelationAlert:
+    rule: CorrelationRule
+    tenant_id: str
+    group: Dict[str, Any]
+    value: float
+    first_seen: datetime
+    last_seen: datetime
+    events: List[Dict[str, Any]]
+
+
+class _GroupState:
+    """State for one (tenant, rule, group)."""
+
+    def __init__(self, rule: CorrelationRule):
+        self.rule = rule
+        self.newest: Optional[datetime] = None
+        if rule.type == "event_count":
+            needed = int(rule.threshold) + (1 if rule.operator == "gt" else 0)
+            self.entries: Deque[Tuple[datetime, Dict[str, Any]]] = deque(maxlen=max(needed, 1))
+        elif rule.type == "value_sum":
+            self.entries = deque(maxlen=MAX_SUM_ENTRIES)
+        self.values: "OrderedDict[Any, datetime]" = OrderedDict()
+        self.per_rule: Dict[str, Deque[datetime]] = {}
+        self.sample: Deque[Dict[str, Any]] = deque(maxlen=SAMPLE_EVENTS)
+
+    def size(self) -> int:
+        if self.rule.type in ("event_count", "value_sum"):
+            return len(self.entries)
+        if self.rule.type == "value_count":
+            return len(self.values)
+        return max((len(d) for d in self.per_rule.values()), default=0)
+
+    def _horizon(self) -> datetime:
+        return self.newest - self.rule.timespan
+
+    def add(self, event: Dict[str, Any], matched: Set[str], ts: datetime) -> Optional[Tuple[float, datetime]]:
+        """Record the event; return (value, first_seen) if the rule fires."""
+        if self.newest is None or ts > self.newest:
+            self.newest = ts
+        if ts < self._horizon():
+            return None  # late event, outside the window
+        self.sample.append(event)
+        rtype = self.rule.type
+
+        if rtype == "event_count":
+            self.entries.append((ts, event))
+            in_window = [t for t, _ in self.entries if t >= self._horizon()]
+            if in_window and self.rule.threshold_met(len(in_window)):
+                return float(len(in_window)), min(in_window)
+            return None
+
+        if rtype == "value_sum":
+            try:
+                amount = float(field_value(event, self.rule.field))
+            except (TypeError, ValueError):
+                return None
+            self.entries.append((ts, amount))
+            while self.entries and self.entries[0][0] < self._horizon():
+                self.entries.popleft()
+            total = sum(a for _, a in self.entries)
+            if self.rule.threshold_met(total):
+                return total, self.entries[0][0]
+            return None
+
+        if rtype == "value_count":
+            value = field_value(event, self.rule.field)
+            if value is None:
+                return None
+            self.values[value] = ts
+            self.values.move_to_end(value)
+            for stale in [v for v, t in self.values.items() if t < self._horizon()]:
+                del self.values[stale]
+            needed = int(self.rule.threshold) + (1 if self.rule.operator == "gt" else 0)
+            while len(self.values) > max(needed, 1):
+                self.values.popitem(last=False)
+            if self.rule.threshold_met(len(self.values)):
+                return float(len(self.values)), min(self.values.values())
+            return None
+
+        # temporal / temporal_ordered
+        for name in matched:
+            self.per_rule.setdefault(name, deque(maxlen=MAX_TEMPORAL_ENTRIES)).append(ts)
+        horizon = self._horizon()
+        for times in self.per_rule.values():
+            while times and times[0] < horizon:
+                times.popleft()
+        if rtype == "temporal":
+            if all(self.per_rule.get(r) for r in self.rule.rules):
+                return float(len(self.rule.rules)), min(min(self.per_rule[r]) for r in self.rule.rules)
+            return None
+        return self._ordered_chain()
+
+    def _ordered_chain(self) -> Optional[Tuple[float, datetime]]:
+        first, *rest = self.rule.rules
+        for start in sorted(self.per_rule.get(first, ())):
+            previous = start
+            for name in rest:
+                later = [t for t in self.per_rule.get(name, ()) if t >= previous]
+                if not later:
+                    break
+                previous = min(later)
+            else:
+                if previous - start <= self.rule.timespan:
+                    return float(len(self.rule.rules)), start
+        return None
+
+    def reset(self) -> None:
+        if hasattr(self, "entries"):
+            self.entries.clear()
+        self.values.clear()
+        self.per_rule.clear()
+        self.sample.clear()
+
+
+class CorrelationStore:
+    """Streaming state for all tenants' correlation rules, bounded in size."""
+
+    def __init__(self, max_groups: int = 100_000):
+        self.max_groups = max_groups
+        self.evictions = 0
+        self._groups: "OrderedDict[Tuple[Any, ...], _GroupState]" = OrderedDict()
+
+    def group_count(self) -> int:
+        return len(self._groups)
+
+    def max_entries_per_group(self) -> int:
+        return max((g.size() for g in self._groups.values()), default=0)
+
+    def process(self, tenant_id: str, rules: Iterable[CorrelationRule], event: Dict[str, Any],
+                matched: Set[str], ts: datetime) -> List[CorrelationAlert]:
+        alerts: List[CorrelationAlert] = []
+        if not matched:
+            return alerts
+        for rule in rules:
+            hits = matched.intersection(rule.rules)
+            if not hits:
+                continue
+            group = {f: field_value(event, f) for f in rule.group_by}
+            key = (tenant_id, rule.id, tuple(str(group[f]) for f in rule.group_by))
+            state = self._groups.get(key)
+            if state is None or state.rule is not rule and state.rule != rule:
+                state = _GroupState(rule)
+                self._groups[key] = state
+            self._groups.move_to_end(key)
+            fired = state.add(event, hits, ts)
+            if fired:
+                value, first_seen = fired
+                alerts.append(CorrelationAlert(
+                    rule=rule, tenant_id=tenant_id, group=group, value=value,
+                    first_seen=first_seen, last_seen=state.newest, events=list(state.sample)))
+                state.reset()
+            while len(self._groups) > self.max_groups:
+                self._groups.popitem(last=False)
+                self.evictions += 1
+        return alerts
