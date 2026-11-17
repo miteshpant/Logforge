@@ -142,14 +142,15 @@ def score_rule_draft(item: Dict[str, Any], draft: Optional[str]) -> Dict[str, An
         return result
     result["passes_gate"] = True
 
+    content = json.loads(row["rule_content"])
     candidate = {"id": row["id"], "techniques": row["mitre_techniques"],
-                 "detection": json.loads(row["rule_content"])["detection"]}
-    if eval_harness._is_count_rule(candidate):
-        result["detects_attack"] = eval_harness._count_fires(candidate, item["attack_events"])
-        result["benign_hits"] = 1 if eval_harness._count_fires(candidate, benign_events()) else 0
-    else:
-        result["detects_attack"] = any(eval_harness._single_matches(candidate, e) for e in item["attack_events"])
-        result["benign_hits"] = sum(1 for e in benign_events() if eval_harness._single_matches(candidate, e))
+                 "detection": content.get("detection") or {}, "correlation": content.get("correlation")}
+    # Scored by replay, exactly as the detection harness scores shipped rules.
+    report = eval_harness.evaluate(
+        [candidate], [{"id": "attack", "techniques": [], "events": item["attack_events"]}], benign_events())
+    stats = report["rules"][row["id"]]
+    result["detects_attack"] = stats["true_positives"] > 0
+    result["benign_hits"] = stats["false_positives"]
     return result
 
 
