@@ -310,6 +310,11 @@ jobs:
         working-directory: apps/${{ matrix.app }}
         run: npx tsc --noEmit
 
+      - name: Unit tests
+        if: matrix.app == 'ui'
+        working-directory: apps/${{ matrix.app }}
+        run: npm run test:unit
+
       - name: Build
         working-directory: apps/${{ matrix.app }}
         env:

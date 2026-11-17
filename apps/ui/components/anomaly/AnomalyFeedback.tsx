@@ -16,6 +16,7 @@ export default function AnomalyFeedback({ anomalyId, onSubmitSuccess }: AnomalyF
   const [notes, setNotes] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   const handleSubmit = async () => {
     if (!feedbackType) return
@@ -30,7 +31,9 @@ export default function AnomalyFeedback({ anomalyId, onSubmitSuccess }: AnomalyF
         'duplicate': 'not_helpful'
       }
 
-      const response = await apiClient.post(`/v1/ai/feedback`, {
+      setSubmitError(null)
+      // Rejects with ApiError if the API refuses the feedback (caught below).
+      await apiClient.post(`/v1/ai/feedback`, {
         analysis_id: anomalyId,
         feedback_type: feedbackMapping[feedbackType] || 'helpful',
         rating: feedbackType === 'true_positive' ? 5 : feedbackType === 'false_positive' ? 1 : 3,
@@ -38,20 +41,19 @@ export default function AnomalyFeedback({ anomalyId, onSubmitSuccess }: AnomalyF
         specific_issues: feedbackType === 'severity_wrong' && correctSeverity ? [`Severity should be ${correctSeverity}`] : []
       })
 
-      if (response.success) {
-        setSubmitted(true)
-        onSubmitSuccess?.()
+      setSubmitted(true)
+      onSubmitSuccess?.()
 
-        // Reset form after 2 seconds
-        setTimeout(() => {
-          setFeedbackType(null)
-          setCorrectSeverity('')
-          setNotes('')
-          setSubmitted(false)
-        }, 2000)
-      }
+      // Reset form after 2 seconds
+      setTimeout(() => {
+        setFeedbackType(null)
+        setCorrectSeverity('')
+        setNotes('')
+        setSubmitted(false)
+      }, 2000)
     } catch (error) {
       console.error('Failed to submit feedback:', error)
+      setSubmitError('Could not submit feedback. Please try again.')
     } finally {
       setIsSubmitting(false)
     }
@@ -152,6 +154,9 @@ export default function AnomalyFeedback({ anomalyId, onSubmitSuccess }: AnomalyF
       >
         {isSubmitting ? 'Submitting...' : 'Submit Feedback'}
       </button>
+      {submitError && (
+        <p role="alert" className="text-xs text-red-400 text-center">{submitError}</p>
+      )}
 
       <p className="text-xs text-slate-500 text-center">
         Your feedback helps our ML models learn and improve detection accuracy over time.

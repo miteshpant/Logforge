@@ -206,13 +206,9 @@ export default function AuthenticationPage() {
           : []
       }
 
-      // ENH-040: this must throw on failure. `apiClient` resolves errors into
-      // `{success:false, error}` rather than rejecting, so the failure is
-      // detected explicitly below instead of relying on `catch`.
+      // ENH-040: this must throw on failure; apiClient mutations reject with
+      // ApiError, so a refused creation never reaches the code below.
       const response = await apiClient.post('/v1/enterprise/auth/api-keys', payload)
-      if (response?.success === false) {
-        throw new Error(response.error || 'API key creation failed')
-      }
       const data = response?.data || response
 
       // The secret is returned exactly once, as `api_key`
@@ -266,10 +262,8 @@ export default function AuthenticationPage() {
     // during a leaked-credential incident that is a false sense of containment
     // while the key stays live.
     try {
-      const response = await apiClient.delete(`/v1/enterprise/auth/api-keys/${keyId}`)
-      if (response?.success === false) {
-        throw new Error(response.error || 'Revocation failed')
-      }
+      // Rejects with ApiError if the revocation fails.
+      await apiClient.delete(`/v1/enterprise/auth/api-keys/${keyId}`)
     } catch (error) {
       setKeyError(
         `Failed to revoke key: ${error instanceof Error ? error.message : 'unknown error'}. The key is still active.`
@@ -305,10 +299,8 @@ export default function AuthenticationPage() {
     // configured when the server had rejected it. Only reflect confirmed state,
     // then re-read from the server rather than guessing the stored shape.
     try {
-      const response = await apiClient.post('/v1/enterprise/auth/oidc/configure', ssoConfig)
-      if (response?.success === false) {
-        throw new Error(response.error || 'SSO configuration failed')
-      }
+      // Rejects with ApiError if the server refuses the configuration.
+      await apiClient.post('/v1/enterprise/auth/oidc/configure', ssoConfig)
 
       setShowConfigureSSO(false)
       setSsoConfig({

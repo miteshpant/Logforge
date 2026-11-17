@@ -189,13 +189,18 @@ const INFRA_METRICS = ['cpu_usage', 'memory_usage', 'disk_usage'] as const
 
 async function loadInfraUtilization(startTime: string, endTime: string): Promise<InfraMetric[]> {
   const results = await Promise.all(INFRA_METRICS.map(async (metric): Promise<InfraMetric | null> => {
-    const res = await apiClient.post('/v1/observability/metrics/query', {
-      start_time: startTime,
-      end_time: endTime,
-      metric_name: metric,
-      aggregation: 'avg',
-      granularity: '1h',
-    })
+    let res
+    try {
+      res = await apiClient.post('/v1/observability/metrics/query', {
+        start_time: startTime,
+        end_time: endTime,
+        metric_name: metric,
+        aggregation: 'avg',
+        granularity: '1h',
+      })
+    } catch {
+      return null // one failing metric must not blank the others
+    }
     const points: { value: number }[] = res?.data?.metrics?.[metric] || []
     if (!points.length) return null
     const values = points.map(p => Number(p.value) || 0)

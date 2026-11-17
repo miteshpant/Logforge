@@ -97,15 +97,12 @@ export default function ThreatIntelPage() {
     loadIndicators()
   }, [typeFilter])
 
-  // apiClient reports HTTP errors as { success: false } instead of throwing.
-  // Indicators are only shown once the API has stored or deleted them.
+  // Indicators are only shown once the API has stored or deleted them;
+  // apiClient mutations reject with ApiError on failure.
   const handleAddIndicator = async () => {
     setFormError(null)
     try {
-      const response = await apiClient.post('/v1/security/threat-intel', formData)
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to add indicator')
-      }
+      await apiClient.post('/v1/security/threat-intel', formData)
       await loadIndicators()
       setIsAddingIndicator(false)
       resetForm()
@@ -120,10 +117,7 @@ export default function ThreatIntelPage() {
     if (!confirm('Delete this threat indicator?')) return
     setListError(null)
     try {
-      const response = await apiClient.delete(`/v1/security/threat-intel/${id}`)
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to delete indicator')
-      }
+      await apiClient.delete(`/v1/security/threat-intel/${id}`)
       await loadIndicators()
     } catch (error) {
       console.error('Failed to delete indicator:', error)

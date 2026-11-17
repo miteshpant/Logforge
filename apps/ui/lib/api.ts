@@ -24,6 +24,23 @@ export interface ApiResponse<T = any> {
 }
 
 /**
+ * Thrown by mutating calls (post/put/patch/delete) when the request fails:
+ * an HTTP error (status = response status), a timeout or a network failure
+ * (status = 0). Reads (get) keep resolving to `{ success: false, error }`.
+ */
+export class ApiError extends Error {
+  readonly status: number
+  readonly data: unknown
+
+  constructor(message: string, status: number, data?: unknown) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.data = data
+  }
+}
+
+/**
  * Human-readable message from an API error body.
  *
  * FastAPI's HTTPException responds with `{"detail": "..."}` and validation
@@ -148,7 +165,9 @@ class ApiClient {
 
         return {
           success: false,
+          status: response.status,
           error: describeApiError(data) || `HTTP ${response.status}: ${response.statusText}`,
+          errorData: data,
           data: undefined,
         }
       }
@@ -172,15 +191,30 @@ class ApiClient {
       if (error.name === 'AbortError') {
         return {
           success: false,
+          status: 0,
           error: 'Request timeout',
         }
       }
 
       return {
         success: false,
+        status: 0,
         error: error.message || 'Network error',
       }
     }
+  }
+
+  /**
+   * Mutations must fail loudly: callers wrap them in try/catch, which never
+   * saw a `{ success: false }` result, so failed saves and actions looked
+   * like successes.
+   */
+  private async mutate<T>(endpoint: string, options: RequestInit): Promise<ApiResponse<T>> {
+    const result = await this.request<T>(endpoint, options)
+    if (!result.success) {
+      throw new ApiError(result.error || 'Request failed', result.status ?? 0, result.errorData)
+    }
+    return result
   }
 
   /**
@@ -210,7 +244,7 @@ class ApiClient {
    * POST request
    */
   async post<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, {
+    return this.mutate<T>(endpoint, {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
     })
@@ -220,7 +254,7 @@ class ApiClient {
    * PUT request
    */
   async put<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, {
+    return this.mutate<T>(endpoint, {
       method: 'PUT',
       body: data ? JSON.stringify(data) : undefined,
     })
@@ -230,14 +264,14 @@ class ApiClient {
    * DELETE request
    */
   async delete<T = any>(endpoint: string): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, { method: 'DELETE' })
+    return this.mutate<T>(endpoint, { method: 'DELETE' })
   }
 
   /**
    * PATCH request
    */
   async patch<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, {
+    return this.mutate<T>(endpoint, {
       method: 'PATCH',
       body: data ? JSON.stringify(data) : undefined,
     })

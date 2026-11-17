@@ -43,11 +43,17 @@ export default function CustomMetricsPanel({ aggregation = 'avg' }: { aggregatio
   const load = useCallback(async (metric: string) => {
     setLoading(true)
     const { start_time, end_time } = getApiTimeRange()
-    const res = await apiClient.post('/v1/observability/metrics/query', {
-      metric_name: metric, start_time, end_time, aggregation, granularity: '15m',
-    })
-    setPoints(res.success ? (res.data?.metrics?.[metric] || []) : [])
-    setLoading(false)
+    try {
+      const res = await apiClient.post('/v1/observability/metrics/query', {
+        metric_name: metric, start_time, end_time, aggregation, granularity: '15m',
+      })
+      setPoints(res.data?.metrics?.[metric] || [])
+    } catch (err) {
+      console.error('Failed to load custom metric:', err)
+      setPoints([])
+    } finally {
+      setLoading(false)
+    }
   }, [getApiTimeRange, aggregation])
 
   useEffect(() => {

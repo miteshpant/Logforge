@@ -320,8 +320,8 @@ export default function MetricsExplorerPage() {
       const { start_time, end_time } = getApiTimeRange()
       const granularity = calculateGranularity(start_time, end_time)
 
-      // Fetch all metrics in parallel using Promise.allSettled
-      const metricPromises = metrics.map(metric =>
+      // Fetch all metrics in parallel; a failed metric is skipped, not fatal.
+      const settledResults = await Promise.allSettled(metrics.map(metric =>
         apiClient.post('/v1/observability/metrics/query', {
           metric_name: metric,
           start_time,
@@ -330,9 +330,7 @@ export default function MetricsExplorerPage() {
           service_name: selectedService !== 'all' ? selectedService : undefined,
           granularity
         }).then(response => ({ metric, response }))
-      )
-
-      const settledResults = await Promise.allSettled(metricPromises)
+      ))
 
       const results: Record<string, MetricDataPoint[]> = {}
 

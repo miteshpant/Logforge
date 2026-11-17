@@ -224,16 +224,14 @@ export default function DashboardEditPage() {
     setSaveError(null)
     try {
       if (isNew) {
+        // post/put reject with ApiError on failure (handled below).
         const response = await apiClient.post('/v1/dashboards', dashboard)
-        if (!response.success || !response.data?.id) {
-          throw new Error(response.error || 'Save failed')
+        if (!response.data?.id) {
+          throw new Error('Save returned no dashboard id')
         }
         router.push(`/dashboards/${response.data.id}`)
       } else {
-        const response = await apiClient.put(`/v1/dashboards/${params.id}`, dashboard)
-        if (!response.success) {
-          throw new Error(response.error || 'Save failed')
-        }
+        await apiClient.put(`/v1/dashboards/${params.id}`, dashboard)
       }
       setHasChanges(false)
     } catch (err) {

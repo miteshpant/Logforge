@@ -90,7 +90,6 @@ export default function SecurityEventsPage() {
   }, [severityFilter, statusFilter, refreshTrigger])
 
   // Run an event action and reflect it only once the API confirms it.
-  // apiClient reports HTTP errors as { success: false } instead of throwing.
   const runEventAction = async (
     eventId: string,
     action: 'acknowledge' | 'investigate' | 'resolve' | 'false-positive',
@@ -100,10 +99,8 @@ export default function SecurityEventsPage() {
     setIsActionLoading(true)
     setActionError(null)
     try {
+      // Rejects with ApiError if the API refuses the action (caught below).
       const response = await apiClient.post(`/v1/security/${eventId}/${action}`, body)
-      if (!response.success) {
-        throw new Error(response.error || `Failed to ${action} event`)
-      }
       if (action === 'investigate' && response.data) {
         setInvestigationData(prev => ({ ...prev, [eventId]: response.data }))
       }
