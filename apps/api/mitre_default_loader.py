@@ -800,13 +800,23 @@ class MitreDefaultLoader:
             return rows, awaiting
 
         candidates: List[Tuple[Any, str]] = []
-        for path in sorted(rules_dir.glob("*.yml")):
+        # Top-level files hold one rule each; correlations/ holds bundles of
+        # base rules and the correlations built on them (multi-document YAML).
+        for path in sorted(rules_dir.glob("*.yml")) + sorted(rules_dir.glob("correlations/*.yml")):
             if path.name == "content_pack.yml":
                 continue
             try:
-                candidates.append((yaml.safe_load(path.read_text(encoding="utf-8")), path.name))
+                # A file may hold several rules as YAML documents (base rules
+                # next to the correlations built on them).
+                documents = [d for d in yaml.safe_load_all(path.read_text(encoding="utf-8")) if d is not None]
             except yaml.YAMLError as exc:
                 awaiting.append(f"{path.name}: invalid YAML ({exc})")
+                continue
+            for document in documents:
+                label = str(path.relative_to(rules_dir))
+                if len(documents) > 1:
+                    label = f"{label}#{document.get('id') if isinstance(document, dict) else '?'}"
+                candidates.append((document, label))
 
         pack_path = rules_dir / "content_pack.yml"
         if pack_path.exists():

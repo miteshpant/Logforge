@@ -6,7 +6,7 @@
     },
     "logforge_cd001-lsass-memory-dump": {
       "false_positives": 0,
-      "true_positives": 1
+      "true_positives": 2
     },
     "logforge_de001-data-exfiltration": {
       "false_positives": 0,
@@ -22,7 +22,7 @@
     },
     "logforge_dp001-host-network-enumeration": {
       "false_positives": 0,
-      "true_positives": 0
+      "true_positives": 2
     },
     "logforge_dp002-security-tool-discovery": {
       "false_positives": 0,
@@ -148,12 +148,72 @@
       "false_positives": 0,
       "true_positives": 1
     },
+    "logforge_lf-c-account-lockout-burst": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-archive-then-cloud-upload": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-brute-force-then-success": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-discovery-burst": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-discovery-then-credential-dump": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-lateral-logon-fanout": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-mass-file-encryption": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-mfa-fatigue": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-outbound-volume": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-password-spray": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-sudo-failure-burst": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-web-scanning": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-ingress-tool-transfer": {
+      "false_positives": 0,
+      "true_positives": 2
+    },
+    "logforge_lf-remote-service-execution": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-unix-reverse-shell": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
     "logforge_lm001-remote-execution": {
       "false_positives": 0,
       "true_positives": 1
     },
     "logforge_pe001-privilege-escalation": {
-      "false_positives": 127,
+      "false_positives": 0,
       "true_positives": 0
     },
     "logforge_pe001-scheduled-task-persistence": {
@@ -258,7 +318,7 @@
     },
     "sigma_default_19aa4f58-94ca-45ff-bc34-92e533c0994a": {
       "false_positives": 0,
-      "true_positives": 0
+      "true_positives": 1
     },
     "sigma_default_1af57a4b-460a-4738-9034-db68b880c665": {
       "false_positives": 0,
@@ -1098,15 +1158,57 @@
     }
   },
   "scenarios": {
+    "account-lockout-burst": {
+      "detected": [
+        "T1110"
+      ],
+      "expected": [
+        "T1110"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-c-account-lockout-burst"
+      ]
+    },
+    "archive-then-cloud-upload": {
+      "detected": [
+        "T1560.001",
+        "T1567.002"
+      ],
+      "expected": [
+        "T1560.001",
+        "T1567.002"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-c-archive-then-cloud-upload"
+      ]
+    },
+    "brute-force-then-success": {
+      "detected": [
+        "T1078",
+        "T1110"
+      ],
+      "expected": [
+        "T1078",
+        "T1110"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-c-brute-force-then-success"
+      ]
+    },
     "certutil-download": {
-      "detected": [],
+      "detected": [
+        "T1105"
+      ],
       "expected": [
         "T1105"
       ],
-      "missing": [
-        "T1105"
-      ],
-      "rules": []
+      "missing": [],
+      "rules": [
+        "logforge_lf-ingress-tool-transfer"
+      ]
     },
     "credential-dumping-lsass": {
       "detected": [
@@ -1122,8 +1224,42 @@
         "sigma_default_a642964e-bead-4bed-8910-1bb4d63e3b4d"
       ]
     },
+    "discovery-burst": {
+      "detected": [
+        "T1016",
+        "T1033",
+        "T1082"
+      ],
+      "expected": [
+        "T1016",
+        "T1033",
+        "T1082"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_dp001-host-network-enumeration",
+        "logforge_lf-c-discovery-burst"
+      ]
+    },
+    "discovery-then-lsass-dump": {
+      "detected": [
+        "T1003.001",
+        "T1033"
+      ],
+      "expected": [
+        "T1003.001",
+        "T1033"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_cd001-lsass-memory-dump",
+        "logforge_dp001-host-network-enumeration",
+        "logforge_lf-c-discovery-then-credential-dump"
+      ]
+    },
     "domain-discovery": {
       "detected": [
+        "T1069.002",
         "T1087.002",
         "T1482"
       ],
@@ -1132,9 +1268,7 @@
         "T1087.002",
         "T1482"
       ],
-      "missing": [
-        "T1069.002"
-      ],
+      "missing": [],
       "rules": [
         "logforge_di001-domain-discovery",
         "logforge_dp006-account-manipulation"
@@ -1142,16 +1276,16 @@
     },
     "encoded-powershell-download": {
       "detected": [
-        "T1059.001"
+        "T1059.001",
+        "T1105"
       ],
       "expected": [
         "T1059.001",
         "T1105"
       ],
-      "missing": [
-        "T1105"
-      ],
+      "missing": [],
       "rules": [
+        "logforge_lf-ingress-tool-transfer",
         "logforge_ps001-suspicious-powershell",
         "sigma_default_85b0b087-eddf-4a2b-b033-d771fa2b9775",
         "sigma_default_e6c54d94-498c-4562-a37c-b469d8e9a275"
@@ -1181,28 +1315,90 @@
         "logforge_de001-data-exfiltration"
       ]
     },
+    "large-outbound-transfer": {
+      "detected": [
+        "T1048"
+      ],
+      "expected": [
+        "T1048"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-c-outbound-volume"
+      ]
+    },
+    "lateral-logon-fanout": {
+      "detected": [
+        "T1021"
+      ],
+      "expected": [
+        "T1021"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-c-lateral-logon-fanout"
+      ]
+    },
     "linux-reverse-shell": {
-      "detected": [],
+      "detected": [
+        "T1059.004"
+      ],
       "expected": [
         "T1059.004"
       ],
-      "missing": [
-        "T1059.004"
+      "missing": [],
+      "rules": [
+        "logforge_lf-unix-reverse-shell"
+      ]
+    },
+    "mass-file-encryption": {
+      "detected": [
+        "T1486"
       ],
-      "rules": []
+      "expected": [
+        "T1486"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-c-mass-file-encryption"
+      ]
+    },
+    "mfa-fatigue": {
+      "detected": [
+        "T1621"
+      ],
+      "expected": [
+        "T1621"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-c-mfa-fatigue"
+      ]
+    },
+    "password-spray": {
+      "detected": [
+        "T1110.003"
+      ],
+      "expected": [
+        "T1110.003"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-c-password-spray"
+      ]
     },
     "psexec-lateral-movement": {
       "detected": [
-        "T1021.002"
+        "T1021.002",
+        "T1569.002"
       ],
       "expected": [
         "T1021.002",
         "T1569.002"
       ],
-      "missing": [
-        "T1569.002"
-      ],
+      "missing": [],
       "rules": [
+        "logforge_lf-remote-service-execution",
         "logforge_lm001-remote-execution"
       ]
     },
@@ -1244,6 +1440,31 @@
         "logforge_bf001-brute-force-login"
       ]
     },
+    "sudo-failure-burst": {
+      "detected": [
+        "T1548.003"
+      ],
+      "expected": [
+        "T1548.003"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-c-sudo-failure-burst"
+      ]
+    },
+    "web-content-scanning": {
+      "detected": [
+        "T1595.003"
+      ],
+      "expected": [
+        "T1595.003"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-c-web-scanning",
+        "sigma_default_19aa4f58-94ca-45ff-bc34-92e533c0994a"
+      ]
+    },
     "web-path-traversal": {
       "detected": [
         "T1190"
@@ -1259,10 +1480,10 @@
   },
   "summary": {
     "benign_events": 2000,
-    "false_positive_alerts": 127,
-    "false_positives_per_1000": 63.5,
-    "rules": 274,
-    "scenarios_detected": 10,
-    "scenarios_total": 12
+    "false_positive_alerts": 0,
+    "false_positives_per_1000": 0.0,
+    "rules": 289,
+    "scenarios_detected": 24,
+    "scenarios_total": 24
   }
 }

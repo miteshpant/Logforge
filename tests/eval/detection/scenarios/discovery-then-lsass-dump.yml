@@ -1,0 +1,6 @@
+title: Orientation, then credential dumping from LSASS
+techniques: [T1033, T1003.001]
+events:
+  - {service: sysmon, event_id: 1, hostname: WS-044, user: carol, process_name: 'C:\Windows\System32\whoami.exe', command_line: 'whoami /priv', message: Process created}
+  - at: 7m
+    event: {service: sysmon, event_id: 1, hostname: WS-044, user: carol, process_name: 'C:\Users\Public\procdump64.exe', command_line: 'procdump64.exe -accepteula -ma lsass.exe C:\Users\Public\l.dmp', message: Process created}

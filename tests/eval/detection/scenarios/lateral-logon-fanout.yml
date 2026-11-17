@@ -1,0 +1,9 @@
+title: Stolen account used to log on across the network
+techniques: [T1021]
+events:
+  - {service: windows-security, event_id: 4624, logon_type: 3, hostname: WS-042, user: svc_helpdesk, src_ip: 10.0.2.31, message: 'An account was successfully logged on'}
+  - {service: windows-security, event_id: 4624, logon_type: 3, hostname: WS-043, user: svc_helpdesk, src_ip: 10.0.2.31, message: 'An account was successfully logged on'}
+  - {service: windows-security, event_id: 4624, logon_type: 3, hostname: WS-044, user: svc_helpdesk, src_ip: 10.0.2.31, message: 'An account was successfully logged on'}
+  - {service: windows-security, event_id: 4624, logon_type: 3, hostname: WS-051, user: svc_helpdesk, src_ip: 10.0.2.31, message: 'An account was successfully logged on'}
+  - {service: windows-security, event_id: 4624, logon_type: 3, hostname: LAPTOP-07, user: svc_helpdesk, src_ip: 10.0.2.31, message: 'An account was successfully logged on'}
+  - {service: windows-security, event_id: 4624, logon_type: 3, hostname: FS-01, user: svc_helpdesk, src_ip: 10.0.2.31, message: 'An account was successfully logged on'}

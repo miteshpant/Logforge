@@ -1,0 +1,7 @@
+title: Password guessing locks out several domain accounts
+techniques: [T1110]
+events:
+  - {service: windows-security, event_id: 4740, hostname: DC-01, target_user: alice, message: 'A user account was locked out'}
+  - {service: windows-security, event_id: 4740, hostname: DC-01, target_user: bob, message: 'A user account was locked out'}
+  - {service: windows-security, event_id: 4740, hostname: DC-01, target_user: carol, message: 'A user account was locked out'}
+  - {service: windows-security, event_id: 4740, hostname: DC-01, target_user: dave, message: 'A user account was locked out'}

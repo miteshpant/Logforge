@@ -1,0 +1,6 @@
+title: Web shell user trying to use sudo
+techniques: [T1548.003]
+events:
+  - repeat: 4
+    every: 15s
+    event: {service: sudo, hostname: app-02, user: www-data, process_name: /usr/bin/sudo, event_type: sudo, result: failed, message: 'www-data : 3 incorrect password attempts ; TTY=pts/1 ; USER=root ; COMMAND=/bin/bash'}

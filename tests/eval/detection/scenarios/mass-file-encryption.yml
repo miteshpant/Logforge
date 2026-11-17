@@ -1,0 +1,5 @@
+title: Ransomware encrypting a file share
+techniques: [T1486]
+events:
+  - repeat: 30
+    event: {service: sysmon, event_id: 11, hostname: FS-01, user: SYSTEM, process_name: 'C:\Users\Public\svc.exe', target_filename: 'C:\Shares\Projects\plan.docx.locked', message: File created}

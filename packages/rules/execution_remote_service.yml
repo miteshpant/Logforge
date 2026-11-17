@@ -1,0 +1,23 @@
+title: Remote service execution (PsExec service or sc create)
+id: lf-remote-service-execution
+status: stable
+description: The PsExec service binary starts on a target host, or a service is created with sc.exe pointing at a command; both run code through the Service Control Manager.
+author: Logforge Security Team
+date: 2026/11/17
+references: [https://attack.mitre.org/techniques/T1569/002/]
+tags: [attack.execution, attack.t1569.002]
+falsepositives:
+    - Administrators using PsExec for remote support
+    - Software installers registering services with sc.exe
+logsource: {category: process_creation, product: windows}
+detection:
+    selection_psexesvc:
+        process_name|endswith: ['\PSEXESVC.exe', '\PAExec.exe', '\csexecsvc.exe']
+    selection_sc_create:
+        process_name|endswith: '\sc.exe'
+        command_line|contains|all: ['create', 'binpath=']
+    condition: 1 of selection_*
+fixtures:
+    true_positive: {process_name: 'C:\Windows\PSEXESVC.exe', command_line: 'C:\Windows\PSEXESVC.exe', hostname: WS-051}
+    true_negative: {process_name: 'C:\Windows\System32\sc.exe', command_line: 'sc.exe query wuauserv', hostname: WS-051}
+level: high

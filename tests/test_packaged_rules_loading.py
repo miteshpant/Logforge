@@ -32,7 +32,9 @@ def test_standalone_rules_and_content_pack_are_loaded(loader):
 
     standalone = len(list(REPO_RULES.glob("*.yml"))) - 1  # minus content_pack.yml
     pack = len(yaml.safe_load((REPO_RULES / "content_pack.yml").read_text())["rules"])
-    assert len(rows) + len(awaiting) == standalone + pack
+    bundled = sum(len([d for d in yaml.safe_load_all(p.read_text()) if d])
+                  for p in REPO_RULES.glob("correlations/*.yml"))  # Phase 1 correlation bundles
+    assert len(rows) + len(awaiting) == standalone + pack + bundled
 
     assert "logforge_cd001-lsass-memory-dump" in ids  # a standalone file
     assert "logforge_dp001-host-network-enumeration" in ids  # a content-pack rule

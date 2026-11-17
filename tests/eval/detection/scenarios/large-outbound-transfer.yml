@@ -1,0 +1,6 @@
+title: Gigabytes sent to an unknown external host
+techniques: [T1048]
+events:
+  - repeat: 4
+    every: 6m
+    event: {service: netflow, src_ip: 10.0.1.15, dst_ip: 203.0.113.66, port: 443, protocol: https, bytes_out: 350000000, message: flow closed}

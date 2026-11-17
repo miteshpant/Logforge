@@ -1,0 +1,6 @@
+title: MFA push bombing until the user approves
+techniques: [T1621]
+events:
+  - repeat: 7
+    every: 40s
+    event: {service: idp, user: erin, src_ip: 45.155.205.40, event_type: mfa, result: denied, message: 'MFA push denied'}

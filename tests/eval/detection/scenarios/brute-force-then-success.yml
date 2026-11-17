@@ -1,0 +1,8 @@
+title: SSH password guessing that succeeds
+techniques: [T1110, T1078]
+events:
+  - repeat: 8
+    every: 4s
+    event: {service: sshd, hostname: bastion-01, user: deploy, src_ip: 45.155.205.233, event_type: authentication, result: failed, message: 'Failed password for deploy'}
+  - at: 2m
+    event: {service: sshd, hostname: bastion-01, user: deploy, src_ip: 45.155.205.233, event_type: authentication, result: success, message: 'Accepted password for deploy'}
