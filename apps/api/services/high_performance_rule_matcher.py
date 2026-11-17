@@ -407,7 +407,7 @@ class HighPerformanceRuleMatcher:
         self.stats["logs_evaluated"] += 1
 
         matches = []
-        log_fields = set(log.keys())
+        log_fields = self.available_fields(log)
 
         # Get only rules that could potentially match
         applicable_rules = self.get_applicable_rules(log_fields, customer_id)
@@ -532,7 +532,22 @@ class HighPerformanceRuleMatcher:
                 else:
                     return None
             return current
-        return log.get(field_name)
+        if field_name in log:
+            return log.get(field_name)
+        # Caller-supplied fields are kept under `attrs` by ingestion.
+        attrs = log.get('attrs')
+        if isinstance(attrs, dict):
+            return attrs.get(field_name)
+        return None
+
+    @staticmethod
+    def available_fields(log: Dict[str, Any]) -> Set[str]:
+        """Field names a rule can see: top-level keys plus keys under `attrs`."""
+        fields = set(log.keys())
+        attrs = log.get('attrs')
+        if isinstance(attrs, dict):
+            fields.update(attrs.keys())
+        return fields
 
     def _match_condition(
         self,

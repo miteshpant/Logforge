@@ -368,8 +368,14 @@ class SigmaConditionEvaluator:
                     else:
                         return None
                 return current_value
-            else:
+            if field_name in log_entry:
                 return log_entry.get(field_name)
+            # Ingestion keeps caller-supplied fields that aren't part of the
+            # log model under `attrs`; rules name them as plain fields.
+            attrs = log_entry.get("attrs")
+            if isinstance(attrs, dict):
+                return attrs.get(field_name)
+            return None
         except Exception:
             return None
 
@@ -579,7 +585,9 @@ class SigmaRuleEngine:
                     # Build group key from group_by fields
                     key_parts = []
                     for field in count_condition.group_by:
-                        field_value = normalized_log.get(field, 'unknown')
+                        field_value = self.condition_evaluator._get_field_value(normalized_log, field)
+                        if field_value is None:
+                            field_value = 'unknown'
                         key_parts.append(f"{field}={field_value}")
                     group_key = "|".join(key_parts)
 
@@ -1043,7 +1051,7 @@ class SigmaRuleEngine:
             matching_logs = []
             for log in logs:
                 # Check if log has required fields
-                log_fields = set(log.keys())
+                log_fields = self.hp_matcher.available_fields(log)
                 if not selection.required_fields.issubset(log_fields):
                     continue
 
@@ -1052,7 +1060,7 @@ class SigmaRuleEngine:
                 matched_fields = {}
 
                 for condition in selection.conditions:
-                    log_value = log.get(condition.field_name)
+                    log_value = self.hp_matcher._get_field_value(log, condition.field_name)
                     if not self.hp_matcher._match_condition(log_value, condition):
                         all_match = False
                         break
@@ -1075,7 +1083,10 @@ class SigmaRuleEngine:
                 groups: Dict[str, List] = defaultdict(list)
 
                 for log, matched_fields in matching_logs:
-                    key_parts = [f"{f}={log.get(f, 'unknown')}" for f in group_by]
+                    key_parts = [
+                        f"{f}={self.hp_matcher._get_field_value(log, f) or 'unknown'}"
+                        for f in group_by
+                    ]
                     group_key = "|".join(key_parts)
                     groups[group_key].append((log, matched_fields))
 

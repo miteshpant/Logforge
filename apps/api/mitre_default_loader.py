@@ -525,7 +525,7 @@ class MitreDefaultLoader:
             if not evaluator.evaluate_selection(event, selection)[0]:
                 continue
             key = "|".join(
-                f"{field}={event.get(field, 'unknown')}"
+                f"{field}={evaluator._get_field_value(event, field) or 'unknown'}"
                 for field in (count_condition.group_by or [])
             )
             groups[key] = groups.get(key, 0) + 1
