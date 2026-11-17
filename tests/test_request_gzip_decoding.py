@@ -14,7 +14,6 @@ import gzip
 import json
 import zlib
 
-import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 

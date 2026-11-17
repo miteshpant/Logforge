@@ -122,6 +122,38 @@ Phases 3, 4 and 8 can run in parallel with phases 1–2 if the team is larger.
 
 **Goal:** a trustworthy baseline to measure every later phase against.
 
+> **Status: done (2026-11-17).** All deliverables shipped and their
+> acceptance criteria are met:
+>
+> - **Known gaps cleared:** `count()` rules load through batch fixtures;
+>   gzip request bodies are accepted; failed UI mutations reject, with a
+>   test over every call site; Playwright specs 01–04 were rewritten and the
+>   full suite (43 tests) runs in CI. This work also fixed three bugs: Sigma
+>   rules couldn't see fields under `attrs`, `/v1/logs` dropped attributes,
+>   and `apiClient.get` dropped `{ params }` filters.
+> - **Detection evaluation** with a CI regression gate
+>   ([tests/eval/detection](https://github.com/miteshpant/Logforge/tree/main/tests/eval/detection)).
+> - **Performance benchmarks**, with results published in
+>   [benchmarks](./benchmarks/README.md).
+> - **AI evaluation harness skeleton**
+>   ([tests/eval/ai](https://github.com/miteshpant/Logforge/tree/main/tests/eval/ai)).
+> - **Docs site** (MkDocs on GitHub Pages).
+>
+> Baseline exit metrics:
+>
+> | Metric | Value |
+> |---|---|
+> | Sustained ingest, one client | 277 events/s (4 vCPU, single node) |
+> | Ingest → searchable | 36.8 s |
+> | Query p95 at 10 M rows | 117–311 ms |
+> | Detection scenarios detected | 10 / 12 |
+> | False positives | 63.5 per 1,000 benign events, all from one rule |
+>
+> Follow-ups are in [ROADMAP.md](./ROADMAP.md): the ingest bottleneck, the
+> noisy sudo rule, and four detection gaps. Public datasets (e.g. OTRF
+> Security-Datasets) are not in the corpus yet; adding them belongs with
+> Phase 1, where the rules they exercise land.
+
 **Why first:** later phases (correlation, AI) make claims about accuracy and
 speed. Without a harness, those claims can't be checked, and regressions go
 unnoticed.
