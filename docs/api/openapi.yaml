@@ -7558,6 +7558,90 @@ paths:
       summary: Get Mitre Coverage
       tags:
       - security-analytics
+  /v1/security/rules/export:
+    get:
+      description: 'The tenant''s enabled rules as Sigma YAML documents, fixtures included,
+
+        ready to commit to a detection repository and sync back unchanged.'
+      operationId: export_rules_v1_security_rules_export_get
+      parameters:
+      - description: Also export the platform library (ids without the logforge_ prefix)
+        in: query
+        name: include_defaults
+        required: false
+        schema:
+          default: false
+          description: Also export the platform library (ids without the logforge_ prefix)
+          title: Include Defaults
+          type: boolean
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Export Rules
+      tags:
+      - security-analytics
+  /v1/security/rules/sync:
+    post:
+      description: 'Sync the tenant''s rules from a git rule set. Every rule goes through
+
+        the fixture gate (and optionally a backtest); any rejection rejects the
+
+        whole sync. `dry_run` (default) returns the plan; otherwise it is applied
+
+        and the tenant''s rule cache refreshed. Rules created in the UI are never
+
+        touched.'
+      operationId: sync_rules_v1_security_rules_sync_post
+      parameters:
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuleSyncRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Sync Rules V1 Security Rules Sync Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Sync Rules
+      tags:
+      - security-analytics
   /v1/security/rules/{rule_id}/acknowledge-all:
     post:
       description: Acknowledge all new events for a specific rule
@@ -13676,6 +13760,41 @@ components:
       - severity
       - triggered_at
       title: RootAlertDetail
+      type: object
+    RuleSyncRequest:
+      properties:
+        backtest_days:
+          default: 0
+          description: Backtest each alerting rule over this many days (0 = skip)
+          maximum: 30.0
+          minimum: 0.0
+          title: Backtest Days
+          type: integer
+        dry_run:
+          default: true
+          description: Only return the plan
+          title: Dry Run
+          type: boolean
+        max_alerts_per_day:
+          anyOf:
+          - minimum: 0.0
+            type: number
+          - type: 'null'
+          description: Reject rules whose backtest exceeds this rate
+          title: Max Alerts Per Day
+        prune:
+          default: false
+          description: Disable git-synced rules that are no longer in the rule set
+          title: Prune
+          type: boolean
+        yaml:
+          description: 'The rule set: Sigma YAML documents (all files of the repository)'
+          maxLength: 2000000
+          title: Yaml
+          type: string
+      required:
+      - yaml
+      title: RuleSyncRequest
       type: object
     SchemaInfo:
       description: Information about a registered schema

@@ -1224,3 +1224,104 @@ async def tuning_suggestion(
                              "spec": {"conditions": suggestion["conditions"]}}
                             if suggestion["conditions"] else None)
     return suggestion
+
+
+# ---------------------------------------------------------------------------
+# Detection-as-code: YAML export and git sync (Phase 1)
+# ---------------------------------------------------------------------------
+
+class RuleSyncRequest(BaseModel):
+    yaml: str = Field(..., max_length=2_000_000, description="The rule set: Sigma YAML documents (all files of the repository)")
+    dry_run: bool = Field(True, description="Only return the plan")
+    prune: bool = Field(False, description="Disable git-synced rules that are no longer in the rule set")
+    backtest_days: int = Field(0, ge=0, le=30, description="Backtest each alerting rule over this many days (0 = skip)")
+    max_alerts_per_day: Optional[float] = Field(None, ge=0, description="Reject rules whose backtest exceeds this rate")
+
+
+def _rules_db():
+    import os
+    from database_layer import DatabaseLayer
+
+    return DatabaseLayer("SecurityDAO", os.getenv("SECURITY_SERVICE_KEY", "security-dao-service-key"))
+
+
+async def _dac_rows(customer_id: str, include_defaults: bool = False):
+    """(the tenant's git-synced rule rows, its other rule rows [+ defaults])."""
+    from detection_as_code import CREATED_BY
+
+    tenants = [customer_id, "default"] if include_defaults else [customer_id]
+    rows = await _rules_db().fetch_all(
+        "SELECT id, customer_id, name, description, rule_content, severity, is_enabled, mitre_techniques, "
+        "created_by FROM sigma_rules_mt WHERE customer_id IN %(tenants)s ORDER BY id", {"tenants": tenants})
+    managed = [r for r in rows if r["customer_id"] == customer_id and r.get("created_by") == CREATED_BY]
+    others = [r for r in rows if not (r["customer_id"] == customer_id and r.get("created_by") == CREATED_BY)]
+    return managed, others
+
+
+async def _invalidate_rules(customer_id: str) -> None:
+    from events.management.cache.sigma_rule_cache import SigmaRuleCache
+
+    await SigmaRuleCache().invalidate_customer_cache(customer_id)
+
+
+@router.get("/rules/export")
+async def export_rules(
+    include_defaults: bool = Query(False, description="Also export the platform library (ids without the logforge_ prefix)"),
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user),
+):
+    """The tenant's enabled rules as Sigma YAML documents, fixtures included,
+    ready to commit to a detection repository and sync back unchanged."""
+    from fastapi.responses import Response
+    from detection_as_code import rule_row_to_dict, rules_to_yaml
+
+    try:
+        managed, others = await _dac_rows(customer_id, include_defaults)
+        rules = [rule_row_to_dict(r) for r in managed + others if r.get("is_enabled", 1)]
+        body = rules_to_yaml(rules, strip_prefix="logforge_" if include_defaults else "")
+    except Exception as e:
+        raise internal_error(e, "Failed to export rules")
+    return Response(content=body, media_type="application/yaml")
+
+
+@router.post("/rules/sync")
+async def sync_rules(
+    request: RuleSyncRequest,
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Sync the tenant's rules from a git rule set. Every rule goes through
+    the fixture gate (and optionally a backtest); any rejection rejects the
+    whole sync. `dry_run` (default) returns the plan; otherwise it is applied
+    and the tenant's rule cache refreshed. Rules created in the UI are never
+    touched."""
+    from datetime import timezone
+    from detection_as_code import DetectionAsCodeError, apply_sync, plan_sync, summarize
+
+    async def backtest(rule_id, rules):
+        end = datetime.now(timezone.utc)
+        return await run_backtest(_backtest_db(), rules, rule_id, customer_id,
+                                  end - timedelta(days=request.backtest_days), end,
+                                  max_events=500_000, sample_limit=0)
+
+    try:
+        managed, others = await _dac_rows(customer_id)
+        plan = await plan_sync(
+            customer_id, request.yaml, managed, prune=request.prune,
+            backtest=backtest if request.backtest_days else None, backtest_days=request.backtest_days,
+            max_alerts_per_day=request.max_alerts_per_day,
+            reserved_ids=[r["id"] for r in others if r.get("customer_id") == customer_id])
+    except DetectionAsCodeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise internal_error(e, "Failed to plan rule sync")
+
+    result = summarize(plan)
+    result["applied"] = None
+    if not request.dry_run and plan["status"] == "ok":
+        try:
+            result["applied"] = await apply_sync(_rules_db(), customer_id, plan)
+            await _invalidate_rules(customer_id)
+        except Exception as e:
+            raise internal_error(e, "Failed to apply rule sync")
+    return result

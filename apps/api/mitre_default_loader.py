@@ -207,6 +207,12 @@ class MitreDefaultLoader:
         self.database = DatabaseLayer("MitreDefaultLoader", service_key)
         self._condition_evaluator = None
 
+    # Whose rules the gate builds: the platform library by default; detection-
+    # as-code builds a tenant's rules with their ids as written.
+    _gate_tenant = DEFAULT_RULE_TENANT
+    _gate_id_prefix = "logforge_"
+    _gate_origin = "logforge"
+
     # ------------------------------------------------------------------
     # Detection evaluation helpers (shared gate for every candidate rule)
     # ------------------------------------------------------------------
@@ -644,15 +650,15 @@ class MitreDefaultLoader:
             "date": str(rule.get("date", "")),
             "fixtures": {"true_positive_batch": fixtures["true_positive_batch"],
                          "true_negative_batch": fixtures["true_negative_batch"]},
-            "source": {"origin": "logforge", "file": source},
+            "source": {"origin": self._gate_origin, "file": source},
             "name": rule.get("name"),
             "generate": generate,
             # What the rule needs to be replayed (gate, backtest).
             "replay_rules": [r["id"] for r in replay_rules if r["id"] != "candidate"],
         }
         return {
-            "id": f"logforge_{rule_id}",
-            "customer_id": DEFAULT_RULE_TENANT,
+            "id": f"{self._gate_id_prefix}{rule_id}",
+            "customer_id": self._gate_tenant,
             "name": str(title),
             "description": str(rule.get("description", "")).strip(),
             "rule_content": json.dumps(rule_content),
@@ -771,13 +777,13 @@ class MitreDefaultLoader:
             "author": rule.get("author", "Logforge Security Team"),
             "date": str(rule.get("date", "")),
             "fixtures": fixtures,
-            "source": {"origin": "logforge", "file": source},
+            "source": {"origin": self._gate_origin, "file": source},
             "name": rule.get("name"),
             "generate": rule.get("generate", True) is not False,
         }
         return {
-            "id": f"logforge_{rule_id}",
-            "customer_id": DEFAULT_RULE_TENANT,
+            "id": f"{self._gate_id_prefix}{rule_id}",
+            "customer_id": self._gate_tenant,
             "name": str(title),
             "description": str(rule.get("description", "")).strip(),
             "rule_content": json.dumps(rule_content),
