@@ -504,6 +504,66 @@ class MitreDefaultLoader:
                 return None, "fires on the benign event corpus"
         return {"true_positive": positive, "true_negative": negative}, None
 
+    @staticmethod
+    def _expand_batch(entries: Any) -> List[Dict[str, Any]]:
+        """Expand a batch fixture: plain events, or {repeat: N, event: {...}}."""
+        events: List[Dict[str, Any]] = []
+        for entry in entries or []:
+            if isinstance(entry, dict) and "repeat" in entry and "event" in entry:
+                events.extend(dict(entry["event"]) for _ in range(int(entry["repeat"])))
+            elif isinstance(entry, dict):
+                events.append(entry)
+        return events
+
+    def _count_rule_fires(self, detection: Dict[str, Any], count_condition, events: List[Dict[str, Any]]) -> bool:
+        """Mirror SigmaEngine's batch count path: match `selection` per event,
+        group by the `by` fields, and compare each group with the threshold."""
+        evaluator = self._get_condition_evaluator()
+        selection = detection.get("selection") or {}
+        groups: Dict[str, int] = {}
+        for event in events:
+            if not evaluator.evaluate_selection(event, selection)[0]:
+                continue
+            key = "|".join(
+                f"{field}={event.get(field, 'unknown')}"
+                for field in (count_condition.group_by or [])
+            )
+            groups[key] = groups.get(key, 0) + 1
+        return any(count_condition.check_threshold(n) for n in groups.values())
+
+    def _verify_batch_fixtures(self, detection: Dict[str, Any], fixtures: Any) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """Gate for aggregation rules: the positive batch must trip the
+        threshold, the negative batch and the benign corpus must not."""
+        from sigma_condition import split_aggregation
+        from sigma_engine import CountCondition
+
+        condition = str(detection.get("condition", ""))
+        head, aggregation = split_aggregation(condition)
+        if aggregation is None:
+            # Standard Sigma: `count(selection) >= N by field` -- the counted
+            # block is the argument of count().
+            m = re.match(r"\s*count\s*\(\s*([A-Za-z0-9_]*)\s*\)", condition)
+            head = m.group(1) if m else ""
+        if head != "selection" or not isinstance(detection.get("selection"), dict):
+            return None, "count rules are evaluated on the 'selection' block only"
+        count_condition = CountCondition.parse(condition)
+        if count_condition is None:
+            return None, "unparseable count condition"
+
+        if not isinstance(fixtures, dict) or not fixtures.get("true_positive_batch") \
+                or not fixtures.get("true_negative_batch"):
+            return None, "aggregation rule needs true_positive_batch and true_negative_batch fixtures"
+        positive = self._expand_batch(fixtures["true_positive_batch"])
+        negative = self._expand_batch(fixtures["true_negative_batch"])
+
+        if not self._count_rule_fires(detection, count_condition, positive):
+            return None, "true_positive_batch does not reach the threshold"
+        if self._count_rule_fires(detection, count_condition, negative):
+            return None, "true_negative_batch reaches the threshold"
+        if self._count_rule_fires(detection, count_condition, list(BENIGN_EVENTS)):
+            return None, "fires on the benign event corpus"
+        return {"true_positive_batch": positive, "true_negative_batch": negative}, None
+
     def _packaged_rule_to_row(self, rule: Any, source: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Validate one Logforge rule (Sigma shape, Logforge field names)."""
         if not isinstance(rule, dict):
@@ -531,11 +591,8 @@ class MitreDefaultLoader:
 
         condition = str(detection.get("condition", ""))
         if "count(" in condition:
-            # A single-event fixture cannot prove a threshold rule; it needs a
-            # batch fixture the gate does not support yet.
-            return None, "aggregation rule (count) cannot be verified with single-event fixtures"
-
-        if "fixtures" in rule:
+            fixtures, reason = self._verify_batch_fixtures(detection, rule.get("fixtures"))
+        elif "fixtures" in rule:
             fixtures, reason = self._verify_fixtures(detection, rule["fixtures"])
         else:
             fixtures, reason = self._validate_detection(detection)

@@ -43,10 +43,12 @@ def test_standalone_rules_and_content_pack_are_loaded(loader):
         assert '"fixtures"' in row["rule_content"], row["id"]
 
 
-def test_aggregation_rule_is_reported_not_loaded(loader):
+def test_aggregation_rule_loads_with_batch_fixtures(loader):
+    """The brute-force count() rule ships batch fixtures, so it now loads
+    (tests/test_count_rule_batch_fixtures.py covers the gate itself)."""
     rows, awaiting = loader._load_packaged_rules()
-    assert "logforge_bf001-brute-force-login" not in {r["id"] for r in rows}
-    assert any(a.startswith("brute_force_detection.yml: aggregation rule") for a in awaiting)
+    assert "logforge_bf001-brute-force-login" in {r["id"] for r in rows}
+    assert not any(a.startswith("brute_force_detection.yml") for a in awaiting)
 
 
 def test_hand_written_fixtures_are_verified(loader, tmp_path, monkeypatch):
