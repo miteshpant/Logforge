@@ -140,7 +140,7 @@ class DatabaseLayer:
     DELETE_ALLOWED_SERVICES = ['SecurityDAO', 'SecurityService', 'TestService', 'QuotaTestService', 'UserDAO', 'AlertDAO']
     
     # Services allowed to perform UPDATE operations (ALTER TABLE ... UPDATE)
-    UPDATE_ALLOWED_SERVICES = ['UserService', 'AlertService', 'SecurityService', 'TestService', 'UserDAO', 'TenantDAO', 'RoleDAO', 'QueryDAO', 'QueryService', 'DashboardDAO', 'DashboardService', 'StorageDAO', 'StorageService', 'AlertDAO', 'SecurityDAO', 'AIDAO', 'ObservabilityDAO', 'EnterpriseDAO', 'SubscriptionDAO', 'QuotaResetService', 'QuotaTestService', 'StorageQuotaSyncService', 'StreamingConfigDAO']
+    UPDATE_ALLOWED_SERVICES = ['MitreDefaultLoader', 'UserService', 'AlertService', 'SecurityService', 'TestService', 'UserDAO', 'TenantDAO', 'RoleDAO', 'QueryDAO', 'QueryService', 'DashboardDAO', 'DashboardService', 'StorageDAO', 'StorageService', 'AlertDAO', 'SecurityDAO', 'AIDAO', 'ObservabilityDAO', 'EnterpriseDAO', 'SubscriptionDAO', 'QuotaResetService', 'QuotaTestService', 'StorageQuotaSyncService', 'StreamingConfigDAO']
     
     # LF-002: table-existence DDL/verification must run at most once per
     # process per service, not on every DatabaseLayer construction (DAOs are

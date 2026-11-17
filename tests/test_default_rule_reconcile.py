@@ -95,3 +95,18 @@ def test_nothing_is_retired_when_nothing_was_built(make_loader):
     loader = make_loader([stored("a")])
     assert reconcile(loader, [])["retired"] == 0
     assert loader.database.updates == []
+
+
+def test_the_loader_is_allowed_to_run_its_reconcile_statements(make_loader):
+    """Found live: DatabaseLayer refused the loader's UPDATEs ("not authorized
+    for UPDATE operations"), so all 41 changed packaged rules failed to update."""
+    from database_layer import DatabaseLayer
+
+    loader = make_loader([stored("a", content='{"old": 1}'), stored("gone")])
+    reconcile(loader, [row("a", content='{"new": 1}')])
+
+    layer = DatabaseLayer.__new__(DatabaseLayer)
+    layer.service_name = "MitreDefaultLoader"
+    for sql, _ in loader.database.updates:
+        layer._validate_query_security(sql)  # raises SecurityError if refused
+        layer._validate_table_access("sigma_rules_mt")
