@@ -13,6 +13,14 @@ from database_layer import DatabaseLayer
 
 logger = structlog.get_logger()
 
+def _ms(value: datetime) -> str:
+    """UTC timestamp with milliseconds. Client-side binding of a datetime
+    dropped the fraction, so rows written in the same second tied."""
+    if value.tzinfo is not None:
+        value = value.astimezone(timezone.utc)
+    return value.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+
+
 class SubscriptionDAO:
     """Data Access Object for subscription and billing operations"""
     
@@ -24,7 +32,19 @@ class SubscriptionDAO:
         """Create tenant subscription in database"""
         try:
             subscription_id = str(uuid.uuid4())
-            
+
+            # One active subscription per tenant: retire the current one(s)
+            # before inserting, and wait for the mutation, so a lookup never
+            # sees two active rows (a same-second change used to be picked
+            # arbitrarily).
+            await self.db.execute_query(
+                "ALTER TABLE tenant_subscriptions_mt UPDATE status = 'inactive', "
+                "updated_at = now64(3) "
+                "WHERE tenant_id = %(tenant_id)s AND status = 'active' "
+                "SETTINGS mutations_sync = 2",
+                {"tenant_id": subscription_data['tenant_id']},
+            )
+
             db_subscription_data = {
                 'id': subscription_id,
                 'tenant_id': subscription_data['tenant_id'],
@@ -32,14 +52,14 @@ class SubscriptionDAO:
                 'subscription_tier': subscription_data['subscription_tier'],
                 'billing_cycle': subscription_data['billing_cycle'],
                 'status': subscription_data.get('status', 'active'),
-                'started_at': subscription_data.get('started_at', datetime.now(timezone.utc)),
+                'started_at': _ms(subscription_data.get('started_at') or datetime.now(timezone.utc)),
                 'expires_at': subscription_data.get('expires_at'),
                 'auto_renew': subscription_data.get('auto_renew', True),
                 'monthly_spend_limit': subscription_data.get('monthly_spend_limit'),
                 'overage_allowed': subscription_data.get('overage_allowed', False),
                 'customer_id': subscription_data.get('customer_id', subscription_data['tenant_id']),
-                'created_at': datetime.now(timezone.utc),
-                'updated_at': datetime.now(timezone.utc)
+                'created_at': _ms(datetime.now(timezone.utc)),
+                'updated_at': _ms(datetime.now(timezone.utc))
             }
             
             await self.db.execute_query(
@@ -66,7 +86,7 @@ class SubscriptionDAO:
             result = await self.db.execute_query(
                 """SELECT * FROM tenant_subscriptions_mt 
                    WHERE tenant_id = %(tenant_id)s AND status = 'active'
-                   ORDER BY started_at DESC LIMIT 1""",
+                   ORDER BY started_at DESC, created_at DESC LIMIT 1""",
                 {"tenant_id": tenant_id}
             )
             
