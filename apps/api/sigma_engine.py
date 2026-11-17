@@ -265,7 +265,7 @@ class SigmaFieldMatcher:
                 return log_str.startswith(rule_str)
             elif operator == "endswith":
                 return log_str.endswith(rule_str)
-            elif operator == "regex":
+            elif operator in ("regex", "re"):  # `re` is the Sigma spec name
                 try:
                     return bool(re.search(rule_str, log_str, re.IGNORECASE))
                 except re.error:
