@@ -223,6 +223,16 @@ class ApiClient {
   async get<T = any>(endpoint: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
     let url = endpoint
 
+    // Accept the axios-style `{ params: {...} }` wrapper too. It used to be
+    // serialised as `params=[object Object]`, silently dropping every filter
+    // and time range the caller meant to send.
+    if (
+      params && Object.keys(params).length === 1 && 'params' in params
+      && params.params !== null && typeof params.params === 'object' && !Array.isArray(params.params)
+    ) {
+      params = params.params as Record<string, any>
+    }
+
     if (params) {
       const searchParams = new URLSearchParams()
       Object.entries(params).forEach(([key, value]) => {

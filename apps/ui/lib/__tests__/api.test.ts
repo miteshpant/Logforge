@@ -87,3 +87,34 @@ describe('reads keep the result-object contract', () => {
     expect(res.error).toBe('not found')
   })
 })
+
+describe('get query parameters', () => {
+  function requestedUrl() {
+    return new URL(fetchMock.mock.calls[0][0] as string)
+  }
+
+  beforeEach(() => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { logs: [] }))
+  })
+
+  it('sends a plain params object as the query string', async () => {
+    await new ApiClient().get('/v1/logs', { service: 'checkout', limit: 50 })
+    expect(requestedUrl().searchParams.get('service')).toBe('checkout')
+    expect(requestedUrl().searchParams.get('limit')).toBe('50')
+  })
+
+  it('accepts the axios-style { params } wrapper that several pages use', async () => {
+    // Previously serialised as `params=[object Object]`, silently dropping
+    // every filter and the time range.
+    await new ApiClient().get('/v1/logs', { params: { service: 'checkout', start_time: 't0' } })
+    const url = requestedUrl()
+    expect(url.searchParams.get('service')).toBe('checkout')
+    expect(url.searchParams.get('start_time')).toBe('t0')
+    expect(url.searchParams.has('params')).toBe(false)
+  })
+
+  it('skips undefined and null values', async () => {
+    await new ApiClient().get('/v1/logs', { params: { service: undefined, level: null, limit: 10 } })
+    expect([...requestedUrl().searchParams.keys()]).toEqual(['limit'])
+  })
+})
