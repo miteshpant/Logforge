@@ -18,6 +18,13 @@ markers).
 
 ## Bugs and gaps
 
+- **Sustained ingest is slow: 277 events/s, 37 s until searchable**
+  ([benchmarks](./benchmarks/README.md)). A single 1,000-event batch takes
+  60–95 ms, but under sustained load the API container is CPU-bound (~100%)
+  while ClickHouse idles, and requests slow to seconds. Profile the ingest
+  path, move post-ingest work (normalisation, detection) out of the
+  request-serving process into separate workers, and run the API with
+  multiple workers instead of a single `--reload` process.
 - **`logforge_pe001-privilege-escalation` is noisy.** It fires on every
   successful `sudo`: 127 false positives in the 2,000-event benign corpus,
   all of the false positives measured

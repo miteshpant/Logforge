@@ -1,0 +1,91 @@
+{
+  "run_at": "2026-11-17T13:34:05+00:00",
+  "environment": {
+    "host": "Linux-6.18.44-fc-v553-x86_64-with-glibc2.39",
+    "python": "3.13.18",
+    "cpus": 4
+  },
+  "ingest": {
+    "events": 50000,
+    "seconds": 180.242,
+    "events_per_second": 277.4,
+    "batch_size": 1000
+  },
+  "ingest_to_searchable_s": 36.847,
+  "queries": {
+    "1000000": {
+      "latest 100 logs (1h)": {
+        "count": 20,
+        "p50_ms": 112.451,
+        "p95_ms": 143.999,
+        "max_ms": 144.02,
+        "mean_ms": 118.728
+      },
+      "service filter, 100 logs (24h)": {
+        "count": 20,
+        "p50_ms": 91.329,
+        "p95_ms": 106.401,
+        "max_ms": 112.172,
+        "mean_ms": 93.919
+      },
+      "LogforgeQL errors by service (24h)": {
+        "count": 20,
+        "p50_ms": 69.838,
+        "p95_ms": 156.554,
+        "max_ms": 232.487,
+        "mean_ms": 84.798
+      },
+      "LogforgeQL full-text search (24h)": {
+        "count": 20,
+        "p50_ms": 102.384,
+        "p95_ms": 118.674,
+        "max_ms": 142.491,
+        "mean_ms": 104.843
+      },
+      "count by level (24h)": {
+        "count": 20,
+        "p50_ms": 107.864,
+        "p95_ms": 122.558,
+        "max_ms": 122.635,
+        "mean_ms": 110.861
+      }
+    },
+    "10000000": {
+      "latest 100 logs (1h)": {
+        "count": 20,
+        "p50_ms": 177.016,
+        "p95_ms": 246.85,
+        "max_ms": 292.598,
+        "mean_ms": 189.728
+      },
+      "service filter, 100 logs (24h)": {
+        "count": 20,
+        "p50_ms": 127.606,
+        "p95_ms": 157.939,
+        "max_ms": 159.365,
+        "mean_ms": 131.778
+      },
+      "LogforgeQL errors by service (24h)": {
+        "count": 20,
+        "p50_ms": 89.13,
+        "p95_ms": 117.23,
+        "max_ms": 135.874,
+        "mean_ms": 92.387
+      },
+      "LogforgeQL full-text search (24h)": {
+        "count": 20,
+        "p50_ms": 232.773,
+        "p95_ms": 311.058,
+        "max_ms": 337.223,
+        "mean_ms": 239.349
+      },
+      "count by level (24h)": {
+        "count": 20,
+        "p50_ms": 140.242,
+        "p95_ms": 171.572,
+        "max_ms": 306.696,
+        "mean_ms": 150.426
+      }
+    }
+  }
+}
