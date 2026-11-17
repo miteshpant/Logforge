@@ -381,6 +381,44 @@ class SigmaConditionEvaluator:
             return None
 
 
+def compile_correlation_rules(correlation_dicts, count_rules):
+    """Correlation rules for this batch: the tenant's Sigma correlation
+    rules, plus one windowed event_count per count() rule. Invalid rules
+    are skipped with a warning; the rest still run."""
+    compiled: List[CorrelationRule] = []
+    meta: Dict[str, Dict[str, Any]] = {}
+    for rule_dict in correlation_dicts:
+        try:
+            data = dict(rule_dict)
+            data.setdefault("level", rule_dict.get("severity") or "medium")
+            rule = CorrelationRule.from_dict(data)
+        except CorrelationRuleError as e:
+            logger.warning(f"Skipping correlation rule {rule_dict.get('id')}: {e}")
+            continue
+        compiled.append(rule)
+        meta[rule.id] = rule_dict
+    for rule_dict, count_condition in count_rules:
+        if count_condition.operator not in ("gt", "gte", "eq"):
+            logger.warning(f"Skipping count rule {rule_dict.get('id')}: "
+                           f"'{count_condition.operator}' can't be evaluated on a stream")
+            continue
+        detection = rule_dict.get("detection", {})
+        try:
+            timespan = parse_timespan(detection.get("timeframe") or "5m")
+        except CorrelationRuleError as e:
+            logger.warning(f"Skipping count rule {rule_dict.get('id')}: {e}")
+            continue
+        rule = CorrelationRule(
+            id=str(rule_dict.get("id")), title=str(rule_dict.get("title") or ""),
+            level=str(rule_dict.get("severity") or "medium"), type="event_count",
+            rules=[_count_rule_name(rule_dict)], group_by=list(count_condition.group_by or []),
+            timespan=timespan, operator=count_condition.operator,
+            threshold=float(count_condition.threshold), tags=list(rule_dict.get("tags") or []))
+        compiled.append(rule)
+        meta[rule.id] = rule_dict
+    return compiled, meta
+
+
 def _count_rule_name(rule_dict: Dict[str, Any]) -> str:
     return f"__count__:{rule_dict.get('id')}"
 
@@ -578,41 +616,7 @@ class SigmaRuleEngine:
             return []
 
     def _compile_correlations(self, correlation_dicts, count_rules):
-        """Correlation rules for this batch: the tenant's Sigma correlation
-        rules, plus one windowed event_count per count() rule. Invalid rules
-        are skipped with a warning; the rest still run."""
-        compiled: List[CorrelationRule] = []
-        meta: Dict[str, Dict[str, Any]] = {}
-        for rule_dict in correlation_dicts:
-            try:
-                data = dict(rule_dict)
-                data.setdefault("level", rule_dict.get("severity") or "medium")
-                rule = CorrelationRule.from_dict(data)
-            except CorrelationRuleError as e:
-                logger.warning(f"Skipping correlation rule {rule_dict.get('id')}: {e}")
-                continue
-            compiled.append(rule)
-            meta[rule.id] = rule_dict
-        for rule_dict, count_condition in count_rules:
-            if count_condition.operator not in ("gt", "gte", "eq"):
-                logger.warning(f"Skipping count rule {rule_dict.get('id')}: "
-                               f"'{count_condition.operator}' can't be evaluated on a stream")
-                continue
-            detection = rule_dict.get("detection", {})
-            try:
-                timespan = parse_timespan(detection.get("timeframe") or "5m")
-            except CorrelationRuleError as e:
-                logger.warning(f"Skipping count rule {rule_dict.get('id')}: {e}")
-                continue
-            rule = CorrelationRule(
-                id=str(rule_dict.get("id")), title=str(rule_dict.get("title") or ""),
-                level=str(rule_dict.get("severity") or "medium"), type="event_count",
-                rules=[_count_rule_name(rule_dict)], group_by=list(count_condition.group_by or []),
-                timespan=timespan, operator=count_condition.operator,
-                threshold=float(count_condition.threshold), tags=list(rule_dict.get("tags") or []))
-            compiled.append(rule)
-            meta[rule.id] = rule_dict
-        return compiled, meta
+        return compile_correlation_rules(correlation_dicts, count_rules)
 
     def _correlation_match(self, alert, rule_dict, log_entry, customer_id) -> SigmaMatch:
         try:

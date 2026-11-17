@@ -7,10 +7,11 @@ are, using the same rule set and matching logic as the running platform:
 * rules are built by the startup loader (`MitreDefaultLoader`): vendored
   SigmaHQ content plus `packages/rules/`, each already through the fixture
   gate;
-* single-event rules are matched with the engine's selection evaluator and
-  condition grammar (`MitreDefaultLoader._rule_matches`);
-* `count()` rules are evaluated over a batch, grouped by their `by` fields,
-  exactly as the runtime's batch path does (`_count_rule_fires`).
+* every scenario, and the benign corpus, is replayed as a timeline through
+  `detection_replay.replay`, the runtime's own logic: single-event rules per
+  event, `count()` rules as windowed counts, correlation rules on base-rule
+  matches. Building blocks (`generate: false`) don't alert, so they aren't
+  scored.
 
 Corpus (this directory):
 
@@ -19,7 +20,8 @@ Corpus (this directory):
   positive.
 * `scenarios/*.yml`: labelled attack scenarios, each listing the ATT&CK
   techniques it should be detected as, and its events in Logforge field
-  names.
+  names. Events are 1s apart unless timed with `at`/`every`/`repeat`
+  (see detection_replay.expand_timeline).
 
 Usage:
 
@@ -63,19 +65,15 @@ def _matcher():
     return _loader
 
 
-def _is_count_rule(rule: Dict[str, Any]) -> bool:
-    return "count(" in str(rule["detection"].get("condition", ""))
+def _replay(rules: List[Dict[str, Any]], entries: List[Any]) -> List[Any]:
+    _matcher()  # puts apps/api on sys.path
+    from detection_replay import expand_timeline, replay
+
+    return replay(rules, expand_timeline(entries))
 
 
-def _count_fires(rule: Dict[str, Any], events: List[Dict[str, Any]]) -> bool:
-    from sigma_engine import CountCondition
-
-    condition = CountCondition.parse(rule["detection"]["condition"])
-    return condition is not None and _matcher()._count_rule_fires(rule["detection"], condition, events)
-
-
-def _single_matches(rule: Dict[str, Any], event: Dict[str, Any]) -> bool:
-    return _matcher()._rule_matches(rule["detection"], event)
+def _alerting(rule: Dict[str, Any]) -> bool:
+    return rule.get("generate") is not False
 
 
 # ---------------------------------------------------------------------------
@@ -84,49 +82,41 @@ def _single_matches(rule: Dict[str, Any], event: Dict[str, Any]) -> bool:
 
 def evaluate(rules: List[Dict[str, Any]], scenarios: List[Dict[str, Any]],
              benign: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Evaluate `rules` ({id, techniques, detection}) on the corpus.
+    """Evaluate `rules` ({id, techniques, detection, [correlation, name,
+    generate]}) on the corpus.
 
-    True positives: scenarios a rule fires on (once per scenario).
-    False positives: benign events a single-event rule fires on; for a count
-    rule, 1 if the benign batch trips it.
+    True positives: scenarios a rule alerts on (once per scenario).
+    False positives: alerts a rule raises on the benign timeline.
     """
-    rule_stats = {r["id"]: {"true_positives": 0, "false_positives": 0} for r in rules}
+    scored = [r for r in rules if _alerting(r)]
+    by_id = {r["id"]: r for r in scored}
+    rule_stats = {r["id"]: {"true_positives": 0, "false_positives": 0} for r in scored}
 
     scenario_results: Dict[str, Any] = {}
     for scenario in scenarios:
-        events = scenario["events"]
-        fired = []
-        for rule in rules:
-            if _is_count_rule(rule):
-                hit = _count_fires(rule, events)
-            else:
-                hit = any(_single_matches(rule, e) for e in events)
-            if hit:
-                fired.append(rule)
-                rule_stats[rule["id"]]["true_positives"] += 1
+        fired_ids = sorted({a.rule_id for a in _replay(rules, scenario["events"]) if a.rule_id in by_id})
+        for rule_id in fired_ids:
+            rule_stats[rule_id]["true_positives"] += 1
         expected = sorted(scenario["techniques"])
-        detected_techniques = {t for r in fired for t in r.get("techniques", [])}
+        detected_techniques = {t for rid in fired_ids for t in by_id[rid].get("techniques", [])}
         detected = [t for t in expected if _technique_covered(t, detected_techniques)]
         scenario_results[scenario["id"]] = {
             "expected": expected,
             "detected": detected,
             "missing": [t for t in expected if t not in detected],
-            "rules": sorted(r["id"] for r in fired),
+            "rules": fired_ids,
         }
 
     false_positive_alerts = 0
-    for rule in rules:
-        if _is_count_rule(rule):
-            fp = 1 if _count_fires(rule, benign) else 0
-        else:
-            fp = sum(1 for e in benign if _single_matches(rule, e))
-        rule_stats[rule["id"]]["false_positives"] = fp
-        false_positive_alerts += fp
+    for alert in _replay(rules, benign):
+        if alert.rule_id in rule_stats:
+            rule_stats[alert.rule_id]["false_positives"] += 1
+            false_positive_alerts += 1
 
     detected_count = sum(1 for s in scenario_results.values() if s["detected"])
     return {
         "summary": {
-            "rules": len(rules),
+            "rules": len(scored),
             "benign_events": len(benign),
             "false_positive_alerts": false_positive_alerts,
             "false_positives_per_1000": round(1000 * false_positive_alerts / len(benign), 3) if benign else 0.0,
@@ -201,7 +191,11 @@ def shipped_rules() -> List[Dict[str, Any]]:
         rules.append({
             "id": row["id"],
             "techniques": list(row.get("mitre_techniques") or []),
-            "detection": content["detection"],
+            "detection": content.get("detection") or {},
+            "correlation": content.get("correlation"),
+            "name": content.get("name"),
+            "generate": content.get("generate", True),
+            "tags": content.get("tags", []),
         })
     return rules
 

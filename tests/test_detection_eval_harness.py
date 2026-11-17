@@ -116,3 +116,42 @@ def test_compare_flags_a_rule_that_stopped_detecting_even_if_another_rule_covers
 def test_compare_flags_a_rule_that_disappeared(report):
     current = evaluate([RULE_BRUTE, RULE_NOISY], SCENARIOS, BENIGN)
     assert "rule r-mimikatz is no longer in the rule set" in compare(current, report)
+
+
+# --- Phase 1: correlation rules and timed scenarios ----------------------------
+
+OK = {"event_type": "authentication", "result": "success", "src_ip": "203.0.113.5"}
+BASE_FAILED = {"id": "b-failed", "name": "auth_failed", "generate": False, "techniques": ["T1110"],
+               "detection": {"selection": {"event_type": "authentication", "result": "failed"},
+                             "condition": "selection"}}
+BASE_OK = {"id": "b-ok", "name": "auth_ok", "generate": False, "techniques": ["T1078"],
+           "detection": {"selection": {"event_type": "authentication", "result": "success"},
+                         "condition": "selection"}}
+RULE_CHAIN = {"id": "r-chain", "techniques": ["T1110", "T1078"], "detection": {},
+              "correlation": {"type": "temporal_ordered", "rules": ["auth_failed", "auth_ok"],
+                              "group-by": ["src_ip"], "timespan": "10m"}}
+CHAIN_RULES = [BASE_FAILED, BASE_OK, RULE_CHAIN]
+
+
+def test_correlation_rules_are_evaluated_on_scenarios():
+    scenario = {"id": "takeover", "techniques": ["T1078"], "events": [FAIL, FAIL, OK]}
+    report = evaluate(CHAIN_RULES, [scenario], [OK])
+    assert report["scenarios"]["takeover"]["rules"] == ["r-chain"]
+    assert report["scenarios"]["takeover"]["detected"] == ["T1078"]
+
+
+def test_building_blocks_are_not_scored_as_alerting_rules():
+    report = evaluate(CHAIN_RULES, [{"id": "s", "techniques": ["T1110"], "events": [FAIL]}], [OK, FAIL])
+    assert set(report["rules"]) == {"r-chain"}
+    assert report["summary"]["false_positive_alerts"] == 0
+    assert report["summary"]["rules"] == 1
+
+
+def test_scenario_timing_is_respected():
+    slow = {"id": "slow", "techniques": ["T1110"],
+            "events": [{"repeat": 3, "every": "10m", "event": FAIL}]}  # 3 failures over 20 minutes
+    fast = {"id": "fast", "techniques": ["T1110"], "events": [{"repeat": 3, "event": FAIL}]}
+    brute = dict(RULE_BRUTE, detection=dict(RULE_BRUTE["detection"], timeframe="5m"))
+    report = evaluate([brute], [slow, fast], [])
+    assert report["scenarios"]["slow"]["detected"] == []
+    assert report["scenarios"]["fast"]["detected"] == ["T1110"]
