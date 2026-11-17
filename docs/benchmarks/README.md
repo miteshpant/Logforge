@@ -1,6 +1,6 @@
 # Performance benchmarks
 
-Measured with [`tests/bench/perf_bench.py`](../../tests/bench/perf_bench.py)
+Measured with [`tests/bench/perf_bench.py`](https://github.com/miteshpant/Logforge/blob/main/tests/bench/perf_bench.py)
 against a running compose stack, in a dedicated benchmark tenant so synthetic
 rows never reach real data. Each release should add a results file here and a
 row to the history table.

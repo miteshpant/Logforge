@@ -26,7 +26,7 @@ fixed in the same PR as this report.*
    `tenant_admin` and visited **all 28 tenant-UI routes**. On each page it
    recorded console errors, uncaught exceptions and failed API calls, and took
    a screenshot. A subset of the screenshots is in the
-   [README](../README.md#screenshots).
+   [README](https://github.com/miteshpant/Logforge/blob/main/README.md#screenshots).
 
 **Not covered:**
 - the admin UI (port 3002), which `deploy.sh` doesn't start;

@@ -1,6 +1,7 @@
-name: Publish API docs
+name: Publish docs
 
-# Publishes docs/api/ (the OpenAPI spec rendered with Redoc) to GitHub Pages
+# Publishes the docs site (docs/ via MkDocs, with the Redoc API reference at
+# /api/) to GitHub Pages
 # whenever it changes on main. One-time setup: Settings -> Pages -> Source:
 # "GitHub Actions".
 
@@ -8,7 +9,8 @@ on:
   push:
     branches: [main]
     paths:
-      - "docs/api/**"
+      - "docs/**"
+      - "mkdocs.yml"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -30,9 +32,18 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build docs site
+        # docs/ rendered with MkDocs; docs/api (Redoc + OpenAPI) is copied in
+        # as static files and served at /api/.
+        run: |
+          pip install mkdocs-material==9.5.39
+          mkdocs build --strict
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/api
+          path: site
       - id: deployment
         uses: actions/deploy-pages@v4

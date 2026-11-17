@@ -142,3 +142,4 @@ minio-data/*.tsbuildinfo
 playwright-report/
 test-results/
 blob-report/
+site/

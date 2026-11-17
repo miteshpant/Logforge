@@ -28,7 +28,7 @@ markers).
 - **`logforge_pe001-privilege-escalation` is noisy.** It fires on every
   successful `sudo`: 127 false positives in the 2,000-event benign corpus,
   all of the false positives measured
-  ([tests/eval/detection](../tests/eval/detection/README.md)). Narrow it to
+  ([tests/eval/detection](https://github.com/miteshpant/Logforge/blob/main/tests/eval/detection/README.md)). Narrow it to
   suspicious patterns (sudo to a shell, users not normally using sudo,
   `sudo` failures followed by success) and update the baseline.
 - **Detection gaps found by the evaluation corpus:** no rule detects
