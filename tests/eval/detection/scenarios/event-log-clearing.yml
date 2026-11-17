@@ -1,0 +1,5 @@
+title: Clearing Windows event logs to hide activity
+techniques: [T1070.001]
+events:
+  - {service: sysmon, event_id: 1, hostname: WS-043, user: bob, process_name: 'C:\Windows\System32\wevtutil.exe', command_line: 'wevtutil cl Security', message: Process created}
+  - {service: sysmon, event_id: 1, hostname: WS-043, user: bob, process_name: 'C:\Windows\System32\wevtutil.exe', command_line: 'wevtutil cl System', message: Process created}

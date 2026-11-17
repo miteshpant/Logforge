@@ -18,6 +18,17 @@ markers).
 
 ## Bugs and gaps
 
+- **`logforge_pe001-privilege-escalation` is noisy.** It fires on every
+  successful `sudo`: 127 false positives in the 2,000-event benign corpus,
+  all of the false positives measured
+  ([tests/eval/detection](../tests/eval/detection/README.md)). Narrow it to
+  suspicious patterns (sudo to a shell, users not normally using sudo,
+  `sudo` failures followed by success) and update the baseline.
+- **Detection gaps found by the evaluation corpus:** no rule detects
+  T1105 (certutil / PowerShell download cradles), T1059.004 (Linux reverse
+  shells), T1569.002 (PsExec service execution) or T1069.002 (domain group
+  discovery). Add fixture-tested rules to `packages/rules/` and record the
+  improvement with `--update-baseline`.
 - **OpenTelemetry metric aliases ignore units.** `cpu.utilization` is a 0–1
   ratio while the canonical `cpu_usage` is a percentage. Mapping one to the
   other needs a unit conversion in `metric_name_mappings.yml` and the
