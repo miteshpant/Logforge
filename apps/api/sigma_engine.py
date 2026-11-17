@@ -16,6 +16,7 @@ import structlog
 
 # Import security analytics components
 from security_analytics import SigmaRule, DetectionSeverity, SecurityDetection
+from correlation import CorrelationRule, CorrelationRuleError, get_correlation_store, parse_timespan
 from events.publishers.security_publisher import SecurityEventPublisher
 from events.constants import EVENT_SECURITY_DETECTION_TRIGGERED
 from services.high_performance_normalizer import normalize_log_fast
@@ -380,11 +381,35 @@ class SigmaConditionEvaluator:
             return None
 
 
+def _count_rule_name(rule_dict: Dict[str, Any]) -> str:
+    return f"__count__:{rule_dict.get('id')}"
+
+
+def _event_time(event: Dict[str, Any]) -> datetime:
+    """The event's own timestamp (UTC), so windows follow event time; falls
+    back to now for events without one."""
+    from datetime import timezone
+
+    for key in ("ts", "timestamp"):
+        value = event.get(key)
+        if isinstance(value, datetime):
+            return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        if isinstance(value, str) and value:
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+    return datetime.now(timezone.utc)
+
+
 class SigmaRuleEngine:
     """Main Sigma Rule Matching Engine with Subscription Integration"""
 
     def __init__(self):
         self.condition_evaluator = SigmaConditionEvaluator()
+        # Process-wide streaming state for correlation and count() rules.
+        self.correlation_store = get_correlation_store()
         self.security_publisher = None  # Initialize later when needed
         # Import here to avoid circular imports
         from services.subscription_service import SubscriptionService
@@ -472,11 +497,16 @@ class SigmaRuleEngine:
                 logger.debug(f"🔍 Sample original: {json.dumps(sample_original, default=str)}")
                 logger.debug(f"🔄 Sample normalized: {json.dumps(sample_normalized, default=str)}")
 
-            # Separate rules into count-based and simple rules
+            # Separate rules: correlation rules (Sigma correlation format),
+            # count() rules and per-event rules.
             count_rules = []
             simple_rules = []
+            correlation_dicts = []
 
             for rule_dict in rules:
+                if rule_dict.get('correlation'):
+                    correlation_dicts.append(rule_dict)
+                    continue
                 detection = rule_dict.get('detection', {})
                 condition = detection.get('condition', 'selection')
 
@@ -484,12 +514,16 @@ class SigmaRuleEngine:
                 count_condition = CountCondition.parse(condition)
                 if count_condition:
                     count_rules.append((rule_dict, count_condition))
-                    logger.debug(f"📊 Rule {rule_dict.get('id')} has count condition: threshold={count_condition.threshold}, group_by={count_condition.group_by}")
                 else:
                     simple_rules.append(rule_dict)
 
-            # Process simple rules (per-log evaluation)
+            correlation_rules, correlation_meta = self._compile_correlations(correlation_dicts, count_rules)
+
             for original_log, normalized_log in normalized_logs:
+                # Names of the base rules this event matched (rule `name` and
+                # id), fed to the correlation engine.
+                matched_names = set()
+
                 for rule_dict in simple_rules:
                     try:
                         # Convert rule dict to SigmaRule object if needed
@@ -502,6 +536,12 @@ class SigmaRuleEngine:
                         match_result = await self._evaluate_rule_against_normalized_log(original_log, normalized_log, rule, customer_id)
 
                         if match_result:
+                            matched_names.add(str(rule_dict.get('id')))
+                            if rule_dict.get('name'):
+                                matched_names.add(str(rule_dict['name']))
+                            # `generate: false` base rules only feed correlations.
+                            if rule_dict.get('generate') is False:
+                                continue
                             matches.append(match_result)
                             logger.info(f"🚨 Sigma rule match: {rule.id} - {rule.title}")
 
@@ -512,23 +552,97 @@ class SigmaRuleEngine:
                         logger.error(f"Error evaluating rule {rule_dict.get('id', 'unknown')}: {e}")
                         continue
 
-            # Process count-based rules (batch-level aggregation)
-            for rule_dict, count_condition in count_rules:
-                try:
-                    count_matches = await self._evaluate_count_rule(
-                        normalized_logs, rule_dict, count_condition, customer_id
-                    )
-                    matches.extend(count_matches)
-                except Exception as e:
-                    logger.error(f"Error evaluating count rule {rule_dict.get('id', 'unknown')}: {e}")
-                    continue
+                # count() rules: the selection matched -> one event for their
+                # windowed event_count correlation.
+                for rule_dict, _ in count_rules:
+                    selection = rule_dict.get('detection', {}).get('selection') or {}
+                    if selection and self.condition_evaluator.evaluate_selection(normalized_log, selection)[0]:
+                        matched_names.add(_count_rule_name(rule_dict))
 
-            logger.debug(f"✅ Sigma evaluation complete: {len(matches)} detections found")
+                if correlation_rules and matched_names:
+                    alerts = self.correlation_store.process(
+                        customer_id, correlation_rules, normalized_log, matched_names,
+                        _event_time(normalized_log))
+                    for alert in alerts:
+                        match = self._correlation_match(alert, correlation_meta.get(alert.rule.id, {}),
+                                                        normalized_log, customer_id)
+                        matches.append(match)
+                        logger.info(f"🚨 Correlation match: {alert.rule.id} - {alert.rule.title} "
+                                    f"(group={alert.group}, value={alert.value})")
+                        await self._publish_detection_event(match)
+
             return matches
 
         except Exception as e:
             logger.error(f"Error in Sigma rule evaluation: {e}")
             return []
+
+    def _compile_correlations(self, correlation_dicts, count_rules):
+        """Correlation rules for this batch: the tenant's Sigma correlation
+        rules, plus one windowed event_count per count() rule. Invalid rules
+        are skipped with a warning; the rest still run."""
+        compiled: List[CorrelationRule] = []
+        meta: Dict[str, Dict[str, Any]] = {}
+        for rule_dict in correlation_dicts:
+            try:
+                data = dict(rule_dict)
+                data.setdefault("level", rule_dict.get("severity") or "medium")
+                rule = CorrelationRule.from_dict(data)
+            except CorrelationRuleError as e:
+                logger.warning(f"Skipping correlation rule {rule_dict.get('id')}: {e}")
+                continue
+            compiled.append(rule)
+            meta[rule.id] = rule_dict
+        for rule_dict, count_condition in count_rules:
+            if count_condition.operator not in ("gt", "gte", "eq"):
+                logger.warning(f"Skipping count rule {rule_dict.get('id')}: "
+                               f"'{count_condition.operator}' can't be evaluated on a stream")
+                continue
+            detection = rule_dict.get("detection", {})
+            try:
+                timespan = parse_timespan(detection.get("timeframe") or "5m")
+            except CorrelationRuleError as e:
+                logger.warning(f"Skipping count rule {rule_dict.get('id')}: {e}")
+                continue
+            rule = CorrelationRule(
+                id=str(rule_dict.get("id")), title=str(rule_dict.get("title") or ""),
+                level=str(rule_dict.get("severity") or "medium"), type="event_count",
+                rules=[_count_rule_name(rule_dict)], group_by=list(count_condition.group_by or []),
+                timespan=timespan, operator=count_condition.operator,
+                threshold=float(count_condition.threshold), tags=list(rule_dict.get("tags") or []))
+            compiled.append(rule)
+            meta[rule.id] = rule_dict
+        return compiled, meta
+
+    def _correlation_match(self, alert, rule_dict, log_entry, customer_id) -> SigmaMatch:
+        try:
+            severity = DetectionSeverity(alert.rule.level)
+        except ValueError:
+            severity = DetectionSeverity.MEDIUM
+        techniques = list(rule_dict.get("attack_techniques") or []) or alert.rule.techniques
+        return SigmaMatch(
+            rule_id=alert.rule.id,
+            rule_title=alert.rule.title,
+            log_entry=log_entry,
+            matched_fields={"_correlation": {
+                "type": alert.rule.type,
+                "group": alert.group,
+                "value": alert.value,
+                "threshold": alert.rule.threshold,
+                "operator": alert.rule.operator,
+                "field": alert.rule.field,
+                "rules": alert.rule.rules,
+                "timespan_seconds": int(alert.rule.timespan.total_seconds()),
+                "first_seen": alert.first_seen.isoformat(),
+                "last_seen": alert.last_seen.isoformat(),
+                "events": len(alert.events),
+            }},
+            severity=severity,
+            attack_techniques=techniques,
+            kill_chain_phases=list(rule_dict.get("kill_chain_phases") or []),
+            timestamp=datetime.now(),
+            customer_id=customer_id,
+        )
 
     async def _evaluate_count_rule(
         self,

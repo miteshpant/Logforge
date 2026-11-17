@@ -323,3 +323,16 @@ class CorrelationStore:
                 self._groups.popitem(last=False)
                 self.evictions += 1
         return alerts
+
+
+_store: Optional[CorrelationStore] = None
+
+
+def get_correlation_store() -> CorrelationStore:
+    """The process-wide store (group cap from CORRELATION_MAX_GROUPS)."""
+    global _store
+    if _store is None:
+        import os
+
+        _store = CorrelationStore(max_groups=int(os.getenv("CORRELATION_MAX_GROUPS", "100000")))
+    return _store
