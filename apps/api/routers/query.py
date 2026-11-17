@@ -673,6 +673,24 @@ async def export_query_results(export_request: Dict[str, Any], customer_id: str 
         raise internal_error(e, "Export failed")
 
 # Basic log retrieval for M0 compatibility
+# Keys ingestion adds to `attrs` for its own bookkeeping; not caller data.
+_INTERNAL_ATTR_KEYS = frozenset({"source_format", "processing_version"})
+
+
+def _caller_attrs(raw) -> dict:
+    """Parse a stored `attrs` JSON string into the caller's attributes."""
+    if isinstance(raw, dict):
+        parsed = raw
+    else:
+        try:
+            parsed = json.loads(raw) if raw else {}
+        except (TypeError, ValueError):
+            return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return {k: v for k, v in parsed.items() if k not in _INTERNAL_ATTR_KEYS}
+
+
 @router.get("/logs")
 async def get_logs(
     service: str = Query(None, description="Filter by service name"),
@@ -732,7 +750,7 @@ async def get_logs(
         # limit/offset are ints validated by FastAPI (ge/le), so they cannot
         # carry SQL. int() makes that explicit and independent of the router.
         query = f"""
-        SELECT ts, service, level, msg, host, trace_id, customer_id
+        SELECT ts, service, level, msg, host, trace_id, customer_id, span_id, attrs
         FROM logs_raw_mt
         WHERE {where_clause}
         ORDER BY ts DESC
@@ -751,7 +769,9 @@ async def get_logs(
                 "msg": row[3],
                 "host": row[4],
                 "trace_id": row[5],
-                "customer_id": row[6]
+                "customer_id": row[6],
+                "span_id": row[7],
+                "attrs": _caller_attrs(row[8]),
             })
 
         # Get total count for pagination (same bound predicate)
