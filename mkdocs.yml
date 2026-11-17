@@ -49,6 +49,7 @@ nav:
       - Platform roadmap: PLATFORM_ROADMAP.md
   - Quality:
       - Benchmarks: benchmarks/README.md
+      - Backtest performance: benchmarks/backtest.md
       - QA report: QA_REPORT.md
   - Background:
       - Architecture: ARCHITECTURE_MINDMAP.md

@@ -16,6 +16,7 @@ from services.security_service import SecurityService, AttackTechnique
 from authn_authz_middleware import get_current_user
 from models import User
 from error_handling import internal_error
+from backtest import BacktestError, RuleNotFound, run_backtest
 
 logger = structlog.get_logger(__name__)
 
@@ -1063,3 +1064,62 @@ async def get_threat_hunt_rules(
 # app lifespan in dependencies.py. A router-level on_event("startup") hook used to live here,
 # but it never ran -- the app's custom lifespan bypassed router startup events --
 # and it called a SecurityService method that does not exist.
+
+# ---------------------------------------------------------------------------
+# Backtesting (Phase 1)
+# ---------------------------------------------------------------------------
+
+class BacktestRequest(BaseModel):
+    start: Optional[datetime] = Field(None, description="Range start (default: end - 7 days)")
+    end: Optional[datetime] = Field(None, description="Range end (default: now)")
+    max_events: int = Field(2_000_000, ge=1, le=20_000_000, description="Stop after scanning this many events")
+    sample_limit: int = Field(50, ge=0, le=500, description="Alerts returned in full (all are counted)")
+
+
+async def _backtest_rules(customer_id: str) -> List[Dict[str, Any]]:
+    """The tenant's rules plus the platform defaults, as the live path uses them."""
+    from events.management.cache.sigma_rule_cache import SigmaRuleCache
+
+    return await SigmaRuleCache().get_customer_rules(customer_id, include_defaults=True)
+
+
+def _backtest_db():
+    import os
+    from database_layer import DatabaseLayer
+
+    return DatabaseLayer("BacktestService", os.getenv("BACKTEST_SERVICE_KEY", "backtest-service-key"))
+
+
+@router.post("/rules/{rule_id}/backtest")
+async def backtest_rule(
+    rule_id: str,
+    request: BacktestRequest,
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Replay a rule over the tenant's stored logs and report what it would
+    have alerted on: alert count, samples, alerts per day, events scanned.
+
+    Matching is done by the detection engine itself (count and correlation
+    rules included, windows spanning the whole range); a SQL prefilter
+    compiled from the rule only narrows what is read."""
+    from datetime import timezone
+
+    end = request.end or datetime.now(timezone.utc)
+    start = request.start or end - timedelta(days=7)
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    try:
+        rules = await _backtest_rules(customer_id)
+        return await run_backtest(_backtest_db(), rules, rule_id, customer_id, start, end,
+                                  max_events=request.max_events, sample_limit=request.sample_limit)
+    except RuleNotFound:
+        raise HTTPException(status_code=404, detail=f"Rule {rule_id} not found")
+    except BacktestError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, f"Backtest of {rule_id} failed", rule_id=rule_id)

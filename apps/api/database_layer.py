@@ -62,6 +62,7 @@ class DatabaseLayer:
         'MitreDefaultLoader': os.getenv('MITRE_DEFAULT_LOADER_KEY', 'mitre-default-loader-service-key'),
         'SecuritySubscriptionChecker': os.getenv('SECURITY_SUBSCRIPTION_CHECKER_KEY', 'security-subscription-checker-service-key'),
         'SigmaProcessor': os.getenv('SIGMA_PROCESSOR_KEY', 'sigma-processor-service-key'),
+        'BacktestService': os.getenv('BACKTEST_SERVICE_KEY', 'backtest-service-key'),
         # Streaming Configuration Service
         'StreamingConfigDAO': os.getenv('STREAMING_CONFIG_SERVICE_KEY', 'streaming-config-service-key'),
         # Migration Service
@@ -122,6 +123,7 @@ class DatabaseLayer:
         'MitreDefaultLoader': ['sigma_rules_mt'],  # Needs to insert default MITRE rules
         'SecuritySubscriptionChecker': ['tenant_subscriptions_mt'],  # Needs to check subscription access
         'SigmaProcessor': ['security_events_mt', 'sigma_rules_mt'],  # Needs to create security events and read rules
+        'BacktestService': ['logs_raw_mt'],  # Reads stored logs to replay rules over them (read-only)
         # Streaming Configuration Service
         'StreamingConfigDAO': ['tenant_configs_mt'],  # Needs to manage streaming configurations in tenant configs table
         # Migration Service

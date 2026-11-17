@@ -7601,6 +7601,58 @@ paths:
       summary: Bulk Acknowledge By Rule
       tags:
       - security-analytics
+  /v1/security/rules/{rule_id}/backtest:
+    post:
+      description: 'Replay a rule over the tenant''s stored logs and report what it would
+
+        have alerted on: alert count, samples, alerts per day, events scanned.
+
+
+        Matching is done by the detection engine itself (count and correlation
+
+        rules included, windows spanning the whole range); a SQL prefilter
+
+        compiled from the rule only narrows what is read.'
+      operationId: backtest_rule_v1_security_rules__rule_id__backtest_post
+      parameters:
+      - in: path
+        name: rule_id
+        required: true
+        schema:
+          title: Rule Id
+          type: string
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BacktestRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Backtest Rule V1 Security Rules  Rule Id  Backtest Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Backtest Rule
+      tags:
+      - security-analytics
   /v1/security/rules/{rule_id}/events:
     get:
       description: Get events for a specific rule
@@ -11692,6 +11744,38 @@ components:
           title: Time Range
           type: string
       title: AnomalyDetectionRequest
+      type: object
+    BacktestRequest:
+      properties:
+        end:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          description: 'Range end (default: now)'
+          title: End
+        max_events:
+          default: 2000000
+          description: Stop after scanning this many events
+          maximum: 20000000.0
+          minimum: 1.0
+          title: Max Events
+          type: integer
+        sample_limit:
+          default: 50
+          description: Alerts returned in full (all are counted)
+          maximum: 500.0
+          minimum: 0.0
+          title: Sample Limit
+          type: integer
+        start:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          description: 'Range start (default: end - 7 days)'
+          title: Start
+      title: BacktestRequest
       type: object
     BackupPolicyRequest:
       properties:
