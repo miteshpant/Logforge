@@ -370,14 +370,16 @@ class SigmaConditionEvaluator:
                     else:
                         return None
                 return current_value
-            if field_name in log_entry:
-                return log_entry.get(field_name)
-            # Ingestion keeps caller-supplied fields that aren't part of the
-            # log model under `attrs`; rules name them as plain fields.
+            value = log_entry.get(field_name)
+            if value not in (None, ""):
+                return value
+            # Ingestion keeps caller-supplied fields under `attrs`, and fills
+            # model columns the caller didn't send with "": an empty column
+            # must not hide the caller's value.
             attrs = log_entry.get("attrs")
-            if isinstance(attrs, dict):
-                return attrs.get(field_name)
-            return None
+            if isinstance(attrs, dict) and attrs.get(field_name) not in (None, ""):
+                return attrs[field_name]
+            return value
         except Exception:
             return None
 

@@ -155,8 +155,8 @@ SAMPLE_EVENTS = 10
 
 
 def field_value(event: Dict[str, Any], name: str) -> Any:
-    """Top-level field, then `attrs` (where ingestion keeps caller fields);
-    dotted names walk nested objects."""
+    """Top-level field, then `attrs` (where ingestion keeps caller fields)
+    when the column is missing or empty; dotted names walk nested objects."""
     if "." in name:
         current: Any = event
         for part in name.split("."):
@@ -164,10 +164,15 @@ def field_value(event: Dict[str, Any], name: str) -> Any:
                 return None
             current = current[part]
         return current
-    if name in event:
-        return event[name]
+    value = event.get(name)
+    if value not in (None, ""):
+        return value
+    # Ingestion fills model columns the caller didn't send with "": fall back
+    # to the caller's value in attrs.
     attrs = event.get("attrs")
-    return attrs.get(name) if isinstance(attrs, dict) else None
+    if isinstance(attrs, dict) and attrs.get(name) not in (None, ""):
+        return attrs[name]
+    return value
 
 
 @dataclass
