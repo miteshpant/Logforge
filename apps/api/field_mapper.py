@@ -276,6 +276,10 @@ class FieldMapper:
         # Only add event_type if not already present
         if "event_type" in mapped_fields:
             return
+        # ...including one the caller sent in attrs: a guess must not shadow it.
+        attrs = mapped_fields.get("attrs")
+        if isinstance(attrs, dict) and attrs.get("event_type"):
+            return
 
         # Check message field for event type patterns
         message_fields = ["message", "msg", "description", "text"]
