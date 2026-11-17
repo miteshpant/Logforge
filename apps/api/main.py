@@ -53,6 +53,12 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Decode gzip-compressed request bodies (shippers compress batches), with the
+# decompressed size capped at the request body limit. Registered first, so it
+# is innermost: auth and the compressed-size check run before it.
+from request_decompression import RequestDecompressionMiddleware
+app.add_middleware(RequestDecompressionMiddleware)
+
 # Add GZip compression middleware for responses > 1KB
 # Reduces bandwidth by 60-80% for JSON responses
 app.add_middleware(GZipMiddleware, minimum_size=1000)

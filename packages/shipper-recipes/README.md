@@ -46,8 +46,10 @@ Batch ingestion is a plan feature: tenants on the default `startup` plan get
 can change the plan with `PUT /v1/admin/tenants/{tenant_id}/subscription`
 (`scripts/bootstrap_demo.py` does this for the demo tenant).
 
-Request bodies must not be gzip-compressed: the API does not decode
-`Content-Encoding: gzip`, so the recipes leave compression off.
+Request bodies may be gzip-compressed (`Content-Encoding: gzip`), and the
+recipes turn compression on. The decompressed body is capped at the API's
+request body limit (`LOGFORGE_MAX_BODY_BYTES`, 32 MiB by default); larger
+bodies get a 413.
 
 ## Quick start
 

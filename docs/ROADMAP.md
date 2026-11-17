@@ -30,19 +30,10 @@ markers).
   `success`; about 25 other files under `apps/ui/app` and
   `apps/ui/components` call `post`/`put`/`delete` and should be audited the
   same way (or the client changed to throw, with every caller updated).
-- **The brute-force rule is not loaded.** `packages/rules/brute_force_detection.yml`
-  uses `count(selection) >= 10 by src_ip`, which the loader's single-event
-  fixture gate cannot verify, so it is reported as awaiting content. Teach
-  `mitre_default_loader._verify_fixtures` to accept a batch fixture (a list of
-  events that must trip the threshold, and one that must not) and add one to
-  the rule.
 - **OpenTelemetry metric aliases ignore units.** `cpu.utilization` is a 0–1
   ratio while the canonical `cpu_usage` is a percentage. Mapping one to the
   other needs a unit conversion in `metric_name_mappings.yml` and the
   normalizer, not just a rename.
-- **Gzip request bodies are rejected.** Shippers can compress batches, but the
-  API does not decode `Content-Encoding: gzip`, so the shipper recipes leave
-  compression off. Add a request-decompression middleware with a size limit.
 
 ## Remove demo / fake data from the UI
 
@@ -92,5 +83,9 @@ For reference, these were on this list and are now done:
 - Production UI images, the admin UI in compose and `deploy.sh`, and Python
   3.12 in the API image.
 - The OpenAPI spec is also published as `docs/api/openapi.yaml`.
+- `count()` rules load through batch fixtures (the brute-force rule now fires),
+  and Sigma rules see fields kept under `attrs`.
+- gzip-compressed request bodies are accepted (bounded), and the shipper
+  recipes compress.
 - The admin login page no longer shows non-existent demo credentials, and the
   admin UI is branded Logforge (it said "MrLogSec").
