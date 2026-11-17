@@ -25,17 +25,18 @@ markers).
   path, move post-ingest work (normalisation, detection) out of the
   request-serving process into separate workers, and run the API with
   multiple workers instead of a single `--reload` process.
-- **`logforge_pe001-privilege-escalation` is noisy.** It fires on every
-  successful `sudo`: 127 false positives in the 2,000-event benign corpus,
-  all of the false positives measured
-  ([tests/eval/detection](https://github.com/miteshpant/Logforge/blob/main/tests/eval/detection/README.md)). Narrow it to
-  suspicious patterns (sudo to a shell, users not normally using sudo,
-  `sudo` failures followed by success) and update the baseline.
-- **Detection gaps found by the evaluation corpus:** no rule detects
-  T1105 (certutil / PowerShell download cradles), T1059.004 (Linux reverse
-  shells), T1569.002 (PsExec service execution) or T1069.002 (domain group
-  discovery). Add fixture-tested rules to `packages/rules/` and record the
-  improvement with `--update-baseline`.
+- **The normalizer maps `hostname` onto the DNS `query` field**
+  (`apps/api/config/field_mapping.yml`), so every event with a host name
+  carries `query: <hostname>` and DNS rules on `query` can match host names.
+  Remove the mapping and check the evaluation baseline.
+- **Detection engine follow-ups from Phase 1**
+  ([platform roadmap](./PLATFORM_ROADMAP.md)): sequence rules have no `until`
+  (abort) condition; no correlation over alerts (e.g. "3+ distinct
+  techniques on one host"); git sync is push-from-CI only (no server-side
+  pull on a schedule or webhook); synced correlations can't reference the
+  shipped library; the streaming state has a 200k-event soak test, not a
+  24 h one; correlation state is per process (lost on restart, not shared
+  between API replicas).
 - **OpenTelemetry metric aliases ignore units.** `cpu.utilization` is a 0–1
   ratio while the canonical `cpu_usage` is a percentage. Mapping one to the
   other needs a unit conversion in `metric_name_mappings.yml` and the
@@ -65,6 +66,11 @@ markers).
 
 For reference, these were on this list and are now done:
 
+- `logforge_pe001-privilege-escalation` no longer fires on every successful
+  `sudo` (0 false positives on the benign corpus, down from 127); sudo
+  abuse is covered by `lf-c-sudo-failure-burst`.
+- Rules for the four detection gaps the evaluation found: T1105, T1059.004,
+  T1569.002 and T1069.002.
 - Pattern alert rules in the `conditions` list format now match.
 - `logs_raw_mt.attrs` stores only the caller's attributes.
 - Tenant metric names are listed in the Metrics Explorer

@@ -150,7 +150,7 @@ Phases 3, 4 and 8 can run in parallel with phases 1–2 if the team is larger.
 > | False positives | 63.5 per 1,000 benign events, all from one rule |
 >
 > Follow-ups are in [ROADMAP.md](./ROADMAP.md): the ingest bottleneck, the
-> noisy sudo rule, and four detection gaps. Public datasets (e.g. OTRF
+> noisy sudo rule, and four detection gaps (the last two fixed in Phase 1). Public datasets (e.g. OTRF
 > Security-Datasets) are not in the corpus yet; adding them belongs with
 > Phase 1, where the rules they exercise land.
 
@@ -200,6 +200,57 @@ unnoticed.
 
 **Goal:** detect attacks that are only visible across many events, which is
 what separates a SIEM from grep with alerts.
+
+> **Status: done (2026-11-17), with the gaps listed below.**
+>
+> - **Thresholds, sequences, entity scope:** Sigma correlation rules
+>   (`event_count`, `value_count`, `value_sum`, `temporal`,
+>   `temporal_ordered`) grouped by any fields, chained correlations, and
+>   `generate: false` building blocks. They run in the live path with bounded
+>   per-group state (`apps/api/correlation.py`); `count()` rules now window
+>   across ingest batches.
+> - **Fixture gate v2:** timed fixture timelines, replayed through the
+>   runtime (`detection_replay`), for count and correlation rules. The eval
+>   harness and AI eval use the same replay.
+> - **Content:** 12 new aggregation/sequence rules (password spray, brute
+>   force then success, account-lockout burst, MFA fatigue, web content
+>   scanning, discovery burst, discovery then LSASS dump, sudo-failure
+>   burst, lateral logon fan-out, archive then cloud upload, outbound
+>   volume, mass file encryption), rules for the four Phase 0 gaps, and a
+>   quiet pe001.
+> - **Backtesting:** `POST /v1/security/rules/{id}/backtest`, with a
+>   Sigma→ClickHouse prefilter that only narrows and the engine deciding
+>   every match.
+> - **Suppression and tuning:** exclusions, throttles, and
+>   `GET /v1/security/rules/{id}/tuning-suggestion` from false-positive
+>   verdicts.
+> - **Detection-as-code:** `POST /v1/security/rules/sync` (gate + optional
+>   backtest, all-or-nothing), YAML export, `scripts/rules_sync.py` for CI
+>   ([guide](./detection-as-code.md)).
+>
+> | Acceptance criterion | Result |
+> |---|---|
+> | Brute force + ≥10 new aggregation/sequence rules through the gate and the evaluation | 13 aggregation/sequence rules; 24/24 scenarios detected; 0 false positives on the benign corpus |
+> | 7 days / 100 M events backtest < 60 s | 20–27 s (5 s with no matches), peak RSS < 200 MB ([details](./benchmarks/backtest.md)) |
+> | Bounded streaming state | Capped per group and by group count (LRU); 200k-event soak test. No 24 h soak yet |
+>
+> | Exit metric | Phase 0 | Phase 1 |
+> |---|---|---|
+> | ATT&CK techniques with verified rules | 360 | 362 |
+> | Aggregation/sequence rules | 1 | 13 |
+> | Scenarios detected | 10 / 12 | 24 / 24 |
+> | False positives per 1,000 benign events | 63.5 | 0 |
+>
+> Most new rules add cross-event detection for techniques the vendored rules
+> already tagged, so the technique count barely moves. The scenarios were
+> written alongside the rules, which flatters the detection numbers; public
+> datasets (OTRF) remain the honest test.
+>
+> **Not done** (tracked in [ROADMAP.md](./ROADMAP.md)): `until` abort
+> conditions; impossible travel (needs GeoIP, Phase 3); correlation over
+> alerts ("3+ distinct techniques on one host"); server-side git pull (sync
+> is pushed from CI); a 24 h soak; correlation state shared across API
+> replicas.
 
 ### Deliverables
 
