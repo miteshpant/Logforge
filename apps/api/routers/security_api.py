@@ -20,6 +20,8 @@ from backtest import BacktestError, RuleNotFound, run_backtest
 
 logger = structlog.get_logger(__name__)
 
+from services.case_service import alert_summary
+
 router = APIRouter(prefix="/v1/security", tags=["security-analytics"])
 
 # Global security service instance
@@ -86,6 +88,7 @@ class SecurityEventResponse(BaseModel):
     assigned_to: Optional[str]
     investigation_notes: List[str]
     artifacts: List[str]
+    threat: Optional[Dict[str, Any]] = None  # Phase 3: intel match summary
 
 class ThreatIntelRequest(BaseModel):
     indicator_type: str  # ip, domain, url, hash, email, file
@@ -512,7 +515,8 @@ async def list_security_events(
                 kill_chain_phase=event.get("kill_chain_phase"),
                 assigned_to=event.get("assigned_to"),
                 investigation_notes=event.get("investigation_notes", []),
-                artifacts=event.get("artifacts", [])
+                artifacts=event.get("artifacts", []),
+                threat=alert_summary(event).get("threat")
             ) for event in events
         ]
     except Exception as e:

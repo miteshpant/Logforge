@@ -143,7 +143,9 @@ class ApiClient {
       const contentType = response.headers.get('content-type')
       let data: any
 
-      if (contentType?.includes('application/json')) {
+      if (response.status === 204 || response.status === 205) {
+        data = null // No Content (FastAPI still labels it JSON)
+      } else if (contentType?.includes('application/json')) {
         data = await response.json()
       } else {
         data = await response.text()

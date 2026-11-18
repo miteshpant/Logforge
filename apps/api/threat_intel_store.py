@@ -236,6 +236,11 @@ class ThreatIntelDAO:
                                         params)
         return rows or [], int((total or [{}])[0].get("total", 0))
 
+    async def seen_counts(self, tenant_id: str, keys: Iterable[Key], days: int = 7) -> Dict[Key, int]:
+        from retro_hunt import seen_counts
+
+        return await seen_counts(self.db, tenant_id, keys, days=days)
+
     # -- feeds -------------------------------------------------------------
     async def save_feed(self, tenant_id: str, feed: FeedConfig, deleted: bool = False) -> None:
         row = feed.to_row()

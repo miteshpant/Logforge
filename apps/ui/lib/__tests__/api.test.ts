@@ -65,6 +65,13 @@ describe('mutations reject on failure', () => {
     expect(res.data).toEqual({ id: 'abc' })
   })
 
+  it('delete resolves on 204 No Content even when labelled JSON', async () => {
+    // FastAPI sends 204 with content-type application/json and no body.
+    fetchMock.mockResolvedValue(new Response(null, { status: 204, headers: { 'content-type': 'application/json' } }))
+    const res = await new ApiClient().delete('/v1/things/1')
+    expect(res.success).toBe(true)
+  })
+
   it('a 401 mutation is retried after a successful token refresh', async () => {
     const client = new ApiClient()
     // first call 401, refresh succeeds, retry succeeds

@@ -54,7 +54,16 @@ def alert_summary(row: Dict[str, Any]) -> Dict[str, Any]:
         if value not in (None, ""):
             entities[name] = [str(value)]
     created = row.get("created_at")
-    return {
+    extra: Dict[str, Any] = {}
+    attrs = event.get("attrs") if isinstance(event, dict) and isinstance(event.get("attrs"), dict) else {}
+    threat = attrs.get("threat")
+    if isinstance(threat, dict) and threat.get("matched"):
+        extra["threat"] = {"max_confidence": threat.get("max_confidence"),
+                           "threat_types": list(threat.get("threat_types") or []),
+                           "sources": sorted({i.get("source") for i in threat.get("indicators") or [] if i.get("source")})}
+    if isinstance(attrs.get("geo"), dict):
+        extra["geo"] = attrs["geo"]
+    return extra | {
         "id": str(row.get("id")),
         "rule_id": row.get("rule_id"),
         "title": row.get("title") or row.get("rule_title"),

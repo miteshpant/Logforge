@@ -64,6 +64,37 @@ def _query(kind: str, values: List[str]) -> Tuple[str, Dict[str, Any]]:
     return sql, params
 
 
+def _value_condition(kind: str, param: str) -> str:
+    """SQL that is true when a stored log mentions the value %(param)s."""
+    if kind == "ip":
+        return " OR ".join([f"src_ip = %({param})s"] + [f"{_attr(f)} = %({param})s" for f in FIELDS["ip"]])
+    if kind == "domain":
+        parts = []
+        for expr in [f"lower({_attr(f)})" for f in FIELDS["domain"]] + \
+                [f"lower(domain({_attr(f)}))" for f in FIELDS["url"]]:
+            parts.append(f"({expr} = %({param})s OR endsWith({expr}, concat('.', %({param})s)))")
+        return " OR ".join(parts)
+    return " OR ".join(f"lower({_attr(f)}) = %({param})s" for f in FIELDS.get(kind, ())) or "0"
+
+
+async def seen_counts(db, tenant_id: str, keys: Iterable[Key], days: int = 7,
+                      now: Optional[datetime] = None) -> Dict[Key, int]:
+    """How many of the tenant's logs in the last `days` mention each indicator."""
+    keys = [k for k in dict.fromkeys(keys) if k[0] in FIELDS][:200]
+    if not keys:
+        return {}
+    now = now or datetime.now(timezone.utc)
+    params: Dict[str, Any] = {"tenant_id": tenant_id, "since": _ms(now - timedelta(days=days))}
+    columns = []
+    for i, (kind, value) in enumerate(keys):
+        params[f"v{i}"] = value
+        columns.append(f"countIf({_value_condition(kind, f'v{i}')}) AS c{i}")
+    rows = await db.fetch_all(f"SELECT {', '.join(columns)} FROM logs_raw_mt WHERE customer_id = %(tenant_id)s "
+                              "AND ts >= %(since)s", params)
+    row = (rows or [{}])[0]
+    return {key: int(row.get(f"c{i}") or 0) for i, key in enumerate(keys)}
+
+
 async def retro_hunt(tenant_id: str, keys: Iterable[Key], get_indicator: Callable[[Key], Optional[Indicator]],
                      db, sink: Sink, now: Optional[datetime] = None, days: int = 7,
                      max_alerts: int = 1000) -> Dict[str, Any]:

@@ -9,7 +9,10 @@ for screenshots and demos (see scripts/capture_screenshots.js).
   successful login, a password spray, discovery then an LSASS dump), so
   case grouping opens cases on its own;
 * one of those cases worked by an analyst: assigned, a note, pinned
-  evidence, moved to investigating.
+  evidence, moved to investigating;
+* threat intelligence: the Feodo Tracker botnet C2 list captured in
+  tests/fixtures/threat_feeds, a hand-added phishing domain, and outbound
+  traffic to two of the C2 servers that ingest-time matching flags.
 
 Run after scripts/bootstrap_demo.py, against a running stack:
 
@@ -130,6 +133,28 @@ def seed_attacks() -> str:
     return brute
 
 
+FEODO = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "threat_feeds" / "feodo_ipblocklist.json"
+
+
+def seed_threat_intel():
+    """Indicators, then traffic that matches some of them."""
+    import json
+
+    entries = json.loads(FEODO.read_text())
+    for entry in entries:
+        call("POST", "/v1/security/intel/indicators", {
+            "value": entry["ip_address"], "threat_type": "botnet_cc", "confidence": 90,
+            "tags": [t for t in (entry.get("malware"), entry.get("as_name")) if t]})
+    call("POST", "/v1/security/intel/indicators", {
+        "value": "login-acme-sso[.]example", "threat_type": "phishing", "confidence": 80, "tags": ["campaign-acme-sso"]})
+    c2 = [e["ip_address"] for e in entries[:2]]
+    logs = [{"ts": at(240 - i * 20), "service": "firewall", "host": "fw-01", "msg": "connection allowed",
+             "src_ip": "10.0.4.27", "attrs": {"dst_ip": c2[i % 2], "dst_port": 443, "action": "allow",
+                                              "event_type": "network_connection"}} for i in range(6)]
+    call("POST", "/v1/ingest/logs/batch", {"logs": logs})
+    print(f"threat intel: {len(entries) + 1} indicators, traffic to {', '.join(c2)}")
+
+
 def work_a_case(source_ip: str):
     """An analyst picks up the brute-force case."""
     for _ in range(45):  # detection and grouping run asynchronously
@@ -158,4 +183,6 @@ if __name__ == "__main__":
     seed_logs()
     seed_traces()
     seed_metrics()
-    work_a_case(seed_attacks())
+    brute_source = seed_attacks()
+    seed_threat_intel()
+    work_a_case(brute_source)

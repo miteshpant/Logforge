@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { ArrowLeft, Link2, Loader2, MessageSquare, Pin, ShieldAlert, Tag, User } from 'lucide-react'
 import { caseAction, CaseDetail, Evidence, getCase, Severity, updateCase } from '@/lib/api/cases'
+import { threatBadge } from '@/lib/intelFormat'
 import { CaseStatus, describeEvent, evidenceHref, nextStatuses, needsReason, statusLabel } from '@/lib/caseFormat'
 
 const SEVERITY_STYLE: Record<string, string> = {
@@ -213,6 +214,14 @@ export default function CaseDetailPage() {
                         {when(alert.ts)} · {statusLabel(alert.status || '')}
                         {(alert.mitre_techniques || []).length > 0 && ` · ${alert.mitre_techniques!.join(', ')}`}
                       </div>
+                      {threatBadge(alert.threat) && (
+                        <div data-testid="intel-badge" className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded border border-red-500/40 bg-red-500/10 text-xs text-red-300">
+                          <ShieldAlert className="w-3 h-3" /> {threatBadge(alert.threat)}
+                        </div>
+                      )}
+                      {alert.geo && Object.entries(alert.geo).map(([field, g]) => (
+                        <span key={field} className="ml-2 text-xs text-slate-500">{field}: {[g.city, g.country].filter(Boolean).join(', ')}{g.as_org ? ` · ${g.as_org}` : ''}</span>
+                      ))}
                     </>
                   )}
                 </div>

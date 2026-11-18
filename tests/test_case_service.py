@@ -156,3 +156,15 @@ def test_details_include_timeline_and_alerts(service):
     assert detail["case"]["id"] == case.id and detail["case"]["created_at"] == T0.isoformat()
     assert [a["id"] for a in detail["alerts"]] == ["a1"]
     assert [e["kind"] for e in detail["timeline"]] == ["created", "alert_attached"]
+
+
+def test_alert_summary_carries_threat_intel_and_geo():
+    """Phase 3: the case page badges alerts whose event matched intel."""
+    row = stored_alert("t1", attrs={"user": "root", "threat": {"matched": True, "max_confidence": 90,
+                                                               "threat_types": ["botnet_cc"],
+                                                               "indicators": [{"source": "Feodo"}]},
+                                    "geo": {"src_ip": {"country": "US"}}})
+    summary = alert_summary(row)
+    assert summary["threat"] == {"max_confidence": 90, "threat_types": ["botnet_cc"], "sources": ["Feodo"]}
+    assert summary["geo"] == {"src_ip": {"country": "US"}}
+    assert "threat" not in alert_summary(stored_alert("t2"))

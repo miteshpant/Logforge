@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createCase } from '@/lib/api/cases'
+import { threatBadge, ThreatSummary } from '@/lib/intelFormat'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { apiClient } from '@/lib/api'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
@@ -40,6 +41,7 @@ interface SecurityEvent {
   assigned_to?: string
   investigation_notes: string[]
   artifacts: string[]
+  threat?: ThreatSummary | null
 }
 
 export default function SecurityEventsPage() {
@@ -425,6 +427,11 @@ export default function SecurityEventsPage() {
                           </span>
                         </div>
                         <p className="font-medium text-white truncate">{event.rule_title}</p>
+                        {threatBadge(event.threat) && (
+                          <p data-testid="intel-badge" className="mt-1 inline-block px-2 py-0.5 rounded border border-red-500/40 bg-red-500/10 text-xs text-red-300">
+                            {threatBadge(event.threat)}
+                          </p>
+                        )}
                         <div className="flex items-center gap-4 mt-2 text-xs text-slate-400">
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />

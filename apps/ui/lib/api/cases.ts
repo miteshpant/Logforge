@@ -41,6 +41,8 @@ export interface CaseAlert {
   ts?: string
   mitre_techniques?: string[]
   entities?: Record<string, string[]>
+  threat?: { max_confidence?: number | null; threat_types?: string[]; sources?: string[] }
+  geo?: Record<string, { country?: string; city?: string; asn?: number | string; as_org?: string }>
   missing?: boolean
 }
 

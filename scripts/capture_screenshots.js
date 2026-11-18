@@ -28,6 +28,7 @@ const PAGES = [
   ['service-map', '/observability/service-map', 'main'],
   ['detection-rules', '/security/rules', 'main'],
   ['cases', '/security/cases', '[data-testid="case-row"]'],
+  ['threat-intel', '/security/threat-intel', '[data-testid="intel-indicator"]'],
 ]
 
 async function main() {

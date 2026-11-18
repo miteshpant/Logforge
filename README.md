@@ -26,6 +26,7 @@ rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 | **Tracing**<br>![Tracing](./docs/images/tracing.png) | **APM** (latency, error rate, Apdex)<br>![APM](./docs/images/apm.png) |
 | **Service Map** (built from trace spans)<br>![Service Map](./docs/images/service-map.png) | **Detection Rules** (vendored SigmaHQ plus Logforge rules, correlation rules included)<br>![Detection Rules](./docs/images/detection-rules.png) |
 | **Cases** (alerts grouped per source, host or user; SLA overview)<br>![Cases](./docs/images/cases.png) | **Case detail** (timeline, linked alerts, entities, evidence)<br>![Case detail](./docs/images/case-detail.png) |
+| **Threat Intelligence** (feeds, indicators, sightings in your logs)<br>![Threat Intelligence](./docs/images/threat-intel.png) | |
 
 ## Contents
 
