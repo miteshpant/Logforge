@@ -387,6 +387,43 @@ actions), `services/notification_service.py`, existing audit trail.
 **Goal:** know when an event involves something known to be bad, and give
 every IP and domain context.
 
+> **Status: done (2026-11-18), with the gaps listed below.** Guide:
+> [Threat intelligence](./threat-intel.md).
+>
+> - **Feeds:** parsers for Feodo, URLhaus, ThreatFox, OTX, MISP attribute
+>   exports, STIX 2.1 bundles, CSV and plain lists (`threat_feeds.py`).
+>   Each feed has its own URL, interval, confidence and TTL, and is
+>   scheduled every minute (`threat_feed_scheduler.py`). Indicators are
+>   normalised (defanged values restored), deduplicated, given an expiry,
+>   and internal addresses are dropped. Storage is `threat_feeds_mt` and
+>   `threat_indicators_mt` (migration 018). API keys stay in environment
+>   variables and are never stored or returned.
+> - **Ingest-time matching:** an in-memory per-tenant index checks IP,
+>   domain (with subdomains and URL hosts), URL, hash and email fields and
+>   stamps `attrs.threat`. Two rules, `lf-ti-known-c2` and
+>   `lf-ti-malware-delivery`, alert on the stamps.
+> - **Retro-hunting:** new indicators are searched for in the last 7 days
+>   of logs; past matches become `lf-ti-retro-match` alerts and are routed
+>   into cases.
+> - **Enrichment:** DB-IP Lite GeoIP/ASN (binary search over ranges),
+>   asset and user CSVs, and optional cached reverse DNS.
+> - **UI:** the Threat Intel page (feeds; indicator search with 7-day
+>   sightings; add and delete), intel badges on case alerts (with GeoIP)
+>   and on the Events list. Covered by `apps/ui/tests/10-threat-intel.spec.ts`.
+>
+> | Acceptance criterion | Result |
+> |---|---|
+> | abuse.ch feeds match a replayed malicious corpus, with none on the benign corpus beyond the feed's error rate | The detection harness enriches every event with the real matcher and the Feodo, URLhaus and ThreatFox fixtures. All three intel scenarios are detected; **0 matches** on 2,000 benign events and on near misses (a neighbouring IP, a parent domain, another path on a listed host). Gated in CI by `tests/test_detection_eval_intel.py` |
+> | Ingest throughput drops by less than 10% with enrichment on | In process, matching against 100,000 indicators adds 11–14 µs per event. That is about 0.3–0.4% of the 3.6 ms per event of sustained ingest measured in Phase 0. A live ingest A/B (`tests/bench/enrichment_bench.py --live`) is being measured |
+>
+> **Not done** (tracked in [ROADMAP.md](./ROADMAP.md)): URLhaus and
+> ThreatFox were not fetched live (they need an abuse.ch Auth-Key); feed
+> fetches need egress from the API container; there is no ClickHouse
+> dictionary, so the index is per process; MISP and TAXII are read as
+> exported documents only; GeoIP has been tested with fixtures only; there
+> is no impossible-travel rule yet; matches are stamped as `attrs.threat`
+> rather than ECS `threat.indicator.*`.
+
 ### Deliverables
 
 1. **Feed framework:** scheduled pulls with per-feed config (URL, auth,

@@ -46,6 +46,18 @@ markers).
   destination hosts); the grouping lock is per API process, so two
   replicas can open duplicate cases for one entity; SLA targets should be
   configurable per tenant.
+- **Threat-intel follow-ups from Phase 3**
+  ([guide](./threat-intel.md)): URLhaus and ThreatFox need an abuse.ch
+  Auth-Key (anonymous downloads return 410), so those feeds have only been
+  tested against fixtures, never live; in the reference compose setup the
+  API container has no outbound DNS, so feed fetches fail until egress is
+  allowed; matching is an in-memory index per API process (no ClickHouse
+  dictionary), and each replica reloads it separately; MISP and TAXII are
+  read as exported documents (no live MISP API, no TAXII collection
+  paging); GeoIP has been tested with DB-IP-format fixtures, not the full
+  download; impossible-travel rules (which need GeoIP) are still to be
+  written; matches are stamped as `attrs.threat`, not ECS
+  `threat.indicator.*`.
 - **OpenTelemetry metric aliases ignore units.** `cpu.utilization` is a 0–1
   ratio while the canonical `cpu_usage` is a percentage. Mapping one to the
   other needs a unit conversion in `metric_name_mappings.yml` and the
