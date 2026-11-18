@@ -15,7 +15,7 @@ import io
 import json
 import statistics
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Sequence
 
 from cases import CLOSED, SEVERITIES, Case
 
