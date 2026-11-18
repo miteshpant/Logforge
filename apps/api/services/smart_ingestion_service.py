@@ -245,6 +245,9 @@ class SmartIngestionService:
 smart_ingestion_service = SmartIngestionService()
 
 
+ENRICHMENT_KEYS = ("threat", "geo", "rdns", "asset", "identity")
+
+
 async def _enrich(customer_id: str, enriched_logs: List[Dict[str, Any]],
                   normalized_data: List[Dict[str, Any]]) -> None:
     """Look up each event once; copy the stamp onto its normalized twin
@@ -254,12 +257,13 @@ async def _enrich(customer_id: str, enriched_logs: List[Dict[str, Any]],
 
         await enrich_events(customer_id, enriched_logs)
         for raw, normalized in zip(enriched_logs, normalized_data):
-            stamp = (raw.get("attrs") or {}).get("threat") if isinstance(raw.get("attrs"), dict) else None
-            if stamp and isinstance(normalized, dict):
+            raw_attrs = raw.get("attrs") if isinstance(raw.get("attrs"), dict) else {}
+            stamps = {k: raw_attrs[k] for k in ENRICHMENT_KEYS if k in raw_attrs}
+            if stamps and isinstance(normalized, dict):
                 attrs = normalized.get("attrs")
                 if not isinstance(attrs, dict):
                     attrs = normalized["attrs"] = {}
-                attrs["threat"] = stamp
+                attrs.update(stamps)
     except Exception as e:
         logger.warning(f"Ingest enrichment skipped for {customer_id}: {e}")
 

@@ -74,20 +74,72 @@ def _matches(sets, event: Dict[str, Any], now: datetime) -> List[Dict[str, Any]]
     return hits[:MAX_MATCHES]
 
 
+HOST_FIELDS = ("host", "hostname")
+USER_FIELDS = ("user", "user_id", "username")
+
+
+def _first(event: Dict[str, Any], names) -> Any:
+    for name in names:
+        for value in _values(event, name):
+            return value
+    return None
+
+
+def _process(event: Dict[str, Any], enrichers) -> None:
+    attrs = event.setdefault("attrs", {})
+    if not isinstance(attrs, dict):
+        return
+    if enrichers.geo or enrichers.rdns:
+        geo, rdns = {}, {}
+        for name in FIELDS["ip"]:
+            for value in _values(event, name):
+                if enrichers.geo:
+                    found = enrichers.geo.lookup(value)
+                    if found:
+                        geo[name] = found
+                if enrichers.rdns:
+                    host = enrichers.rdns.lookup(value)
+                    if host:
+                        rdns[name] = host
+        if geo:
+            attrs["geo"] = geo
+        if rdns:
+            attrs["rdns"] = rdns
+    if enrichers.assets:
+        asset = enrichers.assets.lookup(_first(event, HOST_FIELDS))
+        if asset:
+            attrs["asset"] = asset
+    if enrichers.users:
+        identity = enrichers.users.lookup(_first(event, USER_FIELDS))
+        if identity:
+            attrs["identity"] = identity
+
+
 async def enrich_events(tenant_id: str, events: Iterable[Dict[str, Any]], index: Optional[IndicatorIndex] = None,
-                        now: Optional[datetime] = None) -> Dict[str, Any]:
+                        now: Optional[datetime] = None, enrichers=None) -> Dict[str, Any]:
     events = list(events)
     stats: Dict[str, Any] = {"events": len(events), "matched": 0}
     now = now or datetime.now(timezone.utc)
+    if enrichers is None:
+        from enrichment_processors import get_enrichers
+
+        enrichers = get_enrichers()
+    sets = {}
     try:
         sets = await (index or get_indicator_index()).tenant_set(tenant_id, now)
     except Exception as e:
         logger.warning(f"Threat intel unavailable for {tenant_id}, ingesting without it: {e}")
         stats["error"] = str(e)
-        return stats
-    if not sets:
+    if not sets and not enrichers:
         return stats
     for event in events:
+        if enrichers:
+            try:
+                _process(event, enrichers)
+            except Exception as e:  # never fail ingestion
+                logger.warning(f"Enrichment processor failed: {e}")
+        if not sets:
+            continue
         hits = _matches(sets, event, now)
         if not hits:
             continue
