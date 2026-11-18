@@ -20,6 +20,7 @@ from routers.alerts import router as alerts_router
 
 # Import API routers for additional functionality
 from routers.security_api import router as security_router
+from routers.cases_api import router as cases_router
 from routers.observability_api import router as observability_router
 from routers.ai_api import router as ai_router
 from routers.enterprise_api import router as enterprise_router
@@ -112,6 +113,9 @@ app.include_router(usage_router)
 app.include_router(quota_management_router, tags=["Quota Management"])
 
 # Include additional API routers
+# Cases first: its /v1/security/cases/... routes must win over the security
+# router's /{detection_id}/... patterns.
+app.include_router(cases_router)
 app.include_router(security_router)
 app.include_router(observability_router)
 app.include_router(ai_router)
