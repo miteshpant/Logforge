@@ -1,0 +1,5 @@
+indicator,kind,note
+203.0.113.5,ip,scanner seen at the edge
+bad-domain.example,domain,phishing
+10.0.0.5,ip,internal address must be ignored
+not a valid value,domain,garbage

@@ -1,0 +1,7 @@
+{"response": {"Attribute": [
+  {"id": "1", "type": "ip-dst", "category": "Network activity", "to_ids": true, "value": "203.0.113.200", "Tag": [{"name": "tlp:green"}]},
+  {"id": "2", "type": "domain", "category": "Network activity", "to_ids": true, "value": "exfil.example.org"},
+  {"id": "3", "type": "ip-dst|port", "category": "Network activity", "to_ids": true, "value": "198.51.100.9|8443"},
+  {"id": "4", "type": "comment", "category": "Other", "to_ids": false, "value": "analyst note"},
+  {"id": "5", "type": "ip-src", "category": "Network activity", "to_ids": false, "value": "192.0.2.10"}
+]}}

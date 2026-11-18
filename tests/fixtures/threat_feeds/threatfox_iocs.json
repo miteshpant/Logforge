@@ -1,0 +1,11 @@
+{"query_status": "ok", "data": [
+  {"id": "901", "ioc": "203.0.113.66:4444", "ioc_type": "ip:port", "threat_type": "botnet_cc", "malware": "win.cobalt_strike",
+   "malware_printable": "Cobalt Strike", "confidence_level": 100, "first_seen": "2026-11-17 20:00:00 UTC", "last_seen": null,
+   "reference": "https://example.org/report", "tags": ["CobaltStrike", "c2"]},
+  {"id": "902", "ioc": "c2.badactor.example", "ioc_type": "domain", "threat_type": "botnet_cc", "malware_printable": "AsyncRAT",
+   "confidence_level": 75, "first_seen": "2026-11-17 19:00:00 UTC", "tags": ["AsyncRAT"]},
+  {"id": "903", "ioc": "44d88612fea8a8f36de82e1278abb02f", "ioc_type": "md5_hash", "threat_type": "payload",
+   "malware_printable": "EICAR", "confidence_level": 50, "first_seen": "2026-11-17 18:00:00 UTC", "tags": null},
+  {"id": "904", "ioc": "http://evil.example/gate.php", "ioc_type": "url", "threat_type": "botnet_cc",
+   "malware_printable": "Lumma", "confidence_level": 90, "first_seen": "2026-11-17 18:30:00 UTC", "tags": ["Lumma"]}
+]}
