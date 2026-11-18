@@ -1,0 +1,62 @@
+{
+  "run_at": "2026-11-18T14:02:46+00:00",
+  "environment": {
+    "host": "Linux-6.18.44-fc-v595-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "cpus": 4
+  },
+  "in_process": {
+    "indicators": 100000,
+    "events": 30000,
+    "rounds": 5,
+    "us_per_event_without_intel": 0.03,
+    "us_per_event_with_intel": 12.0,
+    "added_us_per_event": 11.98
+  },
+  "live_ingest": {
+    "rounds": 4,
+    "batches": 10,
+    "batch_size": 1000,
+    "off": [
+      {
+        "events_per_second": 2803.2,
+        "seconds": 3.567
+      },
+      {
+        "events_per_second": 3683.8,
+        "seconds": 2.715
+      },
+      {
+        "events_per_second": 2833.3,
+        "seconds": 3.529
+      },
+      {
+        "events_per_second": 2903.6,
+        "seconds": 3.444
+      }
+    ],
+    "on": [
+      {
+        "events_per_second": 3160.0,
+        "seconds": 3.165
+      },
+      {
+        "events_per_second": 2881.9,
+        "seconds": 3.47
+      },
+      {
+        "events_per_second": 3039.0,
+        "seconds": 3.291
+      },
+      {
+        "events_per_second": 3185.8,
+        "seconds": 3.139
+      }
+    ],
+    "off_eps": 2868.45,
+    "on_eps": 3099.5,
+    "drop_pct": -8.05,
+    "limit_pct": 10,
+    "pass": true
+  }
+}

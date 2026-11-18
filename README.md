@@ -67,7 +67,7 @@ rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 | Server-sent event streams (metrics, alerts, security, …) | ✅ Implemented | `apps/api/routers/streaming_api.py` |
 | Live log tail (`/v1/stream/logs`) | ✅ Implemented | `apps/api/routers/streaming_api.py` |
 | MITRE ATT&CK coverage (`/v1/security/mitre-coverage`), shown on the SIEM page | ✅ Implemented | `apps/api/routers/security_api.py` |
-| Threat-intel enrichment | 🟡 IOC CRUD only, no feed clients | `apps/api/threat_intel.py` |
+| Threat intel and enrichment: abuse.ch, OTX, MISP, STIX and CSV feeds; ingest-time matching; retro-hunting; GeoIP/ASN, asset and user lookups | ✅ Implemented | `apps/api/threat_feeds.py`, `apps/api/ingest_enrichment.py`, [guide](./docs/threat-intel.md) |
 | Root-cause analysis | 🟡 Partly placeholder | `apps/api/services/rca_engine.py` |
 | "AI" natural-language query and recommendations | 🧪 Keyword templates and canned output, no LLM | `apps/api/services/ai_service.py` |
 | Billing | 🟡 Usage metering and invoices computed, no payment provider | `apps/api/routers/usage_api.py` |
@@ -310,7 +310,10 @@ These are the main environment variables for the API. In development none of the
 | `LOGFORGE_SECRET_KEY` | Encrypts stored notification-channel credentials. |
 | `LOGFORGE_NOTIFICATIONS_ENABLED` | Turns on automatic alert delivery (off by default). |
 | `LOGFORGE_MAX_QUERY_WINDOW_DAYS` | Widest query time range allowed (default 31). |
-| `THREAT_INTEL_ENABLED` | Turns on IOC enrichment (off by default). |
+| `THREAT_INTEL_ENABLED` | Turns on the legacy detection-time IOC enricher (off by default). Ingest-time matching runs whenever a tenant has indicators. |
+| `THREAT_FEEDS_SCHEDULER` | `off` stops scheduled feed fetches in this process (on by default). |
+| `ABUSECH_AUTH_KEY` / `OTX_API_KEY` | API keys for the URLhaus/ThreatFox and OTX feeds; read from the environment, never stored. |
+| `GEOIP_CITY_CSV` / `GEOIP_ASN_CSV` / `ASSETS_CSV` / `USERS_CSV` / `REVERSE_DNS` | Enrichment files and options; see the [threat-intel guide](./docs/threat-intel.md#enrichment-processors). |
 | `QUOTA_RESET_*` | Quota reset schedule; see [`.env.quota.example`](./.env.quota.example). |
 
 ---

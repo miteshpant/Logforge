@@ -60,8 +60,39 @@ multiple workers are tracked in [ROADMAP.md](../ROADMAP.md).
 Queries stay well under a second at 10 M rows; full-text search grows fastest
 with data size.
 
+## Threat-intel enrichment: 2026-11-18
+
+Phase 3 acceptance: ingest throughput must drop by less than 10% with
+threat-intel matching on. Measured with
+[`tests/bench/enrichment_bench.py`](https://github.com/miteshpant/Logforge/blob/main/tests/bench/enrichment_bench.py)
+on the same 4-vCPU single-node stack, against 100,000 synthetic indicators
+(60% IPs, 30% domains, 10% URLs). Raw results:
+[`2026-11-18-enrichment.json`](./2026-11-18-enrichment.json).
+
+| Measurement | Without indicators | With 100,000 indicators |
+|---|---|---|
+| In process: `enrich_events` per event (30,000 events, median of 5) | 0.03 µs | 12.0 µs |
+| Live: `POST /v1/ingest/logs/batch`, 10 × 1,000 events, median of 4 rounds | 2,868 events/s | 3,100 events/s |
+
+Per round, the live runs were 2,803 / 3,684 / 2,833 / 2,904 events/s
+without indicators and 3,160 / 2,882 / 3,039 / 3,186 with them. Rounds
+alternate which side goes first. Before each run the indicator index is
+reloaded and the API is allowed to drain the previous run's work.
+
+**Result: no measurable drop.** The median with indicators was 8% *higher*,
+which is inside the ±15–30% spread between rounds. So the live A/B can only
+say that any drop is smaller than its noise. The in-process figure gives the
+bound: 12 µs added to about 349 µs per event at 2,868 events/s is about
+**3.5%**, under the 10% limit. GeoIP, asset and reverse-DNS lookups were not
+enabled in this run.
+
+These numbers are higher than the 277 events/s baseline above because this
+run times smaller bursts with the API drained between them. The baseline
+measured 50 batches back to back, with detection work piling up.
+
 ## History
 
 | Date | Setup | Ingest (events/s) | Ingest → searchable | Slowest query p95 @ 10 M |
 |---|---|---|---|---|
 | 2026-11-17 | single node, 4 vCPU | 277 | 36.8 s | 311 ms (full-text search) |
+| 2026-11-18 | single node, 4 vCPU; enrichment A/B, bursts of 10,000 | 2,868 without / 3,100 with 100k indicators | — | — |
