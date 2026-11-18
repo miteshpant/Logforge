@@ -236,7 +236,10 @@ class ApiClient {
     if (params) {
       const searchParams = new URLSearchParams()
       Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
+        if (Array.isArray(value)) {
+          // Repeated keys (status=a&status=b), as list query parameters expect.
+          value.filter(v => v !== undefined && v !== null).forEach(v => searchParams.append(key, String(v)))
+        } else if (value !== undefined && value !== null) {
           searchParams.append(key, String(value))
         }
       })

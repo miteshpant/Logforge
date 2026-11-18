@@ -113,6 +113,14 @@ describe('get query parameters', () => {
     expect(url.searchParams.has('params')).toBe(false)
   })
 
+  it('repeats a key for array values', async () => {
+    // FastAPI reads `status: List[str]` from repeated keys. Arrays were sent
+    // as one comma-joined value (status=new,investigating), which matched no
+    // case, so the Cases page's Open view was always empty.
+    await new ApiClient().get('/v1/security/cases', { status: ['new', 'investigating'], q: 'x' })
+    expect(requestedUrl().searchParams.getAll('status')).toEqual(['new', 'investigating'])
+  })
+
   it('skips undefined and null values', async () => {
     await new ApiClient().get('/v1/logs', { params: { service: undefined, level: null, limit: 10 } })
     expect([...requestedUrl().searchParams.keys()]).toEqual(['limit'])
