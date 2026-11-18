@@ -363,13 +363,19 @@ class SigmaConditionEvaluator:
         try:
             # Handle nested field access (e.g., "user.name")
             if "." in field_name:
-                current_value = log_entry
-                for part in field_name.split("."):
-                    if isinstance(current_value, dict) and part in current_value:
-                        current_value = current_value[part]
-                    else:
-                        return None
-                return current_value
+                # Top-level path first, then the same path under attrs, where
+                # caller fields and ingest enrichment (threat.*, geo.*) live.
+                for root in (log_entry, log_entry.get("attrs") if isinstance(log_entry.get("attrs"), dict) else None):
+                    current_value = root
+                    for part in field_name.split("."):
+                        if isinstance(current_value, dict) and part in current_value:
+                            current_value = current_value[part]
+                        else:
+                            current_value = None
+                            break
+                    if current_value is not None:
+                        return current_value
+                return None
             value = log_entry.get(field_name)
             if value not in (None, ""):
                 return value

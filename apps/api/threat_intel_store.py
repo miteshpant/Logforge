@@ -297,10 +297,15 @@ class IndicatorIndex:
     async def size(self, tenant_id: str, now: Optional[datetime] = None) -> int:
         return sum(len(v) for v in (await self._load(tenant_id, now or datetime.now(timezone.utc))).values())
 
-    async def lookup(self, tenant_id: str, indicator_type: str, value: Any,
-                     now: Optional[datetime] = None) -> Optional[Indicator]:
-        now = now or datetime.now(timezone.utc)
-        values = (await self._load(tenant_id, now)).get(indicator_type)
+    async def tenant_set(self, tenant_id: str, now: Optional[datetime] = None) -> Dict[str, Dict[str, Indicator]]:
+        """The tenant's loaded indicators by type, for many synchronous
+        `find` calls (one load per ingest batch)."""
+        return await self._load(tenant_id, now or datetime.now(timezone.utc))
+
+    @staticmethod
+    def find(sets: Dict[str, Dict[str, Indicator]], indicator_type: str, value: Any,
+             now: datetime) -> Optional[Indicator]:
+        values = sets.get(indicator_type)
         if not values:
             return None
         text = normalize_indicator(value)
@@ -313,6 +318,11 @@ class IndicatorIndex:
             if hit is not None and (hit.expires_at is None or hit.expires_at > now):
                 return hit
         return None
+
+    async def lookup(self, tenant_id: str, indicator_type: str, value: Any,
+                     now: Optional[datetime] = None) -> Optional[Indicator]:
+        now = now or datetime.now(timezone.utc)
+        return self.find(await self._load(tenant_id, now), indicator_type, value, now)
 
 
 _index: Optional[IndicatorIndex] = None

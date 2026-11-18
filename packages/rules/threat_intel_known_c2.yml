@@ -1,0 +1,30 @@
+title: Communication with a known command-and-control server
+id: lf-ti-known-c2
+status: stable
+description: >
+  An event involves an IP address, domain or URL that a threat intelligence
+  feed lists as botnet command-and-control (Feodo Tracker, ThreatFox, ...).
+  The match is stamped at ingest (attrs.threat) from the tenant's feeds.
+author: Logforge Security Team
+date: 2026/11/18
+references:
+    - https://attack.mitre.org/techniques/T1071/
+    - https://feodotracker.abuse.ch/
+tags:
+    - attack.command_and_control
+    - attack.t1071
+    - threat_intel
+falsepositives:
+    - Stale indicators (an address reassigned after a takedown); check the feed's first and last seen
+    - Security tooling that deliberately contacts known-bad infrastructure
+logsource:
+    category: network_connection
+detection:
+    selection:
+        threat.matched: true
+        threat.threat_types|contains: botnet_cc
+    condition: selection
+fixtures:
+    true_positive: {src_ip: 10.0.1.15, attrs: {dst_ip: 162.243.103.246, threat: {matched: true, max_confidence: 90, threat_types: [botnet_cc]}}}
+    true_negative: {src_ip: 10.0.1.15, attrs: {dst_ip: 198.51.100.66, threat: {matched: true, max_confidence: 80, threat_types: [malware_download]}}}
+level: high

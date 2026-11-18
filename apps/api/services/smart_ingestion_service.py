@@ -82,6 +82,10 @@ class SmartIngestionService:
 
         logger.debug(f"High-performance batch normalization complete: {len(normalized_data)} logs")
 
+        # Step 2b (Phase 3): threat intelligence matches, stamped as
+        # attrs.threat on the stored log and the normalized event alike.
+        await _enrich(customer_id, enriched_logs, normalized_data)
+
         # Step 3: Create LogEntry objects (for backward compatibility)
         for i, (enriched_log, normalized_log) in enumerate(zip(enriched_logs, normalized_data)):
             try:
@@ -239,6 +243,25 @@ class SmartIngestionService:
 
 # Global instance for dependency injection
 smart_ingestion_service = SmartIngestionService()
+
+
+async def _enrich(customer_id: str, enriched_logs: List[Dict[str, Any]],
+                  normalized_data: List[Dict[str, Any]]) -> None:
+    """Look up each event once; copy the stamp onto its normalized twin
+    (index-aligned). Never fails ingestion."""
+    try:
+        from ingest_enrichment import enrich_events
+
+        await enrich_events(customer_id, enriched_logs)
+        for raw, normalized in zip(enriched_logs, normalized_data):
+            stamp = (raw.get("attrs") or {}).get("threat") if isinstance(raw.get("attrs"), dict) else None
+            if stamp and isinstance(normalized, dict):
+                attrs = normalized.get("attrs")
+                if not isinstance(attrs, dict):
+                    attrs = normalized["attrs"] = {}
+                attrs["threat"] = stamp
+    except Exception as e:
+        logger.warning(f"Ingest enrichment skipped for {customer_id}: {e}")
 
 
 def get_smart_ingestion_service() -> SmartIngestionService:
