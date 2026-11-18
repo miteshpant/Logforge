@@ -43,6 +43,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Detection-as-code: detection-as-code.md
+  - Cases: cases.md
   # Static Redoc page (docs/api/index.html); nav entries must be pages or URLs.
   - API reference: https://miteshpant.github.io/Logforge/api/
   - Roadmap:

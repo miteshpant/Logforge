@@ -18,13 +18,14 @@ rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 
 ## Screenshots
 
-<sub>Captured from a fresh `./deploy.sh` during the [QA run](./docs/QA_REPORT.md), with a tenant seeded with an hour of synthetic logs, traces and metrics.</sub>
+<sub>Captured from the current build on a local stack, with the demo tenant seeded by `scripts/seed_demo_telemetry.py` (an hour of synthetic logs, traces and metrics, plus three small attacks that the shipped rules detect). Regenerate with `node scripts/capture_screenshots.js`.</sub>
 
 | | |
 | --- | --- |
 | **Centrum** (tenant overview)<br>![Centrum](./docs/images/centrum.png) | **Log Explorer**<br>![Log Explorer](./docs/images/log-explorer.png) |
 | **Tracing**<br>![Tracing](./docs/images/tracing.png) | **APM** (latency, error rate, Apdex)<br>![APM](./docs/images/apm.png) |
-| **Service Map** (built from trace spans)<br>![Service Map](./docs/images/service-map.png) | **Sigma Detection Rules** (243 vendored SigmaHQ rules)<br>![Detection Rules](./docs/images/detection-rules.png) |
+| **Service Map** (built from trace spans)<br>![Service Map](./docs/images/service-map.png) | **Detection Rules** (vendored SigmaHQ plus Logforge rules, correlation rules included)<br>![Detection Rules](./docs/images/detection-rules.png) |
+| **Cases** (alerts grouped per source, host or user; SLA overview)<br>![Cases](./docs/images/cases.png) | **Case detail** (timeline, linked alerts, entities, evidence)<br>![Case detail](./docs/images/case-detail.png) |
 
 ## Contents
 
@@ -54,7 +55,12 @@ rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 | **LogforgeQL**, a pipe language (`timeout \| where service = "api" \| limit 50`) | ✅ Implemented | `apps/api/logql.py` |
 | Alerting: threshold, pattern, anomaly and saved-search rules | ✅ Implemented | `apps/api/alert_engine.py` |
 | Notifications: webhook, Slack, email, PagerDuty, Teams, Discord | ✅ Implemented (off by default) | `apps/api/services/notification_service.py` |
-| Sigma detection engine: ~270 fixture-verified rules (vendored SigmaHQ + Logforge's own `packages/rules/`) | ✅ Implemented | `apps/api/sigma_engine.py`, `apps/api/content/rules/`, `packages/rules/` |
+| Sigma detection engine: ~300 fixture-verified rules (vendored SigmaHQ + Logforge's own `packages/rules/`) | ✅ Implemented | `apps/api/sigma_engine.py`, `apps/api/content/rules/`, `packages/rules/` |
+| Correlation rules: thresholds, distinct counts, sums and sequences per entity, windowed across batches | ✅ Implemented | `apps/api/correlation.py`, `packages/rules/correlations/` |
+| Rule backtesting over stored logs (7 days / 100 M events in 20–27 s) | ✅ Implemented | `apps/api/backtest.py`, [benchmarks](./docs/benchmarks/backtest.md) |
+| Detection tuning: exclusions, throttles, suggestions from false positives | ✅ Implemented | `apps/api/detection_tuning.py` |
+| Detection-as-code: sync rules from git through the gate, YAML export | ✅ Implemented | `apps/api/detection_as_code.py`, [guide](./docs/detection-as-code.md) |
+| Cases: automatic grouping of alerts, timeline, evidence, merge/split, SLA metrics, audit export | ✅ Implemented | `apps/api/cases.py`, `apps/api/routers/cases_api.py`, [guide](./docs/cases.md) |
 | Anomaly detection and forecasting (z-score / EWMA) | ✅ Implemented | `apps/api/services/anomaly_detector.py`, `predictive_analytics_service.py` |
 | Multi-tenancy, roles, API keys, quotas, subscription tiers | ✅ Implemented | `tenant_api.py`, `authn_authz_middleware.py`, `config/pricing.yml` |
 | Server-sent event streams (metrics, alerts, security, …) | ✅ Implemented | `apps/api/routers/streaming_api.py` |
@@ -277,7 +283,7 @@ apps/
   ui/                 Tenant web UI (Next.js 14)
   admin-ui/           Platform admin UI (Next.js 14)
 packages/
-  rules/              Hand-written Sigma rules and content pack (currently used by tests only)
+  rules/              Logforge's own Sigma rules, correlation bundles and content pack (loaded at startup)
   shipper-recipes/    Vector and Fluent Bit configs
 infra/docker/         compose.yml, ClickHouse schema (init_simple.sql) and migrations
 config/               Storage deployment profiles (S3, GCS, MinIO, GovCloud)
