@@ -37,6 +37,15 @@ markers).
   shipped library; the streaming state has a 200k-event soak test, not a
   24 h one; correlation state is per process (lost on restart, not shared
   between API replicas).
+- **Cases follow-ups from Phase 2**
+  ([platform roadmap](./PLATFORM_ROADMAP.md)): merge and split need UI
+  (the API has them); @mentions are recorded on notes but not delivered,
+  which needs per-user notifications; "create case" should be available
+  wherever an alert is shown (SIEM dashboard, Centrum incidents); a case
+  per host splits lateral movement across hosts (link source and
+  destination hosts); the grouping lock is per API process, so two
+  replicas can open duplicate cases for one entity; SLA targets should be
+  configurable per tenant.
 - **OpenTelemetry metric aliases ignore units.** `cpu.utilization` is a 0–1
   ratio while the canonical `cpu_usage` is a percentage. Mapping one to the
   other needs a unit conversion in `metric_name_mappings.yml` and the

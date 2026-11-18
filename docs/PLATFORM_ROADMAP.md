@@ -305,6 +305,45 @@ what separates a SIEM from grep with alerts.
 **Goal:** turn alerts into owned, tracked investigations, which is the daily
 workflow of a SOC analyst.
 
+> **Status: done (2026-11-18), with the gaps listed below.**
+>
+> - **Case model and storage:** `apps/api/cases.py` holds the status flow,
+>   SLA timestamps and analyst actions. Storage is `cases_mt` (versioned
+>   rows) plus `case_events_mt`, an append-only timeline that doubles as the
+>   audit trail (migration 017).
+> - **Automatic grouping:** each detection joins the open case for its
+>   source IP, host or user, taken from the correlation group when there is
+>   one, within 24 h. Low alerts don't open cases.
+> - **Analyst actions** (`/v1/security/cases`): assign, notes with
+>   @mentions, status with a close reason, tags, severity, evidence
+>   (searches, events, traces, log lines, links), attach alerts, merge,
+>   split and bulk actions. Closing sets the alerts' verdicts, so
+>   false-positive closes feed the Phase 1 tuning suggestions.
+> - **SLA and overview:** mean and median time to acknowledge and resolve per
+>   severity, SLA breaches, ageing, analyst load and alerts per case. The
+>   audit trail exports as JSON or CSV.
+> - **UI:** a Cases list with the SOC overview and a case detail page with
+>   timeline, alerts, entities and evidence. Cases can be created from an
+>   alert (Events) and from a search (Log Explorer); the README screenshots
+>   show both pages.
+>
+> | Acceptance criterion | Result |
+> |---|---|
+> | Alert → case → evidence → resolution in the product, covered by a Playwright spec | `apps/ui/tests/09-cases.spec.ts`: ingested failed logins open a case on their own; the analyst notes, pins evidence, investigates, resolves; the alerts carry the verdict |
+> | Grouping reduces items needing triage by a measured percentage | 64 alerts → 14 cases on the evaluation corpus: **78% fewer items** (`eval_harness.grouping_report`, CI-tested) |
+>
+> | Exit metric | Result |
+> |---|---|
+> | Alerts per case | 4.6 on the evaluation corpus |
+> | Mean time to acknowledge / resolve | Reported live by `/v1/security/cases/metrics`. Demo and test runs take seconds, so they say nothing yet; real numbers need real analysts |
+>
+> **Not done** (tracked in [ROADMAP.md](./ROADMAP.md)): merge and split are
+> API-only (no UI yet); @mentions are recorded but not delivered (no
+> per-user notifications); "create case" exists on Events and the Log
+> Explorer but not on every page showing an alert; lateral movement across
+> two hosts opens two cases (no source→destination linking); the grouping
+> lock is per API process; SLA targets are fixed.
+
 ### Deliverables
 
 1. **Case model** (`cases_mt`, `case_events_mt`): title, severity, status
