@@ -22,6 +22,7 @@ const ROUTES = [
   '/alerts/instances',
   '/alerts/channels',
   '/security/siem',
+  '/security/cases',
   '/security/events',
   '/security/rules',
   '/security/threat-intel',

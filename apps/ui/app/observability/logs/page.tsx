@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import { createCase } from '@/lib/api/cases'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { apiClient } from '@/lib/api'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
@@ -81,6 +83,28 @@ export default function LogExplorerPage() {
   const [hasMore, setHasMore] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const router = useRouter()
+  const [caseError, setCaseError] = useState<string | null>(null)
+
+  // ?q= pre-fills the filter (links from case evidence).
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('q')
+    if (q) setSearchQuery(q)
+  }, [])
+
+  const createCaseFromSearch = async () => {
+    const ref = (mode === 'logql' ? logqlQuery : searchQuery).trim() || (serviceFilter !== 'all' ? `service:${serviceFilter}` : '*')
+    try {
+      setCaseError(null)
+      const created = await createCase({
+        title: `Investigation: ${ref}`.slice(0, 300),
+        evidence: [{ kind: 'search', ref, title: 'Log Explorer search' }],
+      })
+      router.push(`/security/cases/${created.id}`)
+    } catch (error: any) {
+      setCaseError(error?.message || 'Failed to create a case')
+    }
+  }
   const [levelFilter, setLevelFilter] = useState<string[]>([])
   const [serviceFilter, setServiceFilter] = useState<string>('all')
 
@@ -603,6 +627,16 @@ export default function LogExplorerPage() {
             {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             Export
           </button>
+
+          <button
+            data-testid="create-case-from-search"
+            onClick={createCaseFromSearch}
+            title="Open a case with this search pinned as evidence"
+            className="flex items-center gap-2 px-4 py-2 border border-white/10 rounded-lg text-slate-300 hover:bg-white/5"
+          >
+            Create case
+          </button>
+          {caseError && <span role="alert" className="text-sm text-red-400">{caseError}</span>}
 
           <button
             data-testid="logs-refresh"

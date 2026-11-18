@@ -57,8 +57,7 @@ import {
   Link2,
   TrendingUp,
   MessageSquare,
-  Key,
-} from 'lucide-react'
+  Key, Briefcase } from 'lucide-react'
 import { TenantSelector } from '@/components/TenantSelector'
 import PWASupport from '@/components/PWASupport'
 
@@ -108,6 +107,7 @@ const navSections: NavSection[] = [
     icon: ShieldAlert,
     items: [
       { name: 'SIEM Dashboard', href: '/security/siem', icon: ShieldAlert },
+      { name: 'Cases', href: '/security/cases', icon: Briefcase },
       { name: 'Events', href: '/security/events', icon: Shield },
       { name: 'Detection Rules', href: '/security/rules', icon: FileText },
       { name: 'Threat Intel', href: '/security/threat-intel', icon: Globe },
