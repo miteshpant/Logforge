@@ -64,6 +64,7 @@ class DatabaseLayer:
         'SigmaProcessor': os.getenv('SIGMA_PROCESSOR_KEY', 'sigma-processor-service-key'),
         'BacktestService': os.getenv('BACKTEST_SERVICE_KEY', 'backtest-service-key'),
         'TuningDAO': os.getenv('TUNING_SERVICE_KEY', 'tuning-dao-service-key'),
+        'CaseDAO': os.getenv('CASE_SERVICE_KEY', 'case-dao-service-key'),
         # Streaming Configuration Service
         'StreamingConfigDAO': os.getenv('STREAMING_CONFIG_SERVICE_KEY', 'streaming-config-service-key'),
         # Migration Service
@@ -126,6 +127,7 @@ class DatabaseLayer:
         'SigmaProcessor': ['security_events_mt', 'sigma_rules_mt'],  # Needs to create security events and read rules
         'BacktestService': ['logs_raw_mt'],  # Reads stored logs to replay rules over them (read-only)
         'TuningDAO': ['detection_tuning_mt', 'security_events_mt'],  # Tuning records; reads verdicts for suggestions
+        'CaseDAO': ['cases_mt', 'case_events_mt'],  # Cases and their append-only timeline
         # Streaming Configuration Service
         'StreamingConfigDAO': ['tenant_configs_mt'],  # Needs to manage streaming configurations in tenant configs table
         # Migration Service
