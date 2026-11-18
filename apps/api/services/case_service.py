@@ -254,6 +254,22 @@ class CaseService:
             return case
 
 
+    async def metrics(self, tenant_id: str, days: int) -> Dict[str, Any]:
+        """SLA metrics and SOC overview (case_metrics) for cases created in
+        the last `days` plus every case still open."""
+        from datetime import timedelta
+
+        from case_metrics import case_metrics
+
+        now = self.clock()
+        report = case_metrics(await self.dao.for_metrics(tenant_id, now - timedelta(days=days)), now)
+        report["window_days"] = days
+        return report
+
+    async def audit(self, tenant_id: str, start: datetime, end: datetime, limit: int) -> List[Dict[str, Any]]:
+        """Every case change in [start, end): the audit trail."""
+        return [_serialise_event(e) for e in await self.dao.events_between(tenant_id, start, end, limit=limit)]
+
 _locks: Dict[Tuple[str, str], Any] = {}
 
 
@@ -268,3 +284,4 @@ def _lock_for(tenant_id: str, key: str):
         for k in [k for k, lock in _locks.items() if not lock.locked()][:5_000]:
             _locks.pop(k, None)
     return _locks.setdefault((tenant_id, key), asyncio.Lock())
+

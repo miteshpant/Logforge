@@ -7432,6 +7432,71 @@ paths:
       summary: Create Case
       tags:
       - cases
+  /v1/security/cases/audit/export:
+    get:
+      description: 'Every case change (who, what, when) in a time range, as JSON or CSV
+
+        (default: the last 30 days).'
+      operationId: export_case_audit_v1_security_cases_audit_export_get
+      parameters:
+      - in: query
+        name: start
+        required: false
+        schema:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Start
+      - in: query
+        name: end
+        required: false
+        schema:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: End
+      - in: query
+        name: format
+        required: false
+        schema:
+          default: json
+          pattern: ^(json|csv)$
+          title: Format
+          type: string
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 100000
+          maximum: 1000000
+          minimum: 1
+          title: Limit
+          type: integer
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Export Case Audit
+      tags:
+      - cases
   /v1/security/cases/bulk:
     post:
       description: Assign, change status or tag many cases; failures are reported per case.
@@ -7467,6 +7532,50 @@ paths:
       security:
       - HTTPBearer: []
       summary: Bulk Cases
+      tags:
+      - cases
+  /v1/security/cases/metrics:
+    get:
+      description: 'SOC overview: time to acknowledge and resolve per severity, SLA
+
+        breaches, open cases by status and age, analyst load, alerts per case.
+
+        Covers cases created in the last `days` plus every case still open.'
+      operationId: case_metrics_v1_security_cases_metrics_get
+      parameters:
+      - in: query
+        name: days
+        required: false
+        schema:
+          default: 30
+          maximum: 365
+          minimum: 1
+          title: Days
+          type: integer
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Case Metrics V1 Security Cases Metrics Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Case Metrics
       tags:
       - cases
   /v1/security/cases/{case_id}:

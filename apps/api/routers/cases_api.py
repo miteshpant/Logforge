@@ -8,6 +8,7 @@ The actor recorded on every change is the signed-in user.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -157,6 +158,49 @@ async def bulk_cases(body: Bulk, customer_id: str = Header(..., alias="X-Custome
     elif body.action == "tags":
         kwargs = {"add": body.add, "remove": body.remove}
     return await _run(_case_service().bulk(customer_id, body.case_ids, body.action, _actor(current_user), **kwargs))
+
+
+@router.get("/metrics")
+async def case_metrics(days: int = Query(30, ge=1, le=365), customer_id: str = Header(..., alias="X-Customer-ID"),
+                       current_user: User = Depends(get_current_user)) -> Dict[str, Any]:
+    """SOC overview: time to acknowledge and resolve per severity, SLA
+    breaches, open cases by status and age, analyst load, alerts per case.
+    Covers cases created in the last `days` plus every case still open."""
+    return await _run(_case_service().metrics(customer_id, days))
+
+
+@router.get("/audit/export")
+async def export_case_audit(
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+    format: str = Query("json", pattern="^(json|csv)$"),
+    limit: int = Query(100_000, ge=1, le=1_000_000),
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user),
+):
+    """Every case change (who, what, when) in a time range, as JSON or CSV
+    (default: the last 30 days)."""
+    from fastapi.responses import Response
+
+    from case_metrics import events_to_csv
+
+    end = _utc(end) or datetime.now(timezone.utc)
+    start = _utc(start) or end - timedelta(days=30)
+    if end <= start:
+        raise HTTPException(status_code=400, detail="end must be after start")
+    if end - start > timedelta(days=366):
+        raise HTTPException(status_code=400, detail="the range can be at most 366 days")
+    events = await _run(_case_service().audit(customer_id, start, end, limit))
+    if format == "csv":
+        return Response(content=events_to_csv(events), media_type="text/csv",
+                        headers={"Content-Disposition": f'attachment; filename="case-audit-{start:%Y%m%d}-{end:%Y%m%d}.csv"'})
+    return {"start": start.isoformat(), "end": end.isoformat(), "count": len(events), "events": events}
+
+
+def _utc(value: Optional[datetime]) -> Optional[datetime]:
+    if value is None:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
 @router.get("/{case_id}")
