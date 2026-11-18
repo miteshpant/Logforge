@@ -224,3 +224,47 @@ class CaseService:
 
     async def list(self, tenant_id: str, **filters: Any) -> Tuple[List[Case], int]:
         return await self.dao.list(tenant_id, **filters)
+
+    async def route_alert(self, tenant_id: str, row: Dict[str, Any],
+                          correlation_group: Optional[Dict[str, Any]] = None, policy=None) -> Optional[Case]:
+        """Attach a new alert to the open case for its entity, or open one
+        (see case_grouping). Returns the case, or None if skipped."""
+        from case_grouping import GroupingPolicy, group_key, plan
+
+        policy = policy or GroupingPolicy.from_env()
+        if not policy.enabled:
+            return None
+        alert = alert_summary(row)
+        key = group_key(alert, correlation_group)
+        async with _lock_for(tenant_id, key):
+            now = self.clock()
+            existing = await self.dao.find_open_by_group_key(tenant_id, key, now - policy.window) if key else None
+            decision = plan(alert, existing, now, policy)
+            if decision == "skip":
+                return None
+            if decision == "attach":
+                case, events = apply_action(existing, "attach_alert", "system", now, alert=alert)
+                if events:
+                    await self._store([case], events)
+                return case
+            title = alert.get("title") or "Security alert"
+            case, events = new_case(tenant_id, f"{title}: {key}" if key else title, "system", now,
+                                    alerts=[alert], group_key=key)
+            await self._store([case], events)
+            return case
+
+
+_locks: Dict[Tuple[str, str], Any] = {}
+
+
+def _lock_for(tenant_id: str, key: str):
+    """One lock per (tenant, entity key) so concurrent alerts for one entity
+    in this process open a single case."""
+    import asyncio
+
+    if not key:
+        return asyncio.Lock()
+    if len(_locks) > 10_000:
+        for k in [k for k, lock in _locks.items() if not lock.locked()][:5_000]:
+            _locks.pop(k, None)
+    return _locks.setdefault((tenant_id, key), asyncio.Lock())

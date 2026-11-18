@@ -196,8 +196,75 @@ def shipped_rules() -> List[Dict[str, Any]]:
             "name": content.get("name"),
             "generate": content.get("generate", True),
             "tags": content.get("tags", []),
+            "severity": row.get("severity"),
+            "title": row.get("name"),
         })
     return rules
+
+
+def grouping_report(rules: Optional[List[Dict[str, Any]]] = None,
+                    scenarios: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """Route the alerts of all scenarios, replayed in one shared timeline
+    (each scenario starts 2 minutes after the previous), through the
+    production case grouping, and count items needing triage."""
+    _matcher()
+    from datetime import timedelta
+
+    from case_grouping import GroupingPolicy, group_key, plan
+    from cases import apply_action, new_case
+    from detection_replay import TIMELINE_START, expand_timeline, replay
+    from services.case_service import alert_summary
+
+    rules = rules if rules is not None else shipped_rules()
+    scenarios = scenarios if scenarios is not None else load_scenarios()
+    events = []
+    for i, scenario in enumerate(scenarios):
+        for event in expand_timeline(scenario["events"], start=TIMELINE_START + timedelta(minutes=2 * i)):
+            event["_scenario"] = scenario["id"]
+            events.append(event)
+    by_id = {r["id"]: r for r in rules}
+    policy = GroupingPolicy()
+    cases: List[Any] = []
+    members: Dict[str, set] = {}
+    uncased = 0
+    alerts = replay(rules, events)
+    for n, alert in enumerate(alerts):
+        rule = by_id.get(alert.rule_id, {})
+        summary = alert_summary({"id": f"alert-{n}", "rule_id": alert.rule_id, "title": rule.get("title"),
+                                 "severity": rule.get("severity"), "raw_log_data": {"normalized_log": alert.event}})
+        key = group_key(summary, alert.group or None)
+        candidates = [c for c in cases if key and c.group_key == key and c.is_open]
+        existing = max(candidates, key=lambda c: c.last_alert_at) if candidates else None
+        decision = plan(summary, existing, alert.ts, policy)
+        if decision == "skip":
+            uncased += 1
+            continue
+        if decision == "attach":
+            index = cases.index(existing)
+            cases[index], _ = apply_action(existing, "attach_alert", "system", alert.ts, alert=summary)
+            case = cases[index]
+        else:
+            case, _ = new_case("eval", summary.get("title") or "alert", "system", alert.ts, alerts=[summary],
+                               group_key=key)
+            cases.append(case)
+        members.setdefault(case.id, set()).add(alert.event.get("_scenario"))
+
+    per_scenario: Dict[str, int] = {}
+    for case_id, owners in members.items():
+        for owner in owners:
+            per_scenario[owner] = per_scenario.get(owner, 0) + 1
+    total = len(alerts)
+    items = len(cases) + uncased
+    return {
+        "alerts": total,
+        "cases": len(cases),
+        "uncased_low_alerts": uncased,
+        "items_needing_triage": items,
+        "reduction": round(1 - len(cases) / total, 3) if total else 0.0,
+        "alerts_per_case": round((total - uncased) / len(cases), 2) if cases else 0.0,
+        "cases_per_scenario": dict(sorted(per_scenario.items())),
+        "mixed_cases": sum(1 for owners in members.values() if len(owners) > 1),
+    }
 
 
 def load_scenarios(directory: Path = SCENARIO_DIR) -> List[Dict[str, Any]]:
