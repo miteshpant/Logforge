@@ -204,6 +204,14 @@
       "false_positives": 0,
       "true_positives": 1
     },
+    "logforge_lf-ti-known-c2": {
+      "false_positives": 0,
+      "true_positives": 3
+    },
+    "logforge_lf-ti-malware-delivery": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
     "logforge_lf-unix-reverse-shell": {
       "false_positives": 0,
       "true_positives": 1
@@ -1198,6 +1206,18 @@
         "logforge_lf-c-brute-force-then-success"
       ]
     },
+    "c2-beacon-feodo": {
+      "detected": [
+        "T1071"
+      ],
+      "expected": [
+        "T1071"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-ti-known-c2"
+      ]
+    },
     "certutil-download": {
       "detected": [
         "T1105"
@@ -1255,6 +1275,18 @@
         "logforge_cd001-lsass-memory-dump",
         "logforge_dp001-host-network-enumeration",
         "logforge_lf-c-discovery-then-credential-dump"
+      ]
+    },
+    "dns-threatfox-c2": {
+      "detected": [
+        "T1071"
+      ],
+      "expected": [
+        "T1071"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-ti-known-c2"
       ]
     },
     "domain-discovery": {
@@ -1324,7 +1356,8 @@
       ],
       "missing": [],
       "rules": [
-        "logforge_lf-c-outbound-volume"
+        "logforge_lf-c-outbound-volume",
+        "logforge_lf-ti-known-c2"
       ]
     },
     "lateral-logon-fanout": {
@@ -1349,6 +1382,18 @@
       "missing": [],
       "rules": [
         "logforge_lf-unix-reverse-shell"
+      ]
+    },
+    "malware-download-urlhaus": {
+      "detected": [
+        "T1105"
+      ],
+      "expected": [
+        "T1105"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-ti-malware-delivery"
       ]
     },
     "mass-file-encryption": {
@@ -1482,8 +1527,8 @@
     "benign_events": 2000,
     "false_positive_alerts": 0,
     "false_positives_per_1000": 0.0,
-    "rules": 289,
-    "scenarios_detected": 24,
-    "scenarios_total": 24
+    "rules": 291,
+    "scenarios_detected": 27,
+    "scenarios_total": 27
   }
 }

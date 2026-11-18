@@ -18,6 +18,10 @@ Corpus (this directory):
 * `benign.py`: a deterministic generator of ordinary activity (logins,
   web requests, process starts, cron, DNS, ...). Any alert on it is a false
   positive.
+* threat intelligence: every event is first enriched by the ingest-time
+  matcher (`ingest_enrichment.enrich_events`) with the indicators parsed
+  from the abuse.ch feed fixtures in tests/fixtures/threat_feeds, so the
+  lf-ti rules are scored like any other;
 * `scenarios/*.yml`: labelled attack scenarios, each listing the ATT&CK
   techniques it should be detected as, and its events in Logforge field
   names. Events are 1s apart unless timed with `at`/`every`/`repeat`
@@ -65,11 +69,51 @@ def _matcher():
     return _loader
 
 
+INTEL_FIXTURES = REPO / "tests" / "fixtures" / "threat_feeds"
+INTEL_FEEDS = [("feodo_json", "feodo_ipblocklist.json", "abuse.ch Feodo Tracker", 90),
+               ("urlhaus", "urlhaus_recent.json", "abuse.ch URLhaus", 80),
+               ("threatfox", "threatfox_iocs.json", "abuse.ch ThreatFox", 75)]
+_intel = None
+
+
+def intel_sets() -> Dict[str, Dict[str, Any]]:
+    """Indicators by type, parsed from the feed fixtures by the real parsers."""
+    global _intel
+    if _intel is None:
+        _matcher()
+        from threat_feeds import dedupe, parse_feed
+
+        indicators = []
+        for kind, name, source, confidence in INTEL_FEEDS:
+            indicators += parse_feed(kind, (INTEL_FIXTURES / name).read_text(encoding="utf-8"), source, confidence)
+        _intel = {}
+        for indicator in dedupe(indicators):
+            _intel.setdefault(indicator.indicator_type, {})[indicator.normalized()] = indicator
+    return _intel
+
+
+class _StaticIndex:
+    async def tenant_set(self, tenant_id, now=None):
+        return intel_sets()
+
+
+def enrich(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Stamp attrs.threat on matching events, as ingest does."""
+    import asyncio
+
+    _matcher()
+    from enrichment_processors import Enrichers
+    from ingest_enrichment import enrich_events
+
+    asyncio.run(enrich_events("eval", events, index=_StaticIndex(), enrichers=Enrichers()))
+    return events
+
+
 def _replay(rules: List[Dict[str, Any]], entries: List[Any]) -> List[Any]:
     _matcher()  # puts apps/api on sys.path
     from detection_replay import expand_timeline, replay
 
-    return replay(rules, expand_timeline(entries))
+    return replay(rules, enrich(expand_timeline(entries)))
 
 
 def _alerting(rule: Dict[str, Any]) -> bool:
@@ -227,7 +271,7 @@ def grouping_report(rules: Optional[List[Dict[str, Any]]] = None,
     cases: List[Any] = []
     members: Dict[str, set] = {}
     uncased = 0
-    alerts = replay(rules, events)
+    alerts = replay(rules, enrich(events))
     for n, alert in enumerate(alerts):
         rule = by_id.get(alert.rule_id, {})
         summary = alert_summary({"id": f"alert-{n}", "rule_id": alert.rule_id, "title": rule.get("title"),
