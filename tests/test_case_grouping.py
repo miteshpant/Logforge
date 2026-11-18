@@ -148,3 +148,12 @@ def test_concurrent_alerts_for_one_entity_open_one_case():
     cases = asyncio.run(burst())
     assert len({c.id for c in cases}) == 1
     assert sorted(service.dao.cases[("acme", cases[0].id)].alert_ids) == [f"a{i}" for i in range(5)]
+
+
+def test_case_titles_drop_the_detection_prefix():
+    """Stored alerts are titled "Security Detection: <rule>"; the prefix only
+    repeats what every case is about."""
+    row = dict(stored_alert("p1"), title="Security Detection: Password spray")
+    service = CaseService(dao=GroupingDAO(), alerts=FakeAlerts([row]), clock=lambda: T0)
+    case = asyncio.run(service.route_alert("acme", row, policy=POLICY))
+    assert case.title == "Password spray: src_ip=203.0.113.9"

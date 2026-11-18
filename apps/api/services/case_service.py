@@ -247,7 +247,7 @@ class CaseService:
                 if events:
                     await self._store([case], events)
                 return case
-            title = alert.get("title") or "Security alert"
+            title = (alert.get("title") or "Security alert").removeprefix("Security Detection: ").strip() or "Security alert"
             case, events = new_case(tenant_id, f"{title}: {key}" if key else title, "system", now,
                                     alerts=[alert], group_key=key)
             await self._store([case], events)
