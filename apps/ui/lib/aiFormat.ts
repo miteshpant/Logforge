@@ -45,11 +45,11 @@ export function providerNotice(p: AIProviderInfo | null): { external: boolean; t
 
 const SINCE = /^(\d{1,4})([mhd])$/
 
-/** Log Explorer deep link: ?q=<LogforgeQL>&since=24h or &from=<iso>&to=<iso>. */
+/** Log Explorer deep link: ?logql=<LogforgeQL>&since=24h or &from=<iso>&to=<iso> (?q= stays the filter search). */
 export function parseLogsLink(search: string, now: Date = new Date()):
   { query: string; start: Date | null; end: Date | null } | null {
   const params = new URLSearchParams(search)
-  const query = params.get('q')
+  const query = params.get('logql')
   if (!query) return null
   const from = params.get('from'), to = params.get('to'), since = params.get('since')
   if (from && to) {

@@ -55,7 +55,7 @@ def test_run_query_runs_for_the_callers_tenant_and_cites_rows(monkeypatch):
     assert out.refs[0].kind == "query" and out.data["ref"] == 0
     assert out.data["rows"][0]["ref"] == 1 and out.refs[1].kind == "event"
     assert out.refs[1].key == {"ts": "2026-11-19T10:00:00", "service": "auth", "host": "web-1"}
-    assert "/observability/logs?" in out.refs[0].link and "/observability/logs?" in out.refs[1].link
+    assert out.refs[0].link.startswith("/observability/logs?logql=") and out.refs[1].link.startswith("/observability/logs?logql=")
 
 
 def test_aggregate_rows_cite_the_query_only(monkeypatch):

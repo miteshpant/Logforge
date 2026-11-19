@@ -122,7 +122,7 @@ def _plain(value: Any) -> Any:
 
 def _logs_link(query: str, since: str | None = None, start: str | None = None,
                end: str | None = None) -> str:
-    params = {"q": query}
+    params = {"logql": query}  # ?q= is the filter-mode search (case evidence links)
     if since:
         params["since"] = since
     if start:

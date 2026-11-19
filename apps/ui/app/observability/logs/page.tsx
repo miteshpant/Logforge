@@ -249,7 +249,7 @@ export default function LogExplorerPage() {
   }, [logqlQuery, isRunningQuery, getApiTimeRange])
   logqlRunRef.current = runQuery
 
-  // Deep links (AI answer citations): ?q=<LogforgeQL>&since=24h, or &from=<iso>&to=<iso>.
+  // Deep links (AI answer citations): ?logql=<LogforgeQL>&since=24h, or &from=<iso>&to=<iso>.
   useEffect(() => {
     const link = parseLogsLink(window.location.search)
     if (!link) return

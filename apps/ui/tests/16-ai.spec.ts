@@ -40,7 +40,7 @@ test('a citation link opens the Log Explorer on its query', async ({ page }) => 
   const problems = watchForProblems(page)
   await loginViaUi(page)
   const query = '| where level = "error" | stats count() as errors by service'
-  const link = `/observability/logs?q=${encodeURIComponent(query)}&since=24h`
+  const link = `/observability/logs?logql=${encodeURIComponent(query)}&since=24h`
   // from another site: the query is filled in but not run
   await page.goto(link, { waitUntil: 'load', referer: 'https://elsewhere.example/' })
   await expect(page.getByPlaceholder(/LogforgeQL/)).toHaveValue(query)
