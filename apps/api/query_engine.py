@@ -171,6 +171,8 @@ _SAFE_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 # JSON path prefixes that may address keys inside a JSON column.
 _JSON_FIELD_PREFIXES = ("attrs.", "raw_data.")
+_NUMERIC_OPERATORS = frozenset({QueryOperator.EQ, QueryOperator.NE, QueryOperator.GT, QueryOperator.GTE,
+                                QueryOperator.LT, QueryOperator.LTE})
 
 
 def validate_identifier(field: str) -> str:
@@ -215,6 +217,11 @@ class QueryFilter:
             A condition string containing only placeholders for values.
         """
         field_name = self._render_field_reference(params, param_prefix)
+        if (self.field.startswith(_JSON_FIELD_PREFIXES) and isinstance(self.value, (int, float))
+                and not isinstance(self.value, bool) and self.operator in _NUMERIC_OPERATORS):
+            # JSON values are extracted as text; compare numbers as numbers
+            # (String = Int64 is a ClickHouse type error, and "10" > "9" is false).
+            field_name = f"toFloat64OrNull({field_name})"
 
         def bind(value: Any, suffix: str = "") -> str:
             key = f"{param_prefix}{suffix}"
