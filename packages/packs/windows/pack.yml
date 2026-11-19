@@ -1,0 +1,41 @@
+id: windows
+name: Windows Security and Sysmon
+version: 1.0.0
+description: >
+  Windows event logs as JSON, from NXLog (im_msvistalog with to_json, event
+  data as top-level fields) or Winlogbeat (winlog.event_data): the Security
+  log (logons, account and group changes, log clearing) and Sysmon (process
+  creation, process access, network connections), mapped to OCSF. Rules for
+  cleared logs, users added to Administrators, Office spawning a shell,
+  LSASS memory access and encoded PowerShell.
+sources:
+  - name: Windows Security log (NXLog or Winlogbeat JSON)
+    service: windows
+  - name: Sysmon (Microsoft-Windows-Sysmon/Operational, same shippers)
+    service: windows
+samples:
+  - file: samples/security-nxlog.jsonl
+    service: windows
+    pipeline: windows-eventlog
+    expect:
+      - contains: EventID 4625
+        fields: {attrs.event_id: 4625, attrs.logon_failure: "yes", user_id: administrator, src_ip: 203.0.113.61,
+                 attrs.logon_type: 3, attrs.ocsf.class_uid: 3002, level: warn, host: DC01}
+        min: 3
+      - contains: EventID 4732
+        fields: {attrs.group_name: Administrators, attrs.member_name: "CN=Mallory,OU=Users,DC=acme,DC=example",
+                 user_id: helpdesk1, attrs.ocsf.class_uid: 3006}
+      - contains: EventID 1102
+        fields: {attrs.channel: Security, user_id: helpdesk1}
+    rules: [windows-log-cleared, windows-admin-group-add]
+  - file: samples/sysmon-winlogbeat.jsonl
+    service: windows
+    pipeline: windows-eventlog
+    expect:
+      - contains: 'EventID 1 on WS042: Process Create'
+        fields: {attrs.event_id: 1, attrs.channel: Microsoft-Windows-Sysmon/Operational, host: WS042,
+                 attrs.parent_image: 'C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE',
+                 attrs.ocsf.class_uid: 1007, user_id: 'ACME\bob'}
+      - contains: Process accessed
+        fields: {attrs.event_id: 10, attrs.target_image: 'C:\Windows\system32\lsass.exe', attrs.granted_access: "0x1010"}
+    rules: [windows-office-spawns-shell, windows-lsass-access, windows-encoded-powershell]

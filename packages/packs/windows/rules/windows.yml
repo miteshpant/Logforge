@@ -1,0 +1,91 @@
+title: Windows event log cleared
+id: windows-log-cleared
+status: stable
+description: The Security log (1102) or the System log (104) was cleared, a common step to hide activity.
+author: Logforge
+tags: [attack.defense_evasion, attack.t1070.001]
+logsource: {product: windows, service: security}
+detection:
+  selection: {service: windows, event_id: [1102, 104]}
+  condition: selection
+fixtures:
+  true_positive: {service: windows, event_id: 1102, channel: Security, subject_user: helpdesk1}
+  true_negative: {service: windows, event_id: 4624, channel: Security, subject_user: helpdesk1}
+level: high
+---
+title: User added to a privileged local or domain group
+id: windows-admin-group-add
+status: stable
+description: A member was added to Administrators, Domain Admins, Enterprise Admins or Schema Admins.
+author: Logforge
+tags: [attack.persistence, attack.t1098]
+logsource: {product: windows, service: security}
+detection:
+  selection:
+    service: windows
+    event_id: [4728, 4732, 4756]
+    group_name: [Administrators, Domain Admins, Enterprise Admins, Schema Admins]
+  condition: selection
+fixtures:
+  true_positive: {service: windows, event_id: 4732, group_name: Administrators, member_name: "CN=Mallory"}
+  true_negative: {service: windows, event_id: 4732, group_name: Remote Desktop Users, member_name: "CN=Mallory"}
+level: high
+---
+title: Office application spawns a shell or script host
+id: windows-office-spawns-shell
+status: stable
+description: Word, Excel, PowerPoint or Outlook started cmd, PowerShell or a script host, typical of a malicious macro or attachment.
+author: Logforge
+tags: [attack.initial_access, attack.t1566.001, attack.execution, attack.t1204.002]
+logsource: {product: windows, category: process_creation}
+detection:
+  selection:
+    service: windows
+    event_id: 1
+    parent_image|endswith: ['\winword.exe', '\excel.exe', '\powerpnt.exe', '\outlook.exe', '\msaccess.exe']
+    image|endswith: ['\cmd.exe', '\powershell.exe', '\pwsh.exe', '\wscript.exe', '\cscript.exe', '\mshta.exe', '\rundll32.exe', '\regsvr32.exe']
+  condition: selection
+fixtures:
+  true_positive: {service: windows, event_id: 1, parent_image: 'C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE', image: 'C:\Windows\System32\cmd.exe'}
+  true_negative: {service: windows, event_id: 1, parent_image: 'C:\Windows\explorer.exe', image: 'C:\Windows\System32\cmd.exe'}
+level: high
+---
+title: LSASS memory accessed
+id: windows-lsass-access
+status: stable
+description: A process opened lsass.exe with rights that allow reading its memory, as credential dumpers do.
+author: Logforge
+tags: [attack.credential_access, attack.t1003.001]
+logsource: {product: windows, category: process_access}
+detection:
+  selection:
+    service: windows
+    event_id: 10
+    target_image|endswith: '\lsass.exe'
+    granted_access: ['0x1010', '0x1410', '0x1438', '0x143a', '0x1fffff', '0x1f3fff']
+  filter:
+    source_image|endswith: ['\MsMpEng.exe', '\wininit.exe', '\csrss.exe', '\svchost.exe']
+  condition: selection and not filter
+fixtures:
+  true_positive: {service: windows, event_id: 10, target_image: 'C:\Windows\system32\lsass.exe', granted_access: "0x1010", source_image: 'C:\Users\Public\procdump64.exe'}
+  true_negative: {service: windows, event_id: 10, target_image: 'C:\Windows\system32\lsass.exe', granted_access: "0x1010", source_image: 'C:\ProgramData\Microsoft\Windows Defender\Platform\MsMpEng.exe'}
+level: high
+---
+title: Encoded PowerShell command
+id: windows-encoded-powershell
+status: stable
+description: PowerShell was started with a base64-encoded command, which hides what it runs.
+author: Logforge
+tags: [attack.execution, attack.t1059.001]
+logsource: {product: windows, category: process_creation}
+detection:
+  selection:
+    service: windows
+    event_id: 1
+    image|endswith: ['\powershell.exe', '\pwsh.exe']
+    command_line|contains: [' -enc ', ' -encodedcommand ', ' -e JAB', ' -ec ']
+  condition: selection
+fixtures:
+  true_positive: {service: windows, event_id: 1, image: 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe', command_line: 'powershell.exe -nop -w hidden -enc SQBFAFgA'}
+  true_negative: {service: windows, event_id: 1, image: 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe', command_line: 'powershell.exe -File C:\scripts\backup.ps1'}
+level: medium

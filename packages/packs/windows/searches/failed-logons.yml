@@ -1,0 +1,10 @@
+name: Windows failed logons by account and source
+description: Alert template. Twenty or more failed logons (4625) for one account from one address in an hour. Enable it and add a channel.
+query: '| where service = "windows" and attrs.event_id = 4625 | stats count() as failures, values(host) as hosts by user_id, src_ip | where failures >= 20'
+every: 15m
+window: 1h
+enabled: false
+alert:
+  condition: {kind: rows, op: gt, value: 0}
+  severity: medium
+  throttle_minutes: 60
