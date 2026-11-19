@@ -22,6 +22,7 @@ test('with AI off, the page says why and questions get the rule-based answer', a
   await expect(page.getByTestId('ai-provider')).toBeDisabled()
   await expect(page.getByTestId('ai-enabled')).toBeDisabled()
 
+  await expect(page.getByTestId('ai-audit')).toBeVisible()
   const requestsBefore = await page.getByTestId('ai-audit').locator('details').count()
   await page.getByTestId('ai-question').fill('How many errors were logged in the last hour?')
   await page.getByTestId('ai-ask').click()
@@ -47,8 +48,8 @@ test('a citation link opens the Log Explorer on its query', async ({ page }) => 
   await page.waitForTimeout(1500)
   await expect(page.getByTestId('query-results-table')).toHaveCount(0)
   // from Logforge (an AI citation): it runs
-  await page.goto('/settings/ai', { waitUntil: 'load' })
-  await page.evaluate(href => { window.location.href = href }, link)
+  const origin = new URL(page.url()).origin
+  await page.goto(link, { waitUntil: 'load', referer: `${origin}/settings/ai` })
   await expect(page.getByPlaceholder(/LogforgeQL/)).toHaveValue(query)
   const table = page.getByTestId('query-results-table')
   await expect(table.locator('thead')).toContainText('errors', { timeout: 30_000 })

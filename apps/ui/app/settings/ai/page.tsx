@@ -34,10 +34,11 @@ export default function AISettingsPage() {
     }
     try {  // tenant admins only; others just don't see the settings
       const s = await getAISettings()
+      const entries = (await getAIAudit({ limit: 100 })).entries
+      setAudit(entries)  // before the section shows, so it never shows an empty log first
       setAdmin(s)
       setForm(s.settings)
       setRedactText(s.settings.redact_fields.join('\n'))
-      setAudit((await getAIAudit({ limit: 100 })).entries)
     } catch {
       setAdmin(null)
     }
