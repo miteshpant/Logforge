@@ -296,3 +296,86 @@ def test_ocsf_fields_work_in_pipelines(ch):
     got = rows_of(ch, "| stats count() by ocsf.src_endpoint.ip | sort -count | head 1")
     top = Counter(e["src_ip"] for e in events).most_common(1)[0]
     assert got == [{"ocsf.src_endpoint.ip": top[0], "count": top[1]}]
+
+
+# ---------------------------------------------------------------------------
+# Lookups and joins (P6.2)
+# ---------------------------------------------------------------------------
+
+MIGRATION = os.path.join(os.path.dirname(__file__), "..", "infra", "docker", "clickhouse", "migrations",
+                         "021_lookup_tables.sql")
+
+
+@pytest.fixture(scope="module")
+def lookups(ch):
+    client, _, events = ch
+    sql = "\n".join(line for line in open(MIGRATION).read().splitlines() if not line.lstrip().startswith("--"))
+    for statement in sql.split(";"):
+        if "CREATE TABLE" in statement:
+            client.command(statement)
+    departments = {f"u{i}": ("finance" if i % 3 == 0 else "it" if i % 3 == 1 else "ops") for i in range(20)}
+    rows = [[TENANT, "users", 2, user, {"department": dept, "manager": f"m{int(user[1:]) % 4}"}]
+            for user, dept in departments.items()]
+    rows += [[TENANT, "users", 1, "u0", {"department": "OLD VERSION", "manager": ""}]]  # superseded
+    rows += [[OTHER, "users", 2, "u1", {"department": "LEAK", "manager": ""}]]  # another tenant's
+    rows += [[TENANT, "blocklist", 1, ip, {}] for ip in ("10.0.0.1", "10.0.0.2", "203.0.113.9")]
+    client.insert("lookup_rows_mt", rows, column_names=["tenant_id", "lookup", "version", "key", "values"])
+    metas = {"users": lp.LookupMeta("users", 2, ["user_id", "department", "manager"], "user_id"),
+             "blocklist": lp.LookupMeta("blocklist", 1, ["value"], "value")}
+    yield metas, departments
+    client.command("ALTER TABLE lookup_rows_mt DELETE WHERE tenant_id IN (%(a)s, %(b)s)", {"a": TENANT, "b": OTHER})
+
+
+def test_lookup_adds_columns_from_the_current_version(ch, lookups):
+    metas, departments = lookups
+    _, _, events = ch
+    got = rows_of(ch, "| lookup users user_id output department | stats count() by department", lookups=metas)
+    expected = Counter(departments.get(e["user_id"]) for e in events)
+    assert {r["department"]: r["count"] for r in got} == dict(expected)  # users u20..u24 have no row: None
+
+
+def test_lookup_on_a_stats_table(ch, lookups):
+    metas, departments = lookups
+    _, _, events = ch
+    got = rows_of(ch, "| stats count() as n by user_id | lookup users user_id output manager as boss "
+                      "| where isnotnull(boss) | stats sum(n) as n by boss", lookups=metas)
+    expected = Counter()
+    for e in events:
+        if e["user_id"] in departments:
+            expected[f"m{int(e['user_id'][1:]) % 4}"] += 1
+    assert {r["boss"]: r["n"] for r in got} == dict(expected)
+
+
+def test_inlookup_matches_list_members(ch, lookups):
+    metas, _ = lookups
+    _, _, events = ch
+    got = rows_of(ch, '| where inlookup("blocklist", src_ip) | stats count() as hits by src_ip', lookups=metas)
+    expected = Counter(e["src_ip"] for e in events if e["src_ip"] in ("10.0.0.1", "10.0.0.2", "203.0.113.9"))
+    assert {r["src_ip"]: r["hits"] for r in got} == dict(expected)
+
+
+def test_join_compares_two_searches(ch):
+    _, _, events = ch
+    failures = Counter(e["user_id"] for e in events if e["outcome"] == "failure")
+    successes = Counter(e["user_id"] for e in events if e["outcome"] == "success")
+    got = rows_of(ch, '| where attrs.outcome = "failure" | stats count() as failures by user_id '
+                      '| join user_id [ | where attrs.outcome = "success" | stats count() as ok by user_id ] '
+                      '| eval ratio = round(failures / ok, 4) | sort -ratio, user_id | head 5')
+    expected = sorted(((u, n, successes[u]) for u, n in failures.items() if successes[u]),
+                      key=lambda t: (-round(t[1] / t[2], 4), t[0]))[:5]
+    assert [(r["user_id"], r["failures"], r["ok"]) for r in got] == expected
+
+
+def test_left_join_keeps_unmatched_rows_and_events_keep_their_fields(ch):
+    _, _, events = ch
+    got = rows_of(ch, '| join type=left user_id [ | where status = 503 | stats count() as unavailable by user_id ] '
+                      '| where unavailable = 0 | stats count() as n')
+    with_503 = {e["user_id"] for e in events if e["status"] == 503}
+    assert got == [{"n": sum(1 for e in events if e["user_id"] not in with_503)}]
+    got = rows_of(ch, "| join user_id [ | stats dc(src_ip) as ips by user_id ] | where ips > 35 "
+                      "| stats count() as n, dc(ocsf.src_endpoint.ip) as seen")
+    ips = defaultdict(set)
+    for e in events:
+        ips[e["user_id"]].add(e["src_ip"])
+    busy = {u for u, s in ips.items() if len(s) > 35}
+    assert got[0]["n"] == sum(1 for e in events if e["user_id"] in busy)

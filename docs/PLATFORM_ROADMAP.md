@@ -632,12 +632,19 @@ analysts expect from SPL or ES|QL.
 >   bound. Queries the original language accepted keep their old behaviour.
 >   Answers are checked against Python on a seeded dataset in ClickHouse
 >   (`tests/test_logql_pipeline_live.py`, run in CI).
+> - **Done: lookups and joins.** Tenants upload CSV lookups (up to
+>   100,000 rows) or keep managed lists under `/v1/query/lookups`; an
+>   upload is a new version, so a replacement is atomic for queries.
+>   `| lookup users user_id output department` adds columns,
+>   `inlookup("blocklist", src_ip)` tests membership, and
+>   `| join [type=left] [max=N] user_id [ subsearch ]` joins a second
+>   search (same tenant and window, at most 50,000 rows, one row per key).
 > - **Bugs found and fixed:** a query starting with `| eval ...` (or any
 >   stage the original language didn't know) was silently run as a
 >   full-text search for that text; `stats ... | where n > 3` filtered the
 >   events instead of the stats rows, because the original compiler applies
 >   every filter before aggregating.
-> - **Next:** lookups and joins, saved and scheduled searches, dashboard
+> - **Next:** saved and scheduled searches, dashboard
 >   panels from queries, rollups and cost limits, the language reference
 >   and query builder, then the acceptance run.
 

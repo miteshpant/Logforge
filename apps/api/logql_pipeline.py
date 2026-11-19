@@ -61,6 +61,9 @@ MAX_ROWS = 10_000          # rows a query may return
 DEFAULT_EVENT_ROWS = 100   # events returned when the query has no head
 MAX_SERIES = 100           # timechart limit=
 MAX_VALUES = 100           # values() / list() items per group
+MAX_JOIN_ROWS = 50_000     # rows a join subsearch may return
+DEFAULT_JOIN_ROWS = 10_000
+MAX_JOIN_DEPTH = 2
 
 # Column types the compiler tracks, so it can convert where ClickHouse needs it
 # (attrs and ocsf values are text; comparing text with a number is an error).
@@ -73,7 +76,7 @@ EVENT_OUTPUT = ("ts", "host", "service", "level", "msg", "trace_id", "span_id", 
 _TIME_COLUMNS = {"ts", "ingested_at", "date", "hour"}
 
 STAGES = ("where", "eval", "stats", "eventstats", "timechart", "top", "rare", "sort", "head", "limit", "dedup",
-          "fields", "table", "rename", "bin", "rex", "parse", "json", "last")
+          "fields", "table", "rename", "bin", "rex", "parse", "json", "lookup", "join", "last")
 
 _NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
 _FIELD_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)*$")
@@ -183,15 +186,40 @@ class CompiledQuery:
     explicit_limit: bool
 
 
+@dataclass
+class LookupMeta:
+    """What the compiler needs to know about a tenant's lookup table."""
+    name: str
+    version: int
+    columns: List[str]
+    key: str
+
+
 class Compiler:
     def __init__(self, customer_id: str, start: datetime, end: datetime, table: str,
-                 variables: Optional[Dict[str, Any]], max_rows: int):
-        if not _TABLE_RE.match(table):
+                 variables: Optional[Dict[str, Any]], max_rows: int,
+                 lookups: Optional[Dict[str, "LookupMeta"]] = None, lookup_table: str = "lookup_rows_mt"):
+        if not _TABLE_RE.match(table) or not _TABLE_RE.match(lookup_table):
             raise PipelineError("invalid table")
         self.customer_id, self.start, self.end, self.table = customer_id, start, end, table
         self.variables = variables or {}
         self.max_rows = max_rows
         self.params: Dict[str, Any] = {}
+        self.lookups = lookups or {}
+        self.lookup_table = lookup_table
+        self.join_depth = 0
+
+    def lookup(self, name: str) -> "LookupMeta":
+        meta = self.lookups.get(name)
+        if meta is None:
+            known = ", ".join(sorted(self.lookups)) or "none uploaded"
+            raise PipelineError(f"Unknown lookup: {name}. Lookups: {known}")
+        return meta
+
+    def lookup_rows(self, meta: "LookupMeta") -> str:
+        """The current version's rows of a tenant's lookup, as a subquery."""
+        return (f"SELECT key, values FROM {self.lookup_table} WHERE tenant_id = {self.bind(self.customer_id)} "
+                f"AND lookup = {self.bind(meta.name)} AND version = {int(meta.version)}")
 
     # -- binding ------------------------------------------------------------
     def bind(self, value: Any) -> str:
@@ -433,7 +461,17 @@ def _str_fn(sql_name: str, kind: str = STR):
     return fn
 
 
+def _inlookup(c, args):
+    _arity("inlookup", args, 2)
+    if not isinstance(args[0].literal, str):
+        raise PipelineError('inlookup needs a quoted lookup name first, e.g. inlookup("blocklist", src_ip)')
+    meta = c.lookup(args[0].literal)
+    rows = c.lookup_rows(meta).replace("SELECT key, values", "SELECT key", 1)
+    return Col(f"({to_str(args[1])} IN ({rows}))", BOOL)
+
+
 FUNCTIONS: Dict[str, Callable[[Compiler, List[Col]], Col]] = {
+    "inlookup": _inlookup,
     "if": _fn_if,
     "case": _fn_case,
     "coalesce": _fn_coalesce,
@@ -1147,6 +1185,149 @@ class Pipeline:
         return scope
 
 
+    # -- lookups and joins -------------------------------------------------------------
+    def lookup(self, scope: Scope, body: str) -> Scope:
+        """lookup <name> <field> [as <key column>] [output col [as alias], ...]"""
+        parser = Parser(self.c, scope, tokenize(body), "lookup")
+        if parser.done():
+            raise PipelineError("`lookup` needs a lookup and a field, e.g. lookup users user_id")
+        meta = self.c.lookup(parser.name("a lookup name"))
+        if parser.done():
+            raise PipelineError("`lookup` needs a field to match, e.g. lookup users user_id")
+        field_name = parser.name("a field to match")
+        if parser.peek().is_kw("as"):
+            parser.next()
+            key = parser.name("the lookup's key column")
+            if key != meta.key:
+                raise PipelineError(f"`lookup`: {meta.name} is keyed by {meta.key}, not {key}")
+        outputs: List[Tuple[str, str]] = []
+        if parser.peek().is_kw("output", "outputnew"):
+            parser.next()
+            while not parser.done():
+                column = parser.name("a lookup column")
+                alias = column
+                if parser.peek().is_kw("as"):
+                    parser.next()
+                    alias = parser.name("a name after as")
+                outputs.append((column, alias))
+                if not parser.done():
+                    parser.expect_op(",")
+        elif not parser.done():
+            parser.fail(parser.peek(), "expected output or the end of lookup")
+        if not outputs:
+            outputs = [(c, c) for c in meta.columns if c != meta.key]
+        for column, alias in outputs:
+            if column not in meta.columns or column == meta.key:
+                raise PipelineError(f"`lookup`: {meta.name} has no column {column} "
+                                    f"(columns: {', '.join(c for c in meta.columns if c != meta.key)})")
+            if not _NAME_RE.match(alias):
+                raise PipelineError(f"`lookup`: {alias!r} is not a valid name")
+        key = Col(f"toString({self.c.resolve(scope, field_name).sql})", STR)
+        scope = self.add_column(scope, "__lk", key)
+        visible = self.visible(scope)
+        joined = (f"FROM ({scope.sql}) AS l ANY LEFT JOIN ({self.c.lookup_rows(meta)}) AS r "
+                  f"ON l.`__lk` = r.key")
+        values = [(alias, Col(f"if(r.key = '', NULL, r.values[{self.c.bind(column)}])", STR))
+                  for column, alias in outputs]
+        if scope.open:
+            kept = [n for n in scope.real if n != "__lk"]
+            select = [f"l.{q(n)} AS {q(n)}" for n in sorted(kept) if n not in {a for a, _ in values}]
+            select += [f"{c.sql} AS {q(a)}" for a, c in values]
+            computed = [n for n in scope.computed if n != "__lk" and n not in {a for a, _ in values}]
+            cols = {n: c for n, c in scope.cols.items() if n != "__lk"}
+            for alias, c in values:
+                cols[alias] = Col(q(alias), STR)
+            return Scope(**{**scope.__dict__, "sql": f"SELECT {', '.join(select)} {joined}", "cols": cols,
+                            "real": (set(kept) | {a for a, _ in values}), "computed": computed + [a for a, _ in values],
+                            "hidden": scope.hidden - {a for a, _ in values}})
+        names = [n for n in visible if n != "__lk" and n not in {a for a, _ in values}]
+        select = [f"l.{q(n)} AS {q(n)}" for n in names] + [f"{c.sql} AS {q(a)}" for a, c in values]
+        cols = {n: Col(q(n), scope.cols[n].type) for n in names}
+        cols.update({a: Col(q(a), STR) for a, _ in values})
+        order = [(s, d) for s, d in scope.order if s in {q(n) for n in names}]
+        return Scope(**{**scope.__dict__, "sql": f"SELECT {', '.join(select)} {joined}", "cols": cols,
+                        "order": order})
+
+    def join(self, scope: Scope, body: str) -> Scope:
+        """join [type=inner|left] [max=N] key[, key] [ subsearch ]"""
+        options, body = _options(body, ("type", "max"), "join")
+        how = options.get("type", "inner").lower()
+        if how not in ("inner", "left"):
+            raise PipelineError("`join`: type must be inner or left")
+        max_rows = _positive(options.get("max", str(DEFAULT_JOIN_ROWS)), "join max", MAX_JOIN_ROWS)
+        head, subsearch = _subsearch(body)
+        parser = Parser(self.c, scope, tokenize(head), "join")
+        keys, _ = _field_list(parser, "join")
+        if self.c.join_depth >= MAX_JOIN_DEPTH:
+            raise PipelineError(f"`join`: subsearches can be nested at most {MAX_JOIN_DEPTH} deep")
+        self.c.join_depth += 1
+        try:
+            right_pipeline, right_scope, _ = run_stages(self.c, subsearch)
+        finally:
+            self.c.join_depth -= 1
+        right_columns = right_pipeline.visible(right_scope)
+        for key in keys:
+            if key not in right_columns:
+                raise PipelineError(f"`join`: {key} is not in the subsearch's results "
+                                    f"({', '.join(right_columns)})")
+        left_names = set(self.visible(scope)) | set(scope.cols)
+        extra = [n for n in right_columns if n not in keys]
+        clash = [n for n in extra if n in left_names]
+        if clash:
+            raise PipelineError(f"`join`: both sides have {', '.join(clash)}; rename one side first")
+        right_sql, _ = final_select(right_pipeline, right_scope, max_rows)
+        right_keys = ", ".join(f"toString({q(k)}) AS {q(k)}" for k in keys)
+        right_rest = "".join(f", {q(n)}" for n in extra)
+        # One right row per key, then a plain join: ClickHouse's ANY INNER JOIN
+        # also keeps only one LEFT row per key, which dropped events.
+        right = (f"SELECT {right_keys}{right_rest} FROM ({right_sql}) "
+                 f"LIMIT 1 BY {', '.join(q(k) for k in keys)}")
+        for key in keys:
+            scope = self.add_column(scope, key, Col(to_str(self.c.resolve(scope, key)), STR))
+        on = " AND ".join(f"l.{q(k)} = r.{q(k)}" for k in keys)
+        joined = f"FROM ({scope.sql}) AS l {how.upper()} JOIN ({right}) AS r ON {on}"
+        right_types = {n: (right_scope.cols[n].type if n in right_scope.cols else
+                           right_pipeline.c.resolve(right_scope, n).type) for n in extra}
+        if scope.open:
+            select = ["l.*"] + [f"r.{q(n)} AS {q(n)}" for n in extra]
+            cols = dict(scope.cols)
+            cols.update({n: Col(q(n), right_types[n]) for n in extra})
+            return Scope(**{**scope.__dict__, "sql": f"SELECT {', '.join(select)} {joined}", "cols": cols,
+                            "real": scope.real | set(extra), "computed": scope.computed + extra})
+        names = list(scope.cols)
+        select = [f"l.{q(n)} AS {q(n)}" for n in names] + [f"r.{q(n)} AS {q(n)}" for n in extra]
+        cols = {n: Col(q(n), scope.cols[n].type) for n in names}
+        cols.update({n: Col(q(n), right_types[n]) for n in extra})
+        return Scope(**{**scope.__dict__, "sql": f"SELECT {', '.join(select)} {joined}", "cols": cols})
+
+
+def _subsearch(body: str) -> Tuple[str, str]:
+    """Split `key, key [ subsearch ]` at the first [ outside quotes."""
+    quote, depth, start = None, 0, None
+    for i, char in enumerate(body):
+        if quote:
+            if char == "\\":
+                continue
+            if char == quote and body[i - 1] != "\\":
+                quote = None
+            continue
+        if char in "\"'":
+            quote = char
+        elif char == "[":
+            if depth == 0 and start is None:
+                start = i
+            depth += 1
+        elif char == "]":
+            depth -= 1
+    stripped = body.rstrip()
+    if start is None or not stripped.endswith("]") or depth != 0:
+        raise PipelineError("`join` needs a subsearch in brackets, e.g. join user_id [ | stats count() by user_id ]")
+    inner = stripped[start + 1:-1].strip()
+    if not inner:
+        raise PipelineError("`join`: the subsearch is empty")
+    return body[:start], inner
+
+
 def default_name(func: str, arg_text: List[str], args: List[Col]) -> Optional[str]:
     if func in ("count", "c") and not args:
         return "count"
@@ -1287,11 +1468,7 @@ def requested_seconds(query: str) -> Optional[int]:
     return seconds
 
 
-def compile_pipeline(query: str, customer_id: str, start: datetime, end: datetime, table: str = "logs_raw_mt",
-                     variables: Optional[Dict[str, Any]] = None, max_rows: int = MAX_ROWS) -> CompiledQuery:
-    if not customer_id:
-        raise PipelineError("a tenant is required")
-    compiler = Compiler(customer_id, start, end, table, variables, max_rows)
+def run_stages(compiler: Compiler, query: str) -> Tuple["Pipeline", Scope, bool]:
     text, stages = _split(query)
     pipeline = Pipeline(compiler)
     scope = compiler.base(text)
@@ -1338,14 +1515,32 @@ def compile_pipeline(query: str, customer_id: str, start: datetime, end: datetim
             scope = pipeline.bin(scope, body)
         elif keyword in ("rex", "parse", "json"):
             scope = pipeline.extraction(scope, keyword, body)
+        elif keyword == "lookup":
+            scope = pipeline.lookup(scope, body)
+        elif keyword == "join":
+            scope = pipeline.join(scope, body)
+    return pipeline, scope, explicit_limit
 
+
+def final_select(pipeline: "Pipeline", scope: Scope, limit: int) -> Tuple[str, List[str]]:
     columns = pipeline.visible(scope)
     if scope.open:
-        select = ", ".join(f"{compiler.resolve(scope, n).sql} AS {q(n)}" for n in columns)
+        select = ", ".join(f"{pipeline.c.resolve(scope, n).sql} AS {q(n)}" for n in columns)
     else:
         select = ", ".join(q(n) for n in columns)
+    return f"SELECT {select} FROM ({scope.sql}){pipeline.order_clause(scope)} LIMIT {int(limit)}", columns
+
+
+def compile_pipeline(query: str, customer_id: str, start: datetime, end: datetime, table: str = "logs_raw_mt",
+                     variables: Optional[Dict[str, Any]] = None, max_rows: int = MAX_ROWS,
+                     lookups: Optional[Dict[str, LookupMeta]] = None,
+                     lookup_table: str = "lookup_rows_mt") -> CompiledQuery:
+    if not customer_id:
+        raise PipelineError("a tenant is required")
+    compiler = Compiler(customer_id, start, end, table, variables, max_rows, lookups, lookup_table)
+    pipeline, scope, explicit_limit = run_stages(compiler, query)
     limit = scope.limit if scope.limit is not None else (DEFAULT_EVENT_ROWS if scope.events else max_rows)
-    sql = f"SELECT {select} FROM ({scope.sql}){pipeline.order_clause(scope)} LIMIT {int(limit)}"
+    sql, columns = final_select(pipeline, scope, limit)
     return CompiledQuery(sql=sql, params=compiler.params, columns=columns, result_type=scope.kind,
                          limit=int(limit), explicit_limit=explicit_limit)
 

@@ -405,6 +405,20 @@ def _check_variables(variables: Any) -> Dict[str, Any]:
     return variables
 
 
+async def _lookup_metas(customer_id: str, query_text: str) -> Dict[str, Any]:
+    """The tenant's lookup tables, loaded only when the query uses one."""
+    if not re.search(r"\b(lookup|inlookup)\b", query_text, re.IGNORECASE):
+        return {}
+    import lookup_tables
+    from logql_pipeline import LookupMeta
+
+    try:
+        tables = await lookup_tables.LookupDAO().list(customer_id)
+    except Exception as e:
+        raise internal_error(e, "Failed to load lookup tables")
+    return {t.name: LookupMeta(name=t.name, version=t.version, columns=t.columns, key=t.key) for t in tables}
+
+
 async def run_pipeline_query(query_text: str, request_body: Dict[str, Any], customer_id: str,
                              variables: Any = None) -> Dict[str, Any]:
     """Phase 6: compile a pipeline query to one parameterised statement and run it.
@@ -425,8 +439,10 @@ async def run_pipeline_query(query_text: str, request_body: Dict[str, Any], cust
     start, end = logql_window(payload, request_body)
     variables = _check_variables(request_body.get("variables") if variables is None else variables)
 
+    lookups = await _lookup_metas(customer_id, query_text)
     try:
-        compiled = compile_pipeline(query_text, customer_id=customer_id, start=start, end=end, variables=variables)
+        compiled = compile_pipeline(query_text, customer_id=customer_id, start=start, end=end, variables=variables,
+                                    lookups=lookups)
     except (PipelineError, QueryFieldError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 

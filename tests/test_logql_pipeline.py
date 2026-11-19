@@ -140,3 +140,59 @@ def test_extraction_stages_are_shared_with_v1():
 
 def test_v1_compile_is_unchanged():
     assert logql.compile_to_request_payload("| stats count() by level")["group_by"] == ["level"]
+
+
+# ---------------------------------------------------------------------------
+# Lookups and joins (P6.2)
+# ---------------------------------------------------------------------------
+
+LOOKUPS = {"users": lp.LookupMeta(name="users", version=3, columns=["user_id", "department", "manager"],
+                                  key="user_id"),
+           "blocklist": lp.LookupMeta(name="blocklist", version=1, columns=["value"], key="value")}
+
+
+def test_lookup_joins_the_current_version_of_the_tenants_table():
+    q = compile_("| lookup users user_id output department as dept | stats count() by dept", lookups=LOOKUPS)
+    assert "lookup_rows_mt" in q.sql and "ANY LEFT JOIN" in q.sql and "version = 3" in q.sql
+    assert {"acme", "users", "department"} <= set(q.params.values())
+    assert q.columns == ["dept", "count"]
+    # every output column by default, and a field matched to a differently named key
+    q = compile_("| lookup users attrs.actor as user_id", lookups=LOOKUPS)
+    assert q.columns[-2:] == ["department", "manager"]
+
+
+def test_inlookup_is_a_set_membership_test():
+    q = compile_('| where inlookup("blocklist", src_ip) | stats count() as hits', lookups=LOOKUPS)
+    assert "IN (SELECT key FROM lookup_rows_mt" in q.sql and "blocklist" in q.params.values()
+
+
+@pytest.mark.parametrize("query, message", [
+    ("| lookup nope user_id", "Unknown lookup: nope"),
+    ("| lookup users user_id output salary", "users has no column salary"),
+    ("| lookup users", "`lookup` needs"),
+    ('| where inlookup(src_ip, "blocklist")', "quoted lookup name"),
+    ('| where inlookup("nope", src_ip)', "Unknown lookup: nope"),
+    ("| join user_id", "subsearch"),
+    ("| join user_id [ | stats count() as n by host ]", "user_id is not in the subsearch"),
+    ("| stats count() by user_id | join user_id [ | stats count() by user_id ]", "both sides have count"),
+    ("| join type=outer user_id [ | stats count() as n by user_id ]", "type must be inner or left"),
+    ("| join max=100000 user_id [ | stats count() as n by user_id ]", "at most 50000"),
+])
+def test_lookup_and_join_errors(query, message):
+    with pytest.raises(PipelineError, match=message):
+        compile_(query, lookups=LOOKUPS)
+
+
+def test_join_runs_the_subsearch_on_the_same_tenant_and_window_bounded():
+    q = compile_('| where attrs.outcome = "failure" | stats count() as failures by user_id '
+                 '| join type=left max=500 user_id [ | where attrs.outcome = "success" | stats count() as ok by user_id ] '
+                 '| where failures > ok', lookups=LOOKUPS)
+    assert q.columns == ["user_id", "failures", "ok"]
+    assert " LEFT JOIN (" in q.sql and "LIMIT 500" in q.sql and "LIMIT 1 BY `user_id`" in q.sql
+    assert q.sql.count("customer_id = %(") == 2  # both sides are tenant-bound
+    assert "'acme'" not in q.sql
+
+
+def test_join_keeps_event_fields_available():
+    q = compile_("| join user_id [ | stats dc(src_ip) as ips by user_id ] | where ips > 3 | head 5", lookups=LOOKUPS)
+    assert q.result_type == "events" and q.columns[-1] == "ips"

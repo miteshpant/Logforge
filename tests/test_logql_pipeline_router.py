@@ -93,3 +93,25 @@ def test_naive_window_values_are_utc(engine):
     assert response["time_range"]["start_time"].startswith("2026-11-19T10:00:00")
     _, params, _ = engine.client.calls[0]
     assert datetime(2026, 11, 19, 10, tzinfo=timezone.utc) in params.values()
+
+
+def test_lookups_are_loaded_for_queries_that_use_them(engine, monkeypatch):
+    import lookup_tables
+
+    calls = []
+
+    class DAO:
+        async def list(self, tenant):
+            calls.append(tenant)
+            return [lookup_tables.LookupTable(name="users", kind="csv", columns=["user_id", "dept"], key="user_id",
+                                              row_count=2, version=4)]
+
+    monkeypatch.setattr(lookup_tables, "LookupDAO", DAO)
+    call({"query": "| lookup users user_id | stats count() by dept"})
+    sql, params, _ = engine.client.calls[0]
+    assert calls == ["acme"] and "version = 4" in sql and "users" in params.values()
+    call({"query": "| stats count() as n by service"})
+    assert calls == ["acme"]  # not loaded when no lookup is used
+    with pytest.raises(HTTPException) as exc:
+        call({"query": "| lookup nope user_id"})
+    assert exc.value.status_code == 400 and "Unknown lookup: nope" in exc.value.detail
