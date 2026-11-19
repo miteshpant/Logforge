@@ -5,6 +5,7 @@ clickhouse-connect==0.6.23
 pyyaml==6.0.1
 python-multipart==0.0.33
 httpx==0.28.1
+anthropic==2.10.0
 python-json-logger==2.0.7
 structlog==23.2.0
 aiokafka==0.12.0
