@@ -26,7 +26,7 @@ from fastapi import HTTPException
 from .providers import ToolSpec
 
 MAX_ROWS = 50
-MAX_TEXT = 2000
+MAX_TEXT = 2000  # long values are cut by the orchestrator, after redaction
 SINCE = re.compile(r"^\d{1,4}[mhd]$")
 
 
@@ -113,8 +113,6 @@ async def _indicators(value: str, tenant_id: str) -> list[dict[str, Any]]:
 def _plain(value: Any) -> Any:
     if isinstance(value, datetime):
         return value.isoformat()
-    if isinstance(value, str) and len(value) > MAX_TEXT:
-        return value[:MAX_TEXT] + "…"
     if isinstance(value, dict):
         return {k: _plain(v) for k, v in value.items() if k not in ("tenant_id", "customer_id")}
     if isinstance(value, list):
@@ -233,7 +231,7 @@ TOOLS: dict[str, Tool] = {t.name: t for t in [
          ("POST", "/v1/query/logql"), run_query),
     Tool("get_alert", "Fetch one security alert (detection) by id: rule, severity, time and the event that raised it.",
          _schema({"alert_id": {"type": "string"}}, ["alert_id"]),
-         ("GET", "/v1/security/events/{id}"), get_alert),
+         ("GET", "/v1/security/events"), get_alert),
     Tool("get_case", "Fetch an investigation case by id: its status, its alerts and its timeline.",
          _schema({"case_id": {"type": "string"}}, ["case_id"]),
          ("GET", "/v1/security/cases/{id}"), get_case),

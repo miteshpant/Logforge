@@ -25,6 +25,9 @@ import uuid
 logger = structlog.get_logger(__name__)
 
 
+_SAFE_SERVICE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,127}$")
+
+
 @dataclass
 class QueryIntent:
     """Classified query intent with entities"""
@@ -390,6 +393,10 @@ class NLQProcessor:
 
         # Service filter
         service_filter = ""
+        # Service names come from the tenant's logs: only plain names may go
+        # into the SQL text (a crafted name could otherwise end the IN list and
+        # drop the tenant filter; found by the Phase 8 security review).
+        services = [s for s in services if isinstance(s, str) and _SAFE_SERVICE.match(s)]
         if services:
             services_str = "', '".join(services)
             service_filter = f"AND service IN ('{services_str}')"

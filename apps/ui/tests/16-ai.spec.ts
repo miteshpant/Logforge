@@ -40,7 +40,15 @@ test('a citation link opens the Log Explorer on its query', async ({ page }) => 
   const problems = watchForProblems(page)
   await loginViaUi(page)
   const query = '| where level = "error" | stats count() as errors by service'
-  await page.goto(`/observability/logs?q=${encodeURIComponent(query)}&since=24h`, { waitUntil: 'load' })
+  const link = `/observability/logs?q=${encodeURIComponent(query)}&since=24h`
+  // from another site: the query is filled in but not run
+  await page.goto(link, { waitUntil: 'load', referer: 'https://elsewhere.example/' })
+  await expect(page.getByPlaceholder(/LogforgeQL/)).toHaveValue(query)
+  await page.waitForTimeout(1500)
+  await expect(page.getByTestId('query-results-table')).toHaveCount(0)
+  // from Logforge (an AI citation): it runs
+  await page.goto('/settings/ai', { waitUntil: 'load' })
+  await page.evaluate(href => { window.location.href = href }, link)
   await expect(page.getByPlaceholder(/LogforgeQL/)).toHaveValue(query)
   const table = page.getByTestId('query-results-table')
   await expect(table.locator('thead')).toContainText('errors', { timeout: 30_000 })

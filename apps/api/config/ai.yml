@@ -34,7 +34,8 @@ defaults:
   monthly_token_budget: 2000000
   requests_per_minute: 20
   max_tool_calls: 8
-  max_tokens: 4096
+  max_tokens: 4096          # per model reply
+  max_request_tokens: 200000  # per question, all model calls together
 
 # Field names whose values are replaced with [redacted] before anything is
 # sent to a provider (matched case-insensitively at any depth; tenants add

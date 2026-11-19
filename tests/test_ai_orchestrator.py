@@ -191,3 +191,69 @@ def test_unexpected_tool_failures_become_generic_tool_errors(monkeypatch):
     assert "internal error" in sent and "s3cret" not in sent
     assert result.tool_calls[0] == {"name": "get_alert", "arguments": {"alert_id": "a"}, "ok": False,
                                     "error": "get_alert failed with an internal error"}
+
+
+# -- gaps found by the Phase 8 security review ---------------------------------------
+
+def test_redaction_catches_more_secret_forms():
+    r = Redactor([])
+    for text, secret in [
+        ('{"password": "hunter2", "user": "bob"}', "hunter2"),
+        ("GET /cb?access_token=abc123def456ghi789 HTTP/1.1", "abc123def456ghi789"),
+        ("auth_token=zzz111yyy222xxx333", "zzz111yyy222xxx333"),
+        ("Authorization: Basic dXNlcjpwYXNzd29yZA==", "dXNlcjpwYXNzd29yZA=="),
+        ("Cookie: session=7f3a9c2e1b8d4f60", "7f3a9c2e1b8d4f60"),
+        ("connecting to mysql://root:Sup3rS3cret@db:3306/app", "Sup3rS3cret"),
+        ("aws_secret_access_key=wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEY", "wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEY"),
+        ("token glpat-AbCdEfGhIjKlMnOpQrSt", "glpat-AbCdEfGhIjKlMnOpQrSt"),
+        ("-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA7bq9" + "A" * 3000, "MIIEowIBAAKCAQEA7bq9"),
+    ]:
+        out, n = r.redact(text)
+        assert secret not in out and n >= 1, (text, out)
+
+
+def test_redaction_field_names_match_word_segments_and_paths_at_any_depth():
+    r = Redactor(["password", "secret", "session", "credentials", "attrs.user_email"])
+    doc = {"rows": [{"attrs": {"password_hash": "x1", "secret_key": "x2", "sessionid": "x3", "credentials": "x4",
+                               "user_email": "a@b.c", "passenger": "keep"}}]}
+    out, _ = r.redact(doc)
+    attrs = out["rows"][0]["attrs"]
+    assert attrs["passenger"] == "keep"
+    assert all(attrs[k] == "[redacted]" for k in ("password_hash", "secret_key", "sessionid", "credentials",
+                                                  "user_email"))
+
+
+def test_long_values_are_redacted_before_they_are_cut(monkeypatch):
+    key = "-----BEGIN PRIVATE KEY-----\n" + "Q" * 3000 + "\n-----END PRIVATE KEY-----"
+
+    async def run_query(ctx, args):
+        return ToolOutput(data={"ref": 0, "rows": [{"msg": key, "note": "x" * 5000, "ref": 0}]},
+                          refs=[Ref("query", "q", "/observability/logs?q=x")])
+
+    monkeypatch.setitem(tools.TOOLS, "run_query", tools.Tool(
+        "run_query", "q", tools.TOOLS["run_query"].input_schema, ("POST", "/v1/query/logql"), run_query))
+    provider = ScriptedProvider(tool_turn(("run_query", {"query": "x"})), answer("ok [C1]."))
+    run(ask("q", provider=provider, ctx=CTX, redactor=Redactor([])))
+    sent = next(c for r, c in provider.sent[1] if r == "tool")
+    assert "QQQQ" not in sent and "[redacted]" in sent
+    note = json.loads(sent)["rows"][0]["note"]   # long values are still cut, after redaction
+    assert note == "x" * 2000 + "…"
+
+
+def test_tool_errors_are_redacted_and_over_limit_calls_are_audited(monkeypatch):
+    async def failing(ctx, args):
+        raise tools.ToolError("query failed near 'password=hunter2'")
+
+    monkeypatch.setitem(tools.TOOLS, "run_query", tools.Tool(
+        "run_query", "q", tools.TOOLS["run_query"].input_schema, ("POST", "/v1/query/logql"), failing))
+    audit = []
+
+    async def record(kind, content, usage=None):
+        audit.append((kind, content))
+
+    provider = ScriptedProvider(tool_turn(("run_query", {"query": "a"}), ("run_query", {"query": "b"})),
+                                answer("done"))
+    run(ask("q", provider=provider, ctx=CTX, redactor=Redactor([]), audit=record, max_tool_calls=1))
+    assert "hunter2" not in json.dumps(audit) and "hunter2" not in json.dumps(provider.sent)
+    kinds = [k for k, _ in audit]
+    assert kinds.count("tool_call") == 2 and kinds.count("tool_result") == 2

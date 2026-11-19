@@ -194,3 +194,46 @@ def test_provider_failures_are_reported_and_audited(api):
 def test_questions_are_bounded(api):
     assert api.post("/v1/ai/ask", headers=ACME, json={"question": ""}).status_code == 422
     assert api.post("/v1/ai/ask", headers=ACME, json={"question": "x" * 5000}).status_code == 422
+
+
+def test_the_rule_based_fallback_needs_what_v1_ai_query_needs(api):
+    """Security review, Phase 8: the old NLQ processor checks no per-intent
+    permissions, so with AI off only callers allowed to use /v1/ai/query
+    (ai:write) get its answer; others get the reason and no data."""
+    analyst = {**ACME, "X-Test-Role": "security_analyst"}
+    body = api.post("/v1/ai/ask", headers=analyst, json={"question": "any security events?"}).json()
+    assert body["mode"] == "off" and body["reason_code"] == "tenant_off" and body["text"] == ""
+    assert api.state["fallbacks"] == []
+    admin = api.post("/v1/ai/ask", headers=ACME, json={"question": "any security events?"}).json()
+    assert admin["mode"] == "rule_based" and api.state["fallbacks"] == [("any security events?", "acme")]
+
+
+def test_usage_is_written_before_each_model_call_and_requests_are_capped(api, monkeypatch):
+    """Security review, Phase 8: usage written only at the end let concurrent
+    requests overshoot the budget. Each model call now flushes the request's
+    audit rows and re-reads usage first, and one request has a token cap."""
+    from ai.providers import AIConfig
+    from test_ai_orchestrator import tool_turn
+
+    opt_in(api)
+    seen = []
+
+    class Watching(ScriptedProvider):
+        async def chat(self, messages, tools_, **kw):
+            seen.append(len(api.audit.rows))
+            return await super().chat(messages, tools_, **kw)
+
+    monkeypatch.setattr("ai.tools._logql", _fake_logql)
+    api.state["provider"] = Watching(tool_turn(("run_query", {"query": "error"})), answer("done [C1]."))
+    assert api.post("/v1/ai/ask", headers=ACME, json={"question": "q"}).status_code == 200
+    assert seen[0] >= 1 and seen[1] > seen[0]  # the first call's rows were stored before the second call
+
+    api.state["config"] = AIConfig(enabled=True, providers={"claude": CLAUDE}, monthly_token_budget=10_000_000,
+                                   requests_per_minute=50, max_request_tokens=100)
+    api.state["provider"] = ScriptedProvider(tool_turn(("run_query", {"query": "error"})), answer("done [C1]."))
+    r = api.post("/v1/ai/ask", headers=ACME, json={"question": "q"})
+    assert r.status_code == 429 and "per request" in r.json()["detail"]
+
+
+async def _fake_logql(body, customer_id):
+    return {"logs": [{"service": "api", "n": 1}], "total_count": 1}

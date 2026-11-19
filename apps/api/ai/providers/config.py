@@ -51,6 +51,7 @@ class AIConfig:
     requests_per_minute: int = 20
     max_tool_calls: int = 8
     max_tokens: int = 4096
+    max_request_tokens: int = 200_000
     redact_fields: list[str] = field(default_factory=lambda: list(DEFAULT_REDACT_FIELDS))
 
 
@@ -88,6 +89,7 @@ def load_ai_config(path: Path | None = None) -> AIConfig:
         requests_per_minute=int(defaults.get("requests_per_minute", 20)),
         max_tool_calls=int(defaults.get("max_tool_calls", 8)),
         max_tokens=int(defaults.get("max_tokens", 4096)),
+        max_request_tokens=int(defaults.get("max_request_tokens", 200_000)),
         redact_fields=list(raw.get("redact_fields") or DEFAULT_REDACT_FIELDS))
 
 

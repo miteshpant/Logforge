@@ -76,6 +76,17 @@ class AskResult:
                 "stop_reason": self.stop_reason}
 
 
+def _cut(value: Any) -> Any:
+    """Shorten long strings; done after redaction so no half secret is left."""
+    if isinstance(value, str) and len(value) > tool_module.MAX_TEXT:
+        return value[:tool_module.MAX_TEXT] + "…"
+    if isinstance(value, dict):
+        return {k: _cut(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_cut(v) for v in value]
+    return value
+
+
 def _cite(value: Any, ids: list[str]) -> Any:
     if isinstance(value, dict):
         out = {}
@@ -129,11 +140,13 @@ async def ask(question: str, *, provider, ctx: ToolContext, redactor: Redactor,
             break
         messages.append(result.as_message())
         for call in result.tool_calls:
+            await audit("tool_call", {"name": call.name, "arguments": call.arguments})
             if len(calls) >= max_tool_calls:
-                content, is_error = "tool call limit reached; answer with what you have", True
-                calls.append({"name": call.name, "arguments": call.arguments, "ok": False, "error": content})
+                content, is_error = json.dumps({"error": "tool call limit reached; answer with what you have"}), True
+                calls.append({"name": call.name, "arguments": call.arguments, "ok": False,
+                              "error": "tool call limit reached"})
+                await audit("tool_result", {"name": call.name, "is_error": True, "content": content})
             else:
-                await audit("tool_call", {"name": call.name, "arguments": call.arguments})
                 try:
                     output = await tool_module.execute(call.name, call.arguments, ctx)
                     ids = []
@@ -143,13 +156,15 @@ async def ask(question: str, *, provider, ctx: ToolContext, redactor: Redactor,
                                        "key": ref.key}
                         ids.append(cid)
                     data, _ = redactor.redact(_cite(output.data, ids))
+                    data = _cut(data)
                     content, is_error = json.dumps(data, default=str), False
                     if len(content) > MAX_TOOL_RESULT_CHARS:
                         content = content[:MAX_TOOL_RESULT_CHARS] + '..."(cut: result too long)"'
                     calls.append({"name": call.name, "arguments": call.arguments, "ok": True})
                 except ToolError as e:
-                    content, is_error = json.dumps({"error": str(e)}), True
-                    calls.append({"name": call.name, "arguments": call.arguments, "ok": False, "error": str(e)})
+                    message, _ = redactor.text(str(e))
+                    content, is_error = json.dumps({"error": message}), True
+                    calls.append({"name": call.name, "arguments": call.arguments, "ok": False, "error": message})
                 except Exception:  # never surface internals (or crash the answer) on a tool fault
                     logger.exception("AI tool failed", tool=call.name, tenant_id=ctx.tenant_id)
                     message = f"{call.name} failed with an internal error"

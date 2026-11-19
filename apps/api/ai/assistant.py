@@ -209,6 +209,14 @@ async def answer(question: str, *, tenant_id: str, user_id: str, roles: list[dic
     try:
         provider_settings = resolve(settings, config)
     except AIUnavailable as e:
+        # The rule-based NLQ checks no per-intent permissions (it reads logs,
+        # alerts and security events directly), so only those allowed to use
+        # it through /v1/ai/query get its answer.
+        from authn_authz_middleware import check_permission
+
+        if not check_permission(roles, "ai:write:tenant", tenant_id):
+            return {"mode": "off", "reason_code": e.code, "reason": str(e), "text": "", "citations": [],
+                    "grounded": False, "flags": [], "provider": None}
         fallback = await _rule_based(question, tenant_id)
         return {"mode": "rule_based", "reason_code": e.code, "reason": str(e), "citations": [], "grounded": False,
                 "flags": ["rule_based"], "provider": None, **fallback}
@@ -241,8 +249,23 @@ async def answer(question: str, *, tenant_id: str, user_id: str, roles: list[dic
                      "content": content if isinstance(content, str) else json.dumps(content, default=str),
                      "input_tokens": tokens_in, "output_tokens": tokens_out})
 
+    pending: list[dict[str, Any]] = rows  # rows not yet written
+
+    async def flush() -> None:
+        if pending:
+            batch = list(pending)
+            pending.clear()
+            await audit_store.record(batch)
+
     async def before_call() -> None:
-        if used + spent["tokens"] >= limits["monthly_token_budget"]:
+        # Write what this request has used so far, then re-read the month's
+        # usage: concurrent requests see each other's spend at every model
+        # call, not only once they finish.
+        await flush()
+        if spent["tokens"] >= config.max_request_tokens:
+            raise LimitExceeded(f"this request used its {config.max_request_tokens:,} tokens per request")
+        month = (await audit_store.usage(tenant_id, _month_start(now)))["tokens"]
+        if max(month, used + spent["tokens"]) >= limits["monthly_token_budget"]:
             raise LimitExceeded("this tenant's monthly AI token budget ran out during the request")
 
     ctx = ToolContext(tenant_id=tenant_id, user_id=user_id, roles=roles)
@@ -253,16 +276,19 @@ async def answer(question: str, *, tenant_id: str, user_id: str, roles: list[dic
     except (ProviderError, LimitExceeded) as e:
         await audit("error", {"error": str(e)})
         raise
-    except Exception as e:
+    except BaseException as e:  # including cancellation: the request still gets an error row
         await audit("error", {"error": type(e).__name__})
         raise
     finally:
         try:
-            await audit_store.apply_retention(config.audit_retention_days) if hasattr(
-                audit_store, "apply_retention") else None
-        except Exception as e:  # retention is maintenance; the audit rows must still be written
+            await flush()
+        except Exception as e:  # don't hide the request's own error; the rows are lost, so say so loudly
+            logger.error("Could not write AI audit rows", tenant_id=tenant_id, request_id=request_id, error=str(e))
+        try:
+            if hasattr(audit_store, "apply_retention"):
+                await audit_store.apply_retention(config.audit_retention_days)
+        except Exception as e:  # retention is maintenance
             logger.warning("Could not apply AI audit retention", error=str(e))
-        await audit_store.record(rows)
     return {**result.to_public(), "request_id": request_id}
 
 

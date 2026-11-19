@@ -48,6 +48,9 @@ class AuditStore:
         """Set the audit TTL to the configured retention (once per process)."""
         if AuditStore._retention_applied == days:
             return
+        if days == 90:  # the TTL migration 025 sets; nothing to change
+            AuditStore._retention_applied = days
+            return
         await self.db.execute_update(
             f"ALTER TABLE ai_audit_mt MODIFY TTL toDateTime(ts) + INTERVAL {int(days)} DAY", {})
         AuditStore._retention_applied = days

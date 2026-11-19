@@ -258,8 +258,11 @@ export default function LogExplorerPage() {
     }
     setMode('logql')
     setLogqlQuery(link.query)
-    // run once the time range and the query have rendered
-    requestAnimationFrame(() => requestAnimationFrame(() => logqlRunRef.current()))
+    // Run it only when the link came from Logforge itself (an AI citation);
+    // a link from elsewhere fills in the query and waits for Run.
+    let sameOrigin = false
+    try { sameOrigin = !!document.referrer && new URL(document.referrer).origin === window.location.origin } catch {}
+    if (sameOrigin) requestAnimationFrame(() => requestAnimationFrame(() => logqlRunRef.current()))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
