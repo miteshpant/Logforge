@@ -417,7 +417,7 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in WRITE_METHODS:
             return "logs:write:tenant"
         return "logs:read:tenant"
-    elif path.startswith("/v1/logs") or path.startswith("/v1/ingest"):
+    elif path.startswith("/v1/logs") or path.startswith("/v1/ingest") or path.startswith("/v1/fields"):
         if method in WRITE_METHODS:
             return "logs:write:tenant"
         return "logs:read:tenant"

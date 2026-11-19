@@ -267,6 +267,8 @@ def schema_field_sql(path: str, bind) -> str:
                  f"lower({value}) IN ({_sql_words(ocsf_schema.FAILURE)}), '{bad}', '{other}')")
     elif how == "int":
         value = f"toString(toInt64OrNull({value}))"
+    elif how == "nonzero_int":
+        value = f"toString(nullIf(toInt64OrNull({value}), 0))"
     return f"coalesce({explicit}, {value})"
 
 

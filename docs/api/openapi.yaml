@@ -5458,6 +5458,117 @@ paths:
       summary: Get Features For Tier
       tags:
       - subscription
+  /v1/fields:
+    get:
+      operationId: field_catalogue_v1_fields_get
+      parameters:
+      - in: query
+        name: window
+        required: false
+        schema:
+          default: 24h
+          title: Window
+          type: string
+      - in: query
+        name: service
+        required: false
+        schema:
+          anyOf:
+          - maxLength: 200
+            type: string
+          - type: 'null'
+          title: Service
+      - in: query
+        name: sample
+        required: false
+        schema:
+          default: 2000
+          maximum: 10000
+          minimum: 100
+          title: Sample
+          type: integer
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Field Catalogue
+      tags:
+      - fields
+  /v1/fields/values:
+    get:
+      operationId: field_values_v1_fields_values_get
+      parameters:
+      - in: query
+        name: field
+        required: true
+        schema:
+          maxLength: 300
+          title: Field
+          type: string
+      - in: query
+        name: window
+        required: false
+        schema:
+          default: 24h
+          title: Window
+          type: string
+      - in: query
+        name: service
+        required: false
+        schema:
+          anyOf:
+          - maxLength: 200
+            type: string
+          - type: 'null'
+          title: Service
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 10
+          maximum: 100
+          minimum: 1
+          title: Limit
+          type: integer
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Field Values
+      tags:
+      - fields
   /v1/ingest:
     post:
       description: Auto-detect format and ingest logs

@@ -74,3 +74,13 @@ def test_the_docs_table_lists_every_mapped_field(path):
     for entry in MAPPING:
         assert f"`{entry['ocsf']}`" in doc, f"docs/schema.md is missing {entry['ocsf']}"
     assert f"`{path}`" in doc
+
+
+def test_a_zero_status_column_is_not_an_http_code():
+    assert resolve({"status": 0, "attrs": {}}, "http_response.code") is None
+    assert resolve({"status": 503, "attrs": {}}, "http_response.code") == 503
+    from query_engine import QueryFilter, QueryOperator
+
+    params = {}
+    sql = QueryFilter(field="ocsf.http_response.code", operator=QueryOperator.EQ, value=503).to_clickhouse_condition(params, "p")
+    assert "nullIf(toInt64OrNull(" in sql

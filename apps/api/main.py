@@ -23,6 +23,7 @@ from routers.security_api import router as security_router
 from routers.cases_api import router as cases_router
 from routers.threat_intel_api import router as threat_intel_router
 from routers.pipelines_api import router as pipelines_router
+from routers.fields_api import router as fields_router
 from routers.observability_api import router as observability_router
 from routers.ai_api import router as ai_router
 from routers.enterprise_api import router as enterprise_router
@@ -120,6 +121,7 @@ app.include_router(quota_management_router, tags=["Quota Management"])
 app.include_router(cases_router)
 app.include_router(threat_intel_router)
 app.include_router(pipelines_router)
+app.include_router(fields_router)
 app.include_router(security_router)
 app.include_router(observability_router)
 app.include_router(ai_router)

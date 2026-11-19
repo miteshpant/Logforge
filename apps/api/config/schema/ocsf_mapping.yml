@@ -163,7 +163,7 @@ fields:
   - ocsf: http_response.code
     type: integer_t
     from: [attrs.status_code, attrs.response, status]
-    convert: int
+    convert: nonzero_int  # the status column defaults to 0: absent
     otel: http.response.status_code
     description: HTTP status code.
 

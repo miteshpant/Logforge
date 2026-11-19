@@ -72,11 +72,12 @@ def _convert(value: Any, how: Optional[str]) -> Any:
     if how == "status_name":
         sid = status_id(value)
         return {1: "Success", 2: "Failure", 99: "Other"}.get(sid)
-    if how == "int":
+    if how in ("int", "nonzero_int"):
         try:
-            return int(value)
+            number = int(value)
         except (TypeError, ValueError):
             return None
+        return None if how == "nonzero_int" and number == 0 else number
     raise ValueError(f"unknown conversion {how!r} in {MAPPING_FILE.name}")
 
 

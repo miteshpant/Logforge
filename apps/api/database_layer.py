@@ -67,6 +67,7 @@ class DatabaseLayer:
         'CaseDAO': os.getenv('CASE_SERVICE_KEY', 'case-dao-service-key'),
         'ThreatIntelDAO': os.getenv('THREAT_INTEL_SERVICE_KEY', 'threat-intel-dao-service-key'),
         'PipelineDAO': os.getenv('PIPELINE_SERVICE_KEY', 'pipeline-dao-service-key'),
+        'FieldCatalogue': os.getenv('FIELD_CATALOGUE_SERVICE_KEY', 'field-catalogue-service-key'),
         # Streaming Configuration Service
         'StreamingConfigDAO': os.getenv('STREAMING_CONFIG_SERVICE_KEY', 'streaming-config-service-key'),
         # Migration Service
@@ -132,6 +133,7 @@ class DatabaseLayer:
         'CaseDAO': ['cases_mt', 'case_events_mt'],  # Cases and their append-only timeline
         'ThreatIntelDAO': ['threat_feeds_mt', 'threat_indicators_mt', 'logs_raw_mt'],  # Feeds, IOCs, retro-hunts
         'PipelineDAO': ['ingest_pipelines_mt', 'pipeline_dlq_mt'],  # Ingest pipelines and their dead letters
+        'FieldCatalogue': ['logs_raw_mt'],  # Field catalogue and top values (read only)
         # Streaming Configuration Service
         'StreamingConfigDAO': ['tenant_configs_mt'],  # Needs to manage streaming configurations in tenant configs table
         # Migration Service

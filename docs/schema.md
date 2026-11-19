@@ -56,7 +56,7 @@ is checked against it in CI.
 | `http_request.url.path` | string_t | `attrs.uri`, `attrs.path`, `attrs.http_path`, `attrs.request_uri` | `url.path` | Request path. |
 | `http_request.url.url_string` | url_t | `attrs.url` | `url.full` | Full URL. |
 | `http_request.user_agent` | string_t | `attrs.user_agent`, `attrs.http_user_agent` | `user_agent.original` | User agent. |
-| `http_response.code` | integer_t | `attrs.status_code`, `attrs.response`, `status` (int) | `http.response.status_code` | HTTP status code. |
+| `http_response.code` | integer_t | `attrs.status_code`, `attrs.response`, `status` (nonzero_int) | `http.response.status_code` | HTTP status code. |
 | `process.name` | string_t | `attrs.process_name`, `attrs.Image` | `process.executable.name` | Process name or image. |
 | `process.cmd_line` | string_t | `attrs.command_line`, `attrs.CommandLine` | `process.command_line` | Command line. |
 | `process.pid` | integer_t | `attrs.process_id`, `attrs.pid` (int) | `process.pid` | Process id. |
@@ -72,7 +72,7 @@ Conversions:
   Success; failed, denied, invalid and similar become 2 / Failure; anything
   else becomes 99 / Other.
 - **epoch_ms:** the timestamp in milliseconds.
-- **int:** a number.
+- **int:** a number. **nonzero_int:** the same, with 0 treated as absent (the `status` column defaults to 0).
 
 ## Source mappings
 
