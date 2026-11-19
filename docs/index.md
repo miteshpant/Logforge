@@ -32,6 +32,9 @@ observability, self-hosted with one command. Apache 2.0.
 - **[Query language](query-language.md)**: the LogforgeQL reference:
   commands, functions, lookups, joins, saved and scheduled searches,
   dashboard panels, and a cookbook of analyst questions.
+- **[Content packs](packs.md)**: one-step installs for Linux, web servers,
+  AWS, Okta and Google Workspace, Windows and Kubernetes (pipelines, rules,
+  searches, dashboards), and how to write a pack.
 
 ## Where it's going
 

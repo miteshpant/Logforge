@@ -29,6 +29,7 @@ rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 | **Threat Intelligence** (feeds, indicators, sightings in your logs)<br>![Threat Intelligence](./docs/images/threat-intel.png) | **Ingest Pipelines** (parse, mask and shape logs on the way in; test against samples)<br>![Ingest Pipelines](./docs/images/pipelines.png) |
 | **Field explorer** (every field, its top values, add to query; common-schema fields)<br>![Field explorer](./docs/images/field-explorer.png) | **Query builder** (a form that writes LogforgeQL)<br>![Query builder](./docs/images/query-builder.png) |
 | **Query results** (a `timechart` as a chart and a table)<br>![Query results](./docs/images/query-results.png) | **Dashboards from queries** (LogforgeQL panels, Service and Level variables)<br>![Dashboards from queries](./docs/images/dashboard-queries.png) |
+| **Content Packs** (one-step installs for common sources)<br>![Content Packs](./docs/images/content-packs.png) | **Content pack plan** (what installing or upgrading changes, before it does)<br>![Content pack plan](./docs/images/content-pack.png) |
 
 ## Contents
 
@@ -58,6 +59,7 @@ rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 | **LogforgeQL**, a pipe language: `where`, `eval` (35 functions), `stats` (percentiles, distinct counts, ...), `timechart`, `top`, `rare`, `dedup`, `bin`, `eventstats`, `lookup`, `join`, `rex` / `parse` / `json`; `$variables` | ✅ Implemented | `apps/api/logql_pipeline.py`, [reference](./docs/query-language.md) |
 | Lookup tables (CSV) and managed lists; saved and scheduled searches with alerts and CSV reports; dashboard panels from queries, with variables | ✅ Implemented | `apps/api/lookup_tables.py`, `apps/api/saved_searches.py`, `apps/api/dashboard_queries.py` |
 | Query performance: hourly-count projection for counts by service / level / status, skip indexes, cost estimate and per-plan scan limits | ✅ Implemented (queries reading `attrs` over 100 M events take seconds, see [benchmarks](./docs/benchmarks/README.md)) | `apps/api/query_cost.py`, `config/query_limits.yml` |
+| **Content packs**: Linux, nginx/Apache, AWS CloudTrail and VPC Flow Logs, Okta and Google Workspace, Windows Security and Sysmon, Kubernetes; each with pipelines, rules, searches and a dashboard; plan, install, upgrade (keeping local changes) and remove per tenant; checked in CI against sample data | ✅ Implemented | `packages/packs/`, `apps/api/pack_manager.py`, [guide](./docs/packs.md) |
 | Alerting: threshold, pattern, anomaly and saved-search rules | ✅ Implemented | `apps/api/alert_engine.py` |
 | Notifications: webhook, Slack, email, PagerDuty, Teams, Discord | ✅ Implemented (off by default) | `apps/api/services/notification_service.py` |
 | Sigma detection engine: ~300 fixture-verified rules (vendored SigmaHQ + Logforge's own `packages/rules/`) | ✅ Implemented | `apps/api/sigma_engine.py`, `apps/api/content/rules/`, `packages/rules/` |
@@ -273,7 +275,7 @@ python scripts/export_openapi.py
 
 ## Shipping logs
 
-Ready-made Vector and Fluent Bit configurations are in [`packages/shipper-recipes/`](./packages/shipper-recipes/). Point them at `/v1/ingest/logs/batch` and authenticate with an `lf_` API key. Batch ingestion needs a plan that includes the `ingestion.batch` feature; the default `startup` plan doesn't.
+Ready-made Vector and Fluent Bit configurations are in [`packages/shipper-recipes/`](./packages/shipper-recipes/). Point them at `/v1/ingest/logs/batch` and authenticate with an `lf_` API key. For a source a [content pack](./docs/packs.md) covers, send its logs with the service names the pack lists (for Linux, `vector/vector-linux-pack.toml` does). Batch ingestion needs a plan that includes the `ingestion.batch` feature; the default `startup` plan doesn't.
 
 ---
 
@@ -291,6 +293,7 @@ apps/
   admin-ui/           Platform admin UI (Next.js 14)
 packages/
   rules/              Logforge's own Sigma rules, correlation bundles and content pack (loaded at startup)
+  packs/              Source content packs: pipelines, rules, searches, dashboards, samples (docs/packs.md)
   shipper-recipes/    Vector and Fluent Bit configs
 infra/docker/         compose.yml, ClickHouse schema (init_simple.sql) and migrations
 config/               Storage deployment profiles (S3, GCS, MinIO, GovCloud)

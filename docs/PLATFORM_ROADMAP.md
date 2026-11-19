@@ -738,6 +738,63 @@ analysts expect from SPL or ES|QL.
 and Elastic are sticky, and it's where an open-source community can
 contribute most.
 
+> **Status: done (2026-11-19), with the gaps listed below.** Guide:
+> [Content packs](./packs.md).
+>
+> | Acceptance criterion | Result |
+> |---|---|
+> | Install a pack, point a shipper at the source: parsed events, a working dashboard and enabled rules within 15 minutes | **Met for the system's part; the human part is estimated.** `scripts/pack_walkthrough.py` installs the Linux pack, creates an ingest key, runs Vector (in Docker, with the new `vector-linux-pack.toml` recipe) on a scratch `/var/log` and appends auth.log and audit.log lines. 10.6 s after the install all 16 events were parsed, 7 of 7 dashboard panels showed data, and all 4 rules were enabled and had raised alerts ([run](https://github.com/miteshpant/Logforge/blob/main/docs/benchmarks/2026-11-19-pack-walkthrough.json)). The time a person takes to read the plan, create the key and install Vector was not measured |
+>
+> - **Done: pack format.** `packages/packs/<id>/`: `pack.yml` (id,
+>   semver version, sources, samples with expectations), pipelines with
+>   routing, Sigma rules with fixtures, saved searches and alert templates,
+>   dashboards with variables, CSV lookups and samples. A pack is loaded and
+>   validated with the code that installs it, so a rule that fails its
+>   fixtures or a query that doesn't compile is a load error. Schema
+>   mappings are part of each pipeline (it sets `attrs.ocsf.*`), not a
+>   separate object.
+> - **Done: pack manager.** Per tenant: list, plan, install, upgrade and
+>   remove (`/v1/packs`, tenant admin). A plan shows every object as
+>   create / update / unchanged / keep_local / deleted / conflict / remove
+>   before anything changes. The install manifest (migration 024) keeps,
+>   per object, the hash of the pack's definition and of what was stored, so
+>   upgrades keep what the tenant changed or deleted (unless forced),
+>   objects with the same name that the pack didn't install are left alone,
+>   and removal deletes only unchanged objects.
+> - **Done: pack CI.** On every change, each pack's samples go through its
+>   own pipelines (routed as ingest routes them) and must meet their
+>   expectations, every rule listed for a sample must fire on it, and every
+>   search and dashboard query runs against the parsed samples in ClickHouse;
+>   a dashboard that shows nothing fails (`tests/test_pack_ci.py`,
+>   `tests/test_pack_ci_live.py`).
+> - **Done: the first six packs:** Linux (auth.log, auditd, syslog), Web
+>   servers (nginx, Apache), AWS (CloudTrail, VPC Flow Logs), identity (Okta,
+>   Google Workspace), Windows (Security log, Sysmon; NXLog or Winlogbeat
+>   JSON) and Kubernetes (audit log, CRI container logs): 12 pipelines, 27
+>   rules, 12 searches (6 alert templates, shipped disabled) and 6
+>   dashboards.
+> - **Done: Packs UI.** Settings → Content Packs: the catalogue with
+>   install state, a pack's contents and plan, install / upgrade (optionally
+>   overwriting local changes) and remove; a Playwright spec installs the
+>   Web servers pack, sends an nginx line and sees it parsed.
+> - **Done: contributor guide and template.** [docs/packs.md](./packs.md)
+>   and `packages/packs/_template` (a test keeps the template a working
+>   pack).
+> - **Changed along the way:** pipeline paths can index lists
+>   (`field("attrs.target.0.id")`), which the Okta, Workspace and Kubernetes
+>   formats need.
+>
+> **Not done** (tracked in [ROADMAP.md](./ROADMAP.md)): packs come from the
+> catalogue shipped with the deployment (no registry, signing or
+> per-tenant uploads); an install that fails part-way is not rolled back
+> (objects written so far stay, and no manifest is saved); a pack's rules
+> are all installed enabled (no choosing a subset); an object kept on
+> removal shows as a conflict if the pack is installed again; Windows
+> events must arrive as JSON (no native XML or Windows Event Forwarding);
+> the Workspace pipeline reads the first event of each activity; CRI
+> partial lines are not joined (Vector's `kubernetes_logs` source joins
+> them); no shipped pack uses a lookup table yet.
+
 ### Deliverables
 
 1. **Pack format:** a versioned directory containing pipelines (Phase 4),

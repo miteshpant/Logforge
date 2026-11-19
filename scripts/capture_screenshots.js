@@ -118,6 +118,18 @@ async function main() {
   await page.screenshot({ path: path.join(OUT, 'case-detail.png') })
   console.log('case-detail.png')
 
+  // Content packs: the catalogue, and what installing the AWS pack would add.
+  await page.goto(`${UI}/settings/packs`, { waitUntil: 'load' })
+  await page.getByTestId('pack-card').nth(5).waitFor({ timeout: 20000 })
+  await page.waitForTimeout(1000)
+  await page.screenshot({ path: path.join(OUT, 'content-packs.png') })
+  console.log('content-packs.png')
+  await page.goto(`${UI}/settings/packs/aws`, { waitUntil: 'load' })
+  await page.getByTestId('plan-group-create').waitFor({ timeout: 20000 })
+  await page.waitForTimeout(1000)
+  await page.screenshot({ path: path.join(OUT, 'content-pack.png') })
+  console.log('content-pack.png')
+
   await browser.close()
   if (errors.length) {
     console.error('page errors:', errors)

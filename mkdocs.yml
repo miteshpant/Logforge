@@ -48,6 +48,7 @@ nav:
   - Ingest pipelines: pipelines.md
   - Common schema: schema.md
   - Query language: query-language.md
+  - Content packs: packs.md
   # Static Redoc page (docs/api/index.html); nav entries must be pages or URLs.
   - API reference: https://miteshpant.github.io/Logforge/api/
   - Roadmap:

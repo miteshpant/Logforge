@@ -80,6 +80,18 @@ markers).
   persistent per-tenant index with type history. LogforgeQL extraction
   uses RE2, so no lookaround or backreferences, and allows at most 32
   extracted fields per query.
+- **Content pack follow-ups from Phase 7** ([guide](./packs.md)): packs
+  come only from the catalogue shipped with the deployment; add a registry
+  (or git source) with signed packs, and per-tenant uploads. An install that
+  fails part-way is not rolled back: objects written so far stay and no
+  manifest is saved, so the next plan reports them as conflicts. Let the
+  installer choose which rules to enable. An object kept when a pack is
+  removed shows as a conflict on reinstall; offer to adopt it. Windows
+  events must arrive as JSON (NXLog or Winlogbeat), not XML or WEF; the
+  Workspace pipeline reads only the first event of an activity; CRI partial
+  lines are not joined. Good first issues: more packs (PostgreSQL, MySQL,
+  Cisco ASA, Palo Alto, Fortinet, Microsoft 365, Azure activity, GCP audit,
+  GitHub audit, Cloudflare), each from `packages/packs/_template`.
 - **Query language follow-ups from Phase 6** ([reference](./query-language.md)):
   questions that read `attrs` over 100 M events take 6–16 s on 4 vCPUs,
   because every event's JSON is decompressed and scanned

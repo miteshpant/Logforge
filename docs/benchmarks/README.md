@@ -244,6 +244,25 @@ Found by this benchmark, and fixed (the numbers above are after the fixes):
 - a query over the 30 s limit returned a bare 500. It is now a 504 that
   says how to narrow the query.
 
+## Content pack walkthrough: 2026-11-19
+
+`scripts/pack_walkthrough.py` installs the Linux pack, creates an ingest
+key, runs Vector 0.41.1 in Docker with
+`packages/shipper-recipes/vector/vector-linux-pack.toml` on a scratch
+`/var/log`, appends 11 auth.log and 5 audit.log lines and waits for the
+results through the API. Single node, 4 vCPU. Results:
+[`2026-11-19-pack-walkthrough.json`](./2026-11-19-pack-walkthrough.json).
+
+| Seconds after the install | |
+|---|---|
+| 0.3 | ingest key created, Vector started |
+| 4.8 | all 16 events searchable and parsed |
+| 5.0 | the pack's dashboard: 7 of 7 panels show data |
+| 10.6 | all 4 rules enabled, each with alerts for the new lines |
+
+The time is the system's part of the 15-minute target in
+[docs/packs.md](../packs.md); a person's time is not included.
+
 ## History
 
 | Date | Setup | Ingest (events/s) | Ingest → searchable | Slowest query p95 @ 10 M |
