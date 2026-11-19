@@ -202,6 +202,14 @@ const normalizeWidgetData = (widgetType: string, entry: WidgetDataEntry): Normal
   return { kind: 'series', rows, names: ['value'] }
 }
 
+// Time buckets come as ISO strings; show them as local times.
+const axisLabel = (value: any) => {
+  const text = String(value)
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(text)) return text
+  const date = new Date(text)
+  return Number.isNaN(date.getTime()) ? text : date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
 // Widget Components
 function StatWidget({ widget, data }: { widget: Widget; data: Extract<NormalizedWidget, { kind: 'stat' }> }) {
   return (
@@ -293,7 +301,7 @@ function ChartWidget({ widget, rows, names }: { widget: Widget; rows: Record<str
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={rows}>
           <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-          <XAxis dataKey="label" stroke="#64748b" fontSize={10} />
+          <XAxis dataKey="label" stroke="#64748b" fontSize={10} tickFormatter={axisLabel} />
           <YAxis stroke="#64748b" fontSize={10} />
           <Tooltip
             contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
@@ -319,7 +327,7 @@ function ChartWidget({ widget, rows, names }: { widget: Widget; rows: Record<str
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-          <XAxis dataKey="label" stroke="#64748b" fontSize={10} />
+          <XAxis dataKey="label" stroke="#64748b" fontSize={10} tickFormatter={axisLabel} />
           <YAxis stroke="#64748b" fontSize={10} />
           <Tooltip
             contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}

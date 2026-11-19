@@ -159,6 +159,91 @@ Found by this benchmark, and fixed:
 - the benchmark's own patterns exposed a LogforgeQL bug: `\"` inside a
   quoted pattern ended the string early.
 
+## Analyst questions at 100 M rows: 2026-11-19
+
+Phase 6 acceptance: a published set of 30 analyst questions
+([`tests/eval/analytics/questions.yml`](https://github.com/miteshpant/Logforge/blob/main/tests/eval/analytics/questions.yml))
+must each be answerable in one query, and their p95 latency must stay within
+the Phase 0 targets at 100 M rows. Phase 0 set no number. Its baseline,
+"well under a second" (p95 117–311 ms at 10 M rows), is the bar used here.
+
+- **Answerable in one query: met.** Each question is one LogforgeQL query.
+  `tests/test_analyst_questions_live.py` seeds a week of auth, HTTP and DNS
+  events and three lookup tables, and checks every answer against the same
+  answer computed in Python. All 30 match. It runs in CI.
+- **Latency at 100 M rows: not met.** Measured with
+  [`tests/bench/analytics_bench.py`](https://github.com/miteshpant/Logforge/blob/main/tests/bench/analytics_bench.py)
+  on the same 4-vCPU single-node stack. The benchmark tenant held
+  99,999,668 events in the last 7 days, and every question covered all
+  of them. Each question ran 10 times through `POST /v1/query/logql`; p50
+  and p95 are over runs 2–10 (the first run took about as long). Raw
+  results: [`2026-11-19-analytics.json`](./2026-11-19-analytics.json).
+  - **p95 under 1 s: 8 of 30.** These are the counts over service, level
+    and status (answered from the hourly counts), plus questions that only
+    read stored columns.
+  - **1–2.5 s: 7.**
+  - **2.5–5 s: 2.**
+  - **Over 5 s: 13.** Every one of these reads `attrs` (the JSON of event
+    attributes) for every event in the week.
+
+| # | Question | p50 | p95 | Rows read | Hourly counts |
+|---|---|---|---|---|---|
+| 01 | Top 10 source IPs by failed logins per hour this week | 9.10 s | 11.19 s | 100.8 M |  |
+| 02 | Errors per service | 122 ms | 133 ms | 1.3 M | yes |
+| 03 | Error rate per service | 847 ms | 912 ms | 100.8 M |  |
+| 04 | p95 and p99 latency per service | 6.99 s | 7.34 s | 100.8 M |  |
+| 05 | The 5 slowest endpoints at p95 with at least 50 requests | 11.11 s | 11.76 s | 100.8 M |  |
+| 06 | HTTP requests per day by status class | 208 ms | 224 ms | 2.0 M | yes |
+| 07 | Users with more than 3 failed logins and no successful login | 15.72 s | 16.26 s | 201.6 M |  |
+| 08 | Distinct users who logged in, per country | 8.88 s | 9.14 s | 100.8 M |  |
+| 09 | How many users logged in from more than 2 countries | 8.91 s | 9.30 s | 100.8 M |  |
+| 10 | The 5 hosts with the most errors, with their share | 178 ms | 233 ms | 11.0 M |  |
+| 11 | The 3 rarest user agents | 6.05 s | 6.46 s | 100.8 M |  |
+| 12 | Failed logins from outside the internal network, by source IP | 3.97 s | 4.14 s | 100.7 M |  |
+| 13 | Activity from blocklisted IPs | 1.08 s | 1.46 s | 92.4 M |  |
+| 14 | Events per department | 7.23 s | 8.37 s | 100.7 M |  |
+| 15 | Errors per team that owns the host | 990 ms | 1.03 s | 11.0 M |  |
+| 16 | Daily event volume per service | 139 ms | 147 ms | 3.4 M | yes |
+| 17 | The busiest hour of the day | 856 ms | 894 ms | 100.7 M |  |
+| 18 | The 10 users who transferred the most bytes | 7.03 s | 7.38 s | 100.7 M |  |
+| 19 | Average response size and request count by HTTP method | 10.19 s | 10.54 s | 100.7 M |  |
+| 20 | The latest event from each host | 3.25 s | 3.46 s | 4.0 M |  |
+| 21 | First and last seen, and event count, per user | 1.11 s | 1.14 s | 100.7 M |  |
+| 22 | Requests slower than 3x their service's average, per service | 14.93 s | 15.51 s | 201.4 M |  |
+| 23 | Server errors per endpoint, with ids normalised | 1.53 s | 1.66 s | 100.7 M |  |
+| 24 | The 5 most queried DNS names | 1.05 s | 1.36 s | 15.4 M |  |
+| 25 | How many DNS names were queried by only one host | 1.08 s | 1.14 s | 15.4 M |  |
+| 26 | HTTP status code distribution | 144 ms | 164 ms | 1.1 M | yes |
+| 27 | Distinct source IPs every 6 hours | 2.08 s | 2.15 s | 100.7 M |  |
+| 28 | Latency histogram in 250 ms buckets | 13.46 s | 13.80 s | 100.7 M |  |
+| 29 | User and host pairs with 5 or more failed logins | 8.29 s | 8.58 s | 100.6 M |  |
+| 30 | Each service's share of all errors | 291 ms | 323 ms | 2.4 M | yes |
+
+**Why the slow ones are slow.** Reading one `attrs` key from 100 M events
+means decompressing and scanning about 15 GB of JSON. On 4 vCPUs that alone
+takes about 3 s (`visitParamExtractString`, the cheapest ClickHouse JSON
+read) to 5 s (a full JSON parse). Questions that read several keys, or read
+them twice, cost more. The questions that meet the bar read stored columns
+or the hourly counts. Closing the gap needs frequently queried attributes
+stored as columns (typed, materialized from `attrs`). That is storage work
+(Phase 12), and it is tracked in the [roadmap](../ROADMAP.md).
+
+Found by this benchmark, and fixed (the numbers above are after the fixes):
+
+- an `attrs` field read every row's JSON twice (`JSONHas`, then the
+  value). It is now read once, with the legacy location as a fallback:
+  attrs questions got 15–35% faster;
+- `eventstats` used a window function, which sorted all 100 M rows by the
+  partition. It now computes the group values with `GROUP BY` and joins
+  them back. Question 22: 36 s → 15 s;
+- `dedup` sorted every event to keep the latest per key. It now finds each
+  key's latest time first. Question 20: 11.6 s → 3.3 s through the API
+  (1.7 s in ClickHouse);
+- `not cidrmatch(...)` never matched anything (operator precedence in the
+  generated SQL). This was found by the answer checks;
+- a query over the 30 s limit returned a bare 500. It is now a 504 that
+  says how to narrow the query.
+
 ## History
 
 | Date | Setup | Ingest (events/s) | Ingest → searchable | Slowest query p95 @ 10 M |
@@ -167,3 +252,4 @@ Found by this benchmark, and fixed:
 | 2026-11-18 | single node, 4 vCPU; enrichment, in process | +12 µs per event with 100k indicators (request acceptance only was timed live; see the correction) | — | — |
 | 2026-11-19 | single node, 4 vCPU; 10-processor pipeline, end to end | 326–1,650 with the pipeline (8 runs; Phase 0 floor 222) | — | — |
 | 2026-11-19 | single node, 4 vCPU; search-time extraction, 10 M rows | — | — | rex 1.19×, parse 1.22×, json 0.66× of the ingest-time field |
+| 2026-11-19 | single node, 4 vCPU; 30 analyst questions, 100 M rows, 7 days | — | — | p95 < 1 s for 8 of 30 (counts and stored columns); 6–16 s for the 13 that read `attrs` over all 100 M events |

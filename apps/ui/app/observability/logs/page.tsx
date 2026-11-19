@@ -496,8 +496,8 @@ export default function LogExplorerPage() {
   return (
     <DashboardLayout>
       <div className="h-[calc(100vh-120px)] flex flex-col">
-        {/* Controls Bar */}
-        <div className="flex items-center gap-3 mb-4">
+        {/* Controls Bar (wraps: LogQL mode adds Builder and Add to dashboard) */}
+        <div className="flex flex-wrap items-center gap-3 mb-4 [&>button]:whitespace-nowrap">
           {/* Mode toggle: simple filters <-> LogforgeQL (LF-023 item 5) */}
           <div className="flex items-center bg-slate-800/30 rounded-lg p-1">
             <button
@@ -830,8 +830,8 @@ export default function LogExplorerPage() {
           </div>
         )}
 
-        {/* Stats Bar */}
-        <div className="flex gap-4 mb-4">
+        {/* Stats Bar (log counts; not shown for table and timechart results) */}
+        <div className={`${showQueryTable ? 'hidden' : 'flex'} gap-4 mb-4`}>
           <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/30 rounded-lg">
             <FileText className="w-4 h-4 text-slate-400" />
             <span className="text-sm font-medium text-slate-300">

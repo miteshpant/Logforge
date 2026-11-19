@@ -32,3 +32,21 @@ test('no page is wider than the viewport', async ({ page }) => {
   }
   expect(tooWide).toEqual([])
 })
+
+test('the Log Explorer fits in LogQL mode, with its extra buttons', async ({ page }) => {
+  // Found with the Phase 6 screenshots: Builder and Add to dashboard pushed the
+  // toolbar past 1440 px, so the page scrolled sideways and Filters was cut off.
+  await page.goto('/login', { waitUntil: 'load' })
+  await page.fill('[data-testid="email-input"]', EMAIL)
+  await page.fill('[data-testid="password-input"]', PASSWORD)
+  await page.locator('[data-testid="login-button"]:not([disabled])').click()
+  await page.waitForURL(/\/centrum/)
+  await page.goto('/observability/logs', { waitUntil: 'load' })
+  await page.getByRole('button', { name: 'LogQL', exact: true }).click()
+  await page.getByTestId('add-to-dashboard').waitFor()
+  const { scroll, client } = await page.evaluate(() => ({
+    scroll: document.documentElement.scrollWidth,
+    client: document.documentElement.clientWidth,
+  }))
+  expect(scroll).toBeLessThanOrEqual(client)
+})

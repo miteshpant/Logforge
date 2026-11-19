@@ -27,7 +27,8 @@ rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 | **Service Map** (built from trace spans)<br>![Service Map](./docs/images/service-map.png) | **Detection Rules** (vendored SigmaHQ plus Logforge rules, correlation rules included)<br>![Detection Rules](./docs/images/detection-rules.png) |
 | **Cases** (alerts grouped per source, host or user; SLA overview)<br>![Cases](./docs/images/cases.png) | **Case detail** (timeline, linked alerts, entities, evidence)<br>![Case detail](./docs/images/case-detail.png) |
 | **Threat Intelligence** (feeds, indicators, sightings in your logs)<br>![Threat Intelligence](./docs/images/threat-intel.png) | **Ingest Pipelines** (parse, mask and shape logs on the way in; test against samples)<br>![Ingest Pipelines](./docs/images/pipelines.png) |
-| **Field explorer** (every field, its top values, add to query; common-schema fields)<br>![Field explorer](./docs/images/field-explorer.png) | |
+| **Field explorer** (every field, its top values, add to query; common-schema fields)<br>![Field explorer](./docs/images/field-explorer.png) | **Query builder** (a form that writes LogforgeQL)<br>![Query builder](./docs/images/query-builder.png) |
+| **Query results** (a `timechart` as a chart and a table)<br>![Query results](./docs/images/query-results.png) | **Dashboards from queries** (LogforgeQL panels, Service and Level variables)<br>![Dashboards from queries](./docs/images/dashboard-queries.png) |
 
 ## Contents
 
@@ -54,7 +55,9 @@ rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 | Back-pressure (bounded worker pool, `429` + `Retry-After`) | ✅ Implemented | `apps/api/ingest_pipeline.py` |
 | Metrics and trace ingestion, APM, service map | ✅ Implemented | `apps/api/routers/observability_api.py` |
 | Query: JSON DSL, aggregations, time series | ✅ Implemented | `apps/api/query_engine.py` |
-| **LogforgeQL**, a pipe language (`timeout \| where service = "api" \| limit 50`) | ✅ Implemented | `apps/api/logql.py` |
+| **LogforgeQL**, a pipe language: `where`, `eval` (35 functions), `stats` (percentiles, distinct counts, ...), `timechart`, `top`, `rare`, `dedup`, `bin`, `eventstats`, `lookup`, `join`, `rex` / `parse` / `json`; `$variables` | ✅ Implemented | `apps/api/logql_pipeline.py`, [reference](./docs/query-language.md) |
+| Lookup tables (CSV) and managed lists; saved and scheduled searches with alerts and CSV reports; dashboard panels from queries, with variables | ✅ Implemented | `apps/api/lookup_tables.py`, `apps/api/saved_searches.py`, `apps/api/dashboard_queries.py` |
+| Query performance: hourly-count projection for counts by service / level / status, skip indexes, cost estimate and per-plan scan limits | ✅ Implemented (queries reading `attrs` over 100 M events take seconds, see [benchmarks](./docs/benchmarks/README.md)) | `apps/api/query_cost.py`, `config/query_limits.yml` |
 | Alerting: threshold, pattern, anomaly and saved-search rules | ✅ Implemented | `apps/api/alert_engine.py` |
 | Notifications: webhook, Slack, email, PagerDuty, Teams, Discord | ✅ Implemented (off by default) | `apps/api/services/notification_service.py` |
 | Sigma detection engine: ~300 fixture-verified rules (vendored SigmaHQ + Logforge's own `packages/rules/`) | ✅ Implemented | `apps/api/sigma_engine.py`, `apps/api/content/rules/`, `packages/rules/` |

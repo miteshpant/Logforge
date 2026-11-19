@@ -80,6 +80,19 @@ markers).
   persistent per-tenant index with type history. LogforgeQL extraction
   uses RE2, so no lookaround or backreferences, and allows at most 32
   extracted fields per query.
+- **Query language follow-ups from Phase 6** ([reference](./query-language.md)):
+  questions that read `attrs` over 100 M events take 6–16 s on 4 vCPUs,
+  because every event's JSON is decompressed and scanned
+  ([benchmarks](./benchmarks/README.md)). Frequently queried attributes
+  need typed columns materialized from `attrs` (or ClickHouse's JSON type),
+  which the compiler would then read instead. The hourly counts cover only
+  service, level and status (not host or attributes). `join` reads at most
+  50,000 subsearch rows and keeps one row per key. The saved-search
+  scheduler runs inside each API process, so with several replicas each
+  would run every search (needs a lease or a separate worker). Dashboard
+  panels have one query each and no per-panel time range. The query builder
+  writes `where`, `stats`, `timechart`, `sort` and `head` only. Queries the
+  first LogforgeQL accepted still run on the original engine.
 - **Per-request quota mutations.** Every ingest request runs
   `ALTER TABLE tenant_quotas_mt UPDATE ...`. ClickHouse mutations are
   heavyweight and queue up under load; this is the likely cause of the

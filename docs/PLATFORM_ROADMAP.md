@@ -620,7 +620,14 @@ works no matter where the data came from.
 **Goal:** answer analytical questions, not just find lines. This is what
 analysts expect from SPL or ES|QL.
 
-> **Status: in progress.**
+> **Status: done (2026-11-19), with one acceptance criterion not met:**
+> latency at 100 M rows for questions that read `attrs` (see below). Guide:
+> [Query language](./query-language.md).
+>
+> | Acceptance criterion | Result |
+> |---|---|
+> | 30 published analyst questions, each answerable in one query | **Met.** [`tests/eval/analytics/questions.yml`](https://github.com/miteshpant/Logforge/blob/main/tests/eval/analytics/questions.yml): 30 questions, one query each. `tests/test_analyst_questions_live.py` checks every answer against Python on a seeded week of auth, HTTP and DNS events in ClickHouse (run in CI) |
+> | p95 for that set within the Phase 0 targets at 100 M rows | **Not met for 13 of 30.** Phase 0 set no number; its baseline was "well under a second". At 100 M events over 7 days, on a 4-vCPU single node: p95 < 1 s for 8 questions (counts answered from the hourly counts, and questions on stored columns), 1–2.5 s for 7, 3–4 s for 2, and 6–16 s for the 13 that read `attrs` JSON for every event ([benchmarks](./benchmarks/README.md)). Closing the gap needs frequently queried attributes stored as columns (Phase 12) |
 >
 > - **Done: pipeline commands.** LogforgeQL now has `where` (with `or`,
 >   `not`, parentheses), `eval` (35 functions), `stats` (count, dc, sum, avg,
@@ -682,8 +689,20 @@ analysts expect from SPL or ES|QL.
 >   dashboard widget failed whenever the UI sent a time range (the service
 >   called a string method on the datetimes the router passed); a quoted
 >   free-text search ("connection reset") searched for the quote marks.
-> - **Next:** the acceptance run (30 analyst questions, latency at 100 M
->   rows).
+>   Found by the acceptance run: `not cidrmatch(...)` never matched
+>   (operator precedence in the generated SQL); `attrs` fields parsed each
+>   row's JSON twice; `eventstats` and `dedup` sorted every event (36 s and
+>   12 s at 100 M rows, now 15 s and 1.7 s); a query over the time limit
+>   returned a bare 500 (now a 504 saying how to narrow it); the Log
+>   Explorer's toolbar overflowed the page in LogQL mode.
+>
+> **Not done** (tracked in [ROADMAP.md](./ROADMAP.md)): typed columns for
+> hot `attrs` keys (the 100 M-row latency gap); the hourly counts cover only
+> service, level and status; joins are capped at 50,000 subsearch rows and
+> one row per key; scheduled searches run in the API process (one replica
+> runs them; several would each run them); dashboard panels support one
+> query each and no panel-level time override; the query builder writes
+> `where` / `stats` / `timechart` / `sort` / `head` only.
 
 ### Deliverables
 
