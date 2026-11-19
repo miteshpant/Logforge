@@ -8,7 +8,8 @@ resolve to document fields (never Python objects), and the only callables
 are the functions in FUNCTIONS. Validation happens at compile time, so a bad
 expression is rejected when the pipeline is saved, not on the hot path.
 
-Field paths are dotted names (`attrs.user`); a missing field is None. Names
+Field paths are dotted names (`attrs.user`; a number picks a list element,
+`attrs.target.0.id`); a missing field is None. Names
 that aren't identifiers use field("attrs.x-forwarded-for").
 """
 
@@ -40,6 +41,8 @@ def get_path(doc: Dict[str, Any], path: str, default: Any = None) -> Any:
     for part in path.split("."):
         if isinstance(current, dict) and part in current:
             current = current[part]
+        elif isinstance(current, list) and part.isdigit() and int(part) < len(current):
+            current = current[int(part)]
         else:
             return default
     return current
