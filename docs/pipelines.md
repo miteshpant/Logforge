@@ -5,6 +5,8 @@ fields, renames and converts them, masks personal data, enriches events,
 and drops noise, all before the log is stored, searched and checked by
 detection rules. Nothing needs a code change or a restart.
 
+![Ingest pipeline editor](images/pipelines.png)
+
 ## Where pipelines run
 
 Pipelines run in the ingest worker, after an event is accepted and before
@@ -171,9 +173,10 @@ every pipeline.
 
 ## Cost
 
-A ten-processor pipeline costs about 22 µs per event in process. End-to-end
-ingest throughput with and without it is in
-[Benchmarks](benchmarks/README.md).
+A ten-processor pipeline costs about 22 µs per event in process, and about
+44 µs at the ingest stage once routing, stats and the dead-letter snapshot
+are counted. That is about 7% of what an event costs end to end on the
+reference stack; see [Benchmarks](benchmarks/README.md).
 
 ## Limits
 

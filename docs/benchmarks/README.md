@@ -92,9 +92,49 @@ These numbers are higher than the 277 events/s baseline above because this
 run times smaller bursts with the API drained between them. The baseline
 measured 50 batches back to back, with detection work piling up.
 
+## Ingest pipelines: 2026-11-19
+
+Phase 4 acceptance: with a 10-processor pipeline, ingest must stay within
+20% of the Phase 0 baseline (277 events/s), so at least 222 events/s.
+Measured with
+[`tests/bench/pipeline_bench.py`](https://github.com/miteshpant/Logforge/blob/main/tests/bench/pipeline_bench.py)
+on the same 4-vCPU stack. It runs a typical 10-processor pipeline (kv,
+2 × convert, lowercase, rename, set, script, mask, conditional set,
+remove) as the tenant's default. Unlike the Phase 3 run, this benchmark
+times **end to end**: 5,000 events are posted and the clock stops when all
+5,000 are stored in `logs_raw_mt`. Raw results of the 5-round run:
+[`2026-11-19-pipelines.json`](./2026-11-19-pipelines.json).
+
+| Measurement | Without a pipeline | With the 10-processor pipeline |
+|---|---|---|
+| In process: the pipeline alone, per event | — | 21–22 µs |
+| Smart-ingestion stage per 1,000-event batch (the API's own timing log) | ~114 ms | ~158 ms (+44 µs per event) |
+| End to end, run 1 (3 rounds) | 1,996 / 1,712 / 334 events/s | 1,458 / 437 / 452 events/s |
+| End to end, run 2 (5 rounds) | 328 / 329 / 338 / 338 / 335 events/s | 331 / 437 / 462 / 1,650 / 326 events/s |
+
+**Result: criterion met.** Every run with the pipeline (8 of 8) stored at
+least 326 events/s, above the 222 events/s floor and above the Phase 0
+baseline itself.
+
+**What the end-to-end numbers can't show.** On this shared single-node
+stack, whole runs drop several-fold at random to a ceiling of about
+330 events/s, with or without the pipeline. In run 2 every run without a
+pipeline landed in that slow phase, while one run with the pipeline did
+not, so comparing medians or best runs between the sides would mostly
+measure the noise. The cost of the pipeline itself comes from the API's
+own per-batch timing: about 44 µs per event. That is about 7% of the
+~590 µs an event costs end to end when the stack is in its fast phase.
+
+The 44 µs is the processors (22 µs) plus the runner (stats per step, a
+snapshot of each routed event for the dead-letter queue), plus more fields
+for normalisation to handle. The likely cause of the slow phase, quota
+counters updated by a ClickHouse mutation on every request, is tracked in
+[ROADMAP.md](../ROADMAP.md).
+
 ## History
 
 | Date | Setup | Ingest (events/s) | Ingest → searchable | Slowest query p95 @ 10 M |
 |---|---|---|---|---|
 | 2026-11-17 | single node, 4 vCPU | 277 | 36.8 s | 311 ms (full-text search) |
 | 2026-11-18 | single node, 4 vCPU; enrichment, in process | +12 µs per event with 100k indicators (request acceptance only was timed live; see the correction) | — | — |
+| 2026-11-19 | single node, 4 vCPU; 10-processor pipeline, end to end | 326–1,650 with the pipeline (8 runs; Phase 0 floor 222) | — | — |

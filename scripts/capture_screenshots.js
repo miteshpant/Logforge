@@ -52,6 +52,17 @@ async function main() {
     console.log(`${name}.png`)
   }
 
+  // The pipeline editor testing a sample (seeded by seed_demo_telemetry.py).
+  await page.goto(`${UI}/settings/pipelines/payments-gateway`, { waitUntil: 'load' })
+  await page.getByTestId('pipeline-samples').waitFor()
+  await page.getByTestId('pipeline-samples').fill(
+    'txn=TX9001 amount=42.50 currency=EUR status=DECLINED card=4111-1111-1111-1111 customer=dana@acme.example gateway=edge-1')
+  await page.getByTestId('pipeline-simulate').click()
+  await page.getByTestId('pipeline-result-changes').first().waitFor()
+  await page.waitForTimeout(1000)
+  await page.screenshot({ path: path.join(OUT, 'pipelines.png') })
+  console.log('pipelines.png')
+
   // The case an analyst is working (seeded by seed_demo_telemetry.py).
   await page.goto(`${UI}/security/cases`, { waitUntil: 'load' })
   const worked = page.getByTestId('case-row').filter({ hasText: 'investigating' }).first()

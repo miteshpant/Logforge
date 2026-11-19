@@ -461,6 +461,51 @@ the threat-intel page.
 This is the single biggest functional gap against Logstash and Elastic ingest
 pipelines.
 
+> **Status: done (2026-11-19), with the gaps listed below.** Guide:
+> [Ingest pipelines](./pipelines.md).
+>
+> - **Pipeline model:**
+>   - processors run in order, each optionally guarded by `if`, with
+>     Elastic-style failure handling (ignore_failure, per-step and
+>     pipeline on_failure);
+>   - pipelines are stored per tenant and versioned (`ingest_pipelines_mt`,
+>     migration 019);
+>   - 29 processors, covering every one this phase lists, with a bundled
+>     grok library;
+>   - conditions and `script` use a sandboxed expression language (an
+>     `ast` whitelist, no eval).
+> - **Simulation:** `POST /v1/pipelines/simulate` returns the document
+>   after every step. The editor shows before and after side by side,
+>   with the fields added, changed or removed.
+> - **Routing:** the shipper's `X-Logforge-Pipeline` header (or a
+>   `logforge_pipeline` field), then `services` or `if` by priority, then
+>   the tenant's default. Built-in pipelines can be named the same way.
+> - **Dead-letter queue:** failures, and pipelines named but missing,
+>   store the event as received with the pipeline, version, processor and
+>   error (`pipeline_dlq_mt`, migration 020), announced as
+>   `logs.parsing.failed`. Replay sends them through the current version.
+>   If the queue cannot be written, the event is stored with
+>   `attrs.pipeline_error`.
+> - **Observability:** per-version and per-processor counts, failures,
+>   drops and timings, plus events/s, in the API and the UI.
+> - **Migration:** nginx, syslog, CEF and text are built-in pipelines. The
+>   format endpoints parse through them, and a parity test against the
+>   old parser classes fixes five bugs the old parsers had.
+>
+> | Acceptance criterion | Result |
+> |---|---|
+> | Onboard an unknown format end to end (sample → pipeline → searchable fields) in the UI, covered by Playwright | `apps/ui/tests/11-pipelines.spec.ts`: paste a sample, build and test the pipeline, save, ingest, see the unparseable line in the dead-letter queue, then find the parsed field with LogforgeQL. It found two bugs, now fixed: numeric comparisons on `attrs` fields returned 500, and the editor's tabs showed stale data |
+> | 10-processor pipelines keep ingest within 20% of the Phase 0 baseline | Met. All 8 end-to-end runs with a 10-processor pipeline stored ≥ 326 events/s, against a floor of 222 (Phase 0: 277). The pipeline costs about 44 µs per event at the ingest stage, about 7% of an event's end-to-end cost. A clean A/B was not possible: runs swing several-fold on this stack whichever side they're on ([benchmarks](./benchmarks/README.md)) |
+> | No event silently lost: failures land in the DLQ with the reason | Unit tests cover failures, named-but-missing pipelines, a down DLQ and down pipeline storage. Live: an unparseable event was dead-lettered, then replayed and stored after the pipeline was fixed |
+>
+> **Not done** (tracked in [ROADMAP.md](./ROADMAP.md)):
+> - `route` only records the destination; tables and retention tiers
+>   don't exist yet.
+> - Metrics are per process.
+> - The editor takes JSON only.
+> - The OTLP and JSON parsers and the normalizer's field mappings are not
+>   pipelines yet.
+
 ### Deliverables
 
 1. **Pipeline model:** an ordered list of processors, stored per tenant,

@@ -12,7 +12,10 @@ for screenshots and demos (see scripts/capture_screenshots.js).
   evidence, moved to investigating;
 * threat intelligence: the Feodo Tracker botnet C2 list captured in
   tests/fixtures/threat_feeds, a hand-added phishing domain, and outbound
-  traffic to two of the C2 servers that ingest-time matching flags.
+  traffic to two of the C2 servers that ingest-time matching flags;
+* an ingest pipeline for a payments gateway's key=value lines (parse,
+  convert, mask card numbers and emails), with traffic through it and two
+  malformed lines in its dead-letter queue.
 
 Run after scripts/bootstrap_demo.py, against a running stack:
 
@@ -155,6 +158,43 @@ def seed_threat_intel():
     print(f"threat intel: {len(entries) + 1} indicators, traffic to {', '.join(c2)}")
 
 
+PAYMENTS_PIPELINE = {
+    "name": "payments-gateway",
+    "description": "Payments gateway key=value lines: parse, type, mask card numbers and emails",
+    "routing": {"services": ["payments-gw"]},
+    "processors": [
+        {"kv": {"field": "msg", "target": "attrs"}, "tag": "parse"},
+        {"convert": {"field": "attrs.amount", "type": "float"}},
+        {"lowercase": {"field": "attrs.status"}},
+        {"mask": {"field": "attrs.card", "kinds": ["card"], "replacement": "[card]"}, "ignore_failure": True},
+        {"hash": {"field": "attrs.customer", "salt": "demo"}, "ignore_failure": True},
+        {"mask": {"field": "msg", "kinds": ["card", "email"]}},
+        {"set": {"field": "level", "value": "warn"}, "if": "attrs.status == 'declined'"},
+    ],
+}
+
+
+def payment_line(i: int, status: str) -> str:
+    return (f"txn=TX{8800 + i} amount={12 + (i * 7) % 180}.50 currency=EUR status={status.upper()} "
+            f"card=4111-1111-1111-1111 customer=user{i % 9}@acme.example gateway=edge-{i % 3}")
+
+
+def seed_pipeline():
+    """A tenant pipeline with traffic through it and two dead letters."""
+    existing = demo.call("GET", "/v1/pipelines/payments-gateway", token=TOKEN, tenant=TENANT)[0]
+    if existing == 200:
+        call("PUT", "/v1/pipelines/payments-gateway", PAYMENTS_PIPELINE)
+    else:
+        call("POST", "/v1/pipelines", PAYMENTS_PIPELINE)
+    time.sleep(31)  # the ingest workers pick the pipeline up within 30 s
+    logs = [{"ts": at(500 - i * 8), "service": "payments-gw", "host": "pay-01",
+             "msg": payment_line(i, "declined" if i % 7 == 0 else "approved")} for i in range(60)]
+    logs += [{"ts": at(30), "service": "payments-gw", "host": "pay-01", "msg": "gateway timeout talking to acquirer"},
+             {"ts": at(20), "service": "payments-gw", "host": "pay-01", "msg": "<html>502 Bad Gateway</html>"}]
+    call("POST", "/v1/ingest/logs/batch", {"logs": logs})
+    print("pipeline: payments-gateway with 62 events (2 dead letters)")
+
+
 def work_a_case(source_ip: str):
     """An analyst picks up the brute-force case."""
     for _ in range(45):  # detection and grouping run asynchronously
@@ -185,4 +225,5 @@ if __name__ == "__main__":
     seed_metrics()
     brute_source = seed_attacks()
     seed_threat_intel()
+    seed_pipeline()
     work_a_case(brute_source)

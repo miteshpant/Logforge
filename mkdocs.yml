@@ -45,6 +45,7 @@ nav:
   - Detection-as-code: detection-as-code.md
   - Cases: cases.md
   - Threat intelligence: threat-intel.md
+  - Ingest pipelines: pipelines.md
   # Static Redoc page (docs/api/index.html); nav entries must be pages or URLs.
   - API reference: https://miteshpant.github.io/Logforge/api/
   - Roadmap:
