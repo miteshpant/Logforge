@@ -92,3 +92,49 @@ For your own application logs, write a pipeline that sets the same fields
 (see the [guide](pipelines.md)). The rule `lf-schema-failed-logon` (and
 `lf-schema-logon-brute-force`) then detects failed logins from all of them,
 unchanged.
+
+## Search-time fields
+
+You don't have to extract a field at ingest to query it. LogforgeQL can
+pull fields out of the stored text when the query runs (schema-on-read):
+
+```text
+| rex "Failed password for (?<user>\S+) from (?<ip>\S+)" | stats count() by user, ip
+| parse "order * by *" as order_id, customer | where order_id > 1000
+| json field=attrs.payload "user.name" as who, "action" | stats count() by who, action
+```
+
+- **`rex [field=<f>] "<regex>"`:** each named group `(?<name>...)` becomes
+  a field. Patterns use RE2 syntax, so lookaround and backreferences are
+  refused.
+- **`parse [field=<f>] "<text with *>" as a, b`:** each `*` captures up to
+  the next literal text. The last `*`, at the end of the pattern, takes the
+  rest of the line.
+- **`json [field=<f>] "<path>" [as name], ...`:** reads JSON text, a dotted
+  path from the root.
+
+The default field is `msg`. Extracted names can be used by later `where`
+(numbers compare as numbers), `stats ... by` and `sort`, and each returned
+log carries them under `extracted`. Patterns and paths are bound
+parameters, never SQL text. Write `\"` for a quote inside a pattern. Names
+must be new: `status` or `level` would be refused.
+
+See [Benchmarks](benchmarks/README.md) for what extraction costs against a
+field extracted at ingest.
+
+## Field explorer
+
+In the Log Explorer, **Fields** opens the field catalogue:
+- every field in the latest events of the time range, with its type and
+  how often it appears;
+- then the common-schema fields that resolve for those events.
+
+Click a field to see its exact top values and their share. Click **+** or
+**−** on a value to add `| where field = value` (or `!=`) to the query.
+The query bar also autocompletes these field names.
+
+The same data is available through the API:
+- `GET /v1/fields?window=24h`: the catalogue, computed from a sample of the
+  most recent events (2,000 by default);
+- `GET /v1/fields/values?field=attrs.http.status&window=24h`: exact top
+  values, plus total and distinct counts.
