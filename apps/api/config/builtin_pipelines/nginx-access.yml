@@ -1,0 +1,52 @@
+# Built-in pipeline: nginx access logs. Replaces parsers.NginxAccessLogParser
+# and produces the same fields. Accepts `combined`, `main` (no referer/agent),
+# combined followed by $request_time [$upstream_response_time], and JSON
+# log_format lines.
+name: nginx-access
+description: nginx access logs (combined, main, with request times, or JSON log_format)
+processors:
+  - json: {field: msg, target: attrs._nginx}
+    if: "startswith(msg, '{')"
+    tag: json_line
+  - set: {field: attrs._nginx._json, value: true}
+    if: "startswith(msg, '{')"
+  - grok:
+      field: msg
+      target: attrs._nginx
+      patterns:
+        - '^%{NOTSPACE:remote_addr} - %{NOTSPACE:remote_user} \[%{DATA:time_local}\] "%{DATA:request}" %{INT:status} %{INT:body_bytes_sent}(?: "%{DATA:http_referer}" "%{DATA:http_user_agent}"(?: %{NOTSPACE:request_time}(?: %{NOTSPACE:upstream_response_time})?)?)?$'
+    if: "not startswith(msg, '{')"
+    tag: access_line
+  - grok: {field: attrs._nginx.request, target: attrs, patterns: ['^%{NOTSPACE:method} %{NOTSPACE:uri}(?: %{DATA:protocol})?$']}
+    ignore_failure: true  # "-" or a malformed request line
+  - urldecode: {field: attrs.uri, ignore_missing: true}
+  - date: {field: attrs._nginx.time_local, formats: [HTTPDATE, "%d/%b/%Y:%H:%M:%S"]}
+    if: "exists('attrs._nginx.time_local')"
+    ignore_failure: true
+  - date: {field: attrs._nginx.time_iso8601, formats: [ISO8601]}
+    if: "exists('attrs._nginx.time_iso8601') and not exists('attrs._nginx.time_local')"
+    ignore_failure: true
+  - script:
+      source: |
+        status = int(attrs._nginx.status)
+        src_ip = str(attrs._nginx.remote_addr)
+        user_id = '' if attrs._nginx.remote_user in [None, '-', ''] else attrs._nginx.remote_user
+        attrs.bytes = int(attrs._nginx.body_bytes_sent)
+        attrs.referer = attrs._nginx.http_referer
+        attrs.user_agent = attrs._nginx.http_user_agent
+        attrs.request_time = float(attrs._nginx.request_time)
+        attrs.upstream_response_time = float(attrs._nginx.upstream_response_time)
+        level = 'error' if status >= 500 else 'warn' if status >= 400 else 'info'
+        service = 'nginx'
+        msg = str(attrs.method) + ' ' + str(attrs.uri) + ' ' + str(status) + ' ' + str(attrs._nginx.body_bytes_sent)
+  - script:
+      source: |
+        attrs.status = status
+        attrs.remote_user = user_id
+        attrs.upstream_response_time = attrs._nginx.upstream_response_time
+        attrs.geoip_country_code = attrs._nginx.geoip_country_code
+        attrs.ssl_protocol = attrs._nginx.ssl_protocol
+        attrs.ssl_cipher = attrs._nginx.ssl_cipher
+    if: "exists('attrs._nginx._json')"
+  - remove: {field: attrs._nginx}
+  - compact: {field: attrs, values: ["", "-"]}

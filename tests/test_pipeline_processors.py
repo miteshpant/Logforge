@@ -239,3 +239,16 @@ def test_cef_values_keep_spaces_and_escapes():
     d = run("cef", {"field": "msg"}, doc(cef))
     assert d["msg"] == "pipe | in name" and d["attrs"]["msg"] == "disk is full now"
     assert d["attrs"]["cs1"] == "a=b" and d["user_id"] == "bob"
+
+
+def test_regex_with_ordered_patterns_and_flags():
+    config = {"field": "msg", "patterns": [r"username[=:\s]+(?P<user>[^\s,]+)", r"user[=:\s]+(?P<user>[^\s,]+)"],
+              "flags": "i", "target": ""}
+    assert run("regex", config, doc("login USERNAME=root ok"))["user"] == "root"
+    assert run("regex", config, doc("User: alice"))["user"] == "alice"
+
+
+def test_urldecode_and_compact():
+    assert run("urldecode", {"field": "attrs.uri"}, doc(attrs={"uri": "/a%20b?q=%2Fx"}))["attrs"]["uri"] == "/a b?q=/x"
+    d = run("compact", {"field": "attrs", "values": ["", "-"]}, doc(attrs={"a": "", "b": "-", "c": None, "d": 0, "e": "x"}))
+    assert d["attrs"] == {"d": 0, "e": "x"}

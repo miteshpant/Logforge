@@ -943,3 +943,16 @@ class ParserFactory:
     def register_parser(cls, format_type: str, parser_class: type):
         """Register custom parser"""
         cls._parsers[format_type] = parser_class
+
+
+def _use_builtin_pipelines() -> None:
+    """Phase 4: nginx, syslog, CEF and text are parsed by built-in pipelines
+    (config/builtin_pipelines/*.yml), one mechanism for every format. The
+    classes above remain as the reference for the parity tests."""
+    from builtin_pipelines import FORMAT_PIPELINES, pipeline_parser_class
+
+    for format_type, pipeline_id in FORMAT_PIPELINES.items():
+        ParserFactory._parsers[format_type] = pipeline_parser_class(pipeline_id)
+
+
+_use_builtin_pipelines()

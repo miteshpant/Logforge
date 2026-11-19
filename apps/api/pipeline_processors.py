@@ -304,20 +304,62 @@ def _grok(config):
 
 @processor("regex")
 def _regex(config):
+    """One `pattern`, or ordered `patterns` (the first that matches wins).
+    flags: "i" (ignore case), "m", "s". target "" writes to the top level."""
     path, ignore_missing = _field_processor("regex", config)
-    regex = re.compile(_required(config, "pattern", "regex"))
-    if not regex.groupindex:
-        raise ProcessorError("regex: the pattern needs named groups, e.g. (?P<ms>\\d+)")
+    flags = 0
+    for flag in str(config.get("flags", "")):
+        flags |= {"i": re.I, "m": re.M, "s": re.S}.get(flag, 0)
+        if flag not in "ims":
+            raise ProcessorError(f"regex: unknown flag {flag!r} (use i, m, s)")
+    sources = config.get("patterns") or ([config["pattern"]] if config.get("pattern") else [])
+    if not sources:
+        raise ProcessorError("regex: option 'pattern' (or 'patterns') is required")
+    compiled = [re.compile(p, flags) for p in sources]
+    for regex in compiled:
+        if not regex.groupindex:
+            raise ProcessorError("regex: each pattern needs named groups, e.g. (?P<ms>\\d+)")
     target = config.get("target", "attrs")
 
     def run(doc, ctx):
         raw = _read(doc, path, "regex", ignore_missing)
         if raw is _MISSING:
             return
-        match = regex.search(str(raw))
-        if not match:
-            raise ProcessorError(f"regex: pattern did not match {path}")
-        _merge(doc, target, {k: v for k, v in match.groupdict().items() if v is not None})
+        text = str(raw)
+        for regex in compiled:
+            match = regex.search(text)
+            if match:
+                _merge(doc, target, {k: v for k, v in match.groupdict().items() if v is not None})
+                return
+        raise ProcessorError(f"regex: pattern did not match {path}")
+    return run
+
+
+@processor("urldecode")
+def _urldecode(config):
+    from urllib.parse import unquote
+
+    path, ignore_missing = _field_processor("urldecode", config)
+
+    def run(doc, ctx):
+        value = _read(doc, path, "urldecode", ignore_missing)
+        if value is _MISSING:
+            return
+        set_path(doc, path, unquote(str(value)))
+    return run
+
+
+@processor("compact")
+def _compact(config):
+    """Remove keys whose value is None or one of `values` from an object."""
+    path = config.get("field", "attrs")
+    empty = list(config.get("values", ["", None]))
+
+    def run(doc, ctx):
+        obj = get_path(doc, path)
+        if isinstance(obj, dict):
+            for key in [k for k, v in obj.items() if v is None or (not isinstance(v, (dict, list)) and v in empty)]:
+                del obj[key]
     return run
 
 
