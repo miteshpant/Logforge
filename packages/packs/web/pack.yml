@@ -1,0 +1,43 @@
+id: web
+name: Web servers
+version: 1.0.0
+description: >
+  nginx and Apache access logs (combined format) and the nginx error log.
+  Parses method, path, status, bytes, client, referer, user agent and request
+  time, with rules for path traversal, SQL injection attempts and known
+  scanners, and a dashboard of traffic, errors and slow paths.
+sources:
+  - name: nginx access log
+    service: nginx
+    paths: [/var/log/nginx/access.log]
+  - name: nginx error log
+    service: nginx-error
+    paths: [/var/log/nginx/error.log]
+  - name: Apache access log
+    service: apache
+    paths: [/var/log/apache2/access.log, /var/log/httpd/access_log]
+samples:
+  - file: samples/nginx-access.log
+    service: nginx
+    pipeline: web-access
+    expect:
+      - contains: "GET /api/orders"
+        fields: {service: nginx, attrs.method: GET, status: 200, src_ip: 198.51.100.23}
+        min: 2
+      - fields: {status: 503, level: error}
+      - contains: "sqlmap"
+        fields: {attrs.user_agent: "sqlmap/1.7.2#stable (https://sqlmap.org)"}
+    rules: [web-path-traversal, web-sql-injection, web-scanner-user-agent]
+  - file: samples/apache-access.log
+    service: apache
+    pipeline: web-access
+    expect:
+      - fields: {service: apache, attrs.method: POST, attrs.uri: /wp-login.php, status: 200}
+    rules: [web-scanner-user-agent]
+  - file: samples/nginx-error.log
+    service: nginx-error
+    pipeline: web-nginx-error
+    expect:
+      - contains: "upstream timed out"
+        fields: {service: nginx, level: error, src_ip: 198.51.100.23}
+    rules: []

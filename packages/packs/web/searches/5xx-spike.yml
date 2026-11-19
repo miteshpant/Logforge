@@ -1,0 +1,10 @@
+name: Web 5xx spike
+description: Alert template. More than 100 server errors from one service in 15 minutes. Enable it and add a channel.
+query: '| where service in ["nginx", "apache"] and status >= 500 | stats count() as errors by service | where errors > 100'
+every: 5m
+window: 15m
+enabled: false
+alert:
+  condition: {kind: rows, op: gt, value: 0}
+  severity: high
+  throttle_minutes: 30

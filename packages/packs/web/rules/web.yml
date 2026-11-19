@@ -1,0 +1,47 @@
+title: Path traversal in a web request
+id: web-path-traversal
+status: stable
+description: A request path climbs out of the web root (../) or asks for system files such as /etc/passwd.
+author: Logforge
+tags: [attack.initial_access, attack.t1190]
+logsource: {category: webserver}
+detection:
+  selection:
+    uri|contains: ["../", "..\\", /etc/passwd, /etc/shadow, /proc/self/environ, win.ini]
+  condition: selection
+fixtures:
+  true_positive: {service: nginx, method: GET, uri: /static/../../../../etc/passwd, status: 400}
+  true_negative: {service: nginx, method: GET, uri: /static/app.js, status: 200}
+level: medium
+---
+title: SQL injection attempt in a web request
+id: web-sql-injection
+status: stable
+description: A request path carries a typical SQL injection payload (UNION SELECT, OR 1=1, SLEEP(), information_schema).
+author: Logforge
+tags: [attack.initial_access, attack.t1190]
+logsource: {category: webserver}
+detection:
+  selection:
+    uri|contains: ["union select", "union all select", "' or '1'='1", "or 1=1", "sleep(", "benchmark(", information_schema, "xp_cmdshell"]
+  condition: selection
+fixtures:
+  true_positive: {service: nginx, method: GET, uri: "/products?id=1 UNION SELECT username,password FROM users", status: 500}
+  true_negative: {service: nginx, method: GET, uri: "/products?id=42", status: 200}
+level: high
+---
+title: Request from a known vulnerability scanner
+id: web-scanner-user-agent
+status: stable
+description: The user agent is a well-known scanner or exploitation tool.
+author: Logforge
+tags: [attack.reconnaissance, attack.t1595.002]
+logsource: {category: webserver}
+detection:
+  selection:
+    user_agent|contains: [sqlmap, nikto, nmap scripting engine, masscan, zgrab, gobuster, dirbuster, wpscan, nuclei, acunetix]
+  condition: selection
+fixtures:
+  true_positive: {service: apache, uri: /wp-login.php, user_agent: "WPScan v3.8.22 (https://wpscan.com/wordpress-security-scanner)"}
+  true_negative: {service: apache, uri: /, user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+level: low

@@ -1,0 +1,3 @@
+name: Most requested missing paths
+description: The paths that return 404 most often.
+query: '| where service in ["nginx", "apache"] and status = 404 | top limit=20 attrs.uri'
