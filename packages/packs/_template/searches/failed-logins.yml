@@ -1,0 +1,12 @@
+# An alert template: a scheduled search with an alert, shipped disabled so
+# the tenant enables it and adds a channel.
+name: Example app failed logins by user
+description: Alert template. Five or more failed logins for one user in fifteen minutes.
+query: '| where service = "example-app" and attrs.action = "login" and attrs.outcome = "failure" | stats count() as failures by user_id | where failures >= 5'
+every: 5m
+window: 15m
+enabled: false
+alert:
+  condition: {kind: rows, op: gt, value: 0}
+  severity: medium
+  throttle_minutes: 60

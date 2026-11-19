@@ -1,0 +1,4 @@
+{"time":"2026-11-19T10:00:00Z","user":"mallory","ip":"203.0.113.9","action":"login","outcome":"failure"}
+{"time":"2026-11-19T10:00:05Z","user":"mallory","ip":"203.0.113.9","action":"login","outcome":"failure"}
+{"time":"2026-11-19T10:01:00Z","user":"alice","ip":"10.0.0.5","action":"login","outcome":"success"}
+{"time":"2026-11-19T10:02:00Z","user":"alice","ip":"10.0.0.5","action":"export","outcome":"success","records":25000}

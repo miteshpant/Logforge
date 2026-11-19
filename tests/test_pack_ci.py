@@ -69,3 +69,18 @@ def test_every_shipped_pack_passes(pack):
     assert r.ok, r.failures
     assert pack.samples and pack.dashboards and pack.rules and pack.pipelines, "a pack needs all four"
     assert any(s.rules for s in pack.samples), "a sample should show a rule firing"
+
+
+def test_the_template_is_a_working_pack(tmp_path):
+    """packages/packs/_template is what contributors copy (docs/packs.md); it
+    is skipped by the catalogue but must itself pass pack CI."""
+    import shutil
+    from pathlib import Path
+
+    template = Path(sp.default_packs_dir()) / "_template"
+    assert "_template" not in [p.id for p in CATALOGUE]
+    shutil.copytree(template, tmp_path / "example")
+    pack = sp.load_pack(tmp_path / "example")
+    r = pack_ci.check_pack(pack)
+    assert r.ok, r.failures
+    assert pack.samples and pack.dashboards and pack.rules and pack.pipelines and pack.searches

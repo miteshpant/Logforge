@@ -1,0 +1,25 @@
+# Panels are LogforgeQL queries; $name uses a variable. Pack CI runs every
+# query against the parsed samples and fails if a dashboard shows nothing.
+name: Example app
+description: Activity in the example app (example pack)
+variables:
+  - name: user
+    label: User
+    type: query
+    query: '| where service = "example-app" | stats count() by user_id'
+    include_all: true
+    default: "*"
+panels:
+  - name: Events
+    type: metric
+    query: '| where service = "example-app" and user_id = $user | stats count() as events'
+  - name: Failed logins
+    type: metric
+    query: '| where service = "example-app" and user_id = $user and attrs.outcome = "failure" | stats count() as failed'
+  - name: Actions over time
+    type: line_chart
+    query: '| where service = "example-app" and user_id = $user | timechart count() by attrs.action'
+  - name: Top users
+    type: table
+    size: {w: 2, h: 2}
+    query: '| where service = "example-app" | stats count() as events, dc(src_ip) as addresses by user_id | sort -events | head 10'

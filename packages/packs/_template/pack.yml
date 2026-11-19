@@ -1,0 +1,28 @@
+# A pack template. Copy this directory to packages/packs/<id>, then replace
+# every "example" with your id (the directory name, the id below, the
+# pipeline and rule id prefixes). docs/packs.md walks through each file.
+id: example
+name: Example application
+version: 0.1.0
+description: >
+  One paragraph: which product and log format this pack covers, what it maps
+  the events to, and what the rules detect.
+sources:
+  - name: Example app audit log (JSON lines)
+    service: example-app            # the service name shippers send these logs with
+    paths: [/var/log/example/audit.log]
+samples:
+  # Each sample goes through the pack's pipelines, routed by `service` as
+  # ingest routes it, and must land in `pipeline`.
+  - file: samples/audit.jsonl
+    service: example-app
+    pipeline: example-audit
+    expect:
+      # at least `min` (default 1) parsed events whose message contains the
+      # text (optional) have these field values
+      - contains: login failure
+        fields: {user_id: mallory, attrs.outcome: failure, attrs.ocsf.class_uid: 3002, level: warn}
+        min: 2
+      - fields: {attrs.action: export, attrs.records: 25000}
+    # each of these rules must match at least one parsed event of this sample
+    rules: [example-bulk-export]

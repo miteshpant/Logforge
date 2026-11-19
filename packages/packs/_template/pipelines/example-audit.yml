@@ -1,0 +1,22 @@
+# One pipeline per log format. `routing` decides which logs it runs on.
+name: example-audit
+description: Example app audit log (JSON lines)
+routing: {services: [example-app]}
+processors:
+  - json: {field: msg, target: attrs.raw}
+  - date: {field: attrs.raw.time, formats: [ISO8601]}
+    ignore_failure: true
+  - script:
+      source: |
+        attrs.action = attrs.raw.action
+        attrs.outcome = attrs.raw.outcome
+        attrs.records = int(attrs.raw.records) if exists('attrs.raw.records') else None
+        user_id = attrs.raw.user
+        src_ip = attrs.raw.ip
+        level = 'warn' if attrs.raw.outcome == 'failure' else 'info'
+        msg = str(attrs.raw.action) + ' ' + str(attrs.raw.outcome) + ' by ' + str(attrs.raw.user)
+        attrs.ocsf.class_uid = 3002 if attrs.raw.action == 'login' else 6003
+        attrs.ocsf.actor.user.name = attrs.raw.user
+        attrs.ocsf.src_endpoint.ip = attrs.raw.ip
+  - remove: {field: attrs.raw}
+  - compact: {field: attrs}
