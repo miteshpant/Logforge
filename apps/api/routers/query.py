@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from models import QueryResponse
 from query_engine import (
+    AdvancedQueryEngine,
     AdvancedQueryRequest,
     AggregationType,
     QueryAggregation,
@@ -343,10 +344,14 @@ async def logql_query(
     endpoint.
     """
     from logql import LogQLSyntaxError, compile_to_request_payload
+    from logql_pipeline import uses_pipeline
 
     query_text = request_body.get("query")
     if not query_text or not isinstance(query_text, str):
         raise HTTPException(status_code=400, detail="A 'query' string is required")
+
+    if uses_pipeline(query_text):
+        return await run_pipeline_query(query_text, request_body, customer_id)
 
     try:
         payload = compile_to_request_payload(query_text)
@@ -378,6 +383,77 @@ async def logql_query(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise internal_error(e, "LogQL query failed")
+
+
+PIPELINE_QUERY_TIMEOUT_SECONDS = int(os.getenv("LOGFORGE_PIPELINE_QUERY_TIMEOUT_SECONDS", "30"))
+
+
+def _check_variables(variables: Any) -> Dict[str, Any]:
+    """Dashboard / caller variables: name -> string, number, bool or a list of them."""
+    if variables is None:
+        return {}
+    if not isinstance(variables, dict) or len(variables) > 50:
+        raise HTTPException(status_code=400, detail="'variables' must be an object (at most 50 entries)")
+    scalar = (str, int, float, bool)
+    for name, value in variables.items():
+        if not isinstance(name, str) or not re.match(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$", name):
+            raise HTTPException(status_code=400, detail=f"invalid variable name: {name!r}")
+        ok = value is None or isinstance(value, scalar) or (
+            isinstance(value, list) and len(value) <= 1000 and all(isinstance(v, scalar) for v in value))
+        if not ok:
+            raise HTTPException(status_code=400, detail=f"variable ${name} must be a value or a list of values")
+    return variables
+
+
+async def run_pipeline_query(query_text: str, request_body: Dict[str, Any], customer_id: str,
+                             variables: Any = None) -> Dict[str, Any]:
+    """Phase 6: compile a pipeline query to one parameterised statement and run it.
+
+    The tenant is bound into the innermost SELECT by the compiler, so no stage
+    can widen it. The statement runs read-only, with a time limit.
+    """
+    import asyncio
+    import time
+
+    from logql_pipeline import PipelineError, compile_pipeline, execute, requested_seconds
+
+    seconds = requested_seconds(query_text)
+    payload: Dict[str, Any] = {}
+    if seconds:
+        end = datetime.now(timezone.utc)
+        payload = {"start_time": (end - timedelta(seconds=seconds)).isoformat(), "end_time": end.isoformat()}
+    start, end = logql_window(payload, request_body)
+    variables = _check_variables(request_body.get("variables") if variables is None else variables)
+
+    try:
+        compiled = compile_pipeline(query_text, customer_id=customer_id, start=start, end=end, variables=variables)
+    except (PipelineError, QueryFieldError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    if not query_engine:
+        raise HTTPException(status_code=500, detail="Query engine not initialized")
+    settings = {
+        "readonly": 2,
+        "max_execution_time": PIPELINE_QUERY_TIMEOUT_SECONDS,
+        "max_bytes_to_read": AdvancedQueryEngine.DEFAULT_MAX_BYTES_TO_READ,
+    }
+    began = time.time()
+    try:
+        result = await asyncio.to_thread(execute, query_engine.client, compiled, settings)
+    except Exception as e:
+        raise internal_error(e, "LogQL query failed")
+    return {
+        "logs": result["rows"],
+        "columns": result["columns"],
+        "result_type": result["result_type"],
+        "total_count": len(result["rows"]),
+        "truncated": result["truncated"],
+        "aggregations": {},
+        "execution_time_ms": round((time.time() - began) * 1000, 2),
+        "query_info": {"engine": "pipeline", "rows_returned": len(result["rows"])},
+        "customer_id": customer_id,
+        "time_range": _time_range_payload(start, end),
+    }
 
 
 @router.post("/query/aggregate")

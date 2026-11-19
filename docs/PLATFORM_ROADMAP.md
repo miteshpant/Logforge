@@ -620,6 +620,27 @@ works no matter where the data came from.
 **Goal:** answer analytical questions, not just find lines. This is what
 analysts expect from SPL or ES|QL.
 
+> **Status: in progress.**
+>
+> - **Done: pipeline commands.** LogforgeQL now has `where` (with `or`,
+>   `not`, parentheses), `eval` (35 functions), `stats` (count, dc, sum, avg,
+>   min, max, median, p1–p99, stdev, values, earliest, latest), `eventstats`,
+>   `timechart`, `top`, `rare`, `sort`, `head`, `dedup`, `fields`, `rename`
+>   and `bin`, plus `$variables`. Each stage works on the output of the one
+>   before. A query compiles to one parameterised ClickHouse statement: the
+>   tenant and the time window are applied innermost, and every value is
+>   bound. Queries the original language accepted keep their old behaviour.
+>   Answers are checked against Python on a seeded dataset in ClickHouse
+>   (`tests/test_logql_pipeline_live.py`, run in CI).
+> - **Bugs found and fixed:** a query starting with `| eval ...` (or any
+>   stage the original language didn't know) was silently run as a
+>   full-text search for that text; `stats ... | where n > 3` filtered the
+>   events instead of the stats rows, because the original compiler applies
+>   every filter before aggregating.
+> - **Next:** lookups and joins, saved and scheduled searches, dashboard
+>   panels from queries, rollups and cost limits, the language reference
+>   and query builder, then the acceptance run.
+
 ### Deliverables
 
 1. **Pipeline commands** in LogforgeQL: `stats` (count, sum, avg, percentiles,

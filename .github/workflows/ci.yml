@@ -109,6 +109,13 @@ jobs:
         working-directory: tests/routes_tests
         run: pytest . -v --junitxml=../../junit-routes.xml
 
+      - name: Query language tests against ClickHouse
+        # LogforgeQL pipeline answers checked against Python on a seeded dataset.
+        env:
+          LOGFORGE_TEST_CLICKHOUSE: localhost:8124
+          LOGFORGE_REQUIRE_CLICKHOUSE: "1"
+        run: pytest tests/test_logql_pipeline_live.py -v
+
       - name: API logs on failure
         if: failure()
         run: docker compose logs --no-color api clickhouse-migrations | tail -400
