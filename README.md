@@ -27,6 +27,7 @@ rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 | **Service Map** (built from trace spans)<br>![Service Map](./docs/images/service-map.png) | **Detection Rules** (vendored SigmaHQ plus Logforge rules, correlation rules included)<br>![Detection Rules](./docs/images/detection-rules.png) |
 | **Cases** (alerts grouped per source, host or user; SLA overview)<br>![Cases](./docs/images/cases.png) | **Case detail** (timeline, linked alerts, entities, evidence)<br>![Case detail](./docs/images/case-detail.png) |
 | **Threat Intelligence** (feeds, indicators, sightings in your logs)<br>![Threat Intelligence](./docs/images/threat-intel.png) | **Ingest Pipelines** (parse, mask and shape logs on the way in; test against samples)<br>![Ingest Pipelines](./docs/images/pipelines.png) |
+| **Field explorer** (every field, its top values, add to query; common-schema fields)<br>![Field explorer](./docs/images/field-explorer.png) | |
 
 ## Contents
 
@@ -69,6 +70,7 @@ rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 | MITRE ATT&CK coverage (`/v1/security/mitre-coverage`), shown on the SIEM page | ✅ Implemented | `apps/api/routers/security_api.py` |
 | Threat intel and enrichment: abuse.ch, OTX, MISP, STIX and CSV feeds; ingest-time matching; retro-hunting; GeoIP/ASN, asset and user lookups | ✅ Implemented | `apps/api/threat_feeds.py`, `apps/api/ingest_enrichment.py`, [guide](./docs/threat-intel.md) |
 | Ingest pipelines: 29 processors (grok, kv, json, CEF, LEEF, date, mask, hash, script, ...), routing by service/condition/header, test against samples, versioned, dead-letter queue with replay; nginx, syslog, CEF and text are built-in pipelines | ✅ Implemented | `apps/api/pipelines.py`, `apps/api/pipeline_processors.py`, [guide](./docs/pipelines.md) |
+| Common schema (OCSF 1.3 with OpenTelemetry names): schema-on-read `ocsf.*` fields in rules and queries; Linux auth, Windows Security and Okta mapped; search-time `rex` / `parse` / `json`; field catalogue and explorer | ✅ Implemented | `apps/api/ocsf_schema.py`, `apps/api/field_catalogue.py`, [guide](./docs/schema.md) |
 | Root-cause analysis | 🟡 Partly placeholder | `apps/api/services/rca_engine.py` |
 | "AI" natural-language query and recommendations | 🧪 Keyword templates and canned output, no LLM | `apps/api/services/ai_service.py` |
 | Billing | 🟡 Usage metering and invoices computed, no payment provider | `apps/api/routers/usage_api.py` |

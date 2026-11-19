@@ -124,6 +124,8 @@ field extracted at ingest.
 
 ## Field explorer
 
+![Field explorer](images/field-explorer.png)
+
 In the Log Explorer, **Fields** opens the field catalogue:
 - every field in the latest events of the time range, with its type and
   how often it appears;

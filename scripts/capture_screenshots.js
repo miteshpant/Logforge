@@ -52,6 +52,19 @@ async function main() {
     console.log(`${name}.png`)
   }
 
+  // The Log Explorer's field explorer, on a common-schema field.
+  await page.goto(`${UI}/observability/logs`, { waitUntil: 'load' })
+  await page.locator('[data-testid="logs-refresh"]').first().waitFor()
+  await page.getByTestId('fields-toggle').click()
+  await page.getByTestId('field-search').fill('user.name')
+  const userField = page.locator('[data-testid="field-row"][data-field="ocsf.actor.user.name"]')
+  await userField.waitFor({ timeout: 20000 })
+  await userField.getByRole('button').first().click()
+  await userField.getByTestId('field-value').first().waitFor()
+  await page.waitForTimeout(1500)
+  await page.screenshot({ path: path.join(OUT, 'field-explorer.png') })
+  console.log('field-explorer.png')
+
   // The pipeline editor testing a sample (seeded by seed_demo_telemetry.py).
   await page.goto(`${UI}/settings/pipelines/payments-gateway`, { waitUntil: 'load' })
   await page.getByTestId('pipeline-samples').waitFor()

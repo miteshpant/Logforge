@@ -131,6 +131,34 @@ for normalisation to handle. The likely cause of the slow phase, quota
 counters updated by a ClickHouse mutation on every request, is tracked in
 [ROADMAP.md](../ROADMAP.md).
 
+## Search-time extraction: 2026-11-19
+
+Phase 5 acceptance: search-time extraction on 10 M rows must complete
+within 2× the cost of the same query on an ingest-time field. Measured with
+[`tests/bench/extraction_bench.py`](https://github.com/miteshpant/Logforge/blob/main/tests/bench/extraction_bench.py)
+on the same 4-vCPU stack. The benchmark tenant held 10,000,000 rows over 7
+days, and each query counted `region = "eu-west-1"` (about 3.2 M rows) over
+all of them, once from the stored `attrs.region` and once extracted at query
+time. Medians of 7 runs, server time; raw results:
+[`2026-11-19-extraction.json`](./2026-11-19-extraction.json).
+
+| Search-time stage | Ingest-time field | Search-time | Ratio | Same answer |
+|---|---|---|---|---|
+| `rex field=attrs "\"region\":\"(?<region>[^\"]+)\""` | 622 ms | 738 ms | **1.19×** | yes |
+| `parse field=attrs "\"region\":\"*\"" as region` | 613 ms | 748 ms | **1.22×** | yes |
+| `json field=attrs "region" as reg` | 608 ms | 398 ms | **0.66×** | yes |
+
+**Result: criterion met** for all three. The `json` extraction is faster
+than the stored-field path, because the stored-field path also checks the
+legacy envelope location (`JSONHas` + fallback).
+
+Found by this benchmark, and fixed:
+- a first run put `parse` at 2.02×, because its wildcards compiled to a
+  lazy `(.*?)`, which is slow in RE2. Before a single-character delimiter
+  it now compiles to `([^c]*)`, which matches the same text;
+- the benchmark's own patterns exposed a LogforgeQL bug: `\"` inside a
+  quoted pattern ended the string early.
+
 ## History
 
 | Date | Setup | Ingest (events/s) | Ingest → searchable | Slowest query p95 @ 10 M |
@@ -138,3 +166,4 @@ counters updated by a ClickHouse mutation on every request, is tracked in
 | 2026-11-17 | single node, 4 vCPU | 277 | 36.8 s | 311 ms (full-text search) |
 | 2026-11-18 | single node, 4 vCPU; enrichment, in process | +12 µs per event with 100k indicators (request acceptance only was timed live; see the correction) | — | — |
 | 2026-11-19 | single node, 4 vCPU; 10-processor pipeline, end to end | 326–1,650 with the pipeline (8 runs; Phase 0 floor 222) | — | — |
+| 2026-11-19 | single node, 4 vCPU; search-time extraction, 10 M rows | — | — | rex 1.19×, parse 1.22×, json 0.66× of the ingest-time field |

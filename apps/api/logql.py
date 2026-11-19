@@ -427,6 +427,10 @@ def _escape_literal(text: str) -> str:
     return re.sub(r"([.^$*+?()\[\]{}|\\])", r"\\\1", text)
 
 
+def _escape_class(char: str) -> str:
+    return "\\" + char if char in "]\\^-" else char
+
+
 def _parse_parse(body: str, parsed: "ParsedQuery") -> None:
     source, body = _source_option(body)
     template, rest = _quoted(body, "parse")
@@ -444,8 +448,15 @@ def _parse_parse(body: str, parsed: "ParsedQuery") -> None:
     for i, piece in enumerate(pieces):
         regex += _escape_literal(piece)
         if i < len(names):
-            last = i == len(names) - 1 and pieces[-1] == ""
-            regex += "(.*)" if last else "(.*?)"
+            following = pieces[i + 1]
+            last = i == len(names) - 1 and following == ""
+            if last:
+                regex += "(.*)"  # to the end of the line
+            elif len(following) == 1:
+                # Same match as (.*?) before a one-character delimiter, and much faster in RE2.
+                regex += f"([^{_escape_class(following)}]*)"
+            else:
+                regex += "(.*?)"
     _regex_extractions(source, regex, names, parsed, "parse")
 
 

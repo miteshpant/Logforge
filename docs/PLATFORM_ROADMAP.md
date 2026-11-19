@@ -550,6 +550,46 @@ pipelines.
 **Goal:** one vocabulary across sources, so a rule, dashboard or question
 works no matter where the data came from.
 
+> **Status: done (2026-11-19), with the gaps listed below.** Guide:
+> [Common schema](./schema.md).
+>
+> - **Schema:** OCSF 1.3, with each field's OpenTelemetry
+>   semantic-convention name. `config/schema/ocsf_mapping.yml` publishes
+>   the mapping of today's fields (36 OCSF fields), and docs/schema.md is
+>   checked against it in CI.
+> - **Schema-on-read:** `ocsf.<path>` resolves when read, in rules (the
+>   rule engine and correlation group-by) and in LogforgeQL. An explicit
+>   `attrs.ocsf` value, set by a source mapping, comes first, then
+>   today's fields. Nothing extra is stored.
+> - **Source mappings:** built-in `linux-auth`, `windows-security` and
+>   `okta` pipelines map authentication events to OCSF Authentication.
+>   They also keep the legacy fields, so the existing rules still work.
+> - **Rules on the schema:** `lf-schema-failed-logon` and
+>   `lf-schema-logon-brute-force` (counted across sources), plus an
+>   evaluation scenario with events from three sources.
+> - **Field catalogue:** `GET /v1/fields` lists the fields with type,
+>   presence, cardinality, examples and services. `GET /v1/fields/values`
+>   gives exact top values. The catalogue drives the query bar's
+>   autocomplete.
+> - **Search-time extraction:** LogforgeQL `rex`, `parse` and `json`, with
+>   the extracted names usable in where, stats, by and sort, and patterns
+>   bound as parameters. Nested `attrs.a.b` paths are queryable.
+> - **Field explorer UI:** a Fields panel in the Log Explorer: types,
+>   presence, top values with their share, and add/exclude to the query.
+>
+> | Acceptance criterion | Result |
+> |---|---|
+> | The same detection works unchanged across Linux auth, Windows Security, Okta and an application log once each is mapped | `tests/test_schema_detection_across_sources.py`: `lf-schema-failed-logon` fires for failures from all four sources and not for successes or unrelated events. Brute force is counted across sources. Live: a Windows 4625 sent through `windows-security` raised the schema alert |
+> | Search-time extraction on 10 M rows within 2× of the same query on an ingest-time field | rex **1.19×**, parse **1.22×**, json **0.66×**, with the same answers ([benchmarks](./benchmarks/README.md)) |
+>
+> **Not done** (tracked in [ROADMAP.md](./ROADMAP.md)):
+> - Only the Authentication class has source mappings; other classes get
+>   only the generic field mapping.
+> - The shipped Sigma and Logforge rules still use today's field names.
+> - Dashboards aren't migrated to schema fields.
+> - The catalogue is computed from a sample of recent events, not a
+>   persistent per-tenant index.
+
 ### Deliverables
 
 1. **Adopt a common schema.** Recommendation: **OCSF** (vendor-neutral, used

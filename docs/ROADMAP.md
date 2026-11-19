@@ -69,6 +69,17 @@ markers).
   costs about 39 µs per event against the processors' 22 µs (stats are
   taken per step and each routed event is snapshotted for the dead-letter
   queue), which could be trimmed.
+- **Common schema follow-ups from Phase 5** ([guide](./schema.md)): only
+  OCSF Authentication has source mappings (Linux sshd, Windows Security,
+  Okta); Process Activity, Network Activity, HTTP Activity and DNS have
+  only the generic field mapping, with no class, activity or status. The
+  shipped Sigma and Logforge rules still use today's field names (the
+  Sigma field mapping covers them) and aren't migrated to `ocsf.*`.
+  Dashboards aren't migrated either. The field catalogue is computed from
+  a sample of the latest events per request (cached 60 s), not a
+  persistent per-tenant index with type history. LogforgeQL extraction
+  uses RE2, so no lookaround or backreferences, and allows at most 32
+  extracted fields per query.
 - **Per-request quota mutations.** Every ingest request runs
   `ALTER TABLE tenant_quotas_mt UPDATE ...`. ClickHouse mutations are
   heavyweight and queue up under load; this is the likely cause of the

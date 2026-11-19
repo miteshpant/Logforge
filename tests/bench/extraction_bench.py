@@ -58,8 +58,8 @@ def _rows(tenant_id: str) -> int:
                           "AND ts >= now() - INTERVAL 7 DAY").strip() or 0)
 
 
-def _run(client, query: str, shift_s: int) -> Dict[str, Any]:
-    end = datetime.now(timezone.utc) - timedelta(seconds=shift_s)
+def _run(client, query: str, shift_s: int, end: Optional[datetime] = None) -> Dict[str, Any]:
+    end = end or datetime.now(timezone.utc) - timedelta(seconds=shift_s)
     body = {"query": query, "start_time": (end - timedelta(days=7) + timedelta(minutes=1)).isoformat(),
             "end_time": end.isoformat()}
     start = time.perf_counter()
@@ -79,7 +79,10 @@ def measure(client, repeats: int = 7) -> Dict[str, Any]:
                 run = _run(client, query, shift)
                 if i:
                     runs[side].append(run)
-        counts = {side: runs[side][-1]["count"] for side in runs}
+        # The timed runs use shifted windows (cache-busting); check the answers over one identical window.
+        same_end = datetime.now(timezone.utc) - timedelta(hours=1)
+        counts = {"ingest": _run(client, ingest_time, 0, same_end)["count"],
+                  "search": _run(client, search_time, 0, same_end)["count"]}
         results[name] = {
             "ingest_p50_ms": round(statistics.median(r["server_ms"] for r in runs["ingest"]), 1),
             "search_p50_ms": round(statistics.median(r["server_ms"] for r in runs["search"]), 1),

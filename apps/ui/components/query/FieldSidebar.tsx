@@ -94,7 +94,7 @@ export default function FieldSidebar({ window, onClose, onFilter, onFields }: Pr
   )
 
   return (
-    <aside data-testid="field-sidebar" className="fixed right-0 top-0 h-full w-full sm:w-96 z-40 bg-slate-900/98 border-l border-white/10 shadow-2xl flex flex-col">
+    <aside data-testid="field-sidebar" className="fixed right-0 top-0 h-full w-full sm:w-96 z-50 bg-slate-900 border-l border-white/10 shadow-2xl flex flex-col">
       <div className="flex items-center gap-2 p-4 border-b border-white/10">
         <h2 className="text-white font-semibold flex-1">Fields</h2>
         <button aria-label="Close fields" onClick={onClose} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>

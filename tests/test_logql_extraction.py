@@ -119,3 +119,16 @@ def test_escaped_quotes_inside_patterns_do_not_split_stages():
     assert p["filters"] == [{"field": "region", "operator": "eq", "value": "eu-west-1"}]
     p = payload(r'| where msg = "say \"a or b\"" | limit 1')
     assert p["filters"][0]["value"] == 'say "a or b"'
+
+
+def test_parse_uses_a_negated_class_before_a_one_character_delimiter():
+    """Found by the 10 M-row benchmark: a lazy (.*?) made parse 2.0x the cost
+    of the stored field. Before a single-character delimiter, ([^c]*) matches
+    exactly the same text and RE2 runs it much faster; longer delimiters keep
+    the lazy form, which is the only exact equivalent."""
+    p = payload('| parse field=attrs "\\"region\\":\\"*\\"" as region')
+    assert p["extractions"][0]["pattern"] == '"region":"([^"]*)"'
+    # A longer delimiter keeps (.*?): "a,b" must still be captured before ", ip=".
+    p = payload('| parse "user=*, ip=*;" as user, ip')
+    assert p["extractions"][0]["pattern"] == "user=(.*?), ip=([^;]*);"
+    assert payload('| parse "took * ms" as took')["extractions"][0]["pattern"] == "took (.*?) ms"
