@@ -1,0 +1,73 @@
+{
+  "pack": "linux",
+  "vector_image": "timberio/vector:0.41.1-debian",
+  "ran_at": "2026-11-19T17:26:47+00:00",
+  "total_s": 10.6,
+  "steps": [
+    {
+      "step": "plan shown",
+      "at_s": 0.1,
+      "counts": {
+        "create": 10
+      }
+    },
+    {
+      "step": "pack installed",
+      "at_s": 0.2,
+      "objects": 10
+    },
+    {
+      "step": "API key created",
+      "at_s": 0.3
+    },
+    {
+      "step": "Vector running",
+      "at_s": 0.5
+    },
+    {
+      "step": "lines written",
+      "at_s": 0.5,
+      "auth": 11,
+      "audit": 5
+    },
+    {
+      "step": "events parsed",
+      "at_s": 4.8,
+      "auditd": {
+        "events": 5,
+        "parsed": 5
+      },
+      "sshd": {
+        "events": 9,
+        "parsed": 9
+      },
+      "sudo": {
+        "events": 2,
+        "parsed": 2
+      }
+    },
+    {
+      "step": "dashboard loaded",
+      "at_s": 5.0,
+      "panels": 7,
+      "with_data": 7,
+      "empty": []
+    },
+    {
+      "step": "rules enabled and fired",
+      "at_s": 10.6,
+      "enabled": {
+        "linux-ssh-invalid-user": true,
+        "linux-sudo-root-shell": true,
+        "linux-auditd-exec-from-tmp": true,
+        "linux-auditd-shadow-read": true
+      },
+      "alerts": {
+        "linux-ssh-invalid-user": 3,
+        "linux-sudo-root-shell": 1,
+        "linux-auditd-exec-from-tmp": 1,
+        "linux-auditd-shadow-read": 1
+      }
+    }
+  ]
+}
