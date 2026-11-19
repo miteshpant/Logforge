@@ -1,0 +1,34 @@
+# Okta System Log events (https://developer.okta.com/docs/reference/api/system-log/).
+name: identity-okta
+description: Okta System Log
+routing: {services: [okta, okta-system-log]}
+processors:
+  - json: {field: msg, target: attrs.okta}
+  - date: {field: attrs.okta.published, formats: [ISO8601]}
+    ignore_failure: true
+  - script:
+      source: |
+        attrs.event_type = attrs.okta.eventType
+        attrs.outcome = attrs.okta.outcome.result
+        attrs.outcome_reason = attrs.okta.outcome.reason
+        attrs.target_user = field('attrs.okta.target.0.alternateId')
+        attrs.target_type = field('attrs.okta.target.0.type')
+        attrs.admin_role = field('attrs.okta.debugContext.debugData.privilegeGranted')
+        attrs.country = attrs.okta.client.geographicalContext.country
+        attrs.user_agent = attrs.okta.client.userAgent.rawUserAgent
+        attrs.okta_severity = attrs.okta.severity
+        attrs.login_failure = 'yes' if attrs.okta.eventType in ['user.session.start', 'user.authentication.auth_via_mfa', 'user.authentication.sso'] and attrs.okta.outcome.result in ['FAILURE', 'DENY'] else 'no'
+        user_id = attrs.okta.actor.alternateId
+        src_ip = attrs.okta.client.ipAddress
+        level = 'warn' if attrs.okta.outcome.result in ['FAILURE', 'DENY'] or attrs.okta.severity in ['WARN', 'ERROR'] else 'info'
+        msg = str(attrs.okta.eventType) + ' ' + str(attrs.okta.outcome.result) + ': ' + str(attrs.okta.displayMessage) + ' (' + str(user_id) + ')'
+        attrs.ocsf.class_uid = 3002 if startswith(attrs.okta.eventType, 'user.session') or startswith(attrs.okta.eventType, 'user.authentication') else 3001
+        attrs.ocsf.class_name = 'Authentication' if attrs.ocsf.class_uid == 3002 else 'Account Change'
+        attrs.ocsf.actor.user.name = user_id
+        attrs.ocsf.user.name = attrs.target_user
+        attrs.ocsf.src_endpoint.ip = src_ip
+        attrs.ocsf.status = 'Success' if attrs.okta.outcome.result == 'SUCCESS' else 'Failure'
+        service = 'okta'
+  - remove: {field: attrs.okta.debugContext}
+    ignore_failure: true
+  - compact: {field: attrs}
