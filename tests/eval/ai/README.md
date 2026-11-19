@@ -22,6 +22,37 @@ result = ai_eval.evaluate("nl2query", my_feature)   # my_feature(item) -> str
 print(result["score"], result["per_item"])
 ```
 
+## Features and the CI gate (Phase 8)
+
+`run_ai_eval.py` runs the AI features in `apps/api/ai/features.py` against
+these datasets through any provider:
+
+| Feature | Dataset | What it does |
+|---|---|---|
+| `nl2query` | `nl2query` | question → one LogforgeQL query; an answer that doesn't compile counts as none |
+| `summaries` | `summaries` | evidence → a two-to-four sentence summary citing `[E#]` |
+
+CI runs them from **recordings** of a real model (`recordings/<feature>.jsonl`,
+replayed by `ai.providers.recorded.RecordedProvider`, so no network or cost),
+and `tests/test_ai_eval_gate.py` fails if a feature scores below its entry in
+`baseline.json`. A recording is keyed by a hash of the whole request (model,
+prompt, messages, tools): change a prompt and the old answers no longer
+match, so the gate fails until the feature is re-recorded.
+
+```bash
+# record (calls the model once per item) and look at the scores
+ANTHROPIC_API_KEY=... python tests/eval/ai/run_ai_eval.py --record --provider anthropic:claude-opus-5-5
+# make them the baseline CI holds the feature to
+python tests/eval/ai/run_ai_eval.py --update-baseline
+```
+
+`--provider` also takes a provider name from `config/ai.yml`, or
+`ollama:<model>@<url>` / `openai_compatible:<model>@<url>` for a local model.
+
+**Not yet gated:** no recordings are committed yet (they need a model API
+key), so both features are reported as skipped by the gate. The harness,
+recorder and gate are tested end to end with a scripted stand-in.
+
 ## Status
 
 This is the Phase 0 skeleton: scorers, small seed datasets (8 / 5 / 5 items)
