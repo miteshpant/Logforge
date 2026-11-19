@@ -17,7 +17,7 @@ import ipaddress
 import json
 from collections import Counter, defaultdict
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, Optional, Tuple
 
 COLUMNS = ("service", "host", "level", "status", "src_ip", "user_id", "trace_id")
 INTERNAL = {"attrs.source_format", "attrs.processing_version"}  # added by ingest, not by the sender
