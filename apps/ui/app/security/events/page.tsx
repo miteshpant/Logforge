@@ -94,6 +94,15 @@ export default function SecurityEventsPage() {
     loadEvents()
   }, [severityFilter, statusFilter, refreshTrigger])
 
+  // Deep link (AI answer citations): ?alert=<id> opens that alert.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('alert')
+    if (!id || selectedEvent) return
+    const match = events.find(e => e.id === id)
+    if (match) setSelectedEvent(match)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events])
+
   // Run an event action and reflect it only once the API confirms it.
   const runEventAction = async (
     eventId: string,

@@ -6,6 +6,7 @@ import { createCase } from '@/lib/api/cases'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { apiClient } from '@/lib/api'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
+import { parseLogsLink } from '@/lib/aiFormat'
 import QueryBar from '@/components/query/QueryBar'
 import FieldSidebar from '@/components/query/FieldSidebar'
 import AddToDashboard from '@/components/query/AddToDashboard'
@@ -77,7 +78,7 @@ const TAIL_STATUS_LABELS: Record<string, { label: string; dot: string }> = {
 }
 
 export default function LogExplorerPage() {
-  const { getApiTimeRange, refreshTrigger } = useTimeRange()
+  const { getApiTimeRange, refreshTrigger, setTimeRange } = useTimeRange()
 
   // --- Mode -----------------------------------------------------------------
   const [mode, setMode] = useState<SearchMode>('filters')
@@ -247,6 +248,20 @@ export default function LogExplorerPage() {
     }
   }, [logqlQuery, isRunningQuery, getApiTimeRange])
   logqlRunRef.current = runQuery
+
+  // Deep links (AI answer citations): ?q=<LogforgeQL>&since=24h, or &from=<iso>&to=<iso>.
+  useEffect(() => {
+    const link = parseLogsLink(window.location.search)
+    if (!link) return
+    if (link.start && link.end) {
+      setTimeRange({ label: 'From link', value: 'custom', startTime: link.start, endTime: link.end, isCustom: true })
+    }
+    setMode('logql')
+    setLogqlQuery(link.query)
+    // run once the time range and the query have rendered
+    requestAnimationFrame(() => requestAnimationFrame(() => logqlRunRef.current()))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ---------------------------------------------------------------------------
   // Saved queries (existing API, extended with mode + LogQL text)

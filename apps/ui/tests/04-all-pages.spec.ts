@@ -39,6 +39,7 @@ const ROUTES = [
   '/settings/pipelines',
   '/settings/packs',
   '/settings/packs/linux',
+  '/settings/ai',
 ]
 
 const SETTLE_MS = 3_000

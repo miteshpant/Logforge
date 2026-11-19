@@ -38,6 +38,12 @@ export default function ThreatIntelPage() {
     setTotal(data.total)
   }, [query, type])
 
+  // Deep link (AI answer citations): ?q=<indicator>
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('q')
+    if (q) setQuery(q)
+  }, [])
+
   useEffect(() => {
     const timer = setTimeout(async () => {
       setLoading(true)
