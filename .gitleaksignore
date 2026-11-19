@@ -1,0 +1,2 @@
+# Made-up access key id in the AWS pack's CloudTrail sample (commit d3bbf1e); since replaced by AWS's documented example key.
+d3bbf1e448171c502d0005ced393cf696c17f82f:packages/packs/aws/samples/cloudtrail.jsonl:aws-access-token:3
