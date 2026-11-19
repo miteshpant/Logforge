@@ -419,17 +419,53 @@ async def _lookup_metas(customer_id: str, query_text: str) -> Dict[str, Any]:
     return {t.name: LookupMeta(name=t.name, version=t.version, columns=t.columns, key=t.key) for t in tables}
 
 
-async def run_pipeline_query(query_text: str, request_body: Dict[str, Any], customer_id: str,
-                             variables: Any = None) -> Dict[str, Any]:
-    """Phase 6: compile a pipeline query to one parameterised statement and run it.
+async def execute_pipeline_text(query_text: str, customer_id: str, start: datetime, end: datetime,
+                                variables: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Compile a pipeline query and run it: {"rows", "columns", "result_type", "truncated"}.
 
     The tenant is bound into the innermost SELECT by the compiler, so no stage
-    can widen it. The statement runs read-only, with a time limit.
+    can widen it. The statement runs read-only, with a time limit. Compile
+    errors are 400s; database errors propagate (callers decide how to report).
     """
     import asyncio
+
+    from logql_pipeline import PipelineError, compile_pipeline, execute
+
+    lookups = await _lookup_metas(customer_id, query_text)
+    try:
+        compiled = compile_pipeline(query_text, customer_id=customer_id, start=start, end=end,
+                                    variables=variables or {}, lookups=lookups)
+    except (PipelineError, QueryFieldError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not query_engine:
+        raise HTTPException(status_code=500, detail="Query engine not initialized")
+    settings = {
+        "readonly": 2,
+        "max_execution_time": PIPELINE_QUERY_TIMEOUT_SECONDS,
+        "max_bytes_to_read": AdvancedQueryEngine.DEFAULT_MAX_BYTES_TO_READ,
+    }
+    return await asyncio.to_thread(execute, query_engine.client, compiled, settings)
+
+
+async def validate_pipeline_text(query_text: str, customer_id: str) -> None:
+    """Raise ValueError (the message is for the user) if the query does not compile."""
+    from logql_pipeline import PipelineError, compile_pipeline
+
+    lookups = await _lookup_metas(customer_id, query_text)
+    end = datetime.now(timezone.utc)
+    try:
+        compile_pipeline(query_text, customer_id=customer_id, start=end - timedelta(hours=1), end=end,
+                         lookups=lookups, variables=None)
+    except (PipelineError, QueryFieldError) as exc:
+        raise ValueError(str(exc)) from None
+
+
+async def run_pipeline_query(query_text: str, request_body: Dict[str, Any], customer_id: str,
+                             variables: Any = None) -> Dict[str, Any]:
+    """Phase 6: run a pipeline query for the /query/logql endpoint."""
     import time
 
-    from logql_pipeline import PipelineError, compile_pipeline, execute, requested_seconds
+    from logql_pipeline import requested_seconds
 
     seconds = requested_seconds(query_text)
     payload: Dict[str, Any] = {}
@@ -439,23 +475,11 @@ async def run_pipeline_query(query_text: str, request_body: Dict[str, Any], cust
     start, end = logql_window(payload, request_body)
     variables = _check_variables(request_body.get("variables") if variables is None else variables)
 
-    lookups = await _lookup_metas(customer_id, query_text)
-    try:
-        compiled = compile_pipeline(query_text, customer_id=customer_id, start=start, end=end, variables=variables,
-                                    lookups=lookups)
-    except (PipelineError, QueryFieldError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-    if not query_engine:
-        raise HTTPException(status_code=500, detail="Query engine not initialized")
-    settings = {
-        "readonly": 2,
-        "max_execution_time": PIPELINE_QUERY_TIMEOUT_SECONDS,
-        "max_bytes_to_read": AdvancedQueryEngine.DEFAULT_MAX_BYTES_TO_READ,
-    }
     began = time.time()
     try:
-        result = await asyncio.to_thread(execute, query_engine.client, compiled, settings)
+        result = await execute_pipeline_text(query_text, customer_id, start, end, variables)
+    except HTTPException:
+        raise
     except Exception as e:
         raise internal_error(e, "LogQL query failed")
     return {

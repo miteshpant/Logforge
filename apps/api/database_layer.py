@@ -69,6 +69,7 @@ class DatabaseLayer:
         'PipelineDAO': os.getenv('PIPELINE_SERVICE_KEY', 'pipeline-dao-service-key'),
         'FieldCatalogue': os.getenv('FIELD_CATALOGUE_SERVICE_KEY', 'field-catalogue-service-key'),
         'LookupDAO': os.getenv('LOOKUP_SERVICE_KEY', 'lookup-dao-service-key'),
+        'SavedSearchDAO': os.getenv('SAVED_SEARCH_SERVICE_KEY', 'saved-search-service-key'),
         # Streaming Configuration Service
         'StreamingConfigDAO': os.getenv('STREAMING_CONFIG_SERVICE_KEY', 'streaming-config-service-key'),
         # Migration Service
@@ -136,6 +137,7 @@ class DatabaseLayer:
         'PipelineDAO': ['ingest_pipelines_mt', 'pipeline_dlq_mt'],  # Ingest pipelines and their dead letters
         'FieldCatalogue': ['logs_raw_mt'],  # Field catalogue and top values (read only)
         'LookupDAO': ['lookup_tables_mt', 'lookup_rows_mt'],  # LogforgeQL lookup tables and managed lists
+        'SavedSearchDAO': ['saved_searches_mt', 'saved_search_runs_mt'],  # Saved / scheduled searches and runs
         # Streaming Configuration Service
         'StreamingConfigDAO': ['tenant_configs_mt'],  # Needs to manage streaming configurations in tenant configs table
         # Migration Service

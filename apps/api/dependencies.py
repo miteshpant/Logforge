@@ -385,6 +385,14 @@ async def initialize_engines():
         except Exception as e:
             logger.error(f"Failed to start the threat feed scheduler: {e}")
 
+        # Saved searches (Phase 6): runs each tenant's due scheduled searches.
+        try:
+            from routers.searches_api import start_scheduler as start_saved_searches
+            if start_saved_searches():
+                logger.info("Saved search scheduler started")
+        except Exception as e:
+            logger.error(f"Failed to start the saved search scheduler: {e}")
+
         logger.info("All engines initialized successfully")
 
     except Exception as e:

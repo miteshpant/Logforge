@@ -25,6 +25,7 @@ from routers.threat_intel_api import router as threat_intel_router
 from routers.pipelines_api import router as pipelines_router
 from routers.fields_api import router as fields_router
 from routers.lookups_api import router as lookups_router
+from routers.searches_api import router as searches_router
 from routers.observability_api import router as observability_router
 from routers.ai_api import router as ai_router
 from routers.enterprise_api import router as enterprise_router
@@ -105,6 +106,7 @@ app.add_middleware(
 app.include_router(health_router, tags=["Health"])
 app.include_router(ingestion_router, tags=["Ingestion"])
 app.include_router(lookups_router)
+app.include_router(searches_router)
 app.include_router(query_router, tags=["Query"])
 app.include_router(dashboard_router, tags=["Dashboards"])
 app.include_router(storage_router, tags=["Storage"])

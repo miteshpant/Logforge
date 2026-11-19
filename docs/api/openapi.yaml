@@ -7726,6 +7726,245 @@ paths:
       summary: Update Saved Query
       tags:
       - Query
+  /v1/query/searches:
+    get:
+      operationId: list_searches_v1_query_searches_get
+      parameters:
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List Searches
+      tags:
+      - saved searches
+    post:
+      operationId: create_search_v1_query_searches_post
+      parameters:
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              additionalProperties: true
+              title: Body
+              type: object
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Create Search
+      tags:
+      - saved searches
+  /v1/query/searches/{search_id}:
+    delete:
+      operationId: delete_search_v1_query_searches__search_id__delete
+      parameters:
+      - in: path
+        name: search_id
+        required: true
+        schema:
+          title: Search Id
+          type: string
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Delete Search
+      tags:
+      - saved searches
+    get:
+      operationId: get_search_v1_query_searches__search_id__get
+      parameters:
+      - in: path
+        name: search_id
+        required: true
+        schema:
+          title: Search Id
+          type: string
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Search
+      tags:
+      - saved searches
+    put:
+      operationId: update_search_v1_query_searches__search_id__put
+      parameters:
+      - in: path
+        name: search_id
+        required: true
+        schema:
+          title: Search Id
+          type: string
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              additionalProperties: true
+              title: Body
+              type: object
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Update Search
+      tags:
+      - saved searches
+  /v1/query/searches/{search_id}/run:
+    post:
+      operationId: run_search_v1_query_searches__search_id__run_post
+      parameters:
+      - in: path
+        name: search_id
+        required: true
+        schema:
+          title: Search Id
+          type: string
+      - description: 'Preview: no alert, report or record'
+        in: query
+        name: dry_run
+        required: false
+        schema:
+          default: true
+          description: 'Preview: no alert, report or record'
+          title: Dry Run
+          type: boolean
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Run Search
+      tags:
+      - saved searches
+  /v1/query/searches/{search_id}/runs:
+    get:
+      operationId: list_runs_v1_query_searches__search_id__runs_get
+      parameters:
+      - in: path
+        name: search_id
+        required: true
+        schema:
+          title: Search Id
+          type: string
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 50
+          maximum: 500
+          minimum: 1
+          title: Limit
+          type: integer
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List Runs
+      tags:
+      - saved searches
   /v1/query/timeseries:
     post:
       description: Time-series analysis endpoint for trends and patterns
