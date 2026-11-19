@@ -1,0 +1,104 @@
+{
+  "run_at": "2026-11-19T01:54:48+00:00",
+  "environment": {
+    "host": "Linux-6.18.44-fc-v653-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "cpus": 4
+  },
+  "in_process": {
+    "processors": 10,
+    "events": 20000,
+    "rounds": 5,
+    "us_per_event": 21.25
+  },
+  "live_end_to_end": {
+    "rounds": 5,
+    "events_per_round": 5000,
+    "off": [
+      {
+        "events": 5000,
+        "stored": 5000,
+        "post_seconds": 1.56,
+        "seconds": 15.23,
+        "events_per_second": 328.4
+      },
+      {
+        "events": 5000,
+        "stored": 5000,
+        "post_seconds": 1.52,
+        "seconds": 15.19,
+        "events_per_second": 329.2
+      },
+      {
+        "events": 5000,
+        "stored": 5000,
+        "post_seconds": 1.16,
+        "seconds": 14.79,
+        "events_per_second": 338.1
+      },
+      {
+        "events": 5000,
+        "stored": 5000,
+        "post_seconds": 1.63,
+        "seconds": 14.78,
+        "events_per_second": 338.2
+      },
+      {
+        "events": 5000,
+        "stored": 5000,
+        "post_seconds": 1.28,
+        "seconds": 14.93,
+        "events_per_second": 334.8
+      }
+    ],
+    "on": [
+      {
+        "events": 5000,
+        "stored": 5000,
+        "post_seconds": 1.44,
+        "seconds": 15.09,
+        "events_per_second": 331.4
+      },
+      {
+        "events": 5000,
+        "stored": 5000,
+        "post_seconds": 1.31,
+        "seconds": 11.43,
+        "events_per_second": 437.5
+      },
+      {
+        "events": 5000,
+        "stored": 5000,
+        "post_seconds": 1.2,
+        "seconds": 10.81,
+        "events_per_second": 462.4
+      },
+      {
+        "events": 5000,
+        "stored": 5000,
+        "post_seconds": 0.5,
+        "seconds": 3.03,
+        "events_per_second": 1650.5
+      },
+      {
+        "events": 5000,
+        "stored": 5000,
+        "post_seconds": 1.65,
+        "seconds": 15.31,
+        "events_per_second": 326.5
+      }
+    ],
+    "median": {
+      "off_eps": 334.8,
+      "on_eps": 437.5,
+      "drop_pct": -30.68,
+      "limit_pct": 20,
+      "pass": true
+    },
+    "off_eps": 338.2,
+    "on_eps": 1650.5,
+    "drop_pct": -388.02,
+    "limit_pct": 20,
+    "pass": true
+  }
+}

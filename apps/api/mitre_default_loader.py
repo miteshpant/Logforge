@@ -178,6 +178,15 @@ BENIGN_EVENTS: List[Dict[str, Any]] = [
         "hostname": "app-01",
         "message": "Reading package lists",
     },
+    {   # One mistyped password: a single failure is not an attack.
+        "process_name": "/usr/sbin/sshd",
+        "user": "alice",
+        "hostname": "app-01",
+        "event_type": "authentication",
+        "result": "failed",
+        "src_ip": "10.0.0.8",
+        "message": "Failed password for alice from 10.0.0.8 port 51240 ssh2",
+    },
     {   # Ordinary web request.
         "url": "/index.html",
         "http_method": "GET",
@@ -197,6 +206,12 @@ class MitreDefaultLoader:
         service_key = os.getenv('MITRE_DEFAULT_LOADER_KEY', 'mitre-default-loader-service-key')
         self.database = DatabaseLayer("MitreDefaultLoader", service_key)
         self._condition_evaluator = None
+
+    # Whose rules the gate builds: the platform library by default; detection-
+    # as-code builds a tenant's rules with their ids as written.
+    _gate_tenant = DEFAULT_RULE_TENANT
+    _gate_id_prefix = "logforge_"
+    _gate_origin = "logforge"
 
     # ------------------------------------------------------------------
     # Detection evaluation helpers (shared gate for every candidate rule)
@@ -485,7 +500,8 @@ class MitreDefaultLoader:
     # Logforge's own rules (packages/rules/)
     # ------------------------------------------------------------------
 
-    def _verify_fixtures(self, detection: Dict[str, Any], fixtures: Any) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    def _verify_fixtures(self, detection: Dict[str, Any], fixtures: Any,
+                         check_benign: bool = True) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Check a rule's hand-written fixtures with the same standard as
         synthesised ones: the positive must fire, the negative and the benign
         corpus must not."""
@@ -499,10 +515,219 @@ class MitreDefaultLoader:
             return None, "true_positive fixture does not match"
         if self._rule_matches(detection, negative):
             return None, "true_negative fixture matches"
-        for benign in BENIGN_EVENTS:
+        for benign in (BENIGN_EVENTS if check_benign else ()):
             if self._rule_matches(detection, benign):
                 return None, "fires on the benign event corpus"
         return {"true_positive": positive, "true_negative": negative}, None
+
+    @staticmethod
+    def _expand_batch(entries: Any) -> List[Dict[str, Any]]:
+        """Expand a batch fixture: plain events, or {repeat: N, event: {...}}."""
+        events: List[Dict[str, Any]] = []
+        for entry in entries or []:
+            if isinstance(entry, dict) and "repeat" in entry and "event" in entry:
+                events.extend(dict(entry["event"]) for _ in range(int(entry["repeat"])))
+            elif isinstance(entry, dict):
+                events.append(entry)
+        return events
+
+    def _count_rule_fires(self, detection: Dict[str, Any], count_condition, events: List[Dict[str, Any]]) -> bool:
+        """Mirror SigmaEngine's batch count path: match `selection` per event,
+        group by the `by` fields, and compare each group with the threshold."""
+        evaluator = self._get_condition_evaluator()
+        selection = detection.get("selection") or {}
+        groups: Dict[str, int] = {}
+        for event in events:
+            if not evaluator.evaluate_selection(event, selection)[0]:
+                continue
+            key = "|".join(
+                f"{field}={evaluator._get_field_value(event, field) or 'unknown'}"
+                for field in (count_condition.group_by or [])
+            )
+            groups[key] = groups.get(key, 0) + 1
+        return any(count_condition.check_threshold(n) for n in groups.values())
+
+    def _verify_batch_fixtures(self, detection: Dict[str, Any], fixtures: Any) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """Gate for aggregation rules: the positive batch must trip the
+        threshold, the negative batch and the benign corpus must not."""
+        from sigma_condition import split_aggregation
+        from sigma_engine import CountCondition
+
+        condition = str(detection.get("condition", ""))
+        head, aggregation = split_aggregation(condition)
+        if aggregation is None:
+            # Standard Sigma: `count(selection) >= N by field` -- the counted
+            # block is the argument of count().
+            m = re.match(r"\s*count\s*\(\s*([A-Za-z0-9_]*)\s*\)", condition)
+            head = m.group(1) if m else ""
+        if head != "selection" or not isinstance(detection.get("selection"), dict):
+            return None, "count rules are evaluated on the 'selection' block only"
+        count_condition = CountCondition.parse(condition)
+        if count_condition is None:
+            return None, "unparseable count condition"
+
+        if not isinstance(fixtures, dict) or not fixtures.get("true_positive_batch") \
+                or not fixtures.get("true_negative_batch"):
+            return None, "aggregation rule needs true_positive_batch and true_negative_batch fixtures"
+        # Replayed through the runtime, so the rule's timeframe applies.
+        rules = [{"id": "candidate", "detection": detection}]
+        if not self._replay_fires(rules, fixtures["true_positive_batch"], "candidate"):
+            return None, "true_positive_batch does not reach the threshold"
+        if self._replay_fires(rules, fixtures["true_negative_batch"], "candidate"):
+            return None, "true_negative_batch reaches the threshold"
+        if self._replay_fires(rules, list(BENIGN_EVENTS), "candidate"):
+            return None, "fires on the benign event corpus"
+        return {"true_positive_batch": fixtures["true_positive_batch"],
+                "true_negative_batch": fixtures["true_negative_batch"]}, None
+
+    @staticmethod
+    def _replay_fires(rules: List[Dict[str, Any]], entries: Any, rule_id: str) -> bool:
+        """Does `rule_id` alert when the timeline `entries` is replayed
+        through the runtime (see detection_replay)?"""
+        from detection_replay import expand_timeline, replay
+
+        return any(alert.rule_id == rule_id for alert in replay(rules, expand_timeline(entries)))
+
+    def _correlation_rule_to_row(self, rule: Dict[str, Any], source: str,
+                                 bases: Dict[str, Dict[str, Any]]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """Validate a Sigma correlation rule against the base rules that
+        loaded: references must resolve, and its timelines must behave."""
+        from correlation import CorrelationRule, CorrelationRuleError
+
+        rule_id, title, level = rule.get("id"), rule.get("title"), rule.get("level")
+        if not rule_id or not title:
+            return None, "missing id or title"
+        if level not in ("low", "medium", "high", "critical"):
+            return None, f"unsupported level {level!r}"
+        try:
+            parsed = CorrelationRule.from_dict(rule)
+        except CorrelationRuleError as exc:
+            return None, str(exc)
+        if not parsed.techniques:
+            return None, "no MITRE technique tag"
+        referenced = []
+        for reference in parsed.rules:
+            if reference not in bases:
+                return None, f"references unknown base rule {reference!r}"
+            referenced.append(bases[reference])
+
+        correlation = dict(rule["correlation"])
+        correlation["rules"] = [base["ref"] for base in referenced]
+        candidate = {"id": "candidate", "title": str(title), "severity": level,
+                     "tags": list(rule.get("tags") or []), "correlation": correlation}
+        # Each base brings the rules it needs (a chained correlation brings
+        # its own base rules).
+        replay_rules: List[Dict[str, Any]] = []
+        for base in referenced:
+            for dependency in base["replay"]:
+                if all(dependency["id"] != r["id"] for r in replay_rules):
+                    replay_rules.append(dependency)
+        replay_rules.append(candidate)
+
+        fixtures = rule.get("fixtures")
+        if not isinstance(fixtures, dict) or not fixtures.get("true_positive_batch") \
+                or not fixtures.get("true_negative_batch"):
+            return None, "correlation rule needs true_positive_batch and true_negative_batch fixtures"
+        if not self._replay_fires(replay_rules, fixtures["true_positive_batch"], "candidate"):
+            return None, "true_positive_batch does not fire"
+        if self._replay_fires(replay_rules, fixtures["true_negative_batch"], "candidate"):
+            return None, "true_negative_batch fires"
+        generate = rule.get("generate", True) is not False
+        if generate and self._replay_fires(replay_rules, list(BENIGN_EVENTS), "candidate"):
+            return None, "fires on the benign event corpus"
+
+        tags = [str(t) for t in rule.get("tags") or []]
+        rule_content = {
+            "correlation": correlation,
+            "detection": {},
+            "logsource": rule.get("logsource", {}),
+            "tags": tags,
+            "kill_chain_phases": [t.split(".", 1)[1].replace("_", "-") for t in tags
+                                  if t.lower().startswith("attack.") and not _TECHNIQUE_TAG_RE.match(t)],
+            "references": rule.get("references", []),
+            "falsepositives": rule.get("falsepositives", []),
+            "author": rule.get("author", "Logforge Security Team"),
+            "date": str(rule.get("date", "")),
+            "fixtures": {"true_positive_batch": fixtures["true_positive_batch"],
+                         "true_negative_batch": fixtures["true_negative_batch"]},
+            "source": {"origin": self._gate_origin, "file": source},
+            "name": rule.get("name"),
+            "generate": generate,
+            # What the rule needs to be replayed (gate, backtest).
+            "replay_rules": [r["id"] for r in replay_rules if r["id"] != "candidate"],
+        }
+        return {
+            "id": f"{self._gate_id_prefix}{rule_id}",
+            "customer_id": self._gate_tenant,
+            "name": str(title),
+            "description": str(rule.get("description", "")).strip(),
+            "rule_content": json.dumps(rule_content),
+            "mitre_techniques": parsed.techniques,
+            "severity": level,
+            "is_enabled": True,
+            "created_by": "system",
+        }, None
+
+    def _rows_from_candidates(self, candidates: List[Tuple[Any, str]]) -> Tuple[List[Dict[str, Any]], List[str]]:
+        """Gate every candidate: detection rules first, then correlation
+        rules against the base rules that loaded."""
+        rows: List[Dict[str, Any]] = []
+        awaiting: List[str] = []
+        bases: Dict[str, Dict[str, Any]] = {}
+        correlations: List[Tuple[Dict[str, Any], str]] = []
+
+        for rule, source in candidates:
+            if isinstance(rule, dict) and rule.get("correlation") is not None:
+                correlations.append((rule, source))
+                continue
+            row, reason = self._packaged_rule_to_row(rule, source)
+            if row is None:
+                logger.warning(f"Packaged rule not loadable ({reason}): {source}")
+                awaiting.append(f"{source}: {reason}")
+                continue
+            rows.append(row)
+            detection = rule["detection"]
+            if "count(" in str(detection.get("condition", "")):
+                continue  # aggregations aren't base rules
+            name = rule.get("name")
+            ref = str(name) if name else row["id"]
+            base = {"ref": ref, "replay": [{"id": row["id"], "name": name,
+                                            "generate": rule.get("generate", True), "detection": detection}]}
+            bases[str(rule["id"])] = base
+            if name:
+                bases[str(name)] = base
+
+        # Correlations may reference correlations: load in passes, each pass
+        # taking the rules whose references have all loaded. What's left
+        # (unknown references, cycles) is rejected with the reason.
+        pending = list(correlations)
+        while pending:
+            ready = [(r, src) for r, src in pending
+                     if all(str(ref) in bases for ref in self._references(r))]
+            final = not ready
+            for rule, source in list(pending if final else ready):
+                pending.remove((rule, source))
+                row, reason = self._correlation_rule_to_row(rule, source, bases)
+                if row is None:
+                    logger.warning(f"Correlation rule not loadable ({reason}): {source}")
+                    awaiting.append(f"{source}: {reason}")
+                    continue
+                rows.append(row)
+                content = json.loads(row["rule_content"])
+                name = rule.get("name")
+                own = {"id": row["id"], "name": name, "generate": content["generate"],
+                       "tags": content["tags"], "correlation": content["correlation"]}
+                deps = [r for ref in self._references(rule) for r in bases[str(ref)]["replay"]]
+                base = {"ref": str(name) if name else row["id"], "replay": deps + [own]}
+                bases[str(rule["id"])] = base
+                if name:
+                    bases[str(name)] = base
+        return rows, awaiting
+
+    @staticmethod
+    def _references(rule: Dict[str, Any]) -> List[Any]:
+        refs = (rule.get("correlation") or {}).get("rules") or []
+        return [refs] if isinstance(refs, str) else list(refs)
 
     def _packaged_rule_to_row(self, rule: Any, source: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Validate one Logforge rule (Sigma shape, Logforge field names)."""
@@ -531,12 +756,12 @@ class MitreDefaultLoader:
 
         condition = str(detection.get("condition", ""))
         if "count(" in condition:
-            # A single-event fixture cannot prove a threshold rule; it needs a
-            # batch fixture the gate does not support yet.
-            return None, "aggregation rule (count) cannot be verified with single-event fixtures"
-
-        if "fixtures" in rule:
-            fixtures, reason = self._verify_fixtures(detection, rule["fixtures"])
+            fixtures, reason = self._verify_batch_fixtures(detection, rule.get("fixtures"))
+        elif "fixtures" in rule:
+            # A `generate: false` building block never alerts on its own, so
+            # only the correlations built on it face the benign corpus.
+            fixtures, reason = self._verify_fixtures(detection, rule["fixtures"],
+                                                     check_benign=rule.get("generate", True) is not False)
         else:
             fixtures, reason = self._validate_detection(detection)
         if fixtures is None:
@@ -552,11 +777,13 @@ class MitreDefaultLoader:
             "author": rule.get("author", "Logforge Security Team"),
             "date": str(rule.get("date", "")),
             "fixtures": fixtures,
-            "source": {"origin": "logforge", "file": source},
+            "source": {"origin": self._gate_origin, "file": source},
+            "name": rule.get("name"),
+            "generate": rule.get("generate", True) is not False,
         }
         return {
-            "id": f"logforge_{rule_id}",
-            "customer_id": DEFAULT_RULE_TENANT,
+            "id": f"{self._gate_id_prefix}{rule_id}",
+            "customer_id": self._gate_tenant,
             "name": str(title),
             "description": str(rule.get("description", "")).strip(),
             "rule_content": json.dumps(rule_content),
@@ -579,13 +806,23 @@ class MitreDefaultLoader:
             return rows, awaiting
 
         candidates: List[Tuple[Any, str]] = []
-        for path in sorted(rules_dir.glob("*.yml")):
+        # Top-level files hold one rule each; correlations/ holds bundles of
+        # base rules and the correlations built on them (multi-document YAML).
+        for path in sorted(rules_dir.glob("*.yml")) + sorted(rules_dir.glob("correlations/*.yml")):
             if path.name == "content_pack.yml":
                 continue
             try:
-                candidates.append((yaml.safe_load(path.read_text(encoding="utf-8")), path.name))
+                # A file may hold several rules as YAML documents (base rules
+                # next to the correlations built on them).
+                documents = [d for d in yaml.safe_load_all(path.read_text(encoding="utf-8")) if d is not None]
             except yaml.YAMLError as exc:
                 awaiting.append(f"{path.name}: invalid YAML ({exc})")
+                continue
+            for document in documents:
+                label = str(path.relative_to(rules_dir))
+                if len(documents) > 1:
+                    label = f"{label}#{document.get('id') if isinstance(document, dict) else '?'}"
+                candidates.append((document, label))
 
         pack_path = rules_dir / "content_pack.yml"
         if pack_path.exists():
@@ -596,14 +833,8 @@ class MitreDefaultLoader:
                 logger.error(f"Content pack not loadable: {exc}")
                 awaiting.append(f"content_pack.yml: {exc}")
 
-        for rule, source in candidates:
-            row, reason = self._packaged_rule_to_row(rule, source)
-            if row is None:
-                logger.warning(f"Packaged rule not loadable ({reason}): {source}")
-                awaiting.append(f"{source}: {reason}")
-            else:
-                rows.append(row)
-        return rows, awaiting
+        loaded, rejected = self._rows_from_candidates(candidates)
+        return rows + loaded, awaiting + rejected
 
     # ------------------------------------------------------------------
     # Main entry point
@@ -665,24 +896,12 @@ class MitreDefaultLoader:
             all_rows = content_rows + generated_rows
             total_candidates = len(all_rows) + len(awaiting_content)
 
-            # 3. Idempotent reconciliation (LF-004): fetch existing ids once,
-            #    insert only what is missing.
-            existing_ids = await self._existing_default_rule_ids()
-
-            loaded_count = 0
-            inserted_count = 0
-            failed_count = 0
-            for row in all_rows:
-                if row["id"] in existing_ids:
-                    loaded_count += 1
-                    continue
-                if await self._insert_default_sigma_rule(row):
-                    loaded_count += 1
-                    inserted_count += 1
-                    if inserted_count % 50 == 0:
-                        logger.info(f"📈 Inserted {inserted_count} new default rules...")
-                else:
-                    failed_count += 1
+            # 3. Reconcile with what ships (LF-004 idempotency): insert new
+            #    rules, update changed ones, disable retired ones.
+            counts = await self._reconcile_default_rules(all_rows)
+            inserted_count = counts["inserted"]
+            failed_count = counts["failed"]
+            loaded_count = counts["inserted"] + counts["updated"] + counts["unchanged"]
 
             # 4. Refresh Redis cache with the current default rule set.
             logger.info("💾 Refreshing Redis cache with default rules...")
@@ -693,6 +912,8 @@ class MitreDefaultLoader:
                 "total_techniques": total_candidates,
                 "rules_loaded": loaded_count,
                 "rules_inserted": inserted_count,
+                "rules_updated": counts["updated"],
+                "rules_retired": counts["retired"],
                 "rules_failed": failed_count,
                 # Techniques/files with no fixture-verified detection are
                 # reported explicitly, so coverage numbers stay honest and the
@@ -856,6 +1077,84 @@ class MitreDefaultLoader:
     # ------------------------------------------------------------------
     # Database operations
     # ------------------------------------------------------------------
+
+    _COMPARED = ("name", "description", "rule_content", "severity")
+
+    async def _reconcile_default_rules(self, rows: List[Dict[str, Any]]) -> Dict[str, int]:
+        """Make the stored default library match `rows` (the rules that passed
+        the gate): insert missing rules, update changed ones in place, and
+        disable system rules that are no longer shipped."""
+        counts = {"inserted": 0, "updated": 0, "unchanged": 0, "retired": 0, "failed": 0}
+        existing = await self.database.execute_query(
+            """
+            SELECT id, name, description, rule_content, severity, is_enabled
+            FROM sigma_rules_mt
+            WHERE customer_id = %(customer_id)s AND created_by = 'system'
+            """,
+            {"customer_id": DEFAULT_RULE_TENANT},
+        ) or []
+        stored = {r["id"]: r for r in existing}
+
+        for row in rows:
+            current = stored.get(row["id"])
+            if current is None:
+                ok = await self._insert_default_sigma_rule(row)
+                counts["inserted" if ok else "failed"] += 1
+                continue
+            changed = any(str(current.get(k)) != str(row.get(k)) for k in self._COMPARED) \
+                or not current.get("is_enabled")
+            if not changed:
+                counts["unchanged"] += 1
+                continue
+            ok = await self._update_default_sigma_rule(row)
+            counts["updated" if ok else "failed"] += 1
+
+        shipped = {row["id"] for row in rows}
+        retired = [rid for rid, r in stored.items() if rid not in shipped and r.get("is_enabled")]
+        if rows and retired:
+            try:
+                await self.database.execute_update(
+                    """
+                    ALTER TABLE sigma_rules_mt UPDATE is_enabled = 0, updated_at = now64(3)
+                    WHERE customer_id = %(customer_id)s AND id IN %(ids)s
+                    SETTINGS mutations_sync = 2
+                    """,
+                    {"customer_id": DEFAULT_RULE_TENANT, "ids": retired},
+                )
+                counts["retired"] = len(retired)
+                logger.info(f"Disabled {len(retired)} default rules that are no longer shipped")
+            except Exception as e:
+                logger.error(f"Failed to disable retired default rules: {e}")
+        return counts
+
+    async def _update_default_sigma_rule(self, rule: Dict[str, Any]) -> bool:
+        """Update a stored default rule to the shipped version."""
+        try:
+            await self.database.execute_update(
+                """
+                ALTER TABLE sigma_rules_mt UPDATE
+                    name = %(name)s, description = %(description)s, rule_content = %(rule_content)s,
+                    mitre_techniques = %(mitre_techniques)s, severity = %(severity)s,
+                    is_enabled = %(is_enabled)s, updated_at = %(updated_at)s
+                WHERE customer_id = %(customer_id)s AND id = %(id)s
+                SETTINGS mutations_sync = 2
+                """,
+                {
+                    "id": rule["id"],
+                    "customer_id": rule["customer_id"],
+                    "name": rule["name"],
+                    "description": rule["description"],
+                    "rule_content": rule["rule_content"],
+                    "mitre_techniques": rule["mitre_techniques"],
+                    "severity": rule["severity"],
+                    "is_enabled": 1 if rule["is_enabled"] else 0,
+                    "updated_at": datetime.now(timezone.utc),
+                },
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Error updating default rule {rule['id']}: {e}")
+            return False
 
     async def _existing_default_rule_ids(self) -> set:
         """Ids of platform-default rules already present (LF-004 idempotency)."""

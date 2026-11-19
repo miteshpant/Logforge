@@ -1,0 +1,4 @@
+title: DNS lookup of a subdomain of a ThreatFox C2 domain
+techniques: [T1071]
+events:
+  - {service: dns, hostname: dns-01, src_ip: 10.0.1.33, query: 'api.c2.badactor.example', event_type: dns_query, message: query resolved}

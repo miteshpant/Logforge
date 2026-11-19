@@ -1,6 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { createCase } from '@/lib/api/cases'
+import { threatBadge, ThreatSummary } from '@/lib/intelFormat'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { apiClient } from '@/lib/api'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
@@ -38,10 +41,12 @@ interface SecurityEvent {
   assigned_to?: string
   investigation_notes: string[]
   artifacts: string[]
+  threat?: ThreatSummary | null
 }
 
 export default function SecurityEventsPage() {
   const { getApiTimeRange, refreshTrigger } = useTimeRange()
+  const router = useRouter()
   const [events, setEvents] = useState<SecurityEvent[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedEvent, setSelectedEvent] = useState<SecurityEvent | null>(null)
@@ -90,7 +95,6 @@ export default function SecurityEventsPage() {
   }, [severityFilter, statusFilter, refreshTrigger])
 
   // Run an event action and reflect it only once the API confirms it.
-  // apiClient reports HTTP errors as { success: false } instead of throwing.
   const runEventAction = async (
     eventId: string,
     action: 'acknowledge' | 'investigate' | 'resolve' | 'false-positive',
@@ -100,10 +104,8 @@ export default function SecurityEventsPage() {
     setIsActionLoading(true)
     setActionError(null)
     try {
+      // Rejects with ApiError if the API refuses the action (caught below).
       const response = await apiClient.post(`/v1/security/${eventId}/${action}`, body)
-      if (!response.success) {
-        throw new Error(response.error || `Failed to ${action} event`)
-      }
       if (action === 'investigate' && response.data) {
         setInvestigationData(prev => ({ ...prev, [eventId]: response.data }))
       }
@@ -123,6 +125,18 @@ export default function SecurityEventsPage() {
 
   const handleAcknowledge = (eventId: string) =>
     runEventAction(eventId, 'acknowledge', { notes: newNote || undefined }, 'investigating')
+
+  const handleCreateCase = async (event: SecurityEvent) => {
+    try {
+      setIsActionLoading(true)
+      setActionError(null)
+      const created = await createCase({ title: event.rule_title || 'Security alert', alert_ids: [event.id] })
+      router.push(`/security/cases/${created.id}`)
+    } catch (error: any) {
+      setActionError(error?.message || 'Failed to create a case')
+      setIsActionLoading(false)
+    }
+  }
 
   const handleResolve = (eventId: string) =>
     runEventAction(eventId, 'resolve', {
@@ -382,6 +396,7 @@ export default function SecurityEventsPage() {
                 {filteredEvents.map(event => (
                   <div
                     key={event.id}
+                    data-testid="security-event-row"
                     onClick={() => setSelectedEvent(event)}
                     className={`p-4 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-lg border cursor-pointer transition-all ${
                       selectedEvent?.id === event.id
@@ -412,6 +427,11 @@ export default function SecurityEventsPage() {
                           </span>
                         </div>
                         <p className="font-medium text-white truncate">{event.rule_title}</p>
+                        {threatBadge(event.threat) && (
+                          <p data-testid="intel-badge" className="mt-1 inline-block px-2 py-0.5 rounded border border-red-500/40 bg-red-500/10 text-xs text-red-300">
+                            {threatBadge(event.threat)}
+                          </p>
+                        )}
                         <div className="flex items-center gap-4 mt-2 text-xs text-slate-400">
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
@@ -469,6 +489,14 @@ export default function SecurityEventsPage() {
                   {actionError}
                 </div>
               )}
+              <button
+                data-testid="create-case-from-alert"
+                onClick={() => handleCreateCase(selectedEvent)}
+                disabled={isActionLoading}
+                className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                Create case from this alert
+              </button>
               {/* Quick Actions */}
               {selectedEvent.status !== 'resolved' && selectedEvent.status !== 'false_positive' && (
                 <div className="p-4 bg-slate-800/50 rounded-lg border border-white/5">

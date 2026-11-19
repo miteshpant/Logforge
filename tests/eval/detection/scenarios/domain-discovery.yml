@@ -1,0 +1,6 @@
+title: Domain and account discovery after initial access
+techniques: [T1087.002, T1069.002, T1482]
+events:
+  - {service: sysmon, event_id: 1, hostname: WS-042, user: alice, process_name: 'C:\Windows\System32\net.exe', command_line: 'net group "domain admins" /domain', message: Process created}
+  - {service: sysmon, event_id: 1, hostname: WS-042, user: alice, process_name: 'C:\Windows\System32\nltest.exe', command_line: 'nltest /domain_trusts /all_trusts', message: Process created}
+  - {service: sysmon, event_id: 1, hostname: WS-042, user: alice, process_name: 'C:\Windows\System32\net.exe', command_line: 'net user /domain', message: Process created}

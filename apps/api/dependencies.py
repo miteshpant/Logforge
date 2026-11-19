@@ -377,6 +377,14 @@ async def initialize_engines():
             # is visible rather than silently skipped.
             logger.error(f"Failed to start quota reset scheduler: {e}")
 
+        # Threat intelligence feeds (Phase 3): runs each tenant's due feeds.
+        try:
+            from threat_feed_scheduler import start_scheduler as start_threat_feeds
+            if start_threat_feeds():
+                logger.info("Threat feed scheduler started")
+        except Exception as e:
+            logger.error(f"Failed to start the threat feed scheduler: {e}")
+
         logger.info("All engines initialized successfully")
 
     except Exception as e:

@@ -1,0 +1,4 @@
+title: Large upload over FTP to an external host
+techniques: [T1048]
+events:
+  - {service: netflow, src_ip: 10.0.2.15, dst_ip: 185.199.110.4, port: 21, protocol: ftp, bytes_out: '850000000', message: flow closed}

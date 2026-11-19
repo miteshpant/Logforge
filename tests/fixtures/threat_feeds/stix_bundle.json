@@ -1,0 +1,11 @@
+{"type": "bundle", "id": "bundle--1", "objects": [
+  {"type": "indicator", "spec_version": "2.1", "id": "indicator--a", "pattern_type": "stix",
+   "pattern": "[ipv4-addr:value = '198.51.100.23']", "labels": ["malicious-activity"], "confidence": 80,
+   "valid_until": "2027-01-01T00:00:00Z", "name": "C2 server"},
+  {"type": "indicator", "spec_version": "2.1", "id": "indicator--b", "pattern_type": "stix",
+   "pattern": "[domain-name:value = 'stix-c2.example'] OR [url:value = 'http://stix-c2.example/a']"},
+  {"type": "indicator", "spec_version": "2.1", "id": "indicator--c", "pattern_type": "stix",
+   "pattern": "[file:hashes.'SHA-256' = 'aec070645fe53ee3b3763059376134f058cc337247c978add178b6ccdfb0019f']"},
+  {"type": "indicator", "spec_version": "2.1", "id": "indicator--d", "pattern_type": "sigma", "pattern": "title: x"},
+  {"type": "malware", "id": "malware--x", "name": "Something"}
+]}

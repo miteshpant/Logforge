@@ -1,0 +1,47 @@
+# Built-in pipeline: syslog (RFC 5424, RFC 3164, and header-only lines without
+# a priority). Replaces parsers.SyslogParser and produces the same fields;
+# messages that are not syslog are kept as they are (attrs.parser =
+# syslog_fallback), as before.
+name: syslog
+description: syslog messages (RFC 5424 and RFC 3164)
+processors:
+  - syslog: {field: msg}
+    tag: header
+  - script:
+      source: |
+        attrs.facility = attrs.syslog.facility
+        attrs.severity = attrs.syslog.severity
+        attrs.pid = attrs.syslog.pid
+        attrs.syslog_version = str(attrs.syslog.version) if exists('attrs.syslog.version') else None
+        attrs.procid = attrs.syslog.procid
+        attrs.msgid = attrs.syslog.msgid
+        attrs.structured_data = attrs.syslog.structured_data
+        del attrs.syslog
+  - compact: {field: attrs, values: ["", "-"]}
+  - regex:
+      field: msg
+      target: ""
+      flags: i
+      patterns: ['\b(?P<src_ip>(?:[0-9]{1,3}\.){3}[0-9]{1,3})\b']
+    ignore_failure: true
+  - regex:
+      field: msg
+      target: ""
+      flags: i
+      patterns: &user_patterns
+        - 'user[=:\s]+(?P<user_id>[^\s,]+)'
+        - 'username[=:\s]+(?P<user_id>[^\s,]+)'
+        - 'user_id[=:\s]+(?P<user_id>[^\s,]+)'
+        - 'userid[=:\s]+(?P<user_id>[^\s,]+)'
+        - 'user_name[=:\s]+(?P<user_id>[^\s,]+)'
+        - 'login[=:\s]+(?P<user_id>[^\s,]+)'
+        - 'account[=:\s]+(?P<user_id>[^\s,]+)'
+        - 'principal[=:\s]+(?P<user_id>[^\s,]+)'
+        - 'subject[=:\s]+(?P<user_id>[^\s,]+)'
+        - 'actor[=:\s]+(?P<user_id>[^\s,]+)'
+        - 'for\s+user\s+(?P<user_id>[^\s,]+)'
+        - 'by\s+(?P<user_id>[^\s,]+)'
+        - 'from\s+user\s+(?P<user_id>[^\s,]+)'
+    ignore_failure: true
+on_failure:
+  - set: {field: attrs.parser, value: syslog_fallback}

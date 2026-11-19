@@ -24,6 +24,23 @@ export interface ApiResponse<T = any> {
 }
 
 /**
+ * Thrown by mutating calls (post/put/patch/delete) when the request fails:
+ * an HTTP error (status = response status), a timeout or a network failure
+ * (status = 0). Reads (get) keep resolving to `{ success: false, error }`.
+ */
+export class ApiError extends Error {
+  readonly status: number
+  readonly data: unknown
+
+  constructor(message: string, status: number, data?: unknown) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.data = data
+  }
+}
+
+/**
  * Human-readable message from an API error body.
  *
  * FastAPI's HTTPException responds with `{"detail": "..."}` and validation
@@ -126,7 +143,9 @@ class ApiClient {
       const contentType = response.headers.get('content-type')
       let data: any
 
-      if (contentType?.includes('application/json')) {
+      if (response.status === 204 || response.status === 205) {
+        data = null // No Content (FastAPI still labels it JSON)
+      } else if (contentType?.includes('application/json')) {
         data = await response.json()
       } else {
         data = await response.text()
@@ -148,7 +167,9 @@ class ApiClient {
 
         return {
           success: false,
+          status: response.status,
           error: describeApiError(data) || `HTTP ${response.status}: ${response.statusText}`,
+          errorData: data,
           data: undefined,
         }
       }
@@ -172,15 +193,30 @@ class ApiClient {
       if (error.name === 'AbortError') {
         return {
           success: false,
+          status: 0,
           error: 'Request timeout',
         }
       }
 
       return {
         success: false,
+        status: 0,
         error: error.message || 'Network error',
       }
     }
+  }
+
+  /**
+   * Mutations must fail loudly: callers wrap them in try/catch, which never
+   * saw a `{ success: false }` result, so failed saves and actions looked
+   * like successes.
+   */
+  private async mutate<T>(endpoint: string, options: RequestInit): Promise<ApiResponse<T>> {
+    const result = await this.request<T>(endpoint, options)
+    if (!result.success) {
+      throw new ApiError(result.error || 'Request failed', result.status ?? 0, result.errorData)
+    }
+    return result
   }
 
   /**
@@ -189,10 +225,23 @@ class ApiClient {
   async get<T = any>(endpoint: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
     let url = endpoint
 
+    // Accept the axios-style `{ params: {...} }` wrapper too. It used to be
+    // serialised as `params=[object Object]`, silently dropping every filter
+    // and time range the caller meant to send.
+    if (
+      params && Object.keys(params).length === 1 && 'params' in params
+      && params.params !== null && typeof params.params === 'object' && !Array.isArray(params.params)
+    ) {
+      params = params.params as Record<string, any>
+    }
+
     if (params) {
       const searchParams = new URLSearchParams()
       Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
+        if (Array.isArray(value)) {
+          // Repeated keys (status=a&status=b), as list query parameters expect.
+          value.filter(v => v !== undefined && v !== null).forEach(v => searchParams.append(key, String(v)))
+        } else if (value !== undefined && value !== null) {
           searchParams.append(key, String(value))
         }
       })
@@ -210,7 +259,7 @@ class ApiClient {
    * POST request
    */
   async post<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, {
+    return this.mutate<T>(endpoint, {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
     })
@@ -220,7 +269,7 @@ class ApiClient {
    * PUT request
    */
   async put<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, {
+    return this.mutate<T>(endpoint, {
       method: 'PUT',
       body: data ? JSON.stringify(data) : undefined,
     })
@@ -230,14 +279,14 @@ class ApiClient {
    * DELETE request
    */
   async delete<T = any>(endpoint: string): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, { method: 'DELETE' })
+    return this.mutate<T>(endpoint, { method: 'DELETE' })
   }
 
   /**
    * PATCH request
    */
   async patch<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, {
+    return this.mutate<T>(endpoint, {
       method: 'PATCH',
       body: data ? JSON.stringify(data) : undefined,
     })

@@ -16,8 +16,11 @@ from services.security_service import SecurityService, AttackTechnique
 from authn_authz_middleware import get_current_user
 from models import User
 from error_handling import internal_error
+from backtest import BacktestError, RuleNotFound, run_backtest
 
 logger = structlog.get_logger(__name__)
+
+from services.case_service import alert_summary
 
 router = APIRouter(prefix="/v1/security", tags=["security-analytics"])
 
@@ -85,6 +88,7 @@ class SecurityEventResponse(BaseModel):
     assigned_to: Optional[str]
     investigation_notes: List[str]
     artifacts: List[str]
+    threat: Optional[Dict[str, Any]] = None  # Phase 3: intel match summary
 
 class ThreatIntelRequest(BaseModel):
     indicator_type: str  # ip, domain, url, hash, email, file
@@ -511,7 +515,8 @@ async def list_security_events(
                 kill_chain_phase=event.get("kill_chain_phase"),
                 assigned_to=event.get("assigned_to"),
                 investigation_notes=event.get("investigation_notes", []),
-                artifacts=event.get("artifacts", [])
+                artifacts=event.get("artifacts", []),
+                threat=alert_summary(event).get("threat")
             ) for event in events
         ]
     except Exception as e:
@@ -1063,3 +1068,264 @@ async def get_threat_hunt_rules(
 # app lifespan in dependencies.py. A router-level on_event("startup") hook used to live here,
 # but it never ran -- the app's custom lifespan bypassed router startup events --
 # and it called a SecurityService method that does not exist.
+
+# ---------------------------------------------------------------------------
+# Backtesting (Phase 1)
+# ---------------------------------------------------------------------------
+
+class BacktestRequest(BaseModel):
+    start: Optional[datetime] = Field(None, description="Range start (default: end - 7 days)")
+    end: Optional[datetime] = Field(None, description="Range end (default: now)")
+    max_events: int = Field(2_000_000, ge=1, le=20_000_000, description="Stop after scanning this many events")
+    sample_limit: int = Field(50, ge=0, le=500, description="Alerts returned in full (all are counted)")
+    apply_tuning: bool = Field(True, description="Apply the tenant's exclusions and throttles (reported as alerts_suppressed)")
+
+
+async def _backtest_rules(customer_id: str) -> List[Dict[str, Any]]:
+    """The tenant's rules plus the platform defaults, as the live path uses them."""
+    from events.management.cache.sigma_rule_cache import SigmaRuleCache
+
+    return await SigmaRuleCache().get_customer_rules(customer_id, include_defaults=True)
+
+
+async def _backtest_tuning(customer_id: str):
+    from tuning_cache import get_tuning
+
+    return await get_tuning(customer_id)
+
+
+def _backtest_db():
+    import os
+    from database_layer import DatabaseLayer
+
+    return DatabaseLayer("BacktestService", os.getenv("BACKTEST_SERVICE_KEY", "backtest-service-key"))
+
+
+@router.post("/rules/{rule_id}/backtest")
+async def backtest_rule(
+    rule_id: str,
+    request: BacktestRequest,
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Replay a rule over the tenant's stored logs and report what it would
+    have alerted on: alert count, samples, alerts per day, events scanned.
+
+    Matching is done by the detection engine itself (count and correlation
+    rules included, windows spanning the whole range); a SQL prefilter
+    compiled from the rule only narrows what is read."""
+    from datetime import timezone
+
+    end = request.end or datetime.now(timezone.utc)
+    start = request.start or end - timedelta(days=7)
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    try:
+        rules = await _backtest_rules(customer_id)
+        tuning = await _backtest_tuning(customer_id) if request.apply_tuning else None
+        return await run_backtest(_backtest_db(), rules, rule_id, customer_id, start, end,
+                                  max_events=request.max_events, sample_limit=request.sample_limit,
+                                  tuning=tuning)
+    except RuleNotFound:
+        raise HTTPException(status_code=404, detail=f"Rule {rule_id} not found")
+    except BacktestError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, f"Backtest of {rule_id} failed", rule_id=rule_id)
+
+
+# ---------------------------------------------------------------------------
+# Tuning: exclusions and throttles (Phase 1)
+# ---------------------------------------------------------------------------
+
+class TuningRecordRequest(BaseModel):
+    rule_id: str = Field(..., description="Rule id, or '*' for every rule")
+    kind: str = Field(..., description="exclusion | throttle")
+    spec: Dict[str, Any] = Field(..., description="exclusion: {conditions, expires_at?}; throttle: {window, group_by}")
+    reason: str = Field("", max_length=1000)
+
+
+def _tuning_dao():
+    from dao.tuning_dao import TuningDAO
+
+    return TuningDAO()
+
+
+@router.get("/tuning")
+async def list_tuning(
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """The tenant's exclusions and throttles."""
+    try:
+        return {"records": await _tuning_dao().list_records(customer_id)}
+    except Exception as e:
+        raise internal_error(e, "Failed to list tuning records")
+
+
+@router.post("/tuning", status_code=201)
+async def create_tuning(
+    request: TuningRecordRequest,
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Add an exclusion (field conditions in Sigma selection syntax, optional
+    expires_at) or a throttle (window, group_by) for one rule or all ('*').
+    Suppressed alerts are not raised, but still feed correlations."""
+    from detection_tuning import TuningError, validate_record
+    from tuning_cache import invalidate
+
+    try:
+        validate_record(request.model_dump())
+        record = await _tuning_dao().create(customer_id, request.model_dump(), str(current_user.id))
+    except TuningError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise internal_error(e, "Failed to create tuning record")
+    invalidate(customer_id)
+    return record
+
+
+@router.delete("/tuning/{record_id}", status_code=204)
+async def delete_tuning(
+    record_id: str,
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user),
+):
+    from tuning_cache import invalidate
+
+    try:
+        deleted = await _tuning_dao().delete(customer_id, record_id)
+    except Exception as e:
+        raise internal_error(e, "Failed to delete tuning record")
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Tuning record not found")
+    invalidate(customer_id)
+
+
+@router.get("/rules/{rule_id}/tuning-suggestion")
+async def tuning_suggestion(
+    rule_id: str,
+    days: int = Query(30, ge=1, le=90),
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Propose an exclusion from the rule's detections that analysts marked
+    false positive (field values most of them share), and how many of its
+    other detections it would also suppress. Review before saving it."""
+    from detection_tuning import suggest_exclusion
+
+    try:
+        false_positives, others = await _tuning_dao().detections_by_verdict(customer_id, rule_id, days=days)
+    except Exception as e:
+        raise internal_error(e, "Failed to read detections for the suggestion")
+    suggestion = suggest_exclusion(false_positives, others)
+    suggestion["record"] = ({"rule_id": rule_id, "kind": "exclusion",
+                             "spec": {"conditions": suggestion["conditions"]}}
+                            if suggestion["conditions"] else None)
+    return suggestion
+
+
+# ---------------------------------------------------------------------------
+# Detection-as-code: YAML export and git sync (Phase 1)
+# ---------------------------------------------------------------------------
+
+class RuleSyncRequest(BaseModel):
+    yaml: str = Field(..., max_length=2_000_000, description="The rule set: Sigma YAML documents (all files of the repository)")
+    dry_run: bool = Field(True, description="Only return the plan")
+    prune: bool = Field(False, description="Disable git-synced rules that are no longer in the rule set")
+    backtest_days: int = Field(0, ge=0, le=30, description="Backtest each alerting rule over this many days (0 = skip)")
+    max_alerts_per_day: Optional[float] = Field(None, ge=0, description="Reject rules whose backtest exceeds this rate")
+
+
+def _rules_db():
+    import os
+    from database_layer import DatabaseLayer
+
+    return DatabaseLayer("SecurityDAO", os.getenv("SECURITY_SERVICE_KEY", "security-dao-service-key"))
+
+
+async def _dac_rows(customer_id: str, include_defaults: bool = False):
+    """(the tenant's git-synced rule rows, its other rule rows [+ defaults])."""
+    from detection_as_code import CREATED_BY
+
+    tenants = [customer_id, "default"] if include_defaults else [customer_id]
+    rows = await _rules_db().fetch_all(
+        "SELECT id, customer_id, name, description, rule_content, severity, is_enabled, mitre_techniques, "
+        "created_by FROM sigma_rules_mt WHERE customer_id IN %(tenants)s ORDER BY id", {"tenants": tenants})
+    managed = [r for r in rows if r["customer_id"] == customer_id and r.get("created_by") == CREATED_BY]
+    others = [r for r in rows if not (r["customer_id"] == customer_id and r.get("created_by") == CREATED_BY)]
+    return managed, others
+
+
+async def _invalidate_rules(customer_id: str) -> None:
+    from events.management.cache.sigma_rule_cache import SigmaRuleCache
+
+    await SigmaRuleCache().invalidate_customer_cache(customer_id)
+
+
+@router.get("/rules/export")
+async def export_rules(
+    include_defaults: bool = Query(False, description="Also export the platform library (ids without the logforge_ prefix)"),
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user),
+):
+    """The tenant's enabled rules as Sigma YAML documents, fixtures included,
+    ready to commit to a detection repository and sync back unchanged."""
+    from fastapi.responses import Response
+    from detection_as_code import rule_row_to_dict, rules_to_yaml
+
+    try:
+        managed, others = await _dac_rows(customer_id, include_defaults)
+        rules = [rule_row_to_dict(r) for r in managed + others if r.get("is_enabled", 1)]
+        body = rules_to_yaml(rules, strip_prefix="logforge_" if include_defaults else "")
+    except Exception as e:
+        raise internal_error(e, "Failed to export rules")
+    return Response(content=body, media_type="application/yaml")
+
+
+@router.post("/rules/sync")
+async def sync_rules(
+    request: RuleSyncRequest,
+    customer_id: str = Header(..., alias="X-Customer-ID"),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Sync the tenant's rules from a git rule set. Every rule goes through
+    the fixture gate (and optionally a backtest); any rejection rejects the
+    whole sync. `dry_run` (default) returns the plan; otherwise it is applied
+    and the tenant's rule cache refreshed. Rules created in the UI are never
+    touched."""
+    from datetime import timezone
+    from detection_as_code import DetectionAsCodeError, apply_sync, plan_sync, summarize
+
+    async def backtest(rule_id, rules):
+        end = datetime.now(timezone.utc)
+        return await run_backtest(_backtest_db(), rules, rule_id, customer_id,
+                                  end - timedelta(days=request.backtest_days), end,
+                                  max_events=500_000, sample_limit=0)
+
+    try:
+        managed, others = await _dac_rows(customer_id)
+        plan = await plan_sync(
+            customer_id, request.yaml, managed, prune=request.prune,
+            backtest=backtest if request.backtest_days else None, backtest_days=request.backtest_days,
+            max_alerts_per_day=request.max_alerts_per_day,
+            reserved_ids=[r["id"] for r in others if r.get("customer_id") == customer_id])
+    except DetectionAsCodeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise internal_error(e, "Failed to plan rule sync")
+
+    result = summarize(plan)
+    result["applied"] = None
+    if not request.dry_run and plan["status"] == "ok":
+        try:
+            result["applied"] = await apply_sync(_rules_db(), customer_id, plan)
+            await _invalidate_rules(customer_id)
+        except Exception as e:
+            raise internal_error(e, "Failed to apply rule sync")
+    return result

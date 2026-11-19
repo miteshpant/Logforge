@@ -1,10 +1,14 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import { createCase } from '@/lib/api/cases'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { apiClient } from '@/lib/api'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
 import QueryBar from '@/components/query/QueryBar'
+import FieldSidebar from '@/components/query/FieldSidebar'
+import { addFilter } from '@/lib/fieldFormat'
 import { useLiveTail } from '@/components/query/useLiveTail'
 import {
   fetchLogs,
@@ -39,6 +43,7 @@ import {
   ArrowUp,
   SlidersHorizontal,
   Terminal,
+  ListTree,
 } from 'lucide-react'
 
 interface LogStats {
@@ -81,11 +86,35 @@ export default function LogExplorerPage() {
   const [hasMore, setHasMore] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const router = useRouter()
+  const [caseError, setCaseError] = useState<string | null>(null)
+
+  // ?q= pre-fills the filter (links from case evidence).
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('q')
+    if (q) setSearchQuery(q)
+  }, [])
+
+  const createCaseFromSearch = async () => {
+    const ref = (mode === 'logql' ? logqlQuery : searchQuery).trim() || (serviceFilter !== 'all' ? `service:${serviceFilter}` : '*')
+    try {
+      setCaseError(null)
+      const created = await createCase({
+        title: `Investigation: ${ref}`.slice(0, 300),
+        evidence: [{ kind: 'search', ref, title: 'Log Explorer search' }],
+      })
+      router.push(`/security/cases/${created.id}`)
+    } catch (error: any) {
+      setCaseError(error?.message || 'Failed to create a case')
+    }
+  }
   const [levelFilter, setLevelFilter] = useState<string[]>([])
   const [serviceFilter, setServiceFilter] = useState<string>('all')
 
   // --- LogQL mode (LF-023) --------------------------------------------------
   const [logqlQuery, setLogqlQuery] = useState('')
+  const [showFields, setShowFields] = useState(false)
+  const [catalogueFields, setCatalogueFields] = useState<string[]>([])
   const [logqlResult, setLogqlResult] = useState<LogQLResult | null>(null)
   const [logqlSyntaxError, setLogqlSyntaxError] = useState<string | null>(null)
   const [logqlRunError, setLogqlRunError] = useState<string | null>(null)
@@ -482,6 +511,19 @@ export default function LogExplorerPage() {
             </button>
           </div>
 
+          {/* Field explorer (Phase 5) */}
+          <button
+            data-testid="fields-toggle"
+            onClick={() => setShowFields(v => !v)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+              showFields ? 'bg-blue-600 text-white' : 'bg-slate-800/30 text-slate-300 hover:bg-white/10'
+            }`}
+            title="Explore the fields in your logs"
+          >
+            <ListTree className="w-4 h-4" />
+            Fields
+          </button>
+
           {/* Live tail toggle (LF-024) */}
           <button
             onClick={toggleTail}
@@ -605,6 +647,17 @@ export default function LogExplorerPage() {
           </button>
 
           <button
+            data-testid="create-case-from-search"
+            onClick={createCaseFromSearch}
+            title="Open a case with this search pinned as evidence"
+            className="flex items-center gap-2 px-4 py-2 border border-white/10 rounded-lg text-slate-300 hover:bg-white/5"
+          >
+            Create case
+          </button>
+          {caseError && <span role="alert" className="text-sm text-red-400">{caseError}</span>}
+
+          <button
+            data-testid="logs-refresh"
             onClick={() => (mode === 'logql' ? runQuery() : loadLogs())}
             disabled={isTailing || (mode === 'logql' ? isRunningQuery : isLoading)}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium disabled:opacity-50 ml-auto"
@@ -651,6 +704,7 @@ export default function LogExplorerPage() {
               isRunning={isRunningQuery}
               syntaxError={logqlSyntaxError}
               services={services}
+              fields={catalogueFields}
             />
             {logqlRunError && (
               <div className="flex items-center gap-2 px-3 py-2 mt-2 rounded-lg text-sm bg-red-500/10 text-red-400 border border-red-500/30">
@@ -1035,6 +1089,22 @@ export default function LogExplorerPage() {
           </div>
         )}
       </div>
+      {showFields && (
+        <FieldSidebar
+          window={(() => {
+            const { start_time, end_time } = getApiTimeRange()
+            const hours = Math.ceil((new Date(end_time).getTime() - new Date(start_time).getTime()) / 3600000)
+            return `${Math.min(744, Math.max(1, hours || 24))}h`
+          })()}
+          onClose={() => setShowFields(false)}
+          onFields={setCatalogueFields}
+          onFilter={(field, value, exclude, type) => {
+            setMode('logql')
+            setLogqlQuery(current => addFilter(current, field, value, exclude, type))
+            requestAnimationFrame(() => logqlRunRef.current())
+          }}
+        />
+      )}
     </DashboardLayout>
   )
 }

@@ -1,0 +1,5 @@
+title: Path traversal attempts against the web server
+techniques: [T1190]
+events:
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.233, http_method: GET, url: '/download?file=../../../../etc/passwd', status_code: 200, user_agent: 'python-requests/2.31', message: request completed}
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.233, http_method: GET, url: '/static/..%2f..%2f..%2fetc%2fshadow', status_code: 403, user_agent: 'python-requests/2.31', message: request completed}

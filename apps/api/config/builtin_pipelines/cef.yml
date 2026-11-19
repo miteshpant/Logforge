@@ -1,0 +1,24 @@
+# Built-in pipeline: ArcSight Common Event Format. Replaces parsers.CEFParser
+# and produces the same fields. Unlike the old parser, extension values keep
+# their spaces (msg=disk is full) and escapes, and rt/start set the time.
+name: cef
+description: ArcSight Common Event Format (CEF)
+processors:
+  - cef: {field: msg}
+    tag: header
+  - script:
+      source: |
+        service = attrs.cef.device_product
+        attrs.cef_version = attrs.cef.version
+        attrs.device_vendor = attrs.cef.device_vendor
+        attrs.device_product = attrs.cef.device_product
+        attrs.device_version = attrs.cef.device_version
+        attrs.signature_id = attrs.cef.signature_id
+        attrs.cef_severity = attrs.cef.severity
+        del attrs.cef
+  - date: {field: attrs.rt, formats: [UNIX_MS, ISO8601, "%b %d %Y %H:%M:%S"]}
+    if: "exists('attrs.rt')"
+    ignore_failure: true
+  - date: {field: attrs.start, formats: [UNIX_MS, ISO8601, "%b %d %Y %H:%M:%S"]}
+    if: "exists('attrs.start') and not exists('attrs.rt')"
+    ignore_failure: true

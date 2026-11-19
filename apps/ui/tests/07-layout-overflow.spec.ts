@@ -9,7 +9,7 @@ import { test, expect } from '@playwright/test'
  */
 const EMAIL = process.env.E2E_EMAIL || 'dana@acme.example'
 const PASSWORD = process.env.E2E_PASSWORD || 'Acme-Demo-Pass-123!'
-const ROUTES = ['/centrum', '/security/siem', '/security/rules', '/observability/logs', '/observability/apm', '/dashboards/system']
+const ROUTES = ['/centrum', '/security/siem', '/security/rules', '/security/cases', '/observability/logs', '/observability/apm', '/dashboards/system']
 
 test.use({ viewport: { width: 1440, height: 900 } })
 

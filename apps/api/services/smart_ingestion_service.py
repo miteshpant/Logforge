@@ -76,11 +76,24 @@ class SmartIngestionService:
         for raw_log in raw_logs:
             enriched_logs.append(self._enrich_log_metadata(raw_log, customer_id, source_format))
 
+        # Step 1b (Phase 4): ingest pipelines shape each event (parse, rename,
+        # mask, drop, ...) before field mapping. Failures go to the
+        # dead-letter queue with their reason; dropped events are not stored.
+        from ingest_pipeline_runner import run_ingest_pipelines
+
+        enriched_logs, pipeline_summary = await run_ingest_pipelines(customer_id, raw_logs, enriched_logs)
+        if pipeline_summary["processed"]:
+            logger.debug(f"Pipelines: {pipeline_summary}")
+
         # Step 2: Batch normalize using high-performance normalizer
         # This uses schema registry + bloom filters for O(1) lookups on repeated schemas
         normalized_data = normalize_batch_fast(enriched_logs, customer_id, source_format)
 
         logger.debug(f"High-performance batch normalization complete: {len(normalized_data)} logs")
+
+        # Step 2b (Phase 3): threat intelligence matches, stamped as
+        # attrs.threat on the stored log and the normalized event alike.
+        await _enrich(customer_id, enriched_logs, normalized_data)
 
         # Step 3: Create LogEntry objects (for backward compatibility)
         for i, (enriched_log, normalized_log) in enumerate(zip(enriched_logs, normalized_data)):
@@ -239,6 +252,29 @@ class SmartIngestionService:
 
 # Global instance for dependency injection
 smart_ingestion_service = SmartIngestionService()
+
+
+ENRICHMENT_KEYS = ("threat", "geo", "rdns", "asset", "identity")
+
+
+async def _enrich(customer_id: str, enriched_logs: List[Dict[str, Any]],
+                  normalized_data: List[Dict[str, Any]]) -> None:
+    """Look up each event once; copy the stamp onto its normalized twin
+    (index-aligned). Never fails ingestion."""
+    try:
+        from ingest_enrichment import enrich_events
+
+        await enrich_events(customer_id, enriched_logs)
+        for raw, normalized in zip(enriched_logs, normalized_data):
+            raw_attrs = raw.get("attrs") if isinstance(raw.get("attrs"), dict) else {}
+            stamps = {k: raw_attrs[k] for k in ENRICHMENT_KEYS if k in raw_attrs}
+            if stamps and isinstance(normalized, dict):
+                attrs = normalized.get("attrs")
+                if not isinstance(attrs, dict):
+                    attrs = normalized["attrs"] = {}
+                attrs.update(stamps)
+    except Exception as e:
+        logger.warning(f"Ingest enrichment skipped for {customer_id}: {e}")
 
 
 def get_smart_ingestion_service() -> SmartIngestionService:

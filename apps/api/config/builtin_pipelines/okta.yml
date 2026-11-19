@@ -1,0 +1,33 @@
+# Built-in pipeline: Okta System Log sign-ins -> OCSF Authentication (3002).
+# user.session.start / user.session.end and user.authentication.* events,
+# as JSON in msg (log streaming, Okta's API forwarded by a shipper) or
+# already under attrs. Other event types pass through unchanged.
+name: okta
+description: Okta System Log sign-ins, mapped to OCSF Authentication
+processors:
+  - json: {field: msg, target: attrs}
+    if: "startswith(msg, '{')"
+  - script:
+      source: |
+        attrs.ocsf.class_uid = 3002
+        attrs.ocsf.class_name = 'Authentication'
+        attrs.ocsf.category_uid = 3
+        attrs.ocsf.activity_id = 2 if attrs.eventType == 'user.session.end' else 1
+        attrs.ocsf.activity_name = 'Logoff' if attrs.eventType == 'user.session.end' else 'Logon'
+        attrs.ocsf.status_id = 1 if attrs.outcome.result == 'SUCCESS' else 2 if attrs.outcome.result in ['FAILURE', 'DENY'] else 99
+        attrs.ocsf.status = 'Success' if attrs.outcome.result == 'SUCCESS' else 'Failure' if attrs.outcome.result in ['FAILURE', 'DENY'] else 'Other'
+        attrs.ocsf.status_detail = attrs.outcome.reason
+        attrs.ocsf.actor.user.name = attrs.actor.alternateId
+        attrs.ocsf.src_endpoint.ip = attrs.client.ipAddress
+        attrs.ocsf.http_request.user_agent = attrs.client.userAgent.rawUserAgent
+        attrs.event_type = 'authentication'
+        attrs.result = 'success' if attrs.outcome.result == 'SUCCESS' else 'failed'
+        attrs.user = attrs.actor.alternateId
+        src_ip = attrs.client.ipAddress if attrs.client.ipAddress else src_ip
+        user_id = attrs.actor.alternateId
+        msg = attrs.displayMessage if attrs.displayMessage else msg
+    if: "startswith(str(attrs.eventType), 'user.session.') or startswith(str(attrs.eventType), 'user.authentication.')"
+  - date: {field: attrs.published, formats: [ISO8601]}
+    if: "exists('attrs.published')"
+    ignore_failure: true
+  - compact: {field: attrs.ocsf, values: [""]}

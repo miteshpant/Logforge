@@ -215,6 +215,11 @@ class SecurityDAO:
                     "detection": rule_content.get("detection", {}),
                     "references": rule_content.get("references", []),
                     "falsepositives": rule_content.get("falsepositives", []),
+                    # Correlation (Phase 1): base-rule name, alerting switch
+                    # and the Sigma correlation block, when present.
+                    "name": rule_content.get("name"),
+                    "generate": rule_content.get("generate", True),
+                    "correlation": rule_content.get("correlation"),
                     "created_at": rule["created_at"],
                     "updated_at": rule["updated_at"],
                     # Platform-default rules ('default' sentinel, LF-003) have

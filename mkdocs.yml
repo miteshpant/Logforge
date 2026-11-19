@@ -1,0 +1,62 @@
+# Documentation site, published to GitHub Pages by .github/workflows/pages.yml.
+#   pip install mkdocs-material==9.5.39 && mkdocs serve
+site_name: Logforge
+site_description: Open-source log management, alerting, SIEM and observability
+site_url: https://miteshpant.github.io/Logforge/
+repo_url: https://github.com/miteshpant/Logforge
+repo_name: miteshpant/Logforge
+edit_uri: edit/main/docs/
+docs_dir: docs
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.highlight
+  palette:
+    - scheme: slate
+      primary: blue
+      toggle: {icon: material/brightness-4, name: Light mode}
+    - scheme: default
+      primary: blue
+      toggle: {icon: material/brightness-7, name: Dark mode}
+
+markdown_extensions:
+  - admonition
+  - tables
+  - attr_list
+  - pymdownx.details
+  - pymdownx.highlight
+  - toc:
+      permalink: true
+      # GitHub-compatible heading ids, so in-page links work on GitHub and here.
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds: {case: lower}
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - Home: index.md
+  - Detection-as-code: detection-as-code.md
+  - Cases: cases.md
+  - Threat intelligence: threat-intel.md
+  - Ingest pipelines: pipelines.md
+  - Common schema: schema.md
+  # Static Redoc page (docs/api/index.html); nav entries must be pages or URLs.
+  - API reference: https://miteshpant.github.io/Logforge/api/
+  - Roadmap:
+      - Roadmap: ROADMAP.md
+      - Platform roadmap: PLATFORM_ROADMAP.md
+  - Quality:
+      - Benchmarks: benchmarks/README.md
+      - Backtest performance: benchmarks/backtest.md
+      - QA report: QA_REPORT.md
+  - Background:
+      - Architecture: ARCHITECTURE_MINDMAP.md
+      - Code analysis: CODE_ANALYSIS.md
+      - Enhancement log: ENHANCEMENTS.md

@@ -1,0 +1,5 @@
+title: Ransomware deleting volume shadow copies
+techniques: [T1490]
+events:
+  - {service: sysmon, event_id: 1, hostname: WS-051, user: dave, process_name: 'C:\Windows\System32\vssadmin.exe', command_line: 'vssadmin.exe delete shadows /all /quiet', message: Process created}
+  - {service: sysmon, event_id: 1, hostname: WS-051, user: dave, process_name: 'C:\Windows\System32\wbem\WMIC.exe', command_line: 'wmic shadowcopy delete', message: Process created}

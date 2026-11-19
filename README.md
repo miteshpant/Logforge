@@ -10,19 +10,24 @@ them with a pipe-style query language, raises alerts, and runs Sigma detection
 rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 
 > **Project status: early / alpha.** The ingestion, storage, query, alerting and
-> detection paths are real and tested. Some UI screens and "AI" features are
-> still demos. See [Feature status](#feature-status) for an honest breakdown,
-> and [docs/ROADMAP.md](./docs/ROADMAP.md) for where help is needed.
+> detection paths are real and tested. The "AI" features are still keyword
+> templates without a language model, and a few admin pages are placeholders. See [Feature status](#feature-status) for an honest breakdown,
+> [docs/ROADMAP.md](./docs/ROADMAP.md) for where help is needed, and
+> [docs/PLATFORM_ROADMAP.md](./docs/PLATFORM_ROADMAP.md) for the phased plan
+> toward a unified, AI-assisted platform.
 
 ## Screenshots
 
-<sub>Captured from a fresh `./deploy.sh` during the [QA run](./docs/QA_REPORT.md), with a tenant seeded with an hour of synthetic logs, traces and metrics.</sub>
+<sub>Captured from the current build on a local stack, with the demo tenant seeded by `scripts/seed_demo_telemetry.py` (an hour of synthetic logs, traces and metrics, plus three small attacks that the shipped rules detect). Regenerate with `node scripts/capture_screenshots.js`.</sub>
 
 | | |
 | --- | --- |
 | **Centrum** (tenant overview)<br>![Centrum](./docs/images/centrum.png) | **Log Explorer**<br>![Log Explorer](./docs/images/log-explorer.png) |
 | **Tracing**<br>![Tracing](./docs/images/tracing.png) | **APM** (latency, error rate, Apdex)<br>![APM](./docs/images/apm.png) |
-| **Service Map** (built from trace spans)<br>![Service Map](./docs/images/service-map.png) | **Sigma Detection Rules** (243 vendored SigmaHQ rules)<br>![Detection Rules](./docs/images/detection-rules.png) |
+| **Service Map** (built from trace spans)<br>![Service Map](./docs/images/service-map.png) | **Detection Rules** (vendored SigmaHQ plus Logforge rules, correlation rules included)<br>![Detection Rules](./docs/images/detection-rules.png) |
+| **Cases** (alerts grouped per source, host or user; SLA overview)<br>![Cases](./docs/images/cases.png) | **Case detail** (timeline, linked alerts, entities, evidence)<br>![Case detail](./docs/images/case-detail.png) |
+| **Threat Intelligence** (feeds, indicators, sightings in your logs)<br>![Threat Intelligence](./docs/images/threat-intel.png) | **Ingest Pipelines** (parse, mask and shape logs on the way in; test against samples)<br>![Ingest Pipelines](./docs/images/pipelines.png) |
+| **Field explorer** (every field, its top values, add to query; common-schema fields)<br>![Field explorer](./docs/images/field-explorer.png) | |
 
 ## Contents
 
@@ -52,17 +57,24 @@ rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 | **LogforgeQL**, a pipe language (`timeout \| where service = "api" \| limit 50`) | ✅ Implemented | `apps/api/logql.py` |
 | Alerting: threshold, pattern, anomaly and saved-search rules | ✅ Implemented | `apps/api/alert_engine.py` |
 | Notifications: webhook, Slack, email, PagerDuty, Teams, Discord | ✅ Implemented (off by default) | `apps/api/services/notification_service.py` |
-| Sigma detection engine, with 243 vendored SigmaHQ rules | ✅ Implemented | `apps/api/sigma_engine.py`, `apps/api/content/rules/` |
+| Sigma detection engine: ~300 fixture-verified rules (vendored SigmaHQ + Logforge's own `packages/rules/`) | ✅ Implemented | `apps/api/sigma_engine.py`, `apps/api/content/rules/`, `packages/rules/` |
+| Correlation rules: thresholds, distinct counts, sums and sequences per entity, windowed across batches | ✅ Implemented | `apps/api/correlation.py`, `packages/rules/correlations/` |
+| Rule backtesting over stored logs (7 days / 100 M events in 20–27 s) | ✅ Implemented | `apps/api/backtest.py`, [benchmarks](./docs/benchmarks/backtest.md) |
+| Detection tuning: exclusions, throttles, suggestions from false positives | ✅ Implemented | `apps/api/detection_tuning.py` |
+| Detection-as-code: sync rules from git through the gate, YAML export | ✅ Implemented | `apps/api/detection_as_code.py`, [guide](./docs/detection-as-code.md) |
+| Cases: automatic grouping of alerts, timeline, evidence, merge/split, SLA metrics, audit export | ✅ Implemented | `apps/api/cases.py`, `apps/api/routers/cases_api.py`, [guide](./docs/cases.md) |
 | Anomaly detection and forecasting (z-score / EWMA) | ✅ Implemented | `apps/api/services/anomaly_detector.py`, `predictive_analytics_service.py` |
 | Multi-tenancy, roles, API keys, quotas, subscription tiers | ✅ Implemented | `tenant_api.py`, `authn_authz_middleware.py`, `config/pricing.yml` |
 | Server-sent event streams (metrics, alerts, security, …) | ✅ Implemented | `apps/api/routers/streaming_api.py` |
-| Live log tail (`/v1/stream/logs`) | ❌ Missing (the UI already calls it) | [ROADMAP](./docs/ROADMAP.md) |
-| MITRE ATT&CK coverage endpoint | 🟡 Service exists, no route | [ROADMAP](./docs/ROADMAP.md) |
-| Threat-intel enrichment | 🟡 IOC CRUD only, no feed clients | `apps/api/threat_intel.py` |
+| Live log tail (`/v1/stream/logs`) | ✅ Implemented | `apps/api/routers/streaming_api.py` |
+| MITRE ATT&CK coverage (`/v1/security/mitre-coverage`), shown on the SIEM page | ✅ Implemented | `apps/api/routers/security_api.py` |
+| Threat intel and enrichment: abuse.ch, OTX, MISP, STIX and CSV feeds; ingest-time matching; retro-hunting; GeoIP/ASN, asset and user lookups | ✅ Implemented | `apps/api/threat_feeds.py`, `apps/api/ingest_enrichment.py`, [guide](./docs/threat-intel.md) |
+| Ingest pipelines: 29 processors (grok, kv, json, CEF, LEEF, date, mask, hash, script, ...), routing by service/condition/header, test against samples, versioned, dead-letter queue with replay; nginx, syslog, CEF and text are built-in pipelines | ✅ Implemented | `apps/api/pipelines.py`, `apps/api/pipeline_processors.py`, [guide](./docs/pipelines.md) |
+| Common schema (OCSF 1.3 with OpenTelemetry names): schema-on-read `ocsf.*` fields in rules and queries; Linux auth, Windows Security and Okta mapped; search-time `rex` / `parse` / `json`; field catalogue and explorer | ✅ Implemented | `apps/api/ocsf_schema.py`, `apps/api/field_catalogue.py`, [guide](./docs/schema.md) |
 | Root-cause analysis | 🟡 Partly placeholder | `apps/api/services/rca_engine.py` |
 | "AI" natural-language query and recommendations | 🧪 Keyword templates and canned output, no LLM | `apps/api/services/ai_service.py` |
 | Billing | 🟡 Usage metering and invoices computed, no payment provider | `apps/api/routers/usage_api.py` |
-| Tenant web UI (Next.js) | 🟡 Most screens are wired to the API; a few still show demo data | `apps/ui/` |
+| Tenant web UI (Next.js) | ✅ Screens are wired to the API | `apps/ui/` |
 | Platform admin UI (Next.js) | 🟡 Tenants, users, usage and audit work; billing, features and support pages are placeholders | `apps/admin-ui/` |
 
 ---
@@ -244,7 +256,7 @@ Each endpoint is mapped to a permission such as `logs:write:tenant` in `apps/api
 The API has **294 paths (339 operations)**. The OpenAPI 3.1 spec is generated from the code and committed in two equivalent forms:
 
 - **[`docs/api/openapi.yaml`](./docs/api/openapi.yaml)** and **[`docs/api/openapi.json`](./docs/api/openapi.json)**. Import either into Postman, Insomnia or Swagger Editor, or generate a client with `openapi-generator`. GitHub displays these files as source rather than as rendered API docs.
-- **Hosted reference:** once GitHub Pages is enabled, the [Publish API docs](./.github/workflows/pages.yml) workflow serves a Redoc rendering at `https://miteshpant.github.io/Logforge/` (with both spec files alongside it).
+- **Hosted docs:** once GitHub Pages is enabled, the [Publish docs](./.github/workflows/pages.yml) workflow builds the documentation site at `https://miteshpant.github.io/Logforge/` (MkDocs, from `docs/`), with the Redoc API reference at `/api/` and both spec files alongside it.
 - **On a running stack:** Swagger UI at http://localhost:7080/docs and ReDoc at http://localhost:7080/redoc.
 
 If you change an endpoint, regenerate both files. CI fails when either is stale:
@@ -275,7 +287,7 @@ apps/
   ui/                 Tenant web UI (Next.js 14)
   admin-ui/           Platform admin UI (Next.js 14)
 packages/
-  rules/              Hand-written Sigma rules and content pack (currently used by tests only)
+  rules/              Logforge's own Sigma rules, correlation bundles and content pack (loaded at startup)
   shipper-recipes/    Vector and Fluent Bit configs
 infra/docker/         compose.yml, ClickHouse schema (init_simple.sql) and migrations
 config/               Storage deployment profiles (S3, GCS, MinIO, GovCloud)
@@ -301,7 +313,10 @@ These are the main environment variables for the API. In development none of the
 | `LOGFORGE_SECRET_KEY` | Encrypts stored notification-channel credentials. |
 | `LOGFORGE_NOTIFICATIONS_ENABLED` | Turns on automatic alert delivery (off by default). |
 | `LOGFORGE_MAX_QUERY_WINDOW_DAYS` | Widest query time range allowed (default 31). |
-| `THREAT_INTEL_ENABLED` | Turns on IOC enrichment (off by default). |
+| `THREAT_INTEL_ENABLED` | Turns on the legacy detection-time IOC enricher (off by default). Ingest-time matching runs whenever a tenant has indicators. |
+| `THREAT_FEEDS_SCHEDULER` | `off` stops scheduled feed fetches in this process (on by default). |
+| `ABUSECH_AUTH_KEY` / `OTX_API_KEY` | API keys for the URLhaus/ThreatFox and OTX feeds; read from the environment, never stored. |
+| `GEOIP_CITY_CSV` / `GEOIP_ASN_CSV` / `ASSETS_CSV` / `USERS_CSV` / `REVERSE_DNS` | Enrichment files and options; see the [threat-intel guide](./docs/threat-intel.md#enrichment-processors). |
 | `QUOTA_RESET_*` | Quota reset schedule; see [`.env.quota.example`](./.env.quota.example). |
 
 ---

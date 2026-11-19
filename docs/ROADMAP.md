@@ -5,6 +5,10 @@ claim one, open an issue (or comment on an existing one) so nobody duplicates
 the work. Items marked **good first issue** are self-contained and need little
 knowledge of the system.
 
+The long-range product plan (phased path to a unified, AI-assisted security
+and observability platform) is in [PLATFORM_ROADMAP.md](./PLATFORM_ROADMAP.md).
+This file lists the short, claimable tasks.
+
 A full code analysis (architecture, security, quality, priorities) is in
 [CODE_ANALYSIS.md](./CODE_ANALYSIS.md). Historical design notes and the full
 enhancement log are in
@@ -14,31 +18,77 @@ markers).
 
 ## Bugs and gaps
 
-- **Playwright specs 01–04 are out of date.** `apps/ui/tests/01-04-*.spec.ts`
-  expect a seeded `test@example.com` user and selectors the current UI no
-  longer has; 44 of their tests fail against a live stack. CI runs specs 05–08
-  only. Rewrite 01–04 against `scripts/bootstrap_demo.py`'s demo user (as
-  05–08 do), or delete the ones that duplicate newer coverage, then add them to
-  the `ui-e2e` job in `.github/workflows/ci.yml`.
-- **`apiClient` errors are easy to miss.** `apps/ui/lib/api.ts` reports HTTP
-  errors as `{ success: false }` instead of throwing, so a `try/catch` around a
-  call never sees a 4xx/5xx. The dashboard editor and security pages now check
-  `success`; about 25 other files under `apps/ui/app` and
-  `apps/ui/components` call `post`/`put`/`delete` and should be audited the
-  same way (or the client changed to throw, with every caller updated).
-- **The brute-force rule is not loaded.** `packages/rules/brute_force_detection.yml`
-  uses `count(selection) >= 10 by src_ip`, which the loader's single-event
-  fixture gate cannot verify, so it is reported as awaiting content. Teach
-  `mitre_default_loader._verify_fixtures` to accept a batch fixture (a list of
-  events that must trip the threshold, and one that must not) and add one to
-  the rule.
+- **Sustained ingest is slow: 277 events/s, 37 s until searchable**
+  ([benchmarks](./benchmarks/README.md)). A single 1,000-event batch takes
+  60–95 ms, but under sustained load the API container is CPU-bound (~100%)
+  while ClickHouse idles, and requests slow to seconds. Profile the ingest
+  path, move post-ingest work (normalisation, detection) out of the
+  request-serving process into separate workers, and run the API with
+  multiple workers instead of a single `--reload` process.
+- **The normalizer maps `hostname` onto the DNS `query` field**
+  (`apps/api/config/field_mapping.yml`), so every event with a host name
+  carries `query: <hostname>` and DNS rules on `query` can match host names.
+  Remove the mapping and check the evaluation baseline.
+- **Detection engine follow-ups from Phase 1**
+  ([platform roadmap](./PLATFORM_ROADMAP.md)): sequence rules have no `until`
+  (abort) condition; no correlation over alerts (e.g. "3+ distinct
+  techniques on one host"); git sync is push-from-CI only (no server-side
+  pull on a schedule or webhook); synced correlations can't reference the
+  shipped library; the streaming state has a 200k-event soak test, not a
+  24 h one; correlation state is per process (lost on restart, not shared
+  between API replicas).
+- **Cases follow-ups from Phase 2**
+  ([platform roadmap](./PLATFORM_ROADMAP.md)): merge and split need UI
+  (the API has them); @mentions are recorded on notes but not delivered,
+  which needs per-user notifications; "create case" should be available
+  wherever an alert is shown (SIEM dashboard, Centrum incidents); a case
+  per host splits lateral movement across hosts (link source and
+  destination hosts); the grouping lock is per API process, so two
+  replicas can open duplicate cases for one entity; SLA targets should be
+  configurable per tenant.
+- **Threat-intel follow-ups from Phase 3**
+  ([guide](./threat-intel.md)): URLhaus and ThreatFox need an abuse.ch
+  Auth-Key (anonymous downloads return 410), so those feeds have only been
+  tested against fixtures, never live; in the reference compose setup the
+  API container has no outbound DNS, so feed fetches fail until egress is
+  allowed; matching is an in-memory index per API process (no ClickHouse
+  dictionary), and each replica reloads it separately; MISP and TAXII are
+  read as exported documents (no live MISP API, no TAXII collection
+  paging); GeoIP has been tested with DB-IP-format fixtures, not the full
+  download; impossible-travel rules (which need GeoIP) are still to be
+  written; matches are stamped as `attrs.threat`, not ECS
+  `threat.indicator.*`.
+- **Ingest pipeline follow-ups from Phase 4** ([guide](./pipelines.md)):
+  `route` only records a destination in `attrs.route` (separate tables
+  and retention tiers are not implemented); pipeline metrics are per API
+  process and reset on restart; the editor takes processors as JSON, with
+  no form-based builder; the OTLP and JSON parsers and the normalizer's
+  field mappings (`field_mapping.yml`, schema registry) are not expressed
+  as pipelines yet, only nginx, syslog, CEF and text are; the legacy
+  parser classes remain as the reference for the parity tests; the runner
+  costs about 39 µs per event against the processors' 22 µs (stats are
+  taken per step and each routed event is snapshotted for the dead-letter
+  queue), which could be trimmed.
+- **Common schema follow-ups from Phase 5** ([guide](./schema.md)): only
+  OCSF Authentication has source mappings (Linux sshd, Windows Security,
+  Okta); Process Activity, Network Activity, HTTP Activity and DNS have
+  only the generic field mapping, with no class, activity or status. The
+  shipped Sigma and Logforge rules still use today's field names (the
+  Sigma field mapping covers them) and aren't migrated to `ocsf.*`.
+  Dashboards aren't migrated either. The field catalogue is computed from
+  a sample of the latest events per request (cached 60 s), not a
+  persistent per-tenant index with type history. LogforgeQL extraction
+  uses RE2, so no lookaround or backreferences, and allows at most 32
+  extracted fields per query.
+- **Per-request quota mutations.** Every ingest request runs
+  `ALTER TABLE tenant_quotas_mt UPDATE ...`. ClickHouse mutations are
+  heavyweight and queue up under load; this is the likely cause of the
+  several-fold run-to-run swings in the end-to-end benchmarks. Counters
+  belong in an append-only table (or Redis) summed on read.
 - **OpenTelemetry metric aliases ignore units.** `cpu.utilization` is a 0–1
   ratio while the canonical `cpu_usage` is a percentage. Mapping one to the
   other needs a unit conversion in `metric_name_mappings.yml` and the
   normalizer, not just a rename.
-- **Gzip request bodies are rejected.** Shippers can compress batches, but the
-  API does not decode `Content-Encoding: gzip`, so the shipper recipes leave
-  compression off. Add a request-decompression middleware with a size limit.
 
 ## Remove demo / fake data from the UI
 
@@ -64,6 +114,11 @@ markers).
 
 For reference, these were on this list and are now done:
 
+- `logforge_pe001-privilege-escalation` no longer fires on every successful
+  `sudo` (0 false positives on the benign corpus, down from 127); sudo
+  abuse is covered by `lf-c-sudo-failure-burst`.
+- Rules for the four detection gaps the evaluation found: T1105, T1059.004,
+  T1569.002 and T1069.002.
 - Pattern alert rules in the `conditions` list format now match.
 - `logs_raw_mt.attrs` stores only the caller's attributes.
 - Tenant metric names are listed in the Metrics Explorer
@@ -88,5 +143,12 @@ For reference, these were on this list and are now done:
 - Production UI images, the admin UI in compose and `deploy.sh`, and Python
   3.12 in the API image.
 - The OpenAPI spec is also published as `docs/api/openapi.yaml`.
+- `count()` rules load through batch fixtures (the brute-force rule now fires),
+  and Sigma rules see fields kept under `attrs`.
+- Failed UI mutations reject (`ApiError`), every call site is checked by a
+  test, and `get()` no longer drops `{ params }` filters.
+- Playwright specs 01–04 rewritten; the whole suite (43 tests) runs in CI.
+- gzip-compressed request bodies are accepted (bounded), and the shipper
+  recipes compress.
 - The admin login page no longer shows non-existent demo credentials, and the
   admin UI is branded Logforge (it said "MrLogSec").

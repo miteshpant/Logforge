@@ -24,9 +24,9 @@ logsource:
     product: linux
     service: auditd
 detection:
-    selection_sudo:
-        event_type: 'sudo'
-        result: 'success'
+    # A successful sudo is routine administration (127 false positives per
+    # 2000 benign events in the evaluation). Abuse of sudo is covered by
+    # lf-c-sudo-failure-burst; this rule keeps the setuid-family signals.
     selection_setuid:
         syscall: 
             - 'setuid'
@@ -41,7 +41,7 @@ detection:
             - '/bin/passwd'
             - '/usr/bin/passwd'
         user_id: '!0'  # Not root
-    condition: selection_sudo or selection_setuid or selection_suspicious_binaries
+    condition: selection_setuid or selection_suspicious_binaries
 fields:
     - user_id
     - effective_user_id

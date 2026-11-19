@@ -134,46 +134,37 @@ class SigmaRuleCache:
         """
         try:
             customer_cache_key = f"{self.cache_prefix}{customer_id}"
+            service = None
 
-            # Get customer-specific rules from cache
-            customer_rules = await self.redis_manager.get(customer_cache_key, default=[])
+            def security_service():
+                nonlocal service
+                if service is None:
+                    from services.security_service import SecurityService
+                    service = SecurityService()
+                return service
 
-            # Get default rules from cache if requested
-            default_rules = []
-            if include_defaults:
-                default_rules = await self.redis_manager.get(self.default_rules_key, default=[])
-
-            # If we have cache hits, return combined rules
-            if customer_rules or default_rules:
-                combined_rules = customer_rules + default_rules
-                logger.debug(f"✅ Cache hit: Retrieved {len(customer_rules)} customer + {len(default_rules)} default Sigma rules for customer {customer_id}")
-                return combined_rules
-
-            # Cache miss - fallback to database
-            logger.debug(f"⚠️ Cache miss for customer {customer_id}, falling back to database")
-
-            from services.security_service import SecurityService
-            security_service = SecurityService()
-
-            # Get customer rules from database
-            db_customer_rules = await security_service.get_sigma_rules_for_customer(customer_id)
-
-            # Get default rules from database if requested
-            db_default_rules = []
-            if include_defaults:
-                db_default_rules = await security_service.get_default_sigma_rules()
-
-            # Cache the rules for future requests
-            if db_customer_rules:
+            # The tenant's rules and the default library are cached and
+            # loaded independently: a hit on one must not hide a miss on the
+            # other (after invalidate_customer_cache the library is usually
+            # still cached, and the tenant's rules used to vanish from
+            # detection). A tenant without rules is cached as [].
+            customer_rules = await self.redis_manager.get(customer_cache_key, default=None)
+            if customer_rules is None:
+                logger.debug(f"⚠️ Cache miss for customer {customer_id}, loading from database")
+                db_customer_rules = await security_service().get_sigma_rules_for_customer(customer_id)
                 await self._cache_customer_rules(customer_id, db_customer_rules)
-                logger.debug(f"📦 Cached {len(db_customer_rules)} customer Sigma rules for {customer_id} from DB fallback")
+                customer_rules = [r for r in db_customer_rules if r.get('enabled', True) in (True, 1, '1')]
 
-            if db_default_rules and include_defaults:
-                await self._cache_default_rules(db_default_rules)
-                logger.debug(f"📦 Cached {len(db_default_rules)} default Sigma rules from DB fallback")
+            default_rules: List[Dict[str, Any]] = []
+            if include_defaults:
+                default_rules = await self.redis_manager.get(self.default_rules_key, default=None)
+                if default_rules is None:
+                    logger.debug("⚠️ Cache miss for default rules, loading from database")
+                    default_rules = await security_service().get_default_sigma_rules()
+                    if default_rules:
+                        await self._cache_default_rules(default_rules)
 
-            combined_db_rules = db_customer_rules + db_default_rules
-            return combined_db_rules or []
+            return list(customer_rules) + list(default_rules or [])
 
         except Exception as e:
             logger.error(f"❌ Failed to get Sigma rules for customer {customer_id}: {e}")

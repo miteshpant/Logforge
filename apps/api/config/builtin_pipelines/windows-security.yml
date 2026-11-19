@@ -1,0 +1,44 @@
+# Built-in pipeline: Windows Security log logons -> OCSF Authentication (3002).
+# 4624 (logon), 4625 (failed logon) and 4634 (logoff), as forwarded by
+# Winlogbeat, NXLog or WEF: the event's fields as JSON in msg, or already
+# under attrs. Other event IDs pass through unchanged.
+name: windows-security
+description: Windows Security logon events (4624, 4625, 4634), mapped to OCSF Authentication
+processors:
+  - json: {field: msg, target: attrs}
+    if: "startswith(msg, '{')"
+  - script:
+      source: |
+        attrs.ocsf.class_uid = 3002
+        attrs.ocsf.class_name = 'Authentication'
+        attrs.ocsf.category_uid = 3
+        attrs.ocsf.activity_id = 2 if int(attrs.EventID) == 4634 else 1
+        attrs.ocsf.activity_name = 'Logoff' if int(attrs.EventID) == 4634 else 'Logon'
+        attrs.ocsf.status_id = 2 if int(attrs.EventID) == 4625 else 1
+        attrs.ocsf.status = 'Failure' if int(attrs.EventID) == 4625 else 'Success'
+        attrs.ocsf.actor.user.name = attrs.TargetUserName
+        attrs.ocsf.actor.user.domain = attrs.TargetDomainName
+        attrs.ocsf.src_endpoint.ip = None if attrs.IpAddress in [None, '', '-', '::1', '127.0.0.1'] else attrs.IpAddress
+        attrs.ocsf.logon_type_id = int(attrs.LogonType)
+        attrs.ocsf.dst_endpoint.hostname = attrs.Computer
+        attrs.event_type = 'authentication'
+        attrs.result = 'failed' if int(attrs.EventID) == 4625 else 'success'
+        attrs.user = attrs.TargetUserName
+        src_ip = attrs.ocsf.src_endpoint.ip if attrs.ocsf.src_endpoint.ip else src_ip
+        user_id = attrs.TargetUserName
+        msg = 'Windows ' + str(attrs.EventID) + ' ' + attrs.ocsf.activity_name + ' ' + attrs.ocsf.status + ' for ' + str(attrs.TargetUserName)
+    if: "int(attrs.EventID) in [4624, 4625, 4634]"
+  - lookup:
+      field: attrs.SubStatus
+      target: attrs.ocsf.status_detail
+      values:
+        "0xC000006A": wrong password
+        "0xC0000064": unknown user
+        "0xC0000234": account locked out
+        "0xC0000072": account disabled
+        "0xC000006F": outside logon hours
+        "0xC0000071": password expired
+        "0xC0000193": account expired
+    if: "int(attrs.EventID) == 4625"
+    ignore_failure: true
+  - compact: {field: attrs.ocsf, values: [""]}

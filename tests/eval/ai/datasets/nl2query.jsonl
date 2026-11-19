@@ -1,0 +1,8 @@
+{"id": "q-errors-checkout-by-host", "question": "How many errors did checkout log, per host?", "expected_query": "| where service = \"checkout\" and level = \"error\" | stats count() by host"}
+{"id": "q-error-count-by-service", "question": "Which services logged the most errors?", "expected_query": "| where level = \"error\" | stats count() by service"}
+{"id": "q-timeouts-last-15m", "question": "Show timeouts in the last 15 minutes", "expected_query": "timeout | last 15m | limit 100"}
+{"id": "q-5xx-api", "question": "Show API requests that returned a server error", "expected_query": "| where service = \"api-gateway\" and status >= 500 | limit 100"}
+{"id": "q-panics-latest", "question": "Latest 50 log lines mentioning panic", "expected_query": "| where msg contains \"panic\" | sort ts desc | limit 50"}
+{"id": "q-levels-auth", "question": "Break down the auth service's logs by level", "expected_query": "| where service = \"auth\" | stats count() by level"}
+{"id": "q-failed-logins-ip", "question": "Failed logins per source IP", "expected_query": "| where msg contains \"Failed password\" | stats count() by src_ip"}
+{"id": "q-payments-warnings", "question": "Warnings from payments in the last hour", "expected_query": "| last 1h | where service = \"payments\" and level = \"warn\""}

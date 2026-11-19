@@ -28,12 +28,13 @@ test('unauthenticated deep link redirects to login and returns after sign-in', a
 })
 
 for (const hostile of ['//evil.example/x', 'https://evil.example']) {
-  test(`login ignores off-site next=${hostile}`, async ({ page }) => {
+  test(`login ignores off-site next=${hostile}`, async ({ page, baseURL }) => {
     await page.goto(`/login?next=${encodeURIComponent(hostile)}`, { waitUntil: 'load' })
     await page.fill('[data-testid="email-input"]', EMAIL)
     await page.fill('[data-testid="password-input"]', PASSWORD)
     await page.locator('[data-testid="login-button"]:not([disabled])').click()
     await page.waitForURL(/\/centrum$/)
-    expect(new URL(page.url()).host).toBe('localhost:3001')
+    // Still on the UI's own origin, whatever PLAYWRIGHT_BASE_URL points at.
+    expect(new URL(page.url()).host).toBe(new URL(baseURL!).host)
   })
 }

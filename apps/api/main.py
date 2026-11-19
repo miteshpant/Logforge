@@ -20,6 +20,10 @@ from routers.alerts import router as alerts_router
 
 # Import API routers for additional functionality
 from routers.security_api import router as security_router
+from routers.cases_api import router as cases_router
+from routers.threat_intel_api import router as threat_intel_router
+from routers.pipelines_api import router as pipelines_router
+from routers.fields_api import router as fields_router
 from routers.observability_api import router as observability_router
 from routers.ai_api import router as ai_router
 from routers.enterprise_api import router as enterprise_router
@@ -52,6 +56,12 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan
 )
+
+# Decode gzip-compressed request bodies (shippers compress batches), with the
+# decompressed size capped at the request body limit. Registered first, so it
+# is innermost: auth and the compressed-size check run before it.
+from request_decompression import RequestDecompressionMiddleware
+app.add_middleware(RequestDecompressionMiddleware)
 
 # Add GZip compression middleware for responses > 1KB
 # Reduces bandwidth by 60-80% for JSON responses
@@ -106,6 +116,12 @@ app.include_router(usage_router)
 app.include_router(quota_management_router, tags=["Quota Management"])
 
 # Include additional API routers
+# Cases first: its /v1/security/cases/... routes must win over the security
+# router's /{detection_id}/... patterns.
+app.include_router(cases_router)
+app.include_router(threat_intel_router)
+app.include_router(pipelines_router)
+app.include_router(fields_router)
 app.include_router(security_router)
 app.include_router(observability_router)
 app.include_router(ai_router)

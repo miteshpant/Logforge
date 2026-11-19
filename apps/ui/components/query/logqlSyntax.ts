@@ -15,7 +15,7 @@
  * permission mapping is fixed this list can be replaced by that endpoint.
  */
 
-export const LOGQL_STAGES = ['where', 'stats', 'sort', 'limit', 'last'] as const
+export const LOGQL_STAGES = ['where', 'stats', 'sort', 'limit', 'last', 'rex', 'parse', 'json'] as const
 
 export const LOGQL_OPERATORS = [
   '=',
@@ -125,9 +125,12 @@ export interface Suggestion {
 export function getSuggestions(
   text: string,
   caret: number,
-  services: string[]
+  services: string[],
+  catalogueFields: string[] = []
 ): { suggestions: Suggestion[]; replaceStart: number } {
   const before = text.slice(0, caret)
+  // Built-in fields plus the tenant's own (field catalogue, Phase 5).
+  const fields: string[] = Array.from(new Set([...LOGQL_FIELDS, ...catalogueFields]))
 
   // Current (partial) token being typed.
   const tokenMatch = before.match(/[A-Za-z0-9_."']*$/)
@@ -165,7 +168,7 @@ export function getSuggestions(
 
     const afterJoiner = complete.length === 0 || lastComplete === 'and'
     const afterField =
-      complete.length > 0 && LOGQL_FIELDS.some(f => f === lastComplete)
+      complete.length > 0 && fields.some(f => f.toLowerCase() === lastComplete)
     const afterOperator = LOGQL_OPERATORS.some(op => op === lastComplete)
     const valueForService =
       afterOperator && complete[complete.length - 2]?.toLowerCase() === 'service'
@@ -177,15 +180,15 @@ export function getSuggestions(
     } else if (afterField) {
       suggestions = matches(LOGQL_OPERATORS, 'operator')
     } else if (afterJoiner) {
-      suggestions = matches(LOGQL_FIELDS, 'field')
+      suggestions = matches(fields, 'field')
     }
   } else if (stageName === 'stats') {
     const afterBy = /\bby\b/i.test(stageText)
     suggestions = afterBy
-      ? matches(LOGQL_FIELDS, 'field')
+      ? matches(fields, 'field')
       : matches(LOGQL_AGGREGATIONS, 'aggregation')
   } else if (stageName === 'sort') {
-    suggestions = matches(LOGQL_FIELDS, 'field')
+    suggestions = matches(fields, 'field')
   } else if (stageName === 'last') {
     suggestions = matches(LOGQL_DURATIONS, 'duration')
   } else if (lastPipe < 0 && stageWords.length <= 1) {

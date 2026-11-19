@@ -128,8 +128,7 @@ jobs:
     name: UI end-to-end (Playwright, live stack)
     # Builds and starts the full compose stack (production UI image), seeds
     # the demo tenant and user with scripts/bootstrap_demo.py, then runs the
-    # Playwright specs that cover real regressions. Specs 01-04 predate the
-    # current UI and are tracked in docs/ROADMAP.md for a rewrite.
+    # whole Playwright suite (apps/ui/tests).
     # Pinned: Playwright 1.55 (apps/ui) has no browser builds for the
     # ubuntu-latest image (26.04). Move with a Playwright upgrade.
     runs-on: ubuntu-24.04
@@ -179,12 +178,7 @@ jobs:
 
       - name: Run Playwright
         working-directory: apps/ui
-        run: >
-          npx playwright test --project=chromium --trace off
-          tests/05-auth-hydration.spec.ts
-          tests/06-route-guard.spec.ts
-          tests/07-layout-overflow.spec.ts
-          tests/08-plan-badge.spec.ts
+        run: npx playwright test --project=chromium --trace off
 
       - name: Service logs on failure
         if: failure()
@@ -309,6 +303,11 @@ jobs:
         # Blocking: both apps type-check cleanly, so a new error is a regression.
         working-directory: apps/${{ matrix.app }}
         run: npx tsc --noEmit
+
+      - name: Unit tests
+        if: matrix.app == 'ui'
+        working-directory: apps/${{ matrix.app }}
+        run: npm run test:unit
 
       - name: Build
         working-directory: apps/${{ matrix.app }}

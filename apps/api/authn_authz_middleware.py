@@ -387,6 +387,9 @@ ROLE_PERMISSIONS = {
     ]
 }
 
+WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
 def get_endpoint_permission(path: str, method: str) -> str:
     """Get required permission for endpoint"""
     method = method.upper()
@@ -398,27 +401,32 @@ def get_endpoint_permission(path: str, method: str) -> str:
         # Auth endpoints are user-level operations, no tenant-specific permissions needed
         return "auth:user:user"
     elif path.startswith("/v1/users"):
-        if method in ["POST", "PUT", "DELETE"]:
+        if method in WRITE_METHODS:
             return "users:write:tenant"
         return "users:read:tenant"
     elif path.startswith("/v1/security/"):
-        if method in ["POST", "PUT", "DELETE"]:
+        if method in WRITE_METHODS:
             return "security:write:tenant"
         return "security:read:tenant"
     elif path.startswith("/v1/query/"):
-        if method in ["POST", "PUT", "DELETE"]:
+        if method in WRITE_METHODS:
             return "queries:write:tenant"
         return "queries:read:tenant"
-    elif path.startswith("/v1/logs") or path.startswith("/v1/ingest"):
-        if method in ["POST", "PUT", "DELETE"]:
+    elif path.startswith("/v1/pipelines"):
+        # Ingest pipelines shape stored logs: managing them is a logs write.
+        if method in WRITE_METHODS:
+            return "logs:write:tenant"
+        return "logs:read:tenant"
+    elif path.startswith("/v1/logs") or path.startswith("/v1/ingest") or path.startswith("/v1/fields"):
+        if method in WRITE_METHODS:
             return "logs:write:tenant"
         return "logs:read:tenant"
     elif path.startswith("/v1/alerts"):
-        if method in ["POST", "PUT", "DELETE"]:
+        if method in WRITE_METHODS:
             return "alerts:write:tenant"
         return "alerts:read:tenant"
     elif path.startswith("/v1/dashboards"):
-        if method in ["POST", "PUT", "DELETE"]:
+        if method in WRITE_METHODS:
             return "dashboards:write:tenant"
         return "dashboards:read:tenant"
     elif path.startswith("/v1/billing/"):
@@ -426,37 +434,37 @@ def get_endpoint_permission(path: str, method: str) -> str:
     elif path.startswith("/v1/usage/"):
         return "usage:read:tenant"
     elif path.startswith("/v1/costs/"):
-        if method in ["POST", "PUT", "DELETE"]:
+        if method in WRITE_METHODS:
             return "costs:write:tenant"
         return "costs:read:tenant"
     elif path.startswith("/v1/analytics/"):
-        if method in ["POST", "PUT", "DELETE"]:
+        if method in WRITE_METHODS:
             return "analytics:write:tenant"
         return "analytics:read:tenant"
     elif path.startswith("/v1/storage/"):
-        if method in ["POST", "PUT", "DELETE"]:
+        if method in WRITE_METHODS:
             return "storage:write:tenant"
         return "storage:read:tenant"
     elif path.startswith("/v1/export"):
-        if method in ["POST", "PUT", "DELETE"]:
+        if method in WRITE_METHODS:
             return "logs:write:tenant"  # Export is a read operation that generates output
         return "logs:read:tenant"
     elif path.startswith("/v1/ai"):
-        if method in ["POST", "PUT", "DELETE"]:
+        if method in WRITE_METHODS:
             return "ai:write:tenant"
         return "ai:read:tenant"
     elif path.startswith("/v1/enterprise"):
-        if method in ["POST", "PUT", "DELETE"]:
+        if method in WRITE_METHODS:
             return "enterprise:write:tenant"
         return "enterprise:read:tenant"
     elif path.startswith("/v1/observability"):
-        if method in ["POST", "PUT", "DELETE"]:
+        if method in WRITE_METHODS:
             return "observability:write:tenant"
         return "observability:read:tenant"
     elif path.startswith("/v1/stream/"):
         return "observability:read:tenant"  # Streaming endpoints require observability read access
     elif path.startswith("/v1/streaming/config"):
-        if method in ["POST", "PUT", "DELETE"]:
+        if method in WRITE_METHODS:
             return "observability:write:tenant"  # Streaming config management requires write access
         return "observability:read:tenant"  # Reading streaming config requires read access
     elif path == "/v1/tenants" or (path.startswith("/v1/tenants") and path.count("/") == 2):
@@ -465,15 +473,15 @@ def get_endpoint_permission(path: str, method: str) -> str:
         return "platform:admin:platform"
     elif path.startswith("/v1/tenants/") and path.count("/") >= 3:
         # /v1/tenants/{tenant_id}/* allows both platform admin and tenant admin
-        if method in ["POST", "PUT", "DELETE"]:
+        if method in WRITE_METHODS:
             return "tenants:write:tenant"
         return "tenants:read:tenant"
     elif path.startswith("/v1/roles") or path.startswith("/v1/permissions"):
-        if method in ["POST", "PUT", "DELETE"]:
+        if method in WRITE_METHODS:
             return "roles:write:tenant"
         return "roles:read:tenant"
     elif "/roles" in path or path.startswith("/v1/tenants") and "/users" in path:
-        if method in ["POST", "PUT", "DELETE"]:
+        if method in WRITE_METHODS:
             return "roles:write:tenant"
         return "roles:read:tenant"
     elif path.startswith("/v1/check-permission") or path.startswith("/v1/validate-access"):

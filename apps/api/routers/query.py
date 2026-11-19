@@ -121,6 +121,16 @@ def _parse_since(value: str) -> timedelta:
     return int(match.group(1)) * _RELATIVE_UNITS[match.group(2)]
 
 
+def logql_window(payload: Dict[str, Any], request_body: Dict[str, Any]) -> Tuple[datetime, datetime]:
+    """The window a LogforgeQL query scans. An explicit range in the request
+    body wins; otherwise the query's own `| last <duration>`; otherwise the
+    last hour (LF-022). Every path goes through the max-window guard."""
+    if any(request_body.get(k) is not None for k in ("start_time", "end_time", "since")):
+        return resolve_time_window(start_time=request_body.get("start_time"), end_time=request_body.get("end_time"),
+                                   since=request_body.get("since"))
+    return resolve_time_window(start_time=payload.get("start_time"), end_time=payload.get("end_time"))
+
+
 def resolve_time_window(
     start_time: Any = None,
     end_time: Any = None,
@@ -239,7 +249,7 @@ def build_query_request(
         for key in (
             "start_time", "end_time", "text_search", "group_by", "time_series",
             "time_granularity", "sort_field", "sort_order", "limit", "offset",
-            "include_fields", "exclude_fields", "timeout_seconds",
+            "include_fields", "exclude_fields", "timeout_seconds", "extractions",
         )
         if key in payload and payload[key] is not None
     }
@@ -345,14 +355,7 @@ async def logql_query(
         # confusing 500 or an empty result set.
         raise HTTPException(status_code=400, detail=str(exc))
 
-    # Time range comes from the request body, not the query language, so the
-    # caller keeps explicit control over how much data is scanned. LF-022:
-    # absent bounds default to the last hour instead of a 400.
-    start, end = resolve_time_window(
-        start_time=request_body.get("start_time"),
-        end_time=request_body.get("end_time"),
-        since=request_body.get("since"),
-    )
+    start, end = logql_window(payload, request_body)
     payload["start_time"] = start
     payload["end_time"] = end
 
@@ -673,6 +676,24 @@ async def export_query_results(export_request: Dict[str, Any], customer_id: str 
         raise internal_error(e, "Export failed")
 
 # Basic log retrieval for M0 compatibility
+# Keys ingestion adds to `attrs` for its own bookkeeping; not caller data.
+_INTERNAL_ATTR_KEYS = frozenset({"source_format", "processing_version"})
+
+
+def _caller_attrs(raw) -> dict:
+    """Parse a stored `attrs` JSON string into the caller's attributes."""
+    if isinstance(raw, dict):
+        parsed = raw
+    else:
+        try:
+            parsed = json.loads(raw) if raw else {}
+        except (TypeError, ValueError):
+            return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return {k: v for k, v in parsed.items() if k not in _INTERNAL_ATTR_KEYS}
+
+
 @router.get("/logs")
 async def get_logs(
     service: str = Query(None, description="Filter by service name"),
@@ -732,7 +753,7 @@ async def get_logs(
         # limit/offset are ints validated by FastAPI (ge/le), so they cannot
         # carry SQL. int() makes that explicit and independent of the router.
         query = f"""
-        SELECT ts, service, level, msg, host, trace_id, customer_id
+        SELECT ts, service, level, msg, host, trace_id, customer_id, span_id, attrs
         FROM logs_raw_mt
         WHERE {where_clause}
         ORDER BY ts DESC
@@ -751,7 +772,9 @@ async def get_logs(
                 "msg": row[3],
                 "host": row[4],
                 "trace_id": row[5],
-                "customer_id": row[6]
+                "customer_id": row[6],
+                "span_id": row[7],
+                "attrs": _caller_attrs(row[8]),
             })
 
         # Get total count for pagination (same bound predicate)

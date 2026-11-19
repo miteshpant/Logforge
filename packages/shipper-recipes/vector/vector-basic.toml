@@ -41,6 +41,8 @@ method = "post"
 # under Settings -> API keys; it also selects the tenant, so no X-Customer-ID.
 auth.strategy = "bearer"
 auth.token = "${LOGFORGE_API_KEY}"
+# The API decodes gzip request bodies.
+compression = "gzip"
 encoding.codec = "json"
 
 [sinks.logforge.request.headers]

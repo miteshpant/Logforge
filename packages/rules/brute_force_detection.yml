@@ -38,3 +38,32 @@ fields:
     - timestamp
     - user_agent
     - authentication_method
+# Batch fixtures, verified by the rule loader before the rule is enabled: the
+# positive batch must reach the threshold for one source IP, the negative
+# batch must not (failures spread across IPs, or successes from one IP).
+fixtures:
+    true_positive_batch:
+        - repeat: 10
+          event:
+              event_type: authentication
+              result: failed
+              src_ip: 203.0.113.9
+              user_id: admin
+    true_negative_batch:
+        - repeat: 9
+          event:
+              event_type: authentication
+              result: failed
+              src_ip: 203.0.113.9
+              user_id: admin
+        - repeat: 20
+          event:
+              event_type: authentication
+              result: success
+              src_ip: 198.51.100.4
+              user_id: alice
+        - event:
+              event_type: authentication
+              result: failed
+              src_ip: 198.51.100.7
+          repeat: 1

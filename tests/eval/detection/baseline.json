@@ -1,0 +1,1555 @@
+{
+  "rules": {
+    "logforge_bf001-brute-force-login": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_cd001-lsass-memory-dump": {
+      "false_positives": 0,
+      "true_positives": 2
+    },
+    "logforge_de001-data-exfiltration": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_de002-event-log-clearing": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_di001-domain-discovery": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_dp001-host-network-enumeration": {
+      "false_positives": 0,
+      "true_positives": 2
+    },
+    "logforge_dp002-security-tool-discovery": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp003-defensive-tool-tampering": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp004-masquerading-and-lolbin-abuse": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp005-autostart-persistence": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp006-account-manipulation": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_dp007-credential-store-access": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp008-remote-payload-download": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp009-exfiltration-staging": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_dp010-destructive-impact": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp011-suspicious-child-process": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp012-container-and-cloud-abuse": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp013-remote-access-tooling": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp014-credential-and-token-theft": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp015-cloud-control-plane-abuse": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp016-collection-and-capture": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp017-exploitation-and-driver-abuse": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp018-email-and-messaging-abuse": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp019-network-service-and-sniffing": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp020-file-and-media-staging": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp021-integrity-and-availability-attacks": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp022-evasion-and-artifact-removal": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp023-execution-flow-hijacking": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp024-defense-evasion-guardrails": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp025-config-repository-and-policy-discovery": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp026-adversary-in-the-middle-and-alt-exfil": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp027-elevation-and-trust-abuse": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp028-external-access-and-trust-abuse": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp029-token-manipulation-and-proxy-execution": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp030-cloud-storage-and-data-egress": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_dp031-boot-integrity-and-screen-capture": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_im001-shadow-copy-deletion": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-account-lockout-burst": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-archive-then-cloud-upload": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-brute-force-then-success": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-discovery-burst": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-discovery-then-credential-dump": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-lateral-logon-fanout": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-mass-file-encryption": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-mfa-fatigue": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-outbound-volume": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-password-spray": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-sudo-failure-burst": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-c-web-scanning": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-ingress-tool-transfer": {
+      "false_positives": 0,
+      "true_positives": 2
+    },
+    "logforge_lf-remote-service-execution": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-schema-failed-logon": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-schema-logon-brute-force": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-ti-known-c2": {
+      "false_positives": 0,
+      "true_positives": 3
+    },
+    "logforge_lf-ti-malware-delivery": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-unix-reverse-shell": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lm001-remote-execution": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_pe001-privilege-escalation": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "logforge_pe001-scheduled-task-persistence": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_ps001-suspicious-powershell": {
+      "false_positives": 0,
+      "true_positives": 2
+    },
+    "sigma_default_02030f2f-6199-49ec-b258-ea71b07e03dc": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_023c654f-8f16-44d9-bb2b-00ff36a62af9": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_058f4380-962d-40a5-afce-50207d36d7e2": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_067d8238-7127-451c-a9ec-fa78045b618b": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_0685b176-c816-4837-8e7b-1216f346636b": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_07aa184a-870d-413d-893a-157f317f6f58": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_07e3cb2c-0608-410d-be4b-1511cb1a0448": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_08f26069-6f80-474b-8d1f-d971c6fedea0": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_093d68c7-762a-42f4-9f46-95e79142571a": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_09576804-7a05-458e-a817-eb718ca91f54": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_0a4f6091-223b-41f6-8743-f322ec84930b": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_0cf7a157-8879-41a2-8f55-388dd23746b7": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_0e0255bf-2548-47b8-9582-c0955c9283f5": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_0e8cfe08-02c9-4815-a2f8-0d157b7ed33e": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_0ed99dda-6a35-11ef-8c99-0242ac120002": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_0f79c4d2-4e1f-4683-9c36-b5469a665e06": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_1070db9a-3e5d-412e-8e7b-7183b616e1b3": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_11063ec2-de63-4153-935e-b1a8b9e616f1": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_114e7f1c-f137-48c8-8f54-3088c24ce4b9": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_11701de9-d5a5-44aa-8238-84252f131895": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_138d3531-8793-4f50-a2cd-f291b2863d78": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_1712bafe-be05-4a0e-89d4-17a3ed151bf5": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_17a1be64-8d88-40bf-b5ff-a4f7a50ebcc8": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_19aa4f58-94ca-45ff-bc34-92e533c0994a": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "sigma_default_1af57a4b-460a-4738-9034-db68b880c665": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_1c0e41cd-21bb-4433-9acc-4a2cd6367b9b": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_1cc50f3f-1fc8-4acf-b2e9-6f172e1fdebd": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_1e8a9b4d-3c2a-4f9b-8d1e-7c6a5b4f3d2e": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_1f1a8509-2cbb-44f5-8751-8e1571518ce2": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_21d856f9-9281-4ded-9377-51a1a6e2a432": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_21ff4ca9-f13a-41ad-b828-0077b2af2e40": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_220457c1-1c9f-4c2e-afe6-9598926222c1": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_22236d75-d5a0-4287-bf06-c93b1770860f": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_28ac00d6-22d9-4a3c-927f-bbd770104573": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_2953194b-e33c-4859-b9e8-05948c167447": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_2992ac4d-31e9-4325-99f2-b18a73221bb2": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_2a4b3e61-9d22-4e4a-b60f-6e8f0cde6f25": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_2b1ee7e4-89b6-4739-b7bb-b811b6607e5e": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_2c03648b-e081-41a5-b9fb-7d854a915091": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_304810ed-8853-437f-9e36-c4975c3dfd7e": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_312b42b1-bded-4441-8b58-163a3af58775": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_3268b746-88d8-4cd3-bffc-30077d02c787": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_33e814e0-1f00-4e43-9c34-31fb7ae2b174": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_34979410-e4b5-4e5d-8cfb-389fdff05c12": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_36210e0d-5b19-485d-a087-c096088885f0": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_36388120-b3f1-4ce9-b50b-280d9a7f4c04": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_38eb1dbb-011f-40b1-a126-cf03a0210563": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_39019a4e-317f-4ce3-ae63-309a8c6b53c5": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_39b31e81-5f5f-4898-9c0e-2160cfc0f9bf": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_3a716279-c18c-4488-83be-f9ececbfb9fc": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_3be619f4-d9ec-4ea8-a173-18fdd01996ab": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_3c89a1e8-0fba-449e-8f1b-8409d6267ec8": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_3dfd06d2-eaf4-4532-9555-68aca59f57c4": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_3e102cd9-a70d-4a7a-9508-403963092f31": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_3e8207c5-fcd2-4ea6-9418-15d45b4890e4": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_3fcc9b35-39e4-44c0-a2ad-9e82b6902b31": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_403ed92c-b7ec-4edd-9947-5b535ee12d46": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_40b19fa6-d835-400c-b301-41f3a2baacaf": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_41421f44-58f9-455d-838a-c398859841d4": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_42333b2c-b425-441c-b70e-99404a17170f": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_42a993dd-bb3e-48c8-b372-4d6684c4106c": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_43d91656-a9b2-4541-b7e2-6a9bd3a13f4e": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_44e24481-6202-4c62-9127-5a0ae8e3fe3d": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_455b9d50-15a1-4b99-853f-8d37655a4c1b": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_480e7e51-e797-47e3-8d72-ebfce65b6d8d": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_4a6713f6-3331-11ed-a261-0242ac120002": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_4abc0ec4-db5a-412f-9632-26659cddf145": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_4ac47ed3-44c2-4b1f-9d51-bf46e8914126": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_4b09c71e-4269-4111-9cdd-107d8867f0cc": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_4cad6c64-d6df-42d6-8dae-eb78defdc415": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_4e25af4b-246d-44ea-8563-e42aacab006b": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_5468045b-4fcc-4d1a-973c-c9c9578edacb": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_5589ab4f-a767-433c-961d-c91f3f704db1": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_55e862a8-dd9c-4651-807a-f21fcad56716": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_55f0a3a1-846e-40eb-8273-677371b8d912": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_5bb68627-3198-40ca-b458-49f973db8752": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_5c84856b-55a5-45f1-826f-13f37250cf4e": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_5cd16c8f-44a6-4654-81e7-a84d6db507d4": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_5e95028c-5229-4214-afae-d653d573d0ec": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_5f1573a7-363b-4114-9208-ad7a61de46eb": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_5f6a601c-2ecb-498b-9c33-660362323afa": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_6004abd0-afa4-4557-ba90-49d172e0a299": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_60fc936d-2eb0-4543-8a13-911c750a1dfc": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_62b7ccc9-23b4-471e-aa15-6da3663c4d59": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_6640f31c-01ad-49b5-beb5-83498a5cd8bd": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_66c3b204-9f88-4d0a-a7f7-8a57d521ca55": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_676381a6-15ca-4d73-a9c8-6a22e970b90d": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_6adfbf8f-52be-4444-9bac-81b539624146": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_6b14bac8-3e3a-4324-8109-42f0546a347f": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_6ba5a05f-b095-4f0a-8654-b825f4f16334": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_6ec820f2-e963-4801-9127-d8b2dce4d31b": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_7002aa10-b8d4-47ae-b5ba-51ab07e228b9": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_700fb7e8-2981-401c-8430-be58e189e741": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_7124aebe-4cd7-4ccb-8df0-6d6b93c96795": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_72f4ab3f-787d-495d-a55d-68c2ff46cf4c": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_731231b9-0b5d-4219-94dd-abb6959aa7ea": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_737e618a-a410-49b5-bec3-9e55ff7fbc15": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_746c86fb-ccda-4816-8997-01386263acc4": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_75d0a94e-6252-448d-a7be-d953dff527bb": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_7638e5fe-600c-4289-a968-f49dd537ec7d": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_7745c2ea-24a5-4290-b680-04359cb84b35": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "sigma_default_78a80655-a51e-4669-bc6b-e9d206a462ee": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_79b06761-465f-4f88-9ef2-150e24d3d737": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_79f4ede3-402e-41c8-bc3e-ebbf5f162581": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_7ab8f73a-fcff-428b-84aa-6a5ff7877dea": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_7cb02516-6d95-4ffc-8eee-162075e111ac": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_7f734ed0-4f47-46c0-837f-6ee62505abd9": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_80915f59-9b56-4616-9de0-fd0dea6c12fe": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_8344c0e5-5783-47cc-9cf9-a0f7fd03e6cf": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_84c9e83c-599a-458a-a0cb-0ecce44e807a": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_85254a62-22be-4239-b79c-2ec17e566c37": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_85b0b087-eddf-4a2b-b033-d771fa2b9775": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "sigma_default_85d23b42-9a9d-4f8f-b3d7-d2733c1d58f5": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_86157017-c2b1-4d4a-8c33-93b8e67e4af4": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_871b9555-69ca-4993-99d3-35a59f9f3599": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_8737b7f6-8df3-4bb7-b1da-06019b99b687": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_894a8613-cf12-48b3-8e57-9085f54aa0c3": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_89ca78fd-b37c-4310-b3d3-81a023f83936": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_8a46f16c-8c4c-82d1-b121-0fdd3ba70a84": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_8b0e12da-d3c3-49db-bb4f-256703f380e5": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_8c1a5675-cb85-452f-a298-b01b22a51856": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_9069ea3c-b213-4c52-be13-86506a227ab1": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_93199800-b52a-4dec-b762-75212c196542": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_95022b85-ff2a-49fa-939a-d7b8f56eeb9b": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_95d61234-7f56-465c-6f2d-b562c6fedbc4": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_9691f58d-92c1-4416-8bf3-2edd753ec9cf": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_9847f263-4a81-424f-970c-875dab15b79b": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_98dedfdd-8333-49d4-9f23-d7018cccae53": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_9a132afa-654e-11eb-ae93-0242ac130002": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_9b5de532-a757-4d70-946c-1f3e44f48b4d": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_9c0295ce-d60d-40bd-bd74-84673b7592b1": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_9f50fe98-fe5c-4a2d-86c7-fad7f63ed622": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_9f6a34b4-2688-4eb7-a7f5-e39fef573d0e": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_9fff585c-c33e-4a86-b3cd-39312079a65f": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_a015e032-146d-4717-8944-7a1884122111": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_a018fdc3-46a3-44e5-9afb-2cd4af1d4b39": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_a238b5d0-ce2d-4414-a676-7a531b3d13d6": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_a29808fd-ef50-49ff-9c7a-59a9b040b404": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_a2d9e2f3-0f43-4c7a-bcd9-9acfc0d723aa": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_a31eeaed-3fd5-478e-a8ba-e62c6b3f9ecc": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_a642964e-bead-4bed-8910-1bb4d63e3b4d": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "sigma_default_a6fc3c46-23b8-4996-9ea2-573f4c4d88c5": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_aaafa146-074c-11eb-adc1-0242ac120002": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_ab9e3b40-0c85-4ba1-aede-455d226fd124": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_ac20ae82-8758-4f38-958e-b44a3140ca88": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_ad691d92-15f2-4181-9aa4-723c74f9ddc3": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_ae215552-081e-44c7-805f-be16f975c8a2": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_b0524451-19af-4efa-a46f-562a977f792e": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_b0ce780f-10bd-496d-9067-066d23dc3aa5": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_b18c9d4c-fac9-4708-bd06-dd5bfacf200f": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_b222df08-0e07-11eb-adc1-0242ac120002": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_b2815d0d-7481-4bf0-9b6c-a4c48a94b349": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_b28e4eb3-8bbc-4f0c-819f-edfe8e2f25db": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_b45e3d6f-42c6-47d8-a478-df6bd6cf534c": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_b57ba453-b384-4ab9-9f40-1038086b4e53": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_b59c98c6-95e8-4d65-93ee-f594dfb96b17": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_b86d356d-6093-443d-971c-9b07db583c68": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_b923f7d6-ac89-4a50-a71a-89fb846b4aa8": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_baef1ec6-2ca9-47a3-97cc-4cf2bda10b77": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_bb382fd5-b454-47ea-a264-1828e4c766d6": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_bb58aa4a-b80b-415a-a2c0-2f65a4c81009": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_bed26dea-4525-47f4-b24a-76e30e44ffb0": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_bed978f8-7f3a-432b-82c5-9286a9b3031a": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_c172b7b5-f3a1-4af2-90b7-822c63df86cb": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_c21c4eaa-ba2e-419a-92b2-8371703cbe21": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_c260b6db-48ba-4b4a-a76f-2f67644e99d2": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_c42a3073-30fb-48ae-8c99-c23ada84b103": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_c6c56ada-612b-42d1-9a29-adad3c5c2c1e": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_c73124a7-3e89-44a3-bdc1-25fe4df754b1": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_c8557060-9221-4448-8794-96320e6f3e74": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_c9d8b7fd-78e4-44fe-88f6-599135d46d60": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_cafeeba3-01da-4ab4-b6c4-a31b1d9730c7": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_cc268ac1-42d9-40fd-9ed3-8c4e1a5b87e6": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_cc4e02ba-9c06-48e2-b09e-2500cace9ae0": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_cd8c163e-a19b-402e-bdd5-419ff5859f12": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_cec8e918-30f7-4e2d-9bfa-a59cc97ae60f": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_cfec9d29-64ec-4a0f-9ffe-0fdb856d5446": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_d27ab432-2199-483f-a297-03633c05bae6": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_d2d642d7-b393-43fe-bae4-e81ed5915c4b": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_d443095b-a221-4957-a2c4-cd1756c9b747": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_d54c2f06-aca9-4e2b-81c9-5317858f4b79": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_d557dc06-62e8-4468-a8e8-7984124908ce": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_d78b5d61-187d-44b6-bf02-93486a80de5a": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_d7a650c4-226c-451e-948f-cc490db506aa": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_d8d97d51-122d-4cdd-9e2f-01b4b4933530": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_d9047477-0359-48c9-b8c7-792cedcdc9c4": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_dee4af55-1f22-4e1d-a9d2-4bdc7ecb472a": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_e09aed7a-09e0-4c9a-90dd-f0d52507347e": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_e1561947-b4e3-4a74-9bdd-83baed21bdb5": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_e2072cab-8c9a-459b-b63c-40ae79e27031": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_e2326866-609f-4015-aea9-7ec634e8aa04": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_e31033fc-33f0-4020-9a16-faf9b31cbf08": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_e312efd0-35a1-407f-8439-b8d434b438a6": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_e32d4572-9826-4738-b651-95fa63747e8a": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_e34cfa0c-0a50-4210-9cb3-5632d08eb041": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_e3a8a052-111f-4606-9aee-f28ebeb76776": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_e4a6b256-3e47-40fc-89d2-7a477edd6915": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_e4ffe466-6ff8-48d4-94bd-e32d1a6061e2": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_e6313acd-208c-44fc-a0ff-db85d572e90e": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_e6c54d94-498c-4562-a37c-b469d8e9a275": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "sigma_default_e80273e1-9faf-40bc-bd85-dbaff104c4e9": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_e9142d84-fbe0-401d-ac50-3e519fb00c89": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_e92a4287-e072-4a40-9739-370c106bb750": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_e9f55347-2928-4c06-88e5-1a7f8169942e": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_ea011323-7045-460b-b2d7-0f7442ea6b38": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_ea34fb97-e2c4-4afb-810f-785e4459b194": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_ebea773c-a8f1-42ad-a856-00cb221966e8": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_ec127035-a636-4b9a-8555-0efd4e59f316": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_ec52985a-d024-41e3-8ff6-14169039a0b3": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_ed447910-bc30-4575-a598-3a2e49516a7a": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_ee37eb7c-a4e7-4cd5-8fa4-efa27f1c3f31": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_f0f7be61-9cf5-43be-9836-99d6ef448a18": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_f14e169e-9978-4c69-acb3-1cff8200bc36": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_f26307d8-14cd-47e3-a26b-4b4769f24af6": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_f2bed782-994e-4f40-9cd5-518198cb3fba": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_f2c64357-b1d2-41b7-849f-34d2682c0fad": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "sigma_default_f38ce0b9-5e97-4b47-a211-7dc8d8b871da": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_f41dada5-3f56-4232-8503-3fb7f9cf2d60": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_f44800ac-38ec-471f-936e-3fa7d9c53100": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_f57f8d16-1f39-4dcb-a604-6c73d9b54b3d": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_f5e3b62f-e577-4e59-931e-0a15b2b94e1e": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_f63b56ee-3f79-4b8a-97fb-5c48007e8573": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_f72aa3e8-49f9-4c7d-bd74-f8ab84ff9bbb": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_f7d7ebd5-a016-46e2-9c54-f9932f2d386d": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_f8341cb2-ee25-43fa-a975-d8a5a9714b39": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_f9b3edc5-3322-4fc7-8aa3-245d646cc4b7": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_fa4aaed5-4fe0-498d-bbc0-08e3346387ba": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_fa935401-513b-467b-81f4-f9e77aa0dd78": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_faa48cae-6b25-4f00-a094-08947fef582f": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_fb50eb7a-5ab1-43ae-bcc9-091818cb8424": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_fb9d3ff7-7348-46ab-af8c-b55f5fbf39b4": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_fdd1bfb5-f60b-4a35-910e-f36ed3d0b32f": {
+      "false_positives": 0,
+      "true_positives": 0
+    },
+    "sigma_default_fe2f9663-41cb-47e2-b954-8a228f3b9dff": {
+      "false_positives": 0,
+      "true_positives": 0
+    }
+  },
+  "scenarios": {
+    "account-lockout-burst": {
+      "detected": [
+        "T1110"
+      ],
+      "expected": [
+        "T1110"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-c-account-lockout-burst"
+      ]
+    },
+    "archive-then-cloud-upload": {
+      "detected": [
+        "T1560.001",
+        "T1567.002"
+      ],
+      "expected": [
+        "T1560.001",
+        "T1567.002"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-c-archive-then-cloud-upload"
+      ]
+    },
+    "brute-force-then-success": {
+      "detected": [
+        "T1078",
+        "T1110"
+      ],
+      "expected": [
+        "T1078",
+        "T1110"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-c-brute-force-then-success"
+      ]
+    },
+    "c2-beacon-feodo": {
+      "detected": [
+        "T1071"
+      ],
+      "expected": [
+        "T1071"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-ti-known-c2"
+      ]
+    },
+    "certutil-download": {
+      "detected": [
+        "T1105"
+      ],
+      "expected": [
+        "T1105"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-ingress-tool-transfer"
+      ]
+    },
+    "credential-dumping-lsass": {
+      "detected": [
+        "T1003.001"
+      ],
+      "expected": [
+        "T1003.001"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_cd001-lsass-memory-dump",
+        "logforge_dp009-exfiltration-staging",
+        "sigma_default_a642964e-bead-4bed-8910-1bb4d63e3b4d"
+      ]
+    },
+    "discovery-burst": {
+      "detected": [
+        "T1016",
+        "T1033",
+        "T1082"
+      ],
+      "expected": [
+        "T1016",
+        "T1033",
+        "T1082"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_dp001-host-network-enumeration",
+        "logforge_lf-c-discovery-burst"
+      ]
+    },
+    "discovery-then-lsass-dump": {
+      "detected": [
+        "T1003.001",
+        "T1033"
+      ],
+      "expected": [
+        "T1003.001",
+        "T1033"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_cd001-lsass-memory-dump",
+        "logforge_dp001-host-network-enumeration",
+        "logforge_lf-c-discovery-then-credential-dump"
+      ]
+    },
+    "dns-threatfox-c2": {
+      "detected": [
+        "T1071"
+      ],
+      "expected": [
+        "T1071"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-ti-known-c2"
+      ]
+    },
+    "domain-discovery": {
+      "detected": [
+        "T1069.002",
+        "T1087.002",
+        "T1482"
+      ],
+      "expected": [
+        "T1069.002",
+        "T1087.002",
+        "T1482"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_di001-domain-discovery",
+        "logforge_dp006-account-manipulation"
+      ]
+    },
+    "encoded-powershell-download": {
+      "detected": [
+        "T1059.001",
+        "T1105"
+      ],
+      "expected": [
+        "T1059.001",
+        "T1105"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-ingress-tool-transfer",
+        "logforge_ps001-suspicious-powershell",
+        "sigma_default_85b0b087-eddf-4a2b-b033-d771fa2b9775",
+        "sigma_default_e6c54d94-498c-4562-a37c-b469d8e9a275"
+      ]
+    },
+    "event-log-clearing": {
+      "detected": [
+        "T1070.001"
+      ],
+      "expected": [
+        "T1070.001"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_de002-event-log-clearing"
+      ]
+    },
+    "ftp-exfiltration": {
+      "detected": [
+        "T1048"
+      ],
+      "expected": [
+        "T1048"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_de001-data-exfiltration"
+      ]
+    },
+    "large-outbound-transfer": {
+      "detected": [
+        "T1048"
+      ],
+      "expected": [
+        "T1048"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-c-outbound-volume",
+        "logforge_lf-ti-known-c2"
+      ]
+    },
+    "lateral-logon-fanout": {
+      "detected": [
+        "T1021"
+      ],
+      "expected": [
+        "T1021"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-c-lateral-logon-fanout"
+      ]
+    },
+    "linux-reverse-shell": {
+      "detected": [
+        "T1059.004"
+      ],
+      "expected": [
+        "T1059.004"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-unix-reverse-shell"
+      ]
+    },
+    "malware-download-urlhaus": {
+      "detected": [
+        "T1105"
+      ],
+      "expected": [
+        "T1105"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-ti-malware-delivery"
+      ]
+    },
+    "mass-file-encryption": {
+      "detected": [
+        "T1486"
+      ],
+      "expected": [
+        "T1486"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-c-mass-file-encryption"
+      ]
+    },
+    "mfa-fatigue": {
+      "detected": [
+        "T1621"
+      ],
+      "expected": [
+        "T1621"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-c-mfa-fatigue"
+      ]
+    },
+    "multi-source-logon-brute-force": {
+      "detected": [
+        "T1110"
+      ],
+      "expected": [
+        "T1110"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-schema-failed-logon",
+        "logforge_lf-schema-logon-brute-force"
+      ]
+    },
+    "password-spray": {
+      "detected": [
+        "T1110.003"
+      ],
+      "expected": [
+        "T1110.003"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-c-password-spray"
+      ]
+    },
+    "psexec-lateral-movement": {
+      "detected": [
+        "T1021.002",
+        "T1569.002"
+      ],
+      "expected": [
+        "T1021.002",
+        "T1569.002"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-remote-service-execution",
+        "logforge_lm001-remote-execution"
+      ]
+    },
+    "ransomware-shadow-copies": {
+      "detected": [
+        "T1490"
+      ],
+      "expected": [
+        "T1490"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_im001-shadow-copy-deletion"
+      ]
+    },
+    "scheduled-task-persistence": {
+      "detected": [
+        "T1053.005"
+      ],
+      "expected": [
+        "T1053.005"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_pe001-scheduled-task-persistence",
+        "logforge_ps001-suspicious-powershell",
+        "sigma_default_f2c64357-b1d2-41b7-849f-34d2682c0fad"
+      ]
+    },
+    "ssh-brute-force": {
+      "detected": [
+        "T1110"
+      ],
+      "expected": [
+        "T1110"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_bf001-brute-force-login"
+      ]
+    },
+    "sudo-failure-burst": {
+      "detected": [
+        "T1548.003"
+      ],
+      "expected": [
+        "T1548.003"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-c-sudo-failure-burst"
+      ]
+    },
+    "web-content-scanning": {
+      "detected": [
+        "T1595.003"
+      ],
+      "expected": [
+        "T1595.003"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-c-web-scanning",
+        "sigma_default_19aa4f58-94ca-45ff-bc34-92e533c0994a"
+      ]
+    },
+    "web-path-traversal": {
+      "detected": [
+        "T1190"
+      ],
+      "expected": [
+        "T1190"
+      ],
+      "missing": [],
+      "rules": [
+        "sigma_default_7745c2ea-24a5-4290-b680-04359cb84b35"
+      ]
+    }
+  },
+  "summary": {
+    "benign_events": 2000,
+    "false_positive_alerts": 0,
+    "false_positives_per_1000": 0.0,
+    "rules": 293,
+    "scenarios_detected": 28,
+    "scenarios_total": 28
+  }
+}

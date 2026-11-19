@@ -68,7 +68,6 @@ export default defineConfig({
 
   // Global setup and teardown
   globalSetup: './tests/global-setup.ts',
-  globalTeardown: './tests/global-teardown.ts',
 
   // Configure projects for major browsers
   projects: [

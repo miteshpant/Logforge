@@ -1,0 +1,55 @@
+# Rules on the common schema (Phase 5). They reference OCSF fields only, so
+# they work for every source mapped to OCSF Authentication (3002): Linux
+# sshd, Windows Security, Okta, and any tenant pipeline that sets the same
+# fields (docs/schema.md).
+
+title: Failed logon (any source)
+id: lf-schema-failed-logon
+name: schema_failed_logon
+status: stable
+description: >
+  A failed logon on any source mapped to the common schema: OCSF
+  Authentication (class 3002), activity Logon, status Failure.
+author: Logforge Security Team
+date: 2026/11/19
+references: [https://schema.ocsf.io/1.3.0/classes/authentication]
+tags: [attack.credential_access, attack.t1110, schema.ocsf]
+falsepositives:
+    - People mistyping passwords; on its own this is context, the brute-force correlation below is the alert to act on
+logsource: {category: authentication}
+detection:
+    selection:
+        ocsf.class_uid: 3002
+        ocsf.activity_id: 1
+        ocsf.status_id: 2
+    condition: selection
+fixtures:
+    true_positive: {attrs: {ocsf: {class_uid: 3002, activity_id: 1, status_id: 2, actor: {user: {name: root}}}}}
+    true_negative: {attrs: {ocsf: {class_uid: 3002, activity_id: 1, status_id: 1, actor: {user: {name: root}}}}}
+level: low
+---
+title: Logon brute force from one source (any source)
+id: lf-schema-logon-brute-force
+status: stable
+description: >
+  Five or more failed logons from one source address within 5 minutes,
+  counted across every source mapped to the common schema (an attacker
+  trying SSH, then RDP, then the IdP counts once).
+author: Logforge Security Team
+date: 2026/11/19
+references: [https://attack.mitre.org/techniques/T1110/]
+tags: [attack.credential_access, attack.t1110, schema.ocsf]
+falsepositives:
+    - A misconfigured service retrying stale credentials from a fixed address
+correlation:
+    type: event_count
+    rules: [schema_failed_logon]
+    group-by: [ocsf.src_endpoint.ip]
+    timespan: 5m
+    condition: {gte: 5}
+fixtures:
+    true_positive_batch:
+        - {repeat: 5, every: 20s, event: {attrs: {ocsf: {class_uid: 3002, activity_id: 1, status_id: 2, src_endpoint: {ip: 203.0.113.9}}}}}
+    true_negative_batch:
+        - {repeat: 4, every: 20s, event: {attrs: {ocsf: {class_uid: 3002, activity_id: 1, status_id: 2, src_endpoint: {ip: 203.0.113.9}}}}}
+level: high

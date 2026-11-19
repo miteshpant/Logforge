@@ -174,6 +174,16 @@
             "description": "Fields to exclude from results",
             "title": "Exclude Fields"
           },
+          "extractions": {
+            "default": [],
+            "description": "Search-time extracted fields",
+            "items": {
+              "$ref": "#/components/schemas/QueryExtraction"
+            },
+            "maxItems": 32,
+            "title": "Extractions",
+            "type": "array"
+          },
           "filters": {
             "default": [],
             "description": "Query filters",
@@ -369,6 +379,24 @@
           "suggested_root_cause"
         ],
         "title": "AlertGroup",
+        "type": "object"
+      },
+      "AlertIds": {
+        "properties": {
+          "alert_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Alert Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "alert_ids"
+        ],
+        "title": "AlertIds",
         "type": "object"
       },
       "AlertRuleUpdateRequest": {
@@ -634,6 +662,78 @@
           }
         },
         "title": "AnomalyDetectionRequest",
+        "type": "object"
+      },
+      "Assign": {
+        "properties": {
+          "assignee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "User to assign; null unassigns",
+            "title": "Assignee"
+          }
+        },
+        "title": "Assign",
+        "type": "object"
+      },
+      "BacktestRequest": {
+        "properties": {
+          "apply_tuning": {
+            "default": true,
+            "description": "Apply the tenant's exclusions and throttles (reported as alerts_suppressed)",
+            "title": "Apply Tuning",
+            "type": "boolean"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Range end (default: now)",
+            "title": "End"
+          },
+          "max_events": {
+            "default": 2000000,
+            "description": "Stop after scanning this many events",
+            "maximum": 20000000.0,
+            "minimum": 1.0,
+            "title": "Max Events",
+            "type": "integer"
+          },
+          "sample_limit": {
+            "default": 50,
+            "description": "Alerts returned in full (all are counted)",
+            "maximum": 500.0,
+            "minimum": 0.0,
+            "title": "Sample Limit",
+            "type": "integer"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Range start (default: end - 7 days)",
+            "title": "Start"
+          }
+        },
+        "title": "BacktestRequest",
         "type": "object"
       },
       "BackupPolicyRequest": {
@@ -933,6 +1033,71 @@
         "title": "Body_dismiss_anomaly_v1_ai_anomalies__anomaly_id__dismiss_post",
         "type": "object"
       },
+      "Bulk": {
+        "properties": {
+          "action": {
+            "description": "assign | set_status | tags",
+            "title": "Action",
+            "type": "string"
+          },
+          "add": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Add",
+            "type": "array"
+          },
+          "assignee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee"
+          },
+          "case_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Case Ids",
+            "type": "array"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "remove": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Remove",
+            "type": "array"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "case_ids",
+          "action"
+        ],
+        "title": "Bulk",
+        "type": "object"
+      },
       "BulkUpdateRequest": {
         "properties": {
           "filter_status": {
@@ -966,6 +1131,128 @@
           "status"
         ],
         "title": "BulkUpdateRequest",
+        "type": "object"
+      },
+      "CaseCreate": {
+        "properties": {
+          "alert_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "title": "Alert Ids",
+            "type": "array"
+          },
+          "assignee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 20000,
+            "title": "Description",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
+            "maxItems": 100,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "low | medium | high | critical (default: from the alerts)",
+            "title": "Severity"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 300,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "CaseCreate",
+        "type": "object"
+      },
+      "CaseUpdate": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "CaseUpdate",
+        "type": "object"
+      },
+      "Comment": {
+        "properties": {
+          "text": {
+            "description": "Markdown; @name mentions are recorded",
+            "maxLength": 10000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "Comment",
         "type": "object"
       },
       "CorrelatedGroupsResponse": {
@@ -1182,6 +1469,32 @@
         "title": "DashboardRequest",
         "type": "object"
       },
+      "DeadLetterAction": {
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "title": "Ids",
+            "type": "array"
+          },
+          "pipeline_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "All pending entries of this pipeline (up to 1000)",
+            "title": "Pipeline Id"
+          }
+        },
+        "title": "DeadLetterAction",
+        "type": "object"
+      },
       "DeletionType": {
         "description": "Tenant deletion types",
         "enum": [
@@ -1278,6 +1591,51 @@
           "span_minutes"
         ],
         "title": "DuplicateGroupDetail",
+        "type": "object"
+      },
+      "Evidence": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "kind": {
+            "description": "search | event | trace | log | link | file",
+            "title": "Kind",
+            "type": "string"
+          },
+          "ref": {
+            "description": "Query, event id, trace id or URL",
+            "maxLength": 4000,
+            "title": "Ref",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "kind",
+          "ref"
+        ],
+        "title": "Evidence",
         "type": "object"
       },
       "FatigueScoreResponse": {
@@ -1401,6 +1759,255 @@
         "title": "FeatureRateRequest",
         "type": "object"
       },
+      "FeedCreate": {
+        "properties": {
+          "auth_header": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Header"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "interval_minutes": {
+            "anyOf": [
+              {
+                "maximum": 10080.0,
+                "minimum": 5.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Minutes"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
+          },
+          "secret_env": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Environment variable holding the feed's API key",
+            "title": "Secret Env"
+          },
+          "template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Name of a built-in feed to start from",
+            "title": "Template"
+          },
+          "ttl_days": {
+            "anyOf": [
+              {
+                "maximum": 3650.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ttl Days"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "title": "FeedCreate",
+        "type": "object"
+      },
+      "FeedUpdate": {
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "interval_minutes": {
+            "anyOf": [
+              {
+                "maximum": 10080.0,
+                "minimum": 5.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Minutes"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
+          },
+          "ttl_days": {
+            "anyOf": [
+              {
+                "maximum": 3650.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ttl Days"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "title": "FeedUpdate",
+        "type": "object"
+      },
       "FieldMapping": {
         "description": "Single field mapping definition",
         "properties": {
@@ -1473,6 +2080,72 @@
           "services"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "IndicatorCreate": {
+        "properties": {
+          "confidence": {
+            "default": 70,
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "integer"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
+          "indicator_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ip | domain | url | hash | email (default: inferred)",
+            "title": "Indicator Type"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "threat_type": {
+            "default": "malicious",
+            "maxLength": 100,
+            "title": "Threat Type",
+            "type": "string"
+          },
+          "ttl_days": {
+            "anyOf": [
+              {
+                "maximum": 3650.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 90,
+            "title": "Ttl Days"
+          },
+          "value": {
+            "maxLength": 2048,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "title": "IndicatorCreate",
         "type": "object"
       },
       "IngestResponse": {
@@ -2027,6 +2700,24 @@
           "triggered_at"
         ],
         "title": "MemberAlertDetail",
+        "type": "object"
+      },
+      "Merge": {
+        "properties": {
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Source Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "source_ids"
+        ],
+        "title": "Merge",
         "type": "object"
       },
       "MetricQueryRequest": {
@@ -2769,6 +3460,65 @@
         "title": "PermissionCheckRequest",
         "type": "object"
       },
+      "PipelineBody": {
+        "properties": {
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Defaults to a slug of the name",
+            "title": "Id"
+          },
+          "name": {
+            "maxLength": 200,
+            "title": "Name",
+            "type": "string"
+          },
+          "on_failure": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "On Failure",
+            "type": "array"
+          },
+          "processors": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Processors",
+            "type": "array"
+          },
+          "routing": {
+            "additionalProperties": true,
+            "description": "{\"services\": [...], \"if\": \"...\", \"priority\": 100, \"default\": false}",
+            "title": "Routing",
+            "type": "object"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "PipelineBody",
+        "type": "object"
+      },
       "PricingModel": {
         "description": "Pricing model types",
         "enum": [
@@ -2817,6 +3567,76 @@
           "field"
         ],
         "title": "QueryAggregation",
+        "type": "object"
+      },
+      "QueryExtraction": {
+        "description": "A field extracted at search time (LogforgeQL rex / parse / json).",
+        "properties": {
+          "group": {
+            "anyOf": [
+              {
+                "maximum": 64.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "regex: capture group number",
+            "title": "Group"
+          },
+          "kind": {
+            "pattern": "^(regex|json)$",
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 32,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "json: keys from the root",
+            "title": "Path"
+          },
+          "pattern": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "regex: RE2 pattern",
+            "title": "Pattern"
+          },
+          "source": {
+            "default": "msg",
+            "description": "Field to extract from",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind"
+        ],
+        "title": "QueryExtraction",
         "type": "object"
       },
       "QueryFeedbackRequest": {
@@ -3124,6 +3944,54 @@
           "triggered_at"
         ],
         "title": "RootAlertDetail",
+        "type": "object"
+      },
+      "RuleSyncRequest": {
+        "properties": {
+          "backtest_days": {
+            "default": 0,
+            "description": "Backtest each alerting rule over this many days (0 = skip)",
+            "maximum": 30.0,
+            "minimum": 0.0,
+            "title": "Backtest Days",
+            "type": "integer"
+          },
+          "dry_run": {
+            "default": true,
+            "description": "Only return the plan",
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "max_alerts_per_day": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Reject rules whose backtest exceeds this rate",
+            "title": "Max Alerts Per Day"
+          },
+          "prune": {
+            "default": false,
+            "description": "Disable git-synced rules that are no longer in the rule set",
+            "title": "Prune",
+            "type": "boolean"
+          },
+          "yaml": {
+            "description": "The rule set: Sigma YAML documents (all files of the repository)",
+            "maxLength": 2000000,
+            "title": "Yaml",
+            "type": "string"
+          }
+        },
+        "required": [
+          "yaml"
+        ],
+        "title": "RuleSyncRequest",
         "type": "object"
       },
       "SchemaInfo": {
@@ -3451,6 +4319,18 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "threat": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threat"
           },
           "timestamp": {
             "title": "Timestamp",
@@ -3829,6 +4709,58 @@
         "title": "SigmaRuleResponse",
         "type": "object"
       },
+      "SimulateBody": {
+        "properties": {
+          "docs": {
+            "description": "Sample events: objects, or raw lines (become msg)",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              ]
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Docs",
+            "type": "array"
+          },
+          "pipeline": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An inline definition",
+            "title": "Pipeline"
+          },
+          "pipeline_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Or a saved / built-in pipeline",
+            "title": "Pipeline Id"
+          }
+        },
+        "required": [
+          "docs"
+        ],
+        "title": "SimulateBody",
+        "type": "object"
+      },
       "SolutionRequest": {
         "description": "Add solution request",
         "properties": {
@@ -4028,6 +4960,36 @@
         "title": "SpanStatus",
         "type": "string"
       },
+      "Split": {
+        "properties": {
+          "alert_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Alert Ids",
+            "type": "array"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "alert_ids"
+        ],
+        "title": "Split",
+        "type": "object"
+      },
       "StandardFieldsResponse": {
         "description": "List of standard field names supported",
         "properties": {
@@ -4054,6 +5016,27 @@
           "field_variations"
         ],
         "title": "StandardFieldsResponse",
+        "type": "object"
+      },
+      "StatusChange": {
+        "properties": {
+          "reason": {
+            "default": "",
+            "description": "Required to close; becomes the alerts' verdict note",
+            "maxLength": 2000,
+            "title": "Reason",
+            "type": "string"
+          },
+          "status": {
+            "description": "new | investigating | contained | resolved | false_positive",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "StatusChange",
         "type": "object"
       },
       "StorageBackendType": {
@@ -4264,6 +5247,26 @@
         ],
         "title": "SubscriptionTier",
         "type": "string"
+      },
+      "TagsChange": {
+        "properties": {
+          "add": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Add",
+            "type": "array"
+          },
+          "remove": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Remove",
+            "type": "array"
+          }
+        },
+        "title": "TagsChange",
+        "type": "object"
       },
       "TenantConfig": {
         "description": "Tenant configuration settings",
@@ -5843,6 +6846,39 @@
           "peak_count"
         ],
         "title": "TrendSummary",
+        "type": "object"
+      },
+      "TuningRecordRequest": {
+        "properties": {
+          "kind": {
+            "description": "exclusion | throttle",
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Reason",
+            "type": "string"
+          },
+          "rule_id": {
+            "description": "Rule id, or '*' for every rule",
+            "title": "Rule Id",
+            "type": "string"
+          },
+          "spec": {
+            "additionalProperties": true,
+            "description": "exclusion: {conditions, expires_at?}; throttle: {window, group_by}",
+            "title": "Spec",
+            "type": "object"
+          }
+        },
+        "required": [
+          "rule_id",
+          "kind",
+          "spec"
+        ],
+        "title": "TuningRecordRequest",
         "type": "object"
       },
       "UsageBreakdownResponse": {
@@ -14733,6 +15769,184 @@
         ]
       }
     },
+    "/v1/fields": {
+      "get": {
+        "operationId": "field_catalogue_v1_fields_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "window",
+            "required": false,
+            "schema": {
+              "default": "24h",
+              "title": "Window",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "service",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Service"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sample",
+            "required": false,
+            "schema": {
+              "default": 2000,
+              "maximum": 10000,
+              "minimum": 100,
+              "title": "Sample",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Field Catalogue",
+        "tags": [
+          "fields"
+        ]
+      }
+    },
+    "/v1/fields/values": {
+      "get": {
+        "operationId": "field_values_v1_fields_values_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "field",
+            "required": true,
+            "schema": {
+              "maxLength": 300,
+              "title": "Field",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "window",
+            "required": false,
+            "schema": {
+              "default": "24h",
+              "title": "Window",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "service",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Service"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Field Values",
+        "tags": [
+          "fields"
+        ]
+      }
+    },
     "/v1/ingest": {
       "post": {
         "description": "Auto-detect format and ingest logs",
@@ -14803,6 +16017,26 @@
       "post": {
         "description": "Single log entry ingestion endpoint",
         "operationId": "ingest_logs_v1_ingest_logs_post",
+        "parameters": [
+          {
+            "description": "Run these logs through this ingest pipeline",
+            "in": "header",
+            "name": "X-Logforge-Pipeline",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Run these logs through this ingest pipeline",
+              "title": "X-Logforge-Pipeline"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -14845,6 +16079,26 @@
       "post": {
         "description": "Batch log entry ingestion",
         "operationId": "ingest_logs_batch_v1_ingest_logs_batch_post",
+        "parameters": [
+          {
+            "description": "Run these logs through this ingest pipeline",
+            "in": "header",
+            "name": "X-Logforge-Pipeline",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Run these logs through this ingest pipeline",
+              "title": "X-Logforge-Pipeline"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -16677,6 +17931,689 @@
         ]
       }
     },
+    "/v1/pipelines": {
+      "get": {
+        "operationId": "list_pipelines_v1_pipelines_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Pipelines",
+        "tags": [
+          "pipelines"
+        ]
+      },
+      "post": {
+        "operationId": "create_pipeline_v1_pipelines_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PipelineBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Pipeline",
+        "tags": [
+          "pipelines"
+        ]
+      }
+    },
+    "/v1/pipelines/dlq": {
+      "get": {
+        "operationId": "list_dead_letters_v1_pipelines_dlq_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "pipeline_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pipeline Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "pending",
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Dead Letters",
+        "tags": [
+          "pipelines"
+        ]
+      }
+    },
+    "/v1/pipelines/dlq/discard": {
+      "post": {
+        "operationId": "discard_dead_letters_v1_pipelines_dlq_discard_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeadLetterAction"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Discard Dead Letters",
+        "tags": [
+          "pipelines"
+        ]
+      }
+    },
+    "/v1/pipelines/dlq/replay": {
+      "post": {
+        "description": "Send the original events through ingest again, through their pipeline.\nAn event that fails again lands in the queue again with the new reason.",
+        "operationId": "replay_dead_letters_v1_pipelines_dlq_replay_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeadLetterAction"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Replay Dead Letters",
+        "tags": [
+          "pipelines"
+        ]
+      }
+    },
+    "/v1/pipelines/simulate": {
+      "post": {
+        "operationId": "simulate_pipeline_v1_pipelines_simulate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Simulate Pipeline",
+        "tags": [
+          "pipelines"
+        ]
+      }
+    },
+    "/v1/pipelines/stats": {
+      "get": {
+        "description": "Counters for every pipeline that ran in this API process since it started.",
+        "operationId": "tenant_pipeline_stats_v1_pipelines_stats_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Tenant Pipeline Stats",
+        "tags": [
+          "pipelines"
+        ]
+      }
+    },
+    "/v1/pipelines/{pipeline_id}": {
+      "delete": {
+        "operationId": "delete_pipeline_v1_pipelines__pipeline_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Pipeline",
+        "tags": [
+          "pipelines"
+        ]
+      },
+      "get": {
+        "operationId": "get_pipeline_v1_pipelines__pipeline_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Pipeline",
+        "tags": [
+          "pipelines"
+        ]
+      },
+      "put": {
+        "operationId": "update_pipeline_v1_pipelines__pipeline_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PipelineBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Pipeline",
+        "tags": [
+          "pipelines"
+        ]
+      }
+    },
+    "/v1/pipelines/{pipeline_id}/stats": {
+      "get": {
+        "description": "Per-version, per-processor counters and timings (this API process, since start).",
+        "operationId": "pipeline_stats_v1_pipelines__pipeline_id__stats_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Pipeline Stats",
+        "tags": [
+          "pipelines"
+        ]
+      }
+    },
+    "/v1/pipelines/{pipeline_id}/versions": {
+      "get": {
+        "operationId": "pipeline_versions_v1_pipelines__pipeline_id__versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pipeline_id",
+            "required": true,
+            "schema": {
+              "title": "Pipeline Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Pipeline Versions",
+        "tags": [
+          "pipelines"
+        ]
+      }
+    },
     "/v1/query/advanced": {
       "post": {
         "description": "Advanced log querying with filters, aggregations, and analysis",
@@ -17440,6 +19377,1102 @@
         ]
       }
     },
+    "/v1/security/cases": {
+      "get": {
+        "description": "Cases, most recently updated first.",
+        "operationId": "list_cases_v1_security_cases_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "assignee",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assignee"
+            }
+          },
+          {
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Cases V1 Security Cases Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Cases",
+        "tags": [
+          "cases"
+        ]
+      },
+      "post": {
+        "description": "Create a case, optionally from alerts (severity and entities come from\nthem) and with pinned evidence (a saved search, an event, a trace...).",
+        "operationId": "create_case_v1_security_cases_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Case V1 Security Cases Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Case",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/v1/security/cases/audit/export": {
+      "get": {
+        "description": "Every case change (who, what, when) in a time range, as JSON or CSV\n(default: the last 30 days).",
+        "operationId": "export_case_audit_v1_security_cases_audit_export_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "json",
+              "pattern": "^(json|csv)$",
+              "title": "Format",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100000,
+              "maximum": 1000000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export Case Audit",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/v1/security/cases/bulk": {
+      "post": {
+        "description": "Assign, change status or tag many cases; failures are reported per case.",
+        "operationId": "bulk_cases_v1_security_cases_bulk_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Bulk"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Bulk Cases V1 Security Cases Bulk Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Bulk Cases",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/v1/security/cases/metrics": {
+      "get": {
+        "description": "SOC overview: time to acknowledge and resolve per severity, SLA\nbreaches, open cases by status and age, analyst load, alerts per case.\nCovers cases created in the last `days` plus every case still open.",
+        "operationId": "case_metrics_v1_security_cases_metrics_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Case Metrics V1 Security Cases Metrics Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Case Metrics",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/v1/security/cases/{case_id}": {
+      "get": {
+        "description": "The case, its alerts and its timeline (alerts, notes, status changes,\nevidence) in order.",
+        "operationId": "get_case_v1_security_cases__case_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Case V1 Security Cases  Case Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Case",
+        "tags": [
+          "cases"
+        ]
+      },
+      "patch": {
+        "operationId": "update_case_v1_security_cases__case_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Case V1 Security Cases  Case Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Case",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/v1/security/cases/{case_id}/alerts": {
+      "post": {
+        "operationId": "attach_alerts_v1_security_cases__case_id__alerts_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertIds"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Attach Alerts V1 Security Cases  Case Id  Alerts Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Attach Alerts",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/v1/security/cases/{case_id}/assign": {
+      "post": {
+        "operationId": "assign_case_v1_security_cases__case_id__assign_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Assign"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Assign Case V1 Security Cases  Case Id  Assign Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Assign Case",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/v1/security/cases/{case_id}/comments": {
+      "post": {
+        "operationId": "comment_case_v1_security_cases__case_id__comments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Comment"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comment Case V1 Security Cases  Case Id  Comments Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Comment Case",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/v1/security/cases/{case_id}/evidence": {
+      "post": {
+        "operationId": "pin_evidence_v1_security_cases__case_id__evidence_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Evidence"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Pin Evidence V1 Security Cases  Case Id  Evidence Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Pin Evidence",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/v1/security/cases/{case_id}/merge": {
+      "post": {
+        "description": "Merge other cases into this one; they are closed as merged.",
+        "operationId": "merge_case_v1_security_cases__case_id__merge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Merge"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Merge Case V1 Security Cases  Case Id  Merge Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Merge Case",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/v1/security/cases/{case_id}/split": {
+      "post": {
+        "description": "Move some alerts into a new case.",
+        "operationId": "split_case_route_v1_security_cases__case_id__split_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Split"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Split Case Route V1 Security Cases  Case Id  Split Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Split Case Route",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/v1/security/cases/{case_id}/status": {
+      "post": {
+        "description": "Move the case through its workflow. Closing needs a reason, which is\nalso set on the case's alerts (false_positive feeds tuning suggestions).",
+        "operationId": "set_case_status_v1_security_cases__case_id__status_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatusChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Case Status V1 Security Cases  Case Id  Status Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Case Status",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/v1/security/cases/{case_id}/tags": {
+      "post": {
+        "operationId": "tag_case_v1_security_cases__case_id__tags_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagsChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Tag Case V1 Security Cases  Case Id  Tags Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Tag Case",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
     "/v1/security/dashboard": {
       "get": {
         "description": "Get security dashboard overview",
@@ -17721,6 +20754,502 @@
         ]
       }
     },
+    "/v1/security/intel/feeds": {
+      "get": {
+        "operationId": "list_feeds_v1_security_intel_feeds_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Feeds V1 Security Intel Feeds Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Feeds",
+        "tags": [
+          "threat-intel"
+        ]
+      },
+      "post": {
+        "operationId": "create_feed_v1_security_intel_feeds_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Feed V1 Security Intel Feeds Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Feed",
+        "tags": [
+          "threat-intel"
+        ]
+      }
+    },
+    "/v1/security/intel/feeds/{feed_id}": {
+      "delete": {
+        "operationId": "delete_feed_v1_security_intel_feeds__feed_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "feed_id",
+            "required": true,
+            "schema": {
+              "title": "Feed Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Feed",
+        "tags": [
+          "threat-intel"
+        ]
+      },
+      "patch": {
+        "operationId": "update_feed_v1_security_intel_feeds__feed_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "feed_id",
+            "required": true,
+            "schema": {
+              "title": "Feed Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Feed V1 Security Intel Feeds  Feed Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Feed",
+        "tags": [
+          "threat-intel"
+        ]
+      }
+    },
+    "/v1/security/intel/feeds/{feed_id}/run": {
+      "post": {
+        "description": "Fetch the feed now. New indicators are retro-hunted in the background.",
+        "operationId": "run_feed_now_v1_security_intel_feeds__feed_id__run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "feed_id",
+            "required": true,
+            "schema": {
+              "title": "Feed Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Feed Now V1 Security Intel Feeds  Feed Id  Run Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Run Feed Now",
+        "tags": [
+          "threat-intel"
+        ]
+      }
+    },
+    "/v1/security/intel/indicators": {
+      "get": {
+        "description": "Indicators, newest first, with how often each appears in your logs\nover the last 7 days.",
+        "operationId": "search_indicators_v1_security_intel_indicators_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Search Indicators V1 Security Intel Indicators Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Search Indicators",
+        "tags": [
+          "threat-intel"
+        ]
+      },
+      "post": {
+        "description": "Add an indicator by hand (defanged forms accepted). Your recent logs\nare searched for it in the background.",
+        "operationId": "add_indicator_v1_security_intel_indicators_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IndicatorCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Add Indicator V1 Security Intel Indicators Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Add Indicator",
+        "tags": [
+          "threat-intel"
+        ]
+      }
+    },
+    "/v1/security/intel/indicators/{indicator_type}/{value}": {
+      "delete": {
+        "operationId": "delete_indicator_v1_security_intel_indicators__indicator_type___value__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "indicator_type",
+            "required": true,
+            "schema": {
+              "title": "Indicator Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "value",
+            "required": true,
+            "schema": {
+              "title": "Value",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Indicator",
+        "tags": [
+          "threat-intel"
+        ]
+      }
+    },
     "/v1/security/mitre-attack/techniques": {
       "get": {
         "description": "The ATT&CK techniques Logforge knows about (its built-in catalogue).",
@@ -17820,6 +21349,124 @@
         ]
       }
     },
+    "/v1/security/rules/export": {
+      "get": {
+        "description": "The tenant's enabled rules as Sigma YAML documents, fixtures included,\nready to commit to a detection repository and sync back unchanged.",
+        "operationId": "export_rules_v1_security_rules_export_get",
+        "parameters": [
+          {
+            "description": "Also export the platform library (ids without the logforge_ prefix)",
+            "in": "query",
+            "name": "include_defaults",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Also export the platform library (ids without the logforge_ prefix)",
+              "title": "Include Defaults",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export Rules",
+        "tags": [
+          "security-analytics"
+        ]
+      }
+    },
+    "/v1/security/rules/sync": {
+      "post": {
+        "description": "Sync the tenant's rules from a git rule set. Every rule goes through\nthe fixture gate (and optionally a backtest); any rejection rejects the\nwhole sync. `dry_run` (default) returns the plan; otherwise it is applied\nand the tenant's rule cache refreshed. Rules created in the UI are never\ntouched.",
+        "operationId": "sync_rules_v1_security_rules_sync_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleSyncRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Sync Rules V1 Security Rules Sync Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Sync Rules",
+        "tags": [
+          "security-analytics"
+        ]
+      }
+    },
     "/v1/security/rules/{rule_id}/acknowledge-all": {
       "post": {
         "description": "Acknowledge all new events for a specific rule",
@@ -17884,6 +21531,75 @@
           }
         ],
         "summary": "Bulk Acknowledge By Rule",
+        "tags": [
+          "security-analytics"
+        ]
+      }
+    },
+    "/v1/security/rules/{rule_id}/backtest": {
+      "post": {
+        "description": "Replay a rule over the tenant's stored logs and report what it would\nhave alerted on: alert count, samples, alerts per day, events scanned.\n\nMatching is done by the detection engine itself (count and correlation\nrules included, windows spanning the whole range); a SQL prefilter\ncompiled from the rule only narrows what is read.",
+        "operationId": "backtest_rule_v1_security_rules__rule_id__backtest_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BacktestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Backtest Rule V1 Security Rules  Rule Id  Backtest Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Backtest Rule",
         "tags": [
           "security-analytics"
         ]
@@ -18177,6 +21893,77 @@
           }
         ],
         "summary": "Bulk Resolve By Rule",
+        "tags": [
+          "security-analytics"
+        ]
+      }
+    },
+    "/v1/security/rules/{rule_id}/tuning-suggestion": {
+      "get": {
+        "description": "Propose an exclusion from the rule's detections that analysts marked\nfalse positive (field values most of them share), and how many of its\nother detections it would also suppress. Review before saving it.",
+        "operationId": "tuning_suggestion_v1_security_rules__rule_id__tuning_suggestion_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Tuning Suggestion V1 Security Rules  Rule Id  Tuning Suggestion Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Tuning Suggestion",
         "tags": [
           "security-analytics"
         ]
@@ -18935,6 +22722,163 @@
           }
         },
         "summary": "Delete Threat Indicator",
+        "tags": [
+          "security-analytics"
+        ]
+      }
+    },
+    "/v1/security/tuning": {
+      "get": {
+        "description": "The tenant's exclusions and throttles.",
+        "operationId": "list_tuning_v1_security_tuning_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Tuning V1 Security Tuning Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Tuning",
+        "tags": [
+          "security-analytics"
+        ]
+      },
+      "post": {
+        "description": "Add an exclusion (field conditions in Sigma selection syntax, optional\nexpires_at) or a throttle (window, group_by) for one rule or all ('*').\nSuppressed alerts are not raised, but still feed correlations.",
+        "operationId": "create_tuning_v1_security_tuning_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TuningRecordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Tuning V1 Security Tuning Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Tuning",
+        "tags": [
+          "security-analytics"
+        ]
+      }
+    },
+    "/v1/security/tuning/{record_id}": {
+      "delete": {
+        "operationId": "delete_tuning_v1_security_tuning__record_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Tuning",
         "tags": [
           "security-analytics"
         ]

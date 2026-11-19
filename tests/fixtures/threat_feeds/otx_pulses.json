@@ -1,0 +1,8 @@
+{"count": 1, "results": [{"id": "6560a1", "name": "Phishing kit infrastructure", "tags": ["phishing"],
+  "indicators": [
+    {"indicator": "login-secure-update.example", "type": "domain"},
+    {"indicator": "192.0.2.77", "type": "IPv4"},
+    {"indicator": "https://login-secure-update.example/office365/", "type": "URL"},
+    {"indicator": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "type": "FileHash-SHA256"},
+    {"indicator": "CVE-2026-0001", "type": "CVE"}
+  ]}]}

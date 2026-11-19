@@ -16,7 +16,7 @@ This guide provides optimization recommendations for high-throughput log shippin
 
 ### 3. Network Optimization
 - **Connection Pooling**: Enable HTTP keep-alive
-- **Compression**: leave request compression off; the API does not decode gzip bodies
+- **Compression**: use gzip; the API decodes it (decompressed size capped at `LOGFORGE_MAX_BODY_BYTES`)
 - **Retry Strategy**: Exponential backoff with max 3-5 attempts
 - **Timeout**: 30-60 seconds for request timeout
 

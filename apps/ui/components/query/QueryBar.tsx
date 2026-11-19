@@ -14,6 +14,8 @@ interface QueryBarProps {
   syntaxError: string | null
   /** Live service names for value autocomplete (fetched, never hardcoded). */
   services: string[]
+  /** The tenant's field names from the field catalogue (Phase 5). */
+  fields?: string[]
 }
 
 const KIND_STYLES: Record<Suggestion['kind'], string> = {
@@ -36,6 +38,7 @@ export default function QueryBar({
   isRunning,
   syntaxError,
   services,
+  fields = [],
 }: QueryBarProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
@@ -46,13 +49,13 @@ export default function QueryBar({
 
   const refreshSuggestions = useCallback(
     (text: string, caret: number) => {
-      const result = getSuggestions(text, caret, services)
+      const result = getSuggestions(text, caret, services, fields)
       setSuggestions(result.suggestions)
       setReplaceStart(result.replaceStart)
       setHighlightIndex(0)
       setShowSuggestions(result.suggestions.length > 0)
     },
-    [services]
+    [services, fields]
   )
 
   const acceptSuggestion = useCallback(

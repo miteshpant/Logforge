@@ -1,0 +1,4 @@
+title: Scheduled task persistence running an encoded payload
+techniques: [T1053.005]
+events:
+  - {service: sysmon, event_id: 1, hostname: WS-042, user: alice, process_name: 'C:\Windows\System32\schtasks.exe', command_line: 'schtasks /create /sc onlogon /tn "Windows Update Helper" /tr "powershell.exe -w hidden -enc SQBFAFgA" /f', message: Process created}

@@ -1,0 +1,3 @@
+host,owner,criticality,environment
+WS-044,carol,medium,corp
+db-01,platform-team,critical,production

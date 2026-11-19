@@ -1,0 +1,23 @@
+title: Wordlist scan of a public web server
+techniques: [T1595.003]
+events:
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.20, http_method: GET, url: '/admin', status_code: 404, user_agent: 'gobuster/3.6', message: not found}
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.20, http_method: GET, url: '/admin.php', status_code: 404, user_agent: 'gobuster/3.6', message: not found}
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.20, http_method: GET, url: '/administrator/', status_code: 404, user_agent: 'gobuster/3.6', message: not found}
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.20, http_method: GET, url: '/.env', status_code: 404, user_agent: 'gobuster/3.6', message: not found}
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.20, http_method: GET, url: '/.git/config', status_code: 404, user_agent: 'gobuster/3.6', message: not found}
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.20, http_method: GET, url: '/.git/HEAD', status_code: 404, user_agent: 'gobuster/3.6', message: not found}
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.20, http_method: GET, url: '/backup.zip', status_code: 404, user_agent: 'gobuster/3.6', message: not found}
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.20, http_method: GET, url: '/backup.tar.gz', status_code: 404, user_agent: 'gobuster/3.6', message: not found}
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.20, http_method: GET, url: '/db.sql', status_code: 404, user_agent: 'gobuster/3.6', message: not found}
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.20, http_method: GET, url: '/wp-login.php', status_code: 404, user_agent: 'gobuster/3.6', message: not found}
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.20, http_method: GET, url: '/wp-admin/', status_code: 404, user_agent: 'gobuster/3.6', message: not found}
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.20, http_method: GET, url: '/phpmyadmin/', status_code: 404, user_agent: 'gobuster/3.6', message: not found}
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.20, http_method: GET, url: '/config.php.bak', status_code: 404, user_agent: 'gobuster/3.6', message: not found}
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.20, http_method: GET, url: '/server-status', status_code: 404, user_agent: 'gobuster/3.6', message: not found}
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.20, http_method: GET, url: '/.aws/credentials', status_code: 404, user_agent: 'gobuster/3.6', message: not found}
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.20, http_method: GET, url: '/actuator/env', status_code: 404, user_agent: 'gobuster/3.6', message: not found}
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.20, http_method: GET, url: '/console', status_code: 404, user_agent: 'gobuster/3.6', message: not found}
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.20, http_method: GET, url: '/debug', status_code: 404, user_agent: 'gobuster/3.6', message: not found}
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.20, http_method: GET, url: '/api/swagger.json', status_code: 404, user_agent: 'gobuster/3.6', message: not found}
+  - {service: nginx, hostname: web-01, src_ip: 45.155.205.20, http_method: GET, url: '/old/', status_code: 404, user_agent: 'gobuster/3.6', message: not found}

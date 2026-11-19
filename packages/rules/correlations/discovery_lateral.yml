@@ -1,0 +1,247 @@
+# Discovery, privilege and lateral-movement correlations (Phase 1).
+# `generate: false` rules are building blocks for the correlations below.
+
+title: HTTP 404 response
+id: lf-b-web-not-found
+name: web_not_found
+generate: false
+status: stable
+description: A web server answered 404 (building block).
+author: Logforge Security Team
+date: 2026/11/17
+tags: [attack.reconnaissance, attack.t1595.003]
+logsource: {category: webserver}
+detection:
+    selection:
+        status_code: 404
+    condition: selection
+fixtures:
+    true_positive: {status_code: 404, url: /.git/config, src_ip: 45.155.205.20}
+    true_negative: {status_code: 200, url: /index.html, src_ip: 45.155.205.20}
+level: low
+---
+title: Web content scanning from one source
+id: lf-c-web-scanning
+status: stable
+description: >
+  Fifteen or more different paths answered 404 for one client within 5
+  minutes: wordlist scanning for admin panels, backups and secrets. Counting
+  distinct paths keeps one broken link requested many times from alerting.
+author: Logforge Security Team
+date: 2026/11/17
+references: [https://attack.mitre.org/techniques/T1595/003/]
+tags: [attack.reconnaissance, attack.t1595.003]
+falsepositives:
+    - Authorised vulnerability scanners (add them to an exclusion)
+correlation:
+    type: value_count
+    rules: [web_not_found]
+    group-by: [src_ip]
+    timespan: 5m
+    condition: {field: url, gte: 15}
+fixtures:
+    true_positive_batch:
+        - {status_code: 404, url: /admin, src_ip: 45.155.205.20}
+        - {status_code: 404, url: /admin.php, src_ip: 45.155.205.20}
+        - {status_code: 404, url: /.env, src_ip: 45.155.205.20}
+        - {status_code: 404, url: /.git/config, src_ip: 45.155.205.20}
+        - {status_code: 404, url: /backup.zip, src_ip: 45.155.205.20}
+        - {status_code: 404, url: /backup.sql, src_ip: 45.155.205.20}
+        - {status_code: 404, url: /wp-login.php, src_ip: 45.155.205.20}
+        - {status_code: 404, url: /phpmyadmin/, src_ip: 45.155.205.20}
+        - {status_code: 404, url: /config.php.bak, src_ip: 45.155.205.20}
+        - {status_code: 404, url: /server-status, src_ip: 45.155.205.20}
+        - {status_code: 404, url: /.aws/credentials, src_ip: 45.155.205.20}
+        - {status_code: 404, url: /actuator/env, src_ip: 45.155.205.20}
+        - {status_code: 404, url: /console, src_ip: 45.155.205.20}
+        - {status_code: 404, url: /debug, src_ip: 45.155.205.20}
+        - {status_code: 404, url: /old/, src_ip: 45.155.205.20}
+    true_negative_batch:
+        - {repeat: 40, every: 5s, event: {status_code: 404, url: /favicon.ico, src_ip: 10.0.1.12}}
+        - {status_code: 404, url: /old-page, src_ip: 198.51.100.23}
+level: medium
+---
+title: Discovery command
+id: lf-b-discovery-command
+name: discovery_command
+generate: false
+status: stable
+description: A host or account discovery utility ran (building block; each one alone is routine).
+author: Logforge Security Team
+date: 2026/11/17
+tags: [attack.discovery, attack.t1082]
+logsource: {category: process_creation}
+detection:
+    selection:
+        process_name|endswith:
+            - \whoami.exe
+            - \hostname.exe
+            - \ipconfig.exe
+            - \systeminfo.exe
+            - \tasklist.exe
+            - \net.exe
+            - \net1.exe
+            - \nltest.exe
+            - \quser.exe
+            - \netstat.exe
+            - \arp.exe
+            - \route.exe
+            - /whoami
+            - /id
+            - /uname
+            - /hostname
+            - /ifconfig
+            - /netstat
+    condition: selection
+fixtures:
+    true_positive: {process_name: 'C:\Windows\System32\systeminfo.exe', hostname: WS-042, user: alice}
+    true_negative: {process_name: 'C:\Windows\System32\notepad.exe', hostname: WS-042, user: alice}
+level: low
+---
+title: Burst of discovery commands on one host
+id: lf-c-discovery-burst
+status: stable
+description: Four or more different discovery utilities run by one user on one host within 10 minutes, the typical first minutes after initial access.
+author: Logforge Security Team
+date: 2026/11/17
+references: [https://attack.mitre.org/tactics/TA0007/]
+tags: [attack.discovery, attack.t1082, attack.t1016, attack.t1033]
+falsepositives:
+    - Administrators troubleshooting a machine
+correlation:
+    type: value_count
+    rules: [discovery_command]
+    group-by: [hostname, user]
+    timespan: 10m
+    condition: {field: process_name, gte: 4}
+fixtures:
+    true_positive_batch:
+        - {process_name: 'C:\Windows\System32\whoami.exe', hostname: WS-042, user: alice}
+        - {process_name: 'C:\Windows\System32\hostname.exe', hostname: WS-042, user: alice}
+        - {process_name: 'C:\Windows\System32\ipconfig.exe', hostname: WS-042, user: alice}
+        - {process_name: 'C:\Windows\System32\systeminfo.exe', hostname: WS-042, user: alice}
+    true_negative_batch:
+        - {repeat: 10, event: {process_name: 'C:\Windows\System32\whoami.exe', hostname: WS-042, user: alice}}
+        - {process_name: 'C:\Windows\System32\hostname.exe', hostname: WS-043, user: alice}
+        - {process_name: 'C:\Windows\System32\ipconfig.exe', hostname: WS-042, user: bob}
+        - {at: 1h, event: {process_name: 'C:\Windows\System32\systeminfo.exe', hostname: WS-042, user: alice}}
+level: medium
+---
+title: Discovery followed by credential dumping on one host
+id: lf-c-discovery-then-credential-dump
+status: stable
+description: A discovery utility, then an LSASS credential dump (cd001) on the same host within an hour. Attackers orient themselves before harvesting credentials.
+author: Logforge Security Team
+date: 2026/11/17
+references: [https://attack.mitre.org/techniques/T1003/001/]
+tags: [attack.discovery, attack.credential_access, attack.t1082, attack.t1003.001]
+correlation:
+    type: temporal_ordered
+    rules: [discovery_command, cd001-lsass-memory-dump]
+    group-by: [hostname]
+    timespan: 1h
+fixtures:
+    true_positive_batch:
+        - {process_name: 'C:\Windows\System32\whoami.exe', command_line: whoami /all, hostname: WS-051, user: dave}
+        - {at: 5m, event: {process_name: 'C:\Tools\procdump64.exe', command_line: 'procdump64.exe -ma lsass.exe out.dmp', hostname: WS-051, user: dave}}
+    true_negative_batch:
+        - {process_name: 'C:\Tools\procdump64.exe', command_line: 'procdump64.exe -ma lsass.exe out.dmp', hostname: WS-051, user: dave}
+        - {at: 5m, event: {process_name: 'C:\Windows\System32\whoami.exe', command_line: whoami, hostname: WS-051, user: dave}}
+        - {at: 6m, event: {process_name: 'C:\Windows\System32\whoami.exe', command_line: whoami, hostname: WS-052, user: dave}}
+level: critical
+---
+title: Failed sudo authentication
+id: lf-b-sudo-failed
+name: sudo_failed
+generate: false
+status: stable
+description: sudo refused a user (wrong password or not in sudoers), building block.
+author: Logforge Security Team
+date: 2026/11/17
+tags: [attack.privilege_escalation, attack.t1548.003]
+logsource: {product: linux, service: sudo}
+detection:
+    selection:
+        event_type: sudo
+        result: [failed, failure, denied]
+    condition: selection
+fixtures:
+    true_positive: {event_type: sudo, result: failed, user: www-data, hostname: app-02}
+    true_negative: {event_type: sudo, result: success, user: ops_admin, hostname: app-02}
+level: low
+---
+title: Repeated sudo failures by one user
+id: lf-c-sudo-failure-burst
+status: stable
+description: Three or more refused sudo attempts by one user on one host within 10 minutes; typical of a compromised low-privilege account trying to escalate.
+author: Logforge Security Team
+date: 2026/11/17
+references: [https://attack.mitre.org/techniques/T1548/003/]
+tags: [attack.privilege_escalation, attack.t1548.003]
+falsepositives:
+    - An administrator who forgot their password
+correlation:
+    type: event_count
+    rules: [sudo_failed]
+    group-by: [hostname, user]
+    timespan: 10m
+    condition: {gte: 3}
+fixtures:
+    true_positive_batch:
+        - {repeat: 3, every: 20s, event: {event_type: sudo, result: failed, user: www-data, hostname: app-02}}
+    true_negative_batch:
+        - {repeat: 2, every: 20s, event: {event_type: sudo, result: failed, user: www-data, hostname: app-02}}
+        - {event_type: sudo, result: failed, user: www-data, hostname: app-01}
+        - {repeat: 10, event: {event_type: sudo, result: success, user: ops_admin, hostname: app-02}}
+level: high
+---
+title: Network logon
+id: lf-b-network-logon
+name: network_logon
+generate: false
+status: stable
+description: A successful Windows network logon, 4624 type 3 (building block).
+author: Logforge Security Team
+date: 2026/11/17
+tags: [attack.lateral_movement, attack.t1021]
+logsource: {product: windows, service: security}
+detection:
+    selection:
+        event_id: 4624
+        logon_type: 3
+    condition: selection
+fixtures:
+    true_positive: {event_id: 4624, logon_type: 3, hostname: WS-043, user: svc_deploy}
+    true_negative: {event_id: 4624, logon_type: 2, hostname: WS-043, user: alice}
+level: low
+---
+title: One account logging on to many hosts
+id: lf-c-lateral-logon-fanout
+status: stable
+description: One account makes network logons to five or more different hosts within 10 minutes, a common sign of lateral movement with stolen credentials.
+author: Logforge Security Team
+date: 2026/11/17
+references: [https://attack.mitre.org/techniques/T1021/]
+tags: [attack.lateral_movement, attack.t1021]
+falsepositives:
+    - Deployment, inventory or backup service accounts (add them to an exclusion)
+correlation:
+    type: value_count
+    rules: [network_logon]
+    group-by: [user]
+    timespan: 10m
+    condition: {field: hostname, gte: 5}
+fixtures:
+    true_positive_batch:
+        - {event_id: 4624, logon_type: 3, hostname: WS-042, user: carol}
+        - {event_id: 4624, logon_type: 3, hostname: WS-043, user: carol}
+        - {event_id: 4624, logon_type: 3, hostname: WS-044, user: carol}
+        - {event_id: 4624, logon_type: 3, hostname: WS-051, user: carol}
+        - {event_id: 4624, logon_type: 3, hostname: FS-01, user: carol}
+    true_negative_batch:
+        - {repeat: 20, event: {event_id: 4624, logon_type: 3, hostname: FS-01, user: carol}}
+        - {event_id: 4624, logon_type: 2, hostname: WS-042, user: carol}
+        - {event_id: 4624, logon_type: 2, hostname: WS-043, user: carol}
+        - {event_id: 4624, logon_type: 2, hostname: WS-044, user: carol}
+        - {event_id: 4624, logon_type: 2, hostname: WS-051, user: carol}
+level: high

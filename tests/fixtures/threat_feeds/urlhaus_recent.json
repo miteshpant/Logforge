@@ -1,0 +1,6 @@
+{"query_status": "ok", "urls": [
+  {"id": "3101", "url": "http://198.51.100.66/bins/mozi.m", "url_status": "online", "host": "198.51.100.66",
+   "date_added": "2026-11-18 08:01:12 UTC", "threat": "malware_download", "tags": ["mozi", "elf"]},
+  {"id": "3102", "url": "https://malware-drop.example.net/invoice.zip", "url_status": "offline",
+   "host": "malware-drop.example.net", "date_added": "2026-11-18 07:44:02 UTC", "threat": "malware_download", "tags": null}
+]}

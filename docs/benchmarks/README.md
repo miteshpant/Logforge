@@ -1,0 +1,169 @@
+# Performance benchmarks
+
+Measured with [`tests/bench/perf_bench.py`](https://github.com/miteshpant/Logforge/blob/main/tests/bench/perf_bench.py)
+against a running compose stack, in a dedicated benchmark tenant so synthetic
+rows never reach real data. Each release should add a results file here and a
+row to the history table.
+
+## How to run
+
+```bash
+# once: a tenant and user just for benchmarks
+TENANT_NAME=Bench DEMO_USER_NAME="Bench Runner" DEMO_USER_EMAIL=bench@bench.example \
+  DEMO_USER_PASSWORD='Bench-Pass-123!' python scripts/bootstrap_demo.py
+
+BENCH_EMAIL=bench@bench.example BENCH_PASSWORD='Bench-Pass-123!' \
+  python tests/bench/perf_bench.py --rows 1000000 10000000 --out docs/benchmarks/<date>-<setup>.json
+```
+
+What it measures:
+
+| Metric | How |
+|---|---|
+| Ingest throughput | 50 batches of 1,000 events posted back to back to `/v1/ingest/logs/batch` by one client |
+| Ingest → searchable | Time from posting one log until `GET /v1/logs` returns it |
+| Query latency | 20 runs each of five fixed queries, p50/p95, after seeding the tenant to each dataset size directly in ClickHouse. Result-cached endpoints get a distinct window per run, so the cache is not measured |
+
+## Baseline: 2026-11-17, single node
+
+Setup: the compose stack on one 4-vCPU VM (API, ClickHouse, Redpanda, Redis
+and MinIO sharing it); API container in its default single-process mode.
+Raw results: [`2026-11-17-single-node.json`](./2026-11-17-single-node.json).
+
+### Ingest
+
+| Metric | Result |
+|---|---|
+| Sustained ingest, one client, 1,000-event batches | **277 events/s** (50,000 events in 180 s) |
+| A single 1,000-event batch on an idle stack | 60–95 ms (≈ 11,000–16,000 events/s if sustained) |
+| Ingest → searchable | **36.8 s** |
+
+The gap between the single-batch and the sustained numbers is the main
+finding. Under sustained load the API container sits at ~100% CPU while
+ClickHouse is at ~2%, and request latency climbs from ~0.1 s to several
+seconds. Post-ingest work (normalisation and running ~274 detection rules on
+every event) runs inside the same single Python process that serves requests.
+That is the likely bottleneck; it has not been profiled yet. Profiling the
+ingest path, moving detection to separate workers and running the API with
+multiple workers are tracked in [ROADMAP.md](../ROADMAP.md).
+
+### Query latency
+
+| Query | 1 M rows p50 / p95 | 10 M rows p50 / p95 |
+|---|---|---|
+| Latest 100 logs (last hour) | 113 / 144 ms | 177 / 247 ms |
+| Service filter, 100 logs (24 h) | 91 / 106 ms | 128 / 158 ms |
+| LogforgeQL: errors by service (24 h) | 70 / 157 ms | 89 / 117 ms |
+| LogforgeQL: full-text search (24 h) | 102 / 119 ms | 233 / 311 ms |
+| Count by level (24 h) | 108 / 123 ms | 140 / 172 ms |
+
+Queries stay well under a second at 10 M rows; full-text search grows fastest
+with data size.
+
+## Threat-intel enrichment: 2026-11-18
+
+Phase 3 acceptance: ingest throughput must drop by less than 10% with
+threat-intel matching on. Measured with
+[`tests/bench/enrichment_bench.py`](https://github.com/miteshpant/Logforge/blob/main/tests/bench/enrichment_bench.py)
+on the same 4-vCPU single-node stack, against 100,000 synthetic indicators
+(60% IPs, 30% domains, 10% URLs). Raw results:
+[`2026-11-18-enrichment.json`](./2026-11-18-enrichment.json).
+
+| Measurement | Without indicators | With 100,000 indicators |
+|---|---|---|
+| In process: `enrich_events` per event (30,000 events, median of 5) | 0.03 µs | 12.0 µs |
+| Live: `POST /v1/ingest/logs/batch`, 10 × 1,000 events, median of 4 rounds | 2,868 events/s | 3,100 events/s |
+
+Per round, the live runs were 2,803 / 3,684 / 2,833 / 2,904 events/s
+without indicators and 3,160 / 2,882 / 3,039 / 3,186 with them.
+
+**Correction (2026-11-19).** The live row measured how fast the API
+*accepts* batches, not how fast it processes them. `POST
+/v1/ingest/logs/batch` returns once a batch is queued; normalisation,
+enrichment, detection and storage run afterwards in the ingest worker. The
+live A/B therefore did not include enrichment, and its "no measurable drop"
+says nothing about it. The evidence is the in-process cost: 12 µs per event.
+Against the end-to-end cost of an event on this stack (about 590 µs,
+measured by the pipeline benchmark below, which times until events are
+stored), that is about **2%**, under the 10% limit. GeoIP, asset and
+reverse-DNS lookups were not enabled.
+
+These numbers are higher than the 277 events/s baseline above because this
+run times smaller bursts with the API drained between them. The baseline
+measured 50 batches back to back, with detection work piling up.
+
+## Ingest pipelines: 2026-11-19
+
+Phase 4 acceptance: with a 10-processor pipeline, ingest must stay within
+20% of the Phase 0 baseline (277 events/s), so at least 222 events/s.
+Measured with
+[`tests/bench/pipeline_bench.py`](https://github.com/miteshpant/Logforge/blob/main/tests/bench/pipeline_bench.py)
+on the same 4-vCPU stack. It runs a typical 10-processor pipeline (kv,
+2 × convert, lowercase, rename, set, script, mask, conditional set,
+remove) as the tenant's default. Unlike the Phase 3 run, this benchmark
+times **end to end**: 5,000 events are posted and the clock stops when all
+5,000 are stored in `logs_raw_mt`. Raw results of the 5-round run:
+[`2026-11-19-pipelines.json`](./2026-11-19-pipelines.json).
+
+| Measurement | Without a pipeline | With the 10-processor pipeline |
+|---|---|---|
+| In process: the pipeline alone, per event | — | 21–22 µs |
+| Smart-ingestion stage per 1,000-event batch (the API's own timing log) | ~114 ms | ~158 ms (+44 µs per event) |
+| End to end, run 1 (3 rounds) | 1,996 / 1,712 / 334 events/s | 1,458 / 437 / 452 events/s |
+| End to end, run 2 (5 rounds) | 328 / 329 / 338 / 338 / 335 events/s | 331 / 437 / 462 / 1,650 / 326 events/s |
+
+**Result: criterion met.** Every run with the pipeline (8 of 8) stored at
+least 326 events/s, above the 222 events/s floor and above the Phase 0
+baseline itself.
+
+**What the end-to-end numbers can't show.** On this shared single-node
+stack, whole runs drop several-fold at random to a ceiling of about
+330 events/s, with or without the pipeline. In run 2 every run without a
+pipeline landed in that slow phase, while one run with the pipeline did
+not, so comparing medians or best runs between the sides would mostly
+measure the noise. The cost of the pipeline itself comes from the API's
+own per-batch timing: about 44 µs per event. That is about 7% of the
+~590 µs an event costs end to end when the stack is in its fast phase.
+
+The 44 µs is the processors (22 µs) plus the runner (stats per step, a
+snapshot of each routed event for the dead-letter queue), plus more fields
+for normalisation to handle. The likely cause of the slow phase, quota
+counters updated by a ClickHouse mutation on every request, is tracked in
+[ROADMAP.md](../ROADMAP.md).
+
+## Search-time extraction: 2026-11-19
+
+Phase 5 acceptance: search-time extraction on 10 M rows must complete
+within 2× the cost of the same query on an ingest-time field. Measured with
+[`tests/bench/extraction_bench.py`](https://github.com/miteshpant/Logforge/blob/main/tests/bench/extraction_bench.py)
+on the same 4-vCPU stack. The benchmark tenant held 10,000,000 rows over 7
+days, and each query counted `region = "eu-west-1"` (about 3.2 M rows) over
+all of them, once from the stored `attrs.region` and once extracted at query
+time. Medians of 7 runs, server time; raw results:
+[`2026-11-19-extraction.json`](./2026-11-19-extraction.json).
+
+| Search-time stage | Ingest-time field | Search-time | Ratio | Same answer |
+|---|---|---|---|---|
+| `rex field=attrs "\"region\":\"(?<region>[^\"]+)\""` | 622 ms | 738 ms | **1.19×** | yes |
+| `parse field=attrs "\"region\":\"*\"" as region` | 613 ms | 748 ms | **1.22×** | yes |
+| `json field=attrs "region" as reg` | 608 ms | 398 ms | **0.66×** | yes |
+
+**Result: criterion met** for all three. The `json` extraction is faster
+than the stored-field path, because the stored-field path also checks the
+legacy envelope location (`JSONHas` + fallback).
+
+Found by this benchmark, and fixed:
+- a first run put `parse` at 2.02×, because its wildcards compiled to a
+  lazy `(.*?)`, which is slow in RE2. Before a single-character delimiter
+  it now compiles to `([^c]*)`, which matches the same text;
+- the benchmark's own patterns exposed a LogforgeQL bug: `\"` inside a
+  quoted pattern ended the string early.
+
+## History
+
+| Date | Setup | Ingest (events/s) | Ingest → searchable | Slowest query p95 @ 10 M |
+|---|---|---|---|---|
+| 2026-11-17 | single node, 4 vCPU | 277 | 36.8 s | 311 ms (full-text search) |
+| 2026-11-18 | single node, 4 vCPU; enrichment, in process | +12 µs per event with 100k indicators (request acceptance only was timed live; see the correction) | — | — |
+| 2026-11-19 | single node, 4 vCPU; 10-processor pipeline, end to end | 326–1,650 with the pipeline (8 runs; Phase 0 floor 222) | — | — |
+| 2026-11-19 | single node, 4 vCPU; search-time extraction, 10 M rows | — | — | rex 1.19×, parse 1.22×, json 0.66× of the ingest-time field |

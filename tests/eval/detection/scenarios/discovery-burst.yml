@@ -1,0 +1,8 @@
+title: Host discovery right after initial access
+techniques: [T1082, T1016, T1033]
+events:
+  - {service: sysmon, event_id: 1, hostname: WS-043, user: bob, process_name: 'C:\Windows\System32\whoami.exe', command_line: 'whoami /all', message: Process created}
+  - {service: sysmon, event_id: 1, hostname: WS-043, user: bob, process_name: 'C:\Windows\System32\hostname.exe', command_line: hostname, message: Process created}
+  - {service: sysmon, event_id: 1, hostname: WS-043, user: bob, process_name: 'C:\Windows\System32\ipconfig.exe', command_line: 'ipconfig /all', message: Process created}
+  - {service: sysmon, event_id: 1, hostname: WS-043, user: bob, process_name: 'C:\Windows\System32\systeminfo.exe', command_line: systeminfo, message: Process created}
+  - {service: sysmon, event_id: 1, hostname: WS-043, user: bob, process_name: 'C:\Windows\System32\tasklist.exe', command_line: 'tasklist /v', message: Process created}

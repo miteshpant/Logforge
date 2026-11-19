@@ -1,0 +1,3 @@
+user,department,title,privileged
+carol,Finance,Accountant,false
+ops_admin,IT,Administrator,true

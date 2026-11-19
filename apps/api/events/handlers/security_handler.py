@@ -318,11 +318,29 @@ class SecurityEventHandler(EventHandler):
             event_id = await security_service.create_security_event(detection_data)
             logger.info(f"💾 Enhanced security detection saved to database: {event_id} with {len(mitre_techniques)} MITRE techniques")
 
+            await self._route_into_case(customer_id, event_id, detection_data)
             return True
 
         except Exception as e:
             logger.error(f"Failed to save enhanced security detection to database: {e}")
             return False
+
+    async def _route_into_case(self, customer_id: str, event_id: str, detection: Dict[str, Any]) -> None:
+        """Attach the stored detection to the open case for its entity, or
+        open one (Phase 2 case grouping). Best-effort: never loses the
+        detection."""
+        try:
+            from datetime import datetime, timezone
+            from services.case_service import CaseService
+
+            correlation = (detection.get("matched_fields") or {}).get("_correlation") or {}
+            row = {"id": event_id, "rule_id": detection.get("rule_id"), "title": detection.get("rule_title"),
+                   "severity": detection.get("severity"), "raw_log_data": detection.get("raw_log_data"),
+                   "mitre_techniques": detection.get("mitre_techniques") or [],
+                   "created_at": datetime.now(timezone.utc)}
+            await CaseService().route_alert(customer_id, row, correlation_group=correlation.get("group"))
+        except Exception as e:
+            logger.warning(f"Could not route detection {event_id} into a case: {e}")
 
     async def _correlate_with_threat_intel(self, event_data: Dict[str, Any], customer_id: str) -> Dict[str, Any]:
         """Correlate detection with threat intelligence indicators."""

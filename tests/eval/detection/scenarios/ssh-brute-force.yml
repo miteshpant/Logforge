@@ -1,0 +1,18 @@
+title: SSH brute force from one external address
+techniques: [T1110]
+events:
+  - {service: sshd, hostname: bastion-01, user: root, src_ip: 45.155.205.233, event_type: authentication, result: failed, message: 'Failed password for root from 45.155.205.233 port 41 ssh2'}
+  - {service: sshd, hostname: bastion-01, user: root, src_ip: 45.155.205.233, event_type: authentication, result: failed, message: 'Failed password for root from 45.155.205.233 port 42 ssh2'}
+  - {service: sshd, hostname: bastion-01, user: root, src_ip: 45.155.205.233, event_type: authentication, result: failed, message: 'Failed password for root from 45.155.205.233 port 43 ssh2'}
+  - {service: sshd, hostname: bastion-01, user: root, src_ip: 45.155.205.233, event_type: authentication, result: failed, message: 'Failed password for root from 45.155.205.233 port 44 ssh2'}
+  - {service: sshd, hostname: bastion-01, user: root, src_ip: 45.155.205.233, event_type: authentication, result: failed, message: 'Failed password for root from 45.155.205.233 port 45 ssh2'}
+  - {service: sshd, hostname: bastion-01, user: root, src_ip: 45.155.205.233, event_type: authentication, result: failed, message: 'Failed password for root from 45.155.205.233 port 46 ssh2'}
+  - {service: sshd, hostname: bastion-01, user: root, src_ip: 45.155.205.233, event_type: authentication, result: failed, message: 'Failed password for root from 45.155.205.233 port 47 ssh2'}
+  - {service: sshd, hostname: bastion-01, user: root, src_ip: 45.155.205.233, event_type: authentication, result: failed, message: 'Failed password for root from 45.155.205.233 port 48 ssh2'}
+  - {service: sshd, hostname: bastion-01, user: root, src_ip: 45.155.205.233, event_type: authentication, result: failed, message: 'Failed password for root from 45.155.205.233 port 49 ssh2'}
+  - {service: sshd, hostname: bastion-01, user: root, src_ip: 45.155.205.233, event_type: authentication, result: failed, message: 'Failed password for root from 45.155.205.233 port 410 ssh2'}
+  - {service: sshd, hostname: bastion-01, user: root, src_ip: 45.155.205.233, event_type: authentication, result: failed, message: 'Failed password for root from 45.155.205.233 port 411 ssh2'}
+  - {service: sshd, hostname: bastion-01, user: root, src_ip: 45.155.205.233, event_type: authentication, result: failed, message: 'Failed password for root from 45.155.205.233 port 412 ssh2'}
+  - {service: sshd, hostname: bastion-01, user: root, src_ip: 45.155.205.233, event_type: authentication, result: failed, message: 'Failed password for root from 45.155.205.233 port 413 ssh2'}
+  - {service: sshd, hostname: bastion-01, user: root, src_ip: 45.155.205.233, event_type: authentication, result: failed, message: 'Failed password for root from 45.155.205.233 port 414 ssh2'}
+  - {service: sshd, hostname: bastion-01, user: root, src_ip: 45.155.205.233, event_type: authentication, result: failed, message: 'Failed password for root from 45.155.205.233 port 415 ssh2'}

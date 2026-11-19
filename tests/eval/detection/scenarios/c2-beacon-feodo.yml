@@ -1,0 +1,6 @@
+title: Workstation beacons to a Feodo Tracker botnet C2 (QakBot)
+techniques: [T1071]
+events:
+  - repeat: 5
+    every: 60s
+    event: {service: firewall, hostname: fw-01, src_ip: 10.0.2.31, dst_ip: 50.16.16.211, dst_port: 443, action: allow, event_type: network_connection, message: connection allowed}

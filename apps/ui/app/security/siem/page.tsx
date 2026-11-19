@@ -130,12 +130,9 @@ export default function SIEMDashboardPage() {
         ? { resolution_notes: `Marked as ${action} from SIEM dashboard` }
         : { notes: `Action taken from SIEM dashboard` }
 
-      const response = await apiClient.post(`/v1/security/${eventId}/${action}`, body)
-      // apiClient reports HTTP errors as { success: false } instead of throwing;
-      // only reflect the new status once the API has accepted it.
-      if (!response.success) {
-        throw new Error(response.error || `Failed to ${action} event`)
-      }
+      // Rejects with ApiError if the API refuses the action, so the status
+      // below is only applied once the API has accepted it.
+      await apiClient.post(`/v1/security/${eventId}/${action}`, body)
 
       // Update event status in local state
       const statusMap: Record<string, string> = {

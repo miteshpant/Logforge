@@ -1,0 +1,5 @@
+title: Lateral movement with PsExec
+techniques: [T1021.002, T1569.002]
+events:
+  - {service: sysmon, event_id: 1, hostname: WS-044, user: carol, process_name: 'C:\Tools\PsExec64.exe', command_line: 'PsExec64.exe \\WS-051 -s -accepteula cmd.exe', message: Process created}
+  - {service: sysmon, event_id: 1, hostname: WS-051, user: SYSTEM, process_name: 'C:\Windows\PSEXESVC.exe', command_line: 'C:\Windows\PSEXESVC.exe', message: Process created}

@@ -62,6 +62,12 @@ class DatabaseLayer:
         'MitreDefaultLoader': os.getenv('MITRE_DEFAULT_LOADER_KEY', 'mitre-default-loader-service-key'),
         'SecuritySubscriptionChecker': os.getenv('SECURITY_SUBSCRIPTION_CHECKER_KEY', 'security-subscription-checker-service-key'),
         'SigmaProcessor': os.getenv('SIGMA_PROCESSOR_KEY', 'sigma-processor-service-key'),
+        'BacktestService': os.getenv('BACKTEST_SERVICE_KEY', 'backtest-service-key'),
+        'TuningDAO': os.getenv('TUNING_SERVICE_KEY', 'tuning-dao-service-key'),
+        'CaseDAO': os.getenv('CASE_SERVICE_KEY', 'case-dao-service-key'),
+        'ThreatIntelDAO': os.getenv('THREAT_INTEL_SERVICE_KEY', 'threat-intel-dao-service-key'),
+        'PipelineDAO': os.getenv('PIPELINE_SERVICE_KEY', 'pipeline-dao-service-key'),
+        'FieldCatalogue': os.getenv('FIELD_CATALOGUE_SERVICE_KEY', 'field-catalogue-service-key'),
         # Streaming Configuration Service
         'StreamingConfigDAO': os.getenv('STREAMING_CONFIG_SERVICE_KEY', 'streaming-config-service-key'),
         # Migration Service
@@ -122,6 +128,12 @@ class DatabaseLayer:
         'MitreDefaultLoader': ['sigma_rules_mt'],  # Needs to insert default MITRE rules
         'SecuritySubscriptionChecker': ['tenant_subscriptions_mt'],  # Needs to check subscription access
         'SigmaProcessor': ['security_events_mt', 'sigma_rules_mt'],  # Needs to create security events and read rules
+        'BacktestService': ['logs_raw_mt'],  # Reads stored logs to replay rules over them (read-only)
+        'TuningDAO': ['detection_tuning_mt', 'security_events_mt'],  # Tuning records; reads verdicts for suggestions
+        'CaseDAO': ['cases_mt', 'case_events_mt'],  # Cases and their append-only timeline
+        'ThreatIntelDAO': ['threat_feeds_mt', 'threat_indicators_mt', 'logs_raw_mt'],  # Feeds, IOCs, retro-hunts
+        'PipelineDAO': ['ingest_pipelines_mt', 'pipeline_dlq_mt'],  # Ingest pipelines and their dead letters
+        'FieldCatalogue': ['logs_raw_mt'],  # Field catalogue and top values (read only)
         # Streaming Configuration Service
         'StreamingConfigDAO': ['tenant_configs_mt'],  # Needs to manage streaming configurations in tenant configs table
         # Migration Service
@@ -140,7 +152,7 @@ class DatabaseLayer:
     DELETE_ALLOWED_SERVICES = ['SecurityDAO', 'SecurityService', 'TestService', 'QuotaTestService', 'UserDAO', 'AlertDAO']
     
     # Services allowed to perform UPDATE operations (ALTER TABLE ... UPDATE)
-    UPDATE_ALLOWED_SERVICES = ['UserService', 'AlertService', 'SecurityService', 'TestService', 'UserDAO', 'TenantDAO', 'RoleDAO', 'QueryDAO', 'QueryService', 'DashboardDAO', 'DashboardService', 'StorageDAO', 'StorageService', 'AlertDAO', 'SecurityDAO', 'AIDAO', 'ObservabilityDAO', 'EnterpriseDAO', 'SubscriptionDAO', 'QuotaResetService', 'QuotaTestService', 'StorageQuotaSyncService', 'StreamingConfigDAO']
+    UPDATE_ALLOWED_SERVICES = ['MitreDefaultLoader', 'UserService', 'AlertService', 'SecurityService', 'TestService', 'UserDAO', 'TenantDAO', 'RoleDAO', 'QueryDAO', 'QueryService', 'DashboardDAO', 'DashboardService', 'StorageDAO', 'StorageService', 'AlertDAO', 'SecurityDAO', 'AIDAO', 'ObservabilityDAO', 'EnterpriseDAO', 'SubscriptionDAO', 'QuotaResetService', 'QuotaTestService', 'StorageQuotaSyncService', 'StreamingConfigDAO']
     
     # LF-002: table-existence DDL/verification must run at most once per
     # process per service, not on every DatabaseLayer construction (DAOs are

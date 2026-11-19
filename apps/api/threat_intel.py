@@ -91,6 +91,12 @@ class Indicator:
     confidence: int = 50
     source: str = "unknown"
     tags: List[str] = field(default_factory=list)
+    # Phase 3: provenance and lifetime (all optional).
+    first_seen: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+    reference: str = ""
+    description: str = ""
 
     def normalized(self) -> str:
         return normalize_indicator(self.value)
