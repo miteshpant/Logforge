@@ -248,3 +248,11 @@ def test_windows_under_two_hours_scan_the_events():
 
 def test_the_projection_can_be_switched_off():
     assert not compile_("| stats count() by service", start=END - timedelta(days=7), rollup=False).rollup
+
+
+def test_function_results_are_single_operands():
+    """Found by the analyst questions: `not cidrmatch(...)` compiled to
+    NOT (valid ip) AND (in range), which is never true."""
+    q = compile_('| where not cidrmatch("10.0.0.0/8", src_ip) and isnull(attrs.x) = 0 | stats count() as n')
+    assert "(NOT ((isIPv4String(" in q.sql
+    assert "((NOT (isNotNull(" in q.sql

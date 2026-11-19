@@ -15,7 +15,9 @@ for screenshots and demos (see scripts/capture_screenshots.js).
   traffic to two of the C2 servers that ingest-time matching flags;
 * an ingest pipeline for a payments gateway's key=value lines (parse,
   convert, mask card numbers and emails), with traffic through it and two
-  malformed lines in its dead-letter queue.
+  malformed lines in its dead-letter queue;
+* a "Service health" dashboard built from LogforgeQL panels, with Service
+  and Level variables.
 
 Run after scripts/bootstrap_demo.py, against a running stack:
 
@@ -217,6 +219,45 @@ def work_a_case(source_ip: str):
     print(f"case worked: {case_id}")
 
 
+DASHBOARD = "Service health"
+PANELS = [
+    ("Events", "metric", {"w": 1, "h": 1}, '| where service = $service | stats count() as events'),
+    ("Errors", "metric", {"w": 1, "h": 1}, '| where service = $service and level = "error" | stats count() as errors'),
+    ("Distinct hosts", "metric", {"w": 1, "h": 1}, '| where service = $service | stats dc(host) as hosts'),
+    ("Error rate", "metric", {"w": 1, "h": 1},
+     '| where service = $service | stats count() as total, count(if(level = "error", 1, null)) as errors '
+     '| eval error_rate = round(100 * errors / total, 1) | fields error_rate'),
+    ("Events by service", "line_chart", {"w": 2, "h": 2},
+     '| where service = $service and level = $level | timechart span=5m count() by service'),
+    ("Top messages", "bar_chart", {"w": 2, "h": 2},
+     '| where service = $service and level = $level | top limit=6 msg'),
+    ("By host and level", "table", {"w": 4, "h": 2},
+     '| where service = $service | stats count() as events, count(if(level = "error", 1, null)) as errors '
+     'by host, level | sort -events | head 12'),
+]
+
+
+def seed_dashboard():
+    """A dashboard made of LogforgeQL panels, with variables (Phase 6)."""
+    existing = call("GET", "/v1/dashboards")
+    for d in existing.get("dashboards", existing) if isinstance(existing, dict) else existing:
+        if isinstance(d, dict) and d.get("name") == DASHBOARD:
+            call("DELETE", f"/v1/dashboards/{d.get('id') or d.get('dashboard_id')}")
+    created = call("POST", "/v1/dashboards", {
+        "name": DASHBOARD, "description": "Built from LogforgeQL queries",
+        "variables": [
+            {"name": "service", "label": "Service", "type": "query", "query": "| stats count() by service",
+             "include_all": True, "default": "*"},
+            {"name": "level", "label": "Level", "type": "custom", "values": ["error", "warn", "info", "debug"],
+             "include_all": True, "default": "*"}]})
+    dashboard_id = created["dashboard_id"]
+    for i, (name, kind, size, query) in enumerate(PANELS):
+        call("POST", f"/v1/dashboards/{dashboard_id}/widgets", {
+            "name": name, "type": kind, "query_definition": {"logql": query}, "size": size,
+            "position": {"x": i, "y": 0}, "refresh_interval": 300})
+    print(f"dashboard: {dashboard_id}")
+
+
 if __name__ == "__main__":
     TOKEN = demo.admin_token()
     TENANT = demo.tenant_id(TOKEN)
@@ -227,3 +268,4 @@ if __name__ == "__main__":
     seed_threat_intel()
     seed_pipeline()
     work_a_case(brute_source)
+    seed_dashboard()

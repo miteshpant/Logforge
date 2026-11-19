@@ -784,7 +784,10 @@ class Parser:
             if not self.at_op(")"):
                 self.expect_op(",")
         self.next()
-        return func(self.c, args)
+        result = func(self.c, args)
+        # Parenthesised, so a function's SQL is one operand: `not cidrmatch(...)`
+        # negated only the first half of its condition before this.
+        return Col(f"({result.sql})", result.type, literal=result.literal, items=result.items)
 
 
 def compare(left: Col, op: str, right: Col) -> Col:

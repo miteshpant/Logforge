@@ -1,0 +1,99 @@
+# Phase 6 acceptance: analyst questions, each answered by one LogforgeQL query.
+#
+# tests/test_analyst_questions_live.py runs every query against a seeded
+# dataset in ClickHouse and checks the answer against Python;
+# tests/bench/analytics_bench.py measures their latency at 100 M rows.
+# Lookups used: users (user_id -> department, manager), assets (host ->
+# owner, criticality), blocklist (a managed list of IPs).
+
+questions:
+  - id: q01
+    question: Top 10 source IPs by failed logins per hour this week
+    query: '| where attrs.outcome = "failure" | bin span=1h ts | stats count() as failures by ts, src_ip | sort -failures, ts, src_ip | head 10'
+  - id: q02
+    question: Errors per service
+    query: '| where level = "error" | stats count() as errors by service | sort -errors, service'
+  - id: q03
+    question: Error rate per service
+    query: '| stats count() as total, count(if(level = "error", 1, null)) as errors by service | eval error_rate = round(100 * errors / total, 2) | sort -error_rate, service'
+  - id: q04
+    question: p95 and p99 latency per service
+    query: '| stats p95(attrs.duration_ms) as p95, p99(attrs.duration_ms) as p99 by service'
+  - id: q05
+    question: The 5 slowest endpoints at p95 with at least 50 requests
+    query: '| where isnotnull(attrs.uri) | eval route = replace(attrs.uri, "[0-9]+", ":id") | stats count() as requests, p95(attrs.duration_ms) as p95 by route | where requests >= 50 | sort -p95 | head 5'
+  - id: q06
+    question: HTTP requests per day by status class
+    query: '| where service in ["api", "web"] | eval class = case(status >= 500, "5xx", status >= 400, "4xx", "2xx") | timechart span=1d count() by class'
+  - id: q07
+    question: Users with more than 3 failed logins and no successful login
+    query: '| where attrs.outcome = "failure" | stats count() as failures by user_id | join type=left user_id [ | where attrs.outcome = "success" | stats count() as successes by user_id ] | where successes = 0 and failures > 3 | sort -failures, user_id'
+  - id: q08
+    question: Distinct users who logged in, per country
+    query: '| where attrs.outcome = "success" | stats dc(user_id) as users by attrs.country | sort -users, attrs.country'
+  - id: q09
+    question: How many users logged in from more than 2 countries
+    query: '| where attrs.outcome = "success" | stats dc(attrs.country) as countries by user_id | where countries > 2 | stats count() as users'
+  - id: q10
+    question: The 5 hosts with the most errors, with their share
+    query: '| where level = "error" | top limit=5 host'
+  - id: q11
+    question: The 3 rarest user agents
+    query: '| rare limit=3 attrs.user_agent'
+  - id: q12
+    question: Failed logins from outside the internal network, by source IP
+    query: '| where attrs.outcome = "failure" and not cidrmatch("10.0.0.0/8", src_ip) | stats count() as failures by src_ip | sort -failures, src_ip'
+  - id: q13
+    question: Activity from blocklisted IPs
+    query: '| where inlookup("blocklist", src_ip) | stats count() as hits, dc(user_id) as users by src_ip | sort src_ip'
+  - id: q14
+    question: Events per department
+    query: '| lookup users user_id output department | stats count() as events by department'
+  - id: q15
+    question: Errors per team that owns the host
+    query: '| where level = "error" | lookup assets host output owner | stats count() as errors by owner | sort -errors, owner'
+  - id: q16
+    question: Daily event volume per service
+    query: '| timechart span=1d limit=0 count() by service'
+  - id: q17
+    question: The busiest hour of the day
+    query: '| eval hour = hour(ts) | stats count() as events by hour | sort -events, hour | head 1'
+  - id: q18
+    question: The 10 users who transferred the most bytes
+    query: '| stats sum(attrs.bytes) as bytes by user_id | sort -bytes, user_id | head 10'
+  - id: q19
+    question: Average response size and request count by HTTP method
+    query: '| where isnotnull(attrs.method) | stats avg(attrs.bytes) as avg_bytes, count() as requests by attrs.method'
+  - id: q20
+    question: The latest event from each host
+    query: '| dedup host | fields host, ts, service | sort host'
+  - id: q21
+    question: First and last seen, and event count, per user
+    query: '| stats earliest(ts) as first_seen, latest(ts) as last_seen, count() as events by user_id | sort user_id | head 20'
+  - id: q22
+    question: Requests slower than 3x their service's average, per service
+    query: '| eventstats avg(attrs.duration_ms) as svc_avg by service | where attrs.duration_ms > 3 * svc_avg | stats count() as outliers by service'
+  - id: q23
+    question: Server errors per endpoint, with ids normalised
+    query: '| where status >= 500 | eval route = replace(attrs.uri, "[0-9]+", ":id") | stats count() as errors by route | sort -errors, route'
+  - id: q24
+    question: The 5 most queried DNS names
+    query: '| where service = "dns" | top limit=5 attrs.query'
+  - id: q25
+    question: How many DNS names were queried by only one host
+    query: '| where service = "dns" | stats dc(host) as hosts by attrs.query | where hosts = 1 | stats count() as names'
+  - id: q26
+    question: HTTP status code distribution
+    query: '| where service in ["api", "web"] | top limit=10 status'
+  - id: q27
+    question: Distinct source IPs every 6 hours
+    query: '| timechart span=6h dc(src_ip) as ips'
+  - id: q28
+    question: Latency histogram in 250 ms buckets
+    query: '| where isnotnull(attrs.duration_ms) | bin span=250 attrs.duration_ms as bucket | stats count() as requests by bucket'
+  - id: q29
+    question: User and host pairs with 5 or more failed logins
+    query: '| where attrs.outcome = "failure" | stats count() as failures by user_id, host | where failures >= 5 | sort -failures, user_id, host'
+  - id: q30
+    question: Each service's share of all errors
+    query: '| where level = "error" | stats count() as errors by service | eventstats sum(errors) as total | eval share = round(100 * errors / total, 2) | sort -share, service'

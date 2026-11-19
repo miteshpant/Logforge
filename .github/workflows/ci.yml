@@ -114,7 +114,7 @@ jobs:
         env:
           LOGFORGE_TEST_CLICKHOUSE: localhost:8124
           LOGFORGE_REQUIRE_CLICKHOUSE: "1"
-        run: pytest tests/test_logql_pipeline_live.py -v
+        run: pytest tests/test_logql_pipeline_live.py tests/test_analyst_questions_live.py -v
 
       - name: API logs on failure
         if: failure()
