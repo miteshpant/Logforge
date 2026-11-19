@@ -1,0 +1,10 @@
+198.51.100.23 - - [19/Nov/2026:10:00:01 +0000] "GET /api/orders HTTP/1.1" 200 1532 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1)" 0.045
+198.51.100.23 - - [19/Nov/2026:10:00:02 +0000] "GET /api/orders?page=2 HTTP/1.1" 200 1411 "https://shop.example.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1)" 0.052
+198.51.100.40 - - [19/Nov/2026:10:00:03 +0000] "GET /api/orders/77 HTTP/1.1" 200 612 "-" "okhttp/4.12.0" 0.031
+198.51.100.23 - - [19/Nov/2026:10:00:05 +0000] "POST /api/cart HTTP/1.1" 201 88 "https://shop.example.com/cart" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1)" 0.120
+198.51.100.61 - - [19/Nov/2026:10:00:07 +0000] "GET /api/payments HTTP/1.1" 503 197 "-" "okhttp/4.12.0" 2.004
+203.0.113.77 - - [19/Nov/2026:10:00:09 +0000] "GET /static/../../../../etc/passwd HTTP/1.1" 400 157 "-" "curl/8.4.0" 0.001
+203.0.113.77 - - [19/Nov/2026:10:00:10 +0000] "GET /products?id=1%20UNION%20SELECT%20username,password%20FROM%20users HTTP/1.1" 500 0 "-" "sqlmap/1.7.2#stable (https://sqlmap.org)" 0.230
+203.0.113.77 - - [19/Nov/2026:10:00:11 +0000] "GET /admin.php HTTP/1.1" 404 153 "-" "sqlmap/1.7.2#stable (https://sqlmap.org)" 0.002
+198.51.100.40 - - [19/Nov/2026:10:00:13 +0000] "GET /static/app.js HTTP/1.1" 304 0 "https://shop.example.com/" "Mozilla/5.0 (X11; Linux x86_64)" 0.000
+198.51.100.23 - jane [19/Nov/2026:10:00:15 +0000] "GET /account HTTP/1.1" 200 2310 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1)" 0.088

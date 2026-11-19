@@ -1,0 +1,3 @@
+2026/11/19 10:00:07 [error] 2201#0: *10021 upstream timed out (110: Connection timed out) while reading response header from upstream, client: 198.51.100.23, server: shop.example.com, request: "GET /api/payments HTTP/1.1", upstream: "http://10.0.2.15:8080/api/payments", host: "shop.example.com"
+2026/11/19 10:00:11 [error] 2201#0: *10025 open() "/var/www/html/admin.php" failed (2: No such file or directory), client: 203.0.113.77, server: shop.example.com, request: "GET /admin.php HTTP/1.1", host: "shop.example.com"
+2026/11/19 10:01:00 [warn] 2201#0: *10030 an upstream response is buffered to a temporary file /var/cache/nginx/proxy_temp/1/00/0000000001 while reading upstream, client: 198.51.100.40, server: shop.example.com, request: "GET /api/export HTTP/1.1"

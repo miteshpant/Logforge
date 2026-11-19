@@ -70,6 +70,8 @@ Thumbs.db
 # Logs
 logs/
 *.log
+# Content pack samples are test data (pack CI reads them)
+!packages/packs/*/samples/*.log
 
 # Runtime data
 pids/

@@ -1,0 +1,5 @@
+type=SYSCALL msg=audit(1731999600.123:4101): arch=c000003e syscall=59 success=yes exit=0 ppid=812 pid=4242 auid=1001 uid=1001 gid=1001 euid=1001 tty=pts1 comm="xmrig" exe="/tmp/.cache/xmrig" key="exec"
+type=SYSCALL msg=audit(1731999610.456:4102): arch=c000003e syscall=59 success=yes exit=0 ppid=812 pid=4250 auid=1001 uid=1001 gid=1001 euid=1001 tty=pts1 comm="curl" exe="/usr/bin/curl" key="exec"
+type=SYSCALL msg=audit(1731999620.789:4103): arch=c000003e syscall=257 success=yes exit=3 ppid=812 pid=4260 auid=1001 uid=0 gid=0 euid=0 tty=pts1 comm="cat" exe="/usr/bin/cat" key="shadow-access"
+type=SYSCALL msg=audit(1731999630.012:4104): arch=c000003e syscall=257 success=yes exit=3 ppid=1 pid=901 auid=4294967295 uid=0 gid=0 euid=0 tty=(none) comm="unix_chkpwd" exe="/usr/sbin/unix_chkpwd" key="shadow-access"
+type=USER_LOGIN msg=audit(1731999640.345:4105): pid=1201 uid=0 auid=1002 ses=7 msg='op=login acct="deploy" exe="/usr/sbin/sshd" hostname=? addr=10.0.1.20 terminal=sshd res=success'

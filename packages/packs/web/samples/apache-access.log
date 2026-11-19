@@ -1,0 +1,5 @@
+192.0.2.10 - - [19/Nov/2026:11:00:01 +0000] "GET / HTTP/1.1" 200 4512 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+192.0.2.10 - - [19/Nov/2026:11:00:02 +0000] "GET /wp-content/themes/site/style.css HTTP/1.1" 200 8812 "http://blog.example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+203.0.113.90 - - [19/Nov/2026:11:00:05 +0000] "POST /wp-login.php HTTP/1.1" 200 3301 "-" "WPScan v3.8.22 (https://wpscan.com/wordpress-security-scanner)"
+203.0.113.90 - - [19/Nov/2026:11:00:06 +0000] "GET /wp-json/wp/v2/users HTTP/1.1" 200 812 "-" "WPScan v3.8.22 (https://wpscan.com/wordpress-security-scanner)"
+192.0.2.11 - - [19/Nov/2026:11:00:09 +0000] "GET /feed/ HTTP/1.1" 200 15233 "-" "Feedly/1.0"
