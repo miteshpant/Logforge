@@ -80,6 +80,21 @@ markers).
   persistent per-tenant index with type history. LogforgeQL extraction
   uses RE2, so no lookaround or backreferences, and allows at most 32
   extracted fields per query.
+- **AI follow-ups from Phase 8** ([guide](./ai.md)):
+  - **Record the evaluations:** record a real model's answers for `nl2query`
+    and `summaries` (`tests/eval/ai/run_ai_eval.py --record`, needs an API
+    key) and commit the baseline, so the CI gate starts enforcing.
+  - **Share the limits:** the rate limit and the in-request budget check are
+    per API process. Move both to a shared counter (Redis or ClickHouse) so
+    replicas and parallel requests can't overshoot.
+  - **Redact renamed values:** redact at the query layer too, so values
+    renamed in a query (`| eval v = attrs.password`) are still covered.
+  - **Enforce API key scopes:** they are set at login but never checked
+    (pre-existing, every route).
+  - **Fix the rule-based NLQ:** give it per-intent permission checks and
+    parameterised SQL, then open the fallback to `ai:read` again.
+  - **Get a human sign-off** of the security review before enabling AI in
+    production.
 - **Content pack follow-ups from Phase 7** ([guide](./packs.md)): packs
   come only from the catalogue shipped with the deployment; add a registry
   (or git source) with signed packs, and per-tenant uploads. An install that

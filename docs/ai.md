@@ -4,7 +4,8 @@ Logforge can answer questions about a tenant's own logs, alerts, cases and
 threat intelligence with a language model, and **cites every source**.
 AI is **off by default**: a deployment has to enable it and offer a
 provider, and each tenant has to opt in. With AI off, questions get the
-existing rule-based answer, as before.
+existing rule-based answer, as before, for those allowed to use it
+(`/v1/ai/query`, tenant admins); others are told AI is off.
 
 ![AI answer with citations](images/ai-answer.png)
 
@@ -39,7 +40,9 @@ in the deployment, not from a real model.</sub>
     ```
 
     `LOGFORGE_AI_ENABLED=false` switches AI off whatever the file says (the
-    environment can't switch it on). `external` (true by default for hosted
+    environment can't switch it on). `ollama` providers default to
+    `external: false`; set `external: true` if yours runs outside your
+    network, so users are told. `external` (true by default for hosted
     kinds) is shown to users with every answer. The Anthropic adapter turns
     on server-side refusal fallbacks by default (`fallbacks: false` turns
     them off) and takes an optional `effort`.
@@ -80,19 +83,30 @@ every step ──▶ audit log (what was actually sent, after redaction)
 * **Prompt injection:** log lines can contain text written by an attacker.
   The system prompt tells the model to treat tool results as data, and the
   tools can only read, as the person asking. An injected instruction can
-  still distort an answer, which is why answers carry their sources.
+  still distort an answer (even one that cites real sources), make the
+  model run lookups the person didn't ask for, or spend the budget, which
+  is why answers carry their sources and every step is audited. Answers
+  are shown as plain text, and citation links are built by the server, so
+  they always point inside Logforge.
+* **Links:** a Log Explorer link opened from Logforge (an AI citation) runs
+  its query; one opened from another site only fills it in.
 
 ## Data controls
 
-* **Redaction** happens before anything leaves for a provider: the question
-  and every tool result.
+* **Redaction** happens before anything leaves for a provider: the question,
+  every tool result and every tool error, before long values are cut.
   * **Field names:** `password`, `token`, `authorization`, `cookie`,
     `api_key`, `ssn` and others from `ai.yml`, plus fields a tenant adds.
-    Matches are case-insensitive, also as a suffix (`db_password`), or as a
-    dotted path (`attrs.customer_email`).
-  * **Secret-looking values anywhere in text:** `password=...` and
-    "password is ..." pairs, bearer tokens, private keys, JWTs, and AWS,
-    GitHub, Slack and `sk-` keys.
+    Matches are case-insensitive, on any word of the key (`db_password`,
+    `password_hash`, `sessionid`), or the end of a dotted path
+    (`attrs.customer_email`, at any depth).
+  * **Secret-looking values anywhere in text:** `password=`, `"password":`,
+    `access_token=` and "password is ..." pairs, bearer and basic
+    credentials, cookies, credentials in URLs, private keys (even cut
+    short), JWTs, and AWS, GitHub, GitLab, Slack and `sk-` keys.
+  * **Not covered:** a value renamed by a query (`| eval v = attrs.password`)
+    is no longer recognised by its field name; only the text patterns apply
+    to it.
 * **Opt-in per tenant** and a **global switch**, both checked on every
   request.
 * **Visible indicator:** every answer says *External model: ...*,
@@ -111,9 +125,13 @@ every step ──▶ audit log (what was actually sent, after redaction)
   * **Requests-per-minute limit:** a tenant admin can lower both, never
     raise them.
   * **Over a limit:** the request gets HTTP 429.
-  * **Per request:** at most `max_tool_calls` lookups and `max_tokens`
-    tokens per reply; tool results are capped at 50 rows and 30,000
-    characters.
+  * **Per request:** at most `max_request_tokens` tokens in all (200,000),
+    `max_tool_calls` lookups and `max_tokens` tokens per reply; tool results
+    are capped at 50 rows and 30,000 characters.
+  * **Concurrency:** before every model call the request's usage is written
+    and the month's usage re-read, so parallel requests can overshoot the
+    budget by at most one model call each. The rate limit is counted per
+    API process.
 
 ## Evaluation
 
@@ -138,5 +156,8 @@ Tenant admins, security analysts and DevOps engineers have `ai:read`.
 
 ## Security review
 
-The review of data flow and tenant isolation is recorded in the
-[platform roadmap](PLATFORM_ROADMAP.md) (Phase 8).
+An independent review of the data flow and tenant isolation (2026-11-19)
+found one high, two medium and several low issues. All are fixed, and each
+fix has a test; what was found, fixed and left is in the
+[platform roadmap](PLATFORM_ROADMAP.md) (Phase 8). A sign-off by your own
+security team is still needed before turning AI on in production.

@@ -826,6 +826,79 @@ contribute most.
 **Goal:** the plumbing that makes every AI feature safe, private, auditable
 and measurable.
 
+> **Status: done (2026-11-19), with one acceptance criterion awaiting a
+> human sign-off and the gaps listed below.** Guide: [AI](./ai.md).
+>
+> | Acceptance criterion | Result |
+> |---|---|
+> | A security review signs off on data flow and tenant isolation of AI calls | **Reviewed, not yet signed off.** An independent review (by an AI reviewer, of the code, not a penetration test) found one high, two medium and several low issues, listed below; all are fixed, each with a test. Signing off still needs a person on the project's security side. |
+> | AI can be disabled per tenant and globally, verified by route tests | **Met.** `tests/routes_tests/test_ai_assistant_router.py` runs on the live stack in CI. It checks that with the deployment's AI off a tenant can't switch it on, that `/v1/ai/ask` then sends nothing to a model and audits nothing, and that other tenants' AI routes are refused. The per-tenant switch with AI on is covered in `tests/test_ai_api.py` (a fake provider), and both were run by hand on the live stack against a scripted stand-in. |
+>
+> - **Done: provider interface** (`apps/api/ai/providers/`). One chat and
+>   tool-calling interface, with adapters for OpenAI-compatible endpoints,
+>   Anthropic (the official SDK) and Ollama. Providers are configured in
+>   `config/ai.yml`, with keys read from named environment variables. No
+>   provider is configured and AI is off by default;
+>   `LOGFORGE_AI_ENABLED=false` switches it off globally.
+> - **Done: grounding through tools.** The model sees data only through
+>   four read-only tools: run a LogforgeQL query, fetch an alert, fetch a
+>   case, look up an indicator. Each tool call is authorised as the HTTP
+>   request it stands for, with the asking person's roles in their tenant.
+> - **Done: citations.** Every item a tool returns gets an id. The answer's
+>   citations are checked: an uncited sentence, a citation no tool issued, or
+>   no citations at all is flagged. The UI shows each citation as a link to
+>   its event, alert, case, indicator or query.
+> - **Done: data controls.**
+>   - Configured fields and secret-looking values are redacted before
+>     anything is sent: the question, every tool result and every tool
+>     error.
+>   - AI needs a per-tenant opt-in as well as the global switch.
+>   - Every answer says whether an external model answered it.
+> - **Done: audit and cost controls.**
+>   - Every prompt, response, tool call, tool result and error is written to
+>     `ai_audit_mt` (migration 025) as sent, kept 90 days by default.
+>   - Monthly token budget, per-request cap and per-minute rate limit; a
+>     tenant can lower them, not raise them.
+> - **Done: evaluation wiring.** Two single-call features, `nl2query` and
+>   `summarise`, run against the Phase 0 datasets. A recorded provider
+>   replays a real model's answers in CI, and `tests/test_ai_eval_gate.py`
+>   fails any feature below its baseline.
+> - **Done: fallback.** With AI off, `/v1/ai/ask` gives the rule-based NLQ
+>   answer to those allowed `/v1/ai/query`; the existing `/v1/ai/*` routes
+>   are unchanged.
+> - **Found by the security review and fixed:**
+>   - **High:** the rule-based fallback reads logs, alerts and security
+>     events with no per-intent permission checks. It also put service names
+>     from the tenant's logs into SQL unescaped: a crafted service name
+>     dropped the tenant filter. This phase had made it reachable with
+>     `ai:read`. It now needs `ai:write`, and only plain service names reach
+>     the SQL.
+>   - **Medium:** redaction ran after long values were cut, so a private key
+>     cut past its end got through. Dotted field names never matched nested
+>     tool output. Common secret forms were missed: JSON-style pairs,
+>     `access_token=`, Basic credentials, cookies, credentials in URLs, AWS
+>     secret keys, GitLab tokens.
+>   - **Medium-low:** usage was written only when a request ended, so
+>     concurrent requests could overshoot the monthly budget.
+>   - **Low:** Log Explorer links from other sites ran their query on load;
+>     the audit TTL was altered in every new process; calls over the limit
+>     and cancelled requests weren't audited.
+>
+> **Not done** (tracked in [ROADMAP.md](./ROADMAP.md)):
+> - **No recorded model evaluations yet.** Recording needs a model API key;
+>   until then the gate reports both features as skipped.
+> - **Rate limits aren't shared:** the rate limit and the in-request budget
+>   check are per API process, and parallel requests can overshoot the
+>   budget by one model call each. A shared counter is needed.
+> - **Renamed values escape field-name redaction:** a value renamed by a
+>   query keeps only the text-pattern redaction.
+> - **API key scopes are not enforced** for any route (pre-existing): AI
+>   calls with an API key get the service account's roles.
+> - **Prompt injection is mitigated, not prevented:** injected log text can
+>   still distort an answer or spend budget.
+> - **The rule-based fallback still checks no per-intent permissions**, so
+>   it stays limited to `ai:write`.
+
 ### Deliverables
 
 1. **Provider interface** (`apps/api/ai/providers/`): one interface for chat
