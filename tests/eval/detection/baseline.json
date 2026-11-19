@@ -204,6 +204,14 @@
       "false_positives": 0,
       "true_positives": 1
     },
+    "logforge_lf-schema-failed-logon": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
+    "logforge_lf-schema-logon-brute-force": {
+      "false_positives": 0,
+      "true_positives": 1
+    },
     "logforge_lf-ti-known-c2": {
       "false_positives": 0,
       "true_positives": 3
@@ -1420,6 +1428,19 @@
         "logforge_lf-c-mfa-fatigue"
       ]
     },
+    "multi-source-logon-brute-force": {
+      "detected": [
+        "T1110"
+      ],
+      "expected": [
+        "T1110"
+      ],
+      "missing": [],
+      "rules": [
+        "logforge_lf-schema-failed-logon",
+        "logforge_lf-schema-logon-brute-force"
+      ]
+    },
     "password-spray": {
       "detected": [
         "T1110.003"
@@ -1527,8 +1548,8 @@
     "benign_events": 2000,
     "false_positive_alerts": 0,
     "false_positives_per_1000": 0.0,
-    "rules": 291,
-    "scenarios_detected": 27,
-    "scenarios_total": 27
+    "rules": 293,
+    "scenarios_detected": 28,
+    "scenarios_total": 28
   }
 }

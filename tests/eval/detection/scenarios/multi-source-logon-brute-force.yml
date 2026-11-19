@@ -1,0 +1,15 @@
+title: Password guessing across SSH, Windows and Okta from one address (schema-mapped)
+techniques: [T1110]
+# Events as the linux-auth, windows-security and okta mapping pipelines emit
+# them (attrs.ocsf: OCSF Authentication). The schema rules count failures
+# across the three sources.
+events:
+  - {service: sshd, msg: Failed password for root from 203.0.113.211 port 50122 ssh2, attrs: {ocsf: {class_uid: 3002, activity_id: 1, status_id: 2, actor: {user: {name: root}}, src_endpoint: {ip: 203.0.113.211}}}}
+  - at: 20s
+    event: {service: sshd, msg: Failed password for admin from 203.0.113.211 port 50123 ssh2, attrs: {ocsf: {class_uid: 3002, activity_id: 1, status_id: 2, actor: {user: {name: admin}}, src_endpoint: {ip: 203.0.113.211}}}}
+  - at: 40s
+    event: {service: windows-security, msg: Windows 4625 Logon Failure for administrator, attrs: {EventID: 4625, ocsf: {class_uid: 3002, activity_id: 1, status_id: 2, actor: {user: {name: administrator}}, src_endpoint: {ip: 203.0.113.211}}}}
+  - at: 60s
+    event: {service: windows-security, msg: Windows 4625 Logon Failure for administrator, attrs: {EventID: 4625, ocsf: {class_uid: 3002, activity_id: 1, status_id: 2, actor: {user: {name: administrator}}, src_endpoint: {ip: 203.0.113.211}}}}
+  - at: 80s
+    event: {service: okta, msg: User login to Okta, attrs: {eventType: user.session.start, ocsf: {class_uid: 3002, activity_id: 1, status_id: 2, actor: {user: {name: admin@acme.example}}, src_endpoint: {ip: 203.0.113.211}}}}

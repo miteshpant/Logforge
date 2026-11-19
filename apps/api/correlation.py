@@ -158,12 +158,22 @@ def field_value(event: Dict[str, Any], name: str) -> Any:
     """Top-level field, then `attrs` (where ingestion keeps caller fields)
     when the column is missing or empty; dotted names walk nested objects."""
     if "." in name:
-        current: Any = event
-        for part in name.split("."):
-            if not isinstance(current, dict) or part not in current:
-                return None
-            current = current[part]
-        return current
+        attrs = event.get("attrs") if isinstance(event.get("attrs"), dict) else None
+        for root in (event, attrs):
+            current: Any = root
+            for part in name.split("."):
+                if not isinstance(current, dict) or part not in current:
+                    current = None
+                    break
+                current = current[part]
+            if current not in (None, ""):
+                return current
+        if name.startswith("ocsf."):
+            # Phase 5 common schema: today's fields mapped to OCSF at read time.
+            from ocsf_schema import resolve
+
+            return resolve(event, name[len("ocsf."):])
+        return None
     value = event.get(name)
     if value not in (None, ""):
         return value
