@@ -109,3 +109,13 @@ def test_the_router_passes_extractions_through():
     p.update(start_time="2026-11-19T10:00:00+00:00", end_time="2026-11-19T11:00:00+00:00")
     request = build_query_request(p, "acme")
     assert [e.name for e in request.extractions] == ["user"]
+
+
+def test_escaped_quotes_inside_patterns_do_not_split_stages():
+    """Found by the extraction benchmark: `\\"` inside a quoted pattern ended
+    the string early, so the rest of the query was swallowed into the stage."""
+    p = payload(r'| rex field=attrs "\"region\":\"(?<region>[^\"|]+)\"" | where region = "eu-west-1" | stats count()')
+    assert p["extractions"][0]["pattern"] == r'"region":"(?P<region>[^"|]+)"'
+    assert p["filters"] == [{"field": "region", "operator": "eq", "value": "eu-west-1"}]
+    p = payload(r'| where msg = "say \"a or b\"" | limit 1')
+    assert p["filters"][0]["value"] == 'say "a or b"'

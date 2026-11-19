@@ -141,7 +141,8 @@ def _parse_value(raw: str) -> Any:
     text = raw.strip()
 
     if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
-        return text[1:-1]
+        # \" and \\ are escapes; other backslashes (regex \d) are kept as written.
+        return re.sub(r"\\([\\" + text[0] + r"])", r"\1", text[1:-1])
 
     if text.startswith("[") and text.endswith("]"):
         inner = text[1:-1].strip()
@@ -172,10 +173,15 @@ def _split_top_level(text: str, delimiter: str) -> List[str]:
     parts, current, depth = [], [], 0
     quote: Optional[str] = None
 
+    escaped = False
     for char in text:
         if quote:
             current.append(char)
-            if char == quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True  # \" does not end the string
+            elif char == quote:
                 quote = None
             continue
 
@@ -225,6 +231,10 @@ def _split_conditions(expression: str) -> List[Tuple[str, str]]:
 
         if quote:
             current.append(char)
+            if char == "\\" and index + 1 < len(expression):
+                current.append(expression[index + 1])  # an escaped character
+                index += 2
+                continue
             if char == quote:
                 quote = None
             index += 1
