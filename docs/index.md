@@ -35,6 +35,8 @@ observability, self-hosted with one command. Apache 2.0.
 - **[Content packs](packs.md)**: one-step installs for Linux, web servers,
   AWS, Okta and Google Workspace, Windows and Kubernetes (pipelines, rules,
   searches, dashboards), and how to write a pack.
+- **[AI](ai.md)**: grounded answers with citations from your own data, off by
+  default; providers, data controls, audit, budgets and evaluation.
 
 ## Where it's going
 

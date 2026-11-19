@@ -49,6 +49,7 @@ nav:
   - Common schema: schema.md
   - Query language: query-language.md
   - Content packs: packs.md
+  - AI: ai.md
   # Static Redoc page (docs/api/index.html); nav entries must be pages or URLs.
   - API reference: https://miteshpant.github.io/Logforge/api/
   - Roadmap:

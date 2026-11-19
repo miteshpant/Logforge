@@ -664,6 +664,21 @@
         "title": "AnomalyDetectionRequest",
         "type": "object"
       },
+      "AskBody": {
+        "properties": {
+          "question": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "AskBody",
+        "type": "object"
+      },
       "Assign": {
         "properties": {
           "assignee": {
@@ -4521,6 +4536,60 @@
           "severities"
         ],
         "title": "ServiceGroupDetail",
+        "type": "object"
+      },
+      "SettingsBody": {
+        "properties": {
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "monthly_token_budget": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Token Budget"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "redact_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Redact Fields",
+            "type": "array"
+          },
+          "requests_per_minute": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requests Per Minute"
+          }
+        },
+        "title": "SettingsBody",
         "type": "object"
       },
       "SetupTokenResponse": {
@@ -9527,6 +9596,115 @@
         ]
       }
     },
+    "/v1/ai/ask": {
+      "post": {
+        "description": "A grounded answer: the model looks things up with read-only tools (as you), and cites what it used.\nWith AI off for this tenant or deployment, the rule-based answer (`mode: rule_based`) and why.",
+        "operationId": "ai_ask_v1_ai_ask_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Ai Ask V1 Ai Ask Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ai Ask",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
+    "/v1/ai/audit": {
+      "get": {
+        "description": "Every prompt, tool call, tool result and response, as sent to the provider (after redaction).",
+        "operationId": "ai_audit_v1_ai_audit_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "request_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Request Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Ai Audit V1 Ai Audit Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ai Audit",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
     "/v1/ai/baselines": {
       "get": {
         "description": "List ML model baselines",
@@ -10948,6 +11126,118 @@
         "summary": "Get Query History",
         "tags": [
           "ai"
+        ]
+      }
+    },
+    "/v1/ai/settings": {
+      "get": {
+        "operationId": "get_ai_settings_v1_ai_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Ai Settings V1 Ai Settings Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Ai Settings",
+        "tags": [
+          "ai-assistant"
+        ]
+      },
+      "put": {
+        "description": "Opt in or out, choose a provider, add redacted fields, lower budgets.",
+        "operationId": "put_ai_settings_v1_ai_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Put Ai Settings V1 Ai Settings Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Ai Settings",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
+    "/v1/ai/status": {
+      "get": {
+        "description": "Whether AI answers are on for this tenant, the provider, and whether it is external.",
+        "operationId": "ai_status_v1_ai_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Ai Status V1 Ai Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ai Status",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
+    "/v1/ai/usage": {
+      "get": {
+        "operationId": "ai_usage_v1_ai_usage_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Ai Usage V1 Ai Usage Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ai Usage",
+        "tags": [
+          "ai-assistant"
         ]
       }
     },

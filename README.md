@@ -30,6 +30,7 @@ rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 | **Field explorer** (every field, its top values, add to query; common-schema fields)<br>![Field explorer](./docs/images/field-explorer.png) | **Query builder** (a form that writes LogforgeQL)<br>![Query builder](./docs/images/query-builder.png) |
 | **Query results** (a `timechart` as a chart and a table)<br>![Query results](./docs/images/query-results.png) | **Dashboards from queries** (LogforgeQL panels, Service and Level variables)<br>![Dashboards from queries](./docs/images/dashboard-queries.png) |
 | **Content Packs** (one-step installs for common sources)<br>![Content Packs](./docs/images/content-packs.png) | **Content pack plan** (what installing or upgrading changes, before it does)<br>![Content pack plan](./docs/images/content-pack.png) |
+| **AI answers** (cited sources, external-model indicator, audit log; off by default; shown with a scripted test stand-in)<br>![AI answers](./docs/images/ai-answer.png) | |
 
 ## Contents
 
@@ -60,6 +61,7 @@ rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 | Lookup tables (CSV) and managed lists; saved and scheduled searches with alerts and CSV reports; dashboard panels from queries, with variables | ✅ Implemented | `apps/api/lookup_tables.py`, `apps/api/saved_searches.py`, `apps/api/dashboard_queries.py` |
 | Query performance: hourly-count projection for counts by service / level / status, skip indexes, cost estimate and per-plan scan limits | ✅ Implemented (queries reading `attrs` over 100 M events take seconds, see [benchmarks](./docs/benchmarks/README.md)) | `apps/api/query_cost.py`, `config/query_limits.yml` |
 | **Content packs**: Linux, nginx/Apache, AWS CloudTrail and VPC Flow Logs, Okta and Google Workspace, Windows Security and Sysmon, Kubernetes; each with pipelines, rules, searches and a dashboard; plan, install, upgrade (keeping local changes) and remove per tenant; checked in CI against sample data | ✅ Implemented | `packages/packs/`, `apps/api/pack_manager.py`, [guide](./docs/packs.md) |
+| **AI foundation**: one provider interface (OpenAI-compatible, Anthropic, Ollama), read-only tools that run with the asker's permissions, citations checked on every answer, redaction before data leaves, per-tenant opt-in, audit log, token budgets and rate limits; off by default, rule-based answers when off | ✅ Implemented (no recorded model evaluations yet) | `apps/api/ai/`, [guide](./docs/ai.md) |
 | Alerting: threshold, pattern, anomaly and saved-search rules | ✅ Implemented | `apps/api/alert_engine.py` |
 | Notifications: webhook, Slack, email, PagerDuty, Teams, Discord | ✅ Implemented (off by default) | `apps/api/services/notification_service.py` |
 | Sigma detection engine: ~300 fixture-verified rules (vendored SigmaHQ + Logforge's own `packages/rules/`) | ✅ Implemented | `apps/api/sigma_engine.py`, `apps/api/content/rules/`, `packages/rules/` |
