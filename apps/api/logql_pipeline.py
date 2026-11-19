@@ -167,6 +167,7 @@ class Col:
     type: str
     literal: Any = None       # the Python value, for literals
     items: Optional[List["Col"]] = None  # for lists
+    json_text: Optional[str] = None      # attrs.<path>: the JSON column it is read from
 
 
 def q(name: str) -> str:
@@ -325,7 +326,9 @@ class Compiler:
             raise RollupUnsupported(name)
         try:
             if is_complex_field(name):
-                return Col(f"({complex_field_sql(validate_field(name), self.bind_hint)})", STR)
+                field_name = validate_field(name)
+                return Col(f"({complex_field_sql(field_name, self.bind_hint)})", STR,
+                           json_text="attrs" if field_name.startswith("attrs.") else None)
             validate_field(name)
         except QueryFieldError as e:
             raise PipelineError(str(e)) from None
@@ -696,7 +699,11 @@ class Parser:
             lhs, rendered = left.sql, [to_num(i) for i in items]
         else:
             lhs, rendered = left.sql, [i.sql for i in items]
-        return Col(f"({lhs} IN ({', '.join(rendered)}))", BOOL)
+        result = Col(f"({lhs} IN ({', '.join(rendered)}))", BOOL)
+        if left.json_text and all(_verbatim(i) for i in items):
+            needles = ", ".join(i.sql for i in items)
+            return Col(f"(multiSearchAny({left.json_text}, [{needles}]) AND {result.sql})", BOOL)
+        return result
 
     def text_match(self, left: Col, how: str, right: Col) -> Col:
         subject = to_str(left)
@@ -790,7 +797,27 @@ class Parser:
         return Col(f"({result.sql})", result.type, literal=result.literal, items=result.items)
 
 
+# Characters every JSON encoder writes as themselves (no escapes): a value made
+# only of these appears verbatim in the stored JSON text.
+_VERBATIM_RE = re.compile(r"^[A-Za-z0-9 _.:@,;=+*()\[\]{}!?#$%^~|'`-]+$")
+
+
+def _verbatim(col: Col) -> bool:
+    return col.type == STR and isinstance(col.literal, str) and bool(_VERBATIM_RE.match(col.literal))
+
+
 def compare(left: Col, op: str, right: Col) -> Col:
+    result = _compare(left, op, right)
+    # attrs.x = "text": scan for the text before parsing the JSON. A row whose
+    # JSON doesn't contain it can't match, so this only skips work.
+    if op == "=":
+        for field, value in ((left, right), (right, left)):
+            if field.json_text and _verbatim(value):
+                return Col(f"(position({field.json_text}, {value.sql}) > 0 AND {result.sql})", BOOL)
+    return result
+
+
+def _compare(left: Col, op: str, right: Col) -> Col:
     if ALL_TYPE in (left.type, right.type):
         if op not in ("=", "!="):
             _not_all(left if left.type == ALL_TYPE else right)
@@ -1037,10 +1064,44 @@ class Pipeline:
         parser = Parser(self.c, scope, tokenize(body), "eventstats")
         aggs = self.aggregations(parser, "eventstats")
         by = self.by_fields(parser, scope, "eventstats")
-        window = f"OVER (PARTITION BY {', '.join(c.sql for _, c in by)})" if by else "OVER ()"
-        for name, col in aggs:
-            scope = self.add_column(scope, name, Col(f"{col.sql} {window}", col.type))
-        return scope
+        # The group values are computed with GROUP BY and joined back on the
+        # group keys. (A window function sorted every row by the partition:
+        # 36 s for `eventstats avg(...) by service` over 100 M events, against
+        # two scans this way.) Keys join null-safely, so a null key is a group
+        # like any other, as it is in a window partition.
+        keys = []
+        for i, (_, col) in enumerate(by):
+            scope = self.add_column(scope, f"__ek{i}", col)
+            keys.append(f"__ek{i}")
+        group_select = [q(k) for k in keys] + [f"{col.sql} AS {q(f'__ev{i}')}" for i, (_, col) in enumerate(aggs)]
+        group = f"SELECT {', '.join(group_select)} FROM ({scope.sql})"
+        if keys:
+            group += f" GROUP BY {', '.join(q(k) for k in keys)}"
+            on = " AND ".join(f"isNotDistinctFrom(l.{q(k)}, r.{q(k)})" for k in keys)
+            joined = f"FROM ({scope.sql}) AS l LEFT JOIN ({group}) AS r ON {on}"
+        else:
+            joined = f"FROM ({scope.sql}) AS l CROSS JOIN ({group}) AS r"
+        values = ", ".join(f"r.{q(f'__ev{i}')} AS {q(f'__ev{i}')}" for i in range(len(aggs)))
+        if scope.open:
+            scope = Scope(**{**scope.__dict__, "sql": f"SELECT l.*, {values} {joined}",
+                             "real": scope.real | {f"__ev{i}" for i in range(len(aggs))}})
+        else:
+            kept = ", ".join(f"l.{q(n)} AS {q(n)}" for n in scope.cols)
+            scope = Scope(**{**scope.__dict__, "sql": f"SELECT {kept}, {values} {joined}"})
+            scope.cols = {**scope.cols, **{f"__ev{i}": Col(q(f"__ev{i}"), c.type) for i, (_, c) in enumerate(aggs)}}
+        for i, (name, col) in enumerate(aggs):
+            scope = self.add_column(scope, name, Col(q(f"__ev{i}"), col.type))
+        return self.drop_helpers(scope, keys + [f"__ev{i}" for i in range(len(aggs))])
+
+    def drop_helpers(self, scope: Scope, names: List[str]) -> Scope:
+        if scope.open:
+            return Scope(**{**scope.__dict__, "sql": f"SELECT * EXCEPT ({', '.join(q(n) for n in names)}) "
+                                                     f"FROM ({scope.sql})",
+                            "real": scope.real - set(names), "computed": [n for n in scope.computed if n not in names],
+                            "cols": {k: v for k, v in scope.cols.items() if k not in names}})
+        cols = {k: v for k, v in scope.cols.items() if k not in names}
+        return Scope(**{**scope.__dict__, "sql": f"SELECT {', '.join(q(n) for n in cols)} FROM ({scope.sql})",
+                        "cols": cols})
 
     def timechart(self, scope: Scope, body: str) -> Scope:
         options, body = _options(body, ("span", "limit"), "timechart")
@@ -1164,8 +1225,15 @@ class Pipeline:
         names, _ = _field_list(parser, "dedup")
         cols = [self.c.resolve(scope, n) for n in names]
         present = " AND ".join(nonempty(c) for c in cols)
-        sql = (f"SELECT * FROM ({scope.sql}) WHERE {present}{self.order_clause(scope)} "
-               f"LIMIT {keep} BY {', '.join(c.sql for c in cols)}")
+        keys = ", ".join(c.sql for c in cols)
+        source = f"SELECT * FROM ({scope.sql}) WHERE {present}"
+        if keep == 1 and scope.events and not scope.order and not scope.order_frozen:
+            # The latest event per key: find each key's latest time first, so
+            # only those events are sorted (sorting every event took 12 s for
+            # `dedup host` over 100 M events).
+            ts = self.c.resolve(scope, "ts").sql
+            source = f"{source} AND ({keys}, {ts}) IN (SELECT {keys}, max({ts}) FROM ({source}) GROUP BY {keys})"
+        sql = f"SELECT * FROM ({source}){self.order_clause(scope)} LIMIT {keep} BY {keys}"
         return Scope(**{**scope.__dict__, "sql": sql})
 
     def fields(self, scope: Scope, body: str, stage: str = "fields") -> Scope:

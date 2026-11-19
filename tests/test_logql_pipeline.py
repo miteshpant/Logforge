@@ -107,7 +107,7 @@ def test_stats_after_stats_and_eventstats():
                  "max(failures) as worst")
     assert q.columns == ["users", "worst"]
     q = compile_("| eventstats avg(status) as avg_status by service | where status > avg_status * 2")
-    assert "OVER (PARTITION BY" in q.sql and q.result_type == "events"
+    assert "GROUP BY `__ek0`" in q.sql and "isNotDistinctFrom" in q.sql and q.result_type == "events"
 
 
 def test_the_row_limit_is_always_applied():
@@ -256,3 +256,37 @@ def test_function_results_are_single_operands():
     q = compile_('| where not cidrmatch("10.0.0.0/8", src_ip) and isnull(attrs.x) = 0 | stats count() as n')
     assert "(NOT ((isIPv4String(" in q.sql
     assert "((NOT (isNotNull(" in q.sql
+
+
+# ---------------------------------------------------------------------------
+# attrs reads at 100 M rows (P6.7)
+# ---------------------------------------------------------------------------
+
+def test_an_attrs_field_is_parsed_once_in_the_common_case():
+    """JSONHas + JSONExtractString parsed every row's JSON twice; reading the
+    key and falling back only when it is empty parses it once."""
+    q = compile_("| stats count() by attrs.outcome")
+    assert "JSONHas" not in q.sql
+    assert q.sql.count("JSONExtractString(attrs, 'attrs'") >= 1  # the legacy envelope is still read
+
+
+@pytest.mark.parametrize("query, prefilter", [
+    ('| where attrs.outcome = "failure" | stats count() as n', "position(attrs, %("),
+    ('| where attrs.country in ["DE", "FR"] | stats count() as n', "multiSearchAny(attrs, ["),
+])
+def test_string_equality_on_attrs_is_prefiltered_by_a_substring_scan(query, prefilter):
+    q = compile_(query)
+    assert prefilter in q.sql
+    assert "failure" in q.params.values() or "DE" in q.params.values()
+
+
+@pytest.mark.parametrize("query", [
+    '| where attrs.name = "Zoë" | head 1',          # non-ASCII is escaped in stored JSON
+    '| where attrs.q = "say \\"hi\\"" | head 1',   # so are quotes
+    "| where attrs.n = 5 | head 1",                # numbers compare as numbers
+    '| where attrs.outcome != "failure" | head 1', # only = and in narrow
+    '| where ocsf.status = "Failure" | head 1',    # derived from several sources
+])
+def test_no_prefilter_where_it_could_drop_a_match(query):
+    q = compile_(query)
+    assert "position(attrs" not in q.sql and "multiSearchAny(attrs" not in q.sql

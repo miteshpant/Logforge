@@ -490,6 +490,11 @@ async def run_pipeline_query(query_text: str, request_body: Dict[str, Any], cust
     except HTTPException:
         raise
     except Exception as e:
+        if "TIMEOUT_EXCEEDED" in str(e) or "Code: 159." in str(e):
+            raise HTTPException(status_code=504, detail=(
+                f"The query did not finish within {PIPELINE_QUERY_TIMEOUT_SECONDS} s. Narrow the time range, "
+                "filter on service or level first, or count with stats count() by service / level / status "
+                "(those read the hourly counts)."))
         raise internal_error(e, "LogQL query failed")
     return {
         "logs": result["rows"],

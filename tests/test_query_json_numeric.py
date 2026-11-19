@@ -22,7 +22,7 @@ def render(field, op, value):
 @pytest.mark.parametrize("op, symbol", [(QueryOperator.EQ, "="), (QueryOperator.GT, ">"), (QueryOperator.LTE, "<=")])
 def test_numbers_compare_numerically_on_json_fields(op, symbol):
     sql, params = render("attrs.order_id", op, 94598)
-    assert sql.startswith("toFloat64OrNull(if(JSONHas(attrs, %(p_jsonkey)s)")
+    assert sql.startswith("toFloat64OrNull(if(JSONExtractString(attrs, %(p_jsonkey)s) != ''")
     assert sql.endswith(f") {symbol} %(p)s") and params["p"] == 94598
     sql, _ = render("raw_data.bytes", op, 1.5)
     assert sql == f"toFloat64OrNull(JSONExtractString(raw_data, %(p_jsonkey)s)) {symbol} %(p)s"
@@ -30,7 +30,7 @@ def test_numbers_compare_numerically_on_json_fields(op, symbol):
 
 def test_strings_and_columns_are_unchanged():
     sql, _ = render("attrs.action", QueryOperator.EQ, "REFUNDED")
-    assert sql.startswith("if(JSONHas(attrs") and "toFloat64OrNull" not in sql
+    assert sql.startswith("if(JSONExtractString(attrs") and "toFloat64OrNull" not in sql
     sql, _ = render("status", QueryOperator.GTE, 500)
     assert sql == "status >= %(p)s"
     sql, _ = render("attrs.flag", QueryOperator.EQ, True)  # booleans are not numbers here

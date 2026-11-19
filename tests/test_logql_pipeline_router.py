@@ -126,3 +126,17 @@ def test_lookups_are_loaded_for_queries_that_use_them(engine, monkeypatch):
     with pytest.raises(HTTPException) as exc:
         call({"query": "| lookup nope user_id"})
     assert exc.value.status_code == 400 and "Unknown lookup: nope" in exc.value.detail
+
+
+def test_a_query_over_the_time_limit_is_explained(engine, monkeypatch):
+    """Found by the 100 M-row benchmark: ClickHouse's timeout came back as a
+    bare 500 "LogQL query failed"."""
+    def slow(sql, parameters=None, settings=None):
+        if sql.startswith("EXPLAIN"):
+            return SimpleNamespace(column_names=["rows"], result_rows=[[10]])
+        raise RuntimeError("Code: 159. DB::Exception: Timeout exceeded: elapsed 30.0 seconds, maximum: 30. "
+                           "(TIMEOUT_EXCEEDED)")
+    monkeypatch.setattr(engine.client, "query", slow)
+    with pytest.raises(HTTPException) as exc:
+        call({"query": "| stats count() as n by service"})
+    assert exc.value.status_code == 504 and "30 s" in exc.value.detail and "Narrow" in exc.value.detail
