@@ -96,7 +96,8 @@ async def list_packs(customer_id: str = Header(..., alias="X-Customer-ID")):
 async def get_pack(pack_id: str, customer_id: str = Header(..., alias="X-Customer-ID")):
     pack = _find(pack_id)
     manifest = await _store().get(customer_id, pack_id)
-    return {**pack.detail(), "installed": manifest.to_public() if manifest else None}
+    return {**pack.detail(), "installed": manifest.to_public() if manifest else None,
+            "update_available": bool(manifest) and version_key(pack.version) > version_key(manifest.version)}
 
 
 async def _plan(pack, customer_id: str, force: bool):

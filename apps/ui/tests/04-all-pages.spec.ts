@@ -36,6 +36,9 @@ const ROUTES = [
   '/settings/roles',
   '/settings/costs',
   '/settings/compliance',
+  '/settings/pipelines',
+  '/settings/packs',
+  '/settings/packs/linux',
 ]
 
 const SETTLE_MS = 3_000

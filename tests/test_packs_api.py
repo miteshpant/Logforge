@@ -62,6 +62,7 @@ def test_catalogue_and_detail(api):
     assert entry["contents"]["rules"] == 1
     detail = api.get("/v1/packs/demo", headers=H).json()
     assert detail["rules"][0]["id"] == "demo-login-failed" and detail["installed"] is None
+    assert detail["update_available"] is False
     assert api.get("/v1/packs/nope", headers=H).status_code == 404
 
 
@@ -82,6 +83,8 @@ def test_plan_install_upgrade_remove(api):
     path.write_text(path.read_text().replace("Parse demo lines", "Parse demo lines, v1.3"))
     entry = api.get("/v1/packs", headers=H).json()["packs"][0]
     assert entry["version"] == "1.3.0" and entry["installed_version"] == "1.2.0" and entry["update_available"]
+    detail = api.get("/v1/packs/demo", headers=H).json()
+    assert detail["installed"]["version"] == "1.2.0" and detail["update_available"]
     plan = api.post("/v1/packs/demo/plan", headers=H).json()
     assert [a["key"] for a in plan["actions"]["update"]] == ["pipeline:demo-app"]
     assert [a["key"] for a in plan["actions"]["keep_local"]] == ["dashboard:Demo overview"]
