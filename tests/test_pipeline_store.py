@@ -129,3 +129,20 @@ def test_builtins_are_selectable_by_name_and_shadowed_by_tenant_pipelines():
 
 async def _async(value):
     return value
+
+
+def test_registry_keeps_the_cached_router_when_storage_fails():
+    calls = {"n": 0}
+
+    class DAO:
+        async def list(self, tenant_id):
+            calls["n"] += 1
+            if calls["n"] > 1:
+                raise ConnectionError("down")
+            return [record("nginx", routing={"services": ["nginx"]})]
+
+    registry = PipelineRegistry(dao=DAO(), ttl_seconds=0, builtins={})
+    run(registry.router("acme"))
+    assert run(registry.router("acme")).select({"service": "nginx"}).id == "nginx"
+    with pytest.raises(ConnectionError):
+        run(PipelineRegistry(dao=DAO(), builtins={}).router("acme"))  # nothing cached yet

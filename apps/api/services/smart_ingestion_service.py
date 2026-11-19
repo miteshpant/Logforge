@@ -76,6 +76,15 @@ class SmartIngestionService:
         for raw_log in raw_logs:
             enriched_logs.append(self._enrich_log_metadata(raw_log, customer_id, source_format))
 
+        # Step 1b (Phase 4): ingest pipelines shape each event (parse, rename,
+        # mask, drop, ...) before field mapping. Failures go to the
+        # dead-letter queue with their reason; dropped events are not stored.
+        from ingest_pipeline_runner import run_ingest_pipelines
+
+        enriched_logs, pipeline_summary = await run_ingest_pipelines(customer_id, raw_logs, enriched_logs)
+        if pipeline_summary["processed"]:
+            logger.debug(f"Pipelines: {pipeline_summary}")
+
         # Step 2: Batch normalize using high-performance normalizer
         # This uses schema registry + bloom filters for O(1) lookups on repeated schemas
         normalized_data = normalize_batch_fast(enriched_logs, customer_id, source_format)

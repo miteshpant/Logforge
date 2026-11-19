@@ -196,22 +196,14 @@ def test_capacity_check_runs_before_any_work():
     Checking after parsing would still burn CPU on data destined to be dropped.
     """
     for handler in _ingest_endpoints():
-        check_line = None
-        for node in ast.walk(handler):
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Name)
-                and node.func.id == "check_ingest_capacity"
-            ):
-                check_line = node.lineno
-                break
-
-        assert check_line is not None
-        # It should be within the first few statements of the body.
-        assert check_line - handler.lineno < 12, (
-            f"{handler.name} checks capacity too late (line offset "
-            f"{check_line - handler.lineno})"
-        )
+        body = handler.body
+        if body and isinstance(body[0], ast.Expr) and isinstance(getattr(body[0], "value", None), ast.Constant):
+            body = body[1:]  # docstring
+        first = body[:2]  # measured in statements, so a long signature doesn't matter
+        calls = [node for stmt in first for node in ast.walk(stmt)
+                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                 and node.func.id == "check_ingest_capacity"]
+        assert calls, f"{handler.name} does not check capacity in its first statements"
 
 
 def test_429_is_not_relabelled_by_generic_handlers():

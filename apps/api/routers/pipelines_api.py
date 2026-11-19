@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Union
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from authn_authz_middleware import get_current_user
@@ -22,10 +22,25 @@ from pipelines import PipelineError, simulate
 
 router = APIRouter(prefix="/v1/pipelines", tags=["pipelines"])
 MAX_SIMULATE_DOCS = 100
+MAX_REPLAY = 1000
 
 
 def _registry():
     return get_pipeline_registry()
+
+
+def _dlq():
+    from pipeline_dlq import PipelineDLQ
+
+    return PipelineDLQ()
+
+
+def _resubmit(tenant_id: str, logs: List[Any]) -> None:
+    """Send events through ingest again (the same worker pool as /v1/ingest)."""
+    from dependencies import process_logs_and_tracking_background
+
+    process_logs_and_tracking_background(logs, tenant_id, "/v1/pipelines/dlq/replay", "json", len(logs),
+                                         sum(len(str(getattr(log, "msg", ""))) for log in logs), 0)
 
 
 class PipelineBody(BaseModel):
@@ -37,6 +52,11 @@ class PipelineBody(BaseModel):
                                     description='{"services": [...], "if": "...", "priority": 100, "default": false}')
     processors: List[Dict[str, Any]] = Field(default_factory=list)
     on_failure: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class DeadLetterAction(BaseModel):
+    ids: List[str] = Field(default_factory=list, max_length=MAX_REPLAY)
+    pipeline_id: Optional[str] = Field(None, description="All pending entries of this pipeline (up to 1000)")
 
 
 class SimulateBody(BaseModel):
@@ -113,6 +133,74 @@ async def simulate_pipeline(body: SimulateBody, customer_id: str = Header(..., a
 
     ctx = await context_for(customer_id)
     return {"pipeline": record.id, "results": simulate(record.pipeline, docs, ctx)}
+
+
+@router.get("/dlq")
+async def list_dead_letters(pipeline_id: Optional[str] = None, status: Optional[str] = Query("pending"),
+                            limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0),
+                            customer_id: str = Header(..., alias="X-Customer-ID"),
+                            user: User = Depends(get_current_user)):
+    if status not in (None, "", "pending", "replayed", "discarded"):
+        raise HTTPException(status_code=400, detail="status must be pending, replayed or discarded")
+    dlq = _dlq()
+    entries, total = await dlq.list(customer_id, pipeline_id=pipeline_id, status=status or None, limit=limit,
+                                    offset=offset)
+    return {"entries": entries, "total": total, "counts": await dlq.counts(customer_id)}
+
+
+async def _selected(dlq, tenant_id: str, body: DeadLetterAction) -> List[Dict[str, Any]]:
+    if body.ids:
+        entries = await dlq.get_many(tenant_id, body.ids)
+    elif body.pipeline_id:
+        entries, _ = await dlq.list(tenant_id, pipeline_id=body.pipeline_id, status="pending", limit=MAX_REPLAY)
+    else:
+        raise HTTPException(status_code=400, detail="give ids or pipeline_id")
+    return [e for e in entries if e.get("status") == "pending"]
+
+
+@router.post("/dlq/replay")
+async def replay_dead_letters(body: DeadLetterAction, customer_id: str = Header(..., alias="X-Customer-ID"),
+                              user: User = Depends(get_current_user)):
+    """Send the original events through ingest again, through their pipeline.
+    An event that fails again lands in the queue again with the new reason."""
+    from ingest_pipeline_runner import PIPELINE_FIELD
+    from models import LogEntry
+
+    dlq = _dlq()
+    entries = await _selected(dlq, customer_id, body)
+    logs, replayed = [], []
+    for entry in entries:
+        event = {k: v for k, v in (entry.get("event") or {}).items() if k not in ("customer_id", PIPELINE_FIELD)}
+        event.setdefault("service", "unknown")
+        event.setdefault("msg", "")
+        try:
+            log = LogEntry(**event)
+        except Exception:
+            continue  # stays pending: it is not a valid log entry any more
+        setattr(log, PIPELINE_FIELD, entry["pipeline_id"])
+        log.customer_id = customer_id
+        logs.append(log)
+        replayed.append(entry)
+    if logs:
+        # Mark first, then resubmit: a failed status write must not leave the
+        # events both resubmitted and still pending (replayed twice later).
+        await dlq.resolve(customer_id, replayed, "replayed", actor=_actor(user))
+        try:
+            _resubmit(customer_id, logs)
+        except Exception:
+            await dlq.resolve_pending_again(customer_id, replayed)
+            raise
+    return {"replayed": len(replayed)}
+
+
+@router.post("/dlq/discard")
+async def discard_dead_letters(body: DeadLetterAction, customer_id: str = Header(..., alias="X-Customer-ID"),
+                               user: User = Depends(get_current_user)):
+    dlq = _dlq()
+    entries = await _selected(dlq, customer_id, body)
+    if entries:
+        await dlq.resolve(customer_id, entries, "discarded", actor=_actor(user))
+    return {"discarded": len(entries)}
 
 
 @router.get("/{pipeline_id}")

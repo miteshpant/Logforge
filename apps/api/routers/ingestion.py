@@ -7,7 +7,7 @@ import time
 import logging
 from typing import Dict, Any, List, Optional, Union
 from datetime import datetime, timezone
-from fastapi import APIRouter, BackgroundTasks, Body, Request, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Body, Header, Request, HTTPException
 from fastapi.responses import JSONResponse
 
 from models import (
@@ -103,15 +103,37 @@ def setup_dependencies(pf, plb, pltb=None):
     else:
         logger.warning("⚠️ NEW TRACKING FUNCTION IS NONE - USING FALLBACK")
 
+
+PIPELINE_HEADER = "X-Logforge-Pipeline"
+PipelineHeader = Header(None, alias=PIPELINE_HEADER, description="Run these logs through this ingest pipeline")
+
+
+async def stamp_pipeline(logs, customer_id: str, pipeline: Optional[str]) -> None:
+    """Phase 4: route these logs through the pipeline the shipper named
+    (X-Logforge-Pipeline). Refused with 400 if it doesn't exist or is off."""
+    if not isinstance(pipeline, str) or not pipeline.strip():
+        return  # (a direct call without the header passes the Header() default)
+    from ingest_pipeline_runner import PIPELINE_FIELD
+    from pipeline_store import get_pipeline_registry
+
+    router_for_tenant = await get_pipeline_registry().router(customer_id)
+    if router_for_tenant.select({}, requested=pipeline) is None:
+        raise HTTPException(status_code=400, detail=f"pipeline {pipeline!r} not found or disabled")
+    for log in logs:
+        setattr(log, PIPELINE_FIELD, pipeline)
+
+
 @router.post("/logs", response_model=IngestResponse)
 async def ingest_logs(
     log_entry: LogEntry,
     background_tasks: BackgroundTasks,
-    customer_id: str = MiddlewareTenant
+    customer_id: str = MiddlewareTenant,
+    pipeline: Optional[str] = PipelineHeader,
 ):
     """Single log entry ingestion endpoint"""
     # ENH-029: shed load honestly rather than accepting data we cannot persist.
     check_ingest_capacity()
+    await stamp_pipeline([log_entry], customer_id, pipeline)
 
     start_time = time.time()
 
@@ -184,7 +206,8 @@ async def ingest_logs_batch(
         description='Either {"logs": [...]} or a bare JSON array of log entries '
                     '(what Vector, Fluent Bit and Fluentd send). At most 1000 per request.',
     ),
-    customer_id: str = MiddlewareTenant
+    customer_id: str = MiddlewareTenant,
+    pipeline: Optional[str] = PipelineHeader,
 ):
     """Batch log entry ingestion"""
     # ENH-029: shed load honestly rather than accepting data we cannot persist.
@@ -195,6 +218,7 @@ async def ingest_logs_batch(
         if len(batch) > MAX_BATCH_LOGS:
             raise HTTPException(status_code=413, detail=f"Batch size cannot exceed {MAX_BATCH_LOGS} logs")
         batch = BatchLogEntry.model_construct(logs=batch)
+    await stamp_pipeline(batch.logs, customer_id, pipeline)
 
     start_time = time.time()
 

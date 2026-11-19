@@ -247,7 +247,15 @@ class PipelineRegistry:
         if cached and _time.monotonic() - cached[0] < self.ttl:
             return cached[1]
         records = dict(self.builtins())
-        for record in await self.dao.list(tenant_id):
+        try:
+            tenant_records = await self.dao.list(tenant_id)
+        except Exception:
+            if cached:  # storage is down: keep routing with what we had
+                logger.warning(f"Pipelines of {tenant_id} could not be reloaded; using the cached set")
+                self._routers[tenant_id] = (_time.monotonic(), cached[1])
+                return cached[1]
+            raise
+        for record in tenant_records:
             records[record.id] = record
         router = PipelineRouter(list(records.values()))
         self._routers[tenant_id] = (_time.monotonic(), router)
