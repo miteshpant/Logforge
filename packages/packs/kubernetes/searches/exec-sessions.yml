@@ -1,0 +1,3 @@
+name: Kubernetes exec sessions
+description: Who opened shells into which pods.
+query: '| where service = "k8s-audit" and attrs.resource = "pods" and attrs.subresource in ["exec", "attach"] | stats count() as sessions by user_id, attrs.namespace, attrs.object_name | sort -sessions'

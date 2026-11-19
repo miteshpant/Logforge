@@ -1,0 +1,46 @@
+# Kubernetes API server audit events (audit.k8s.io/v1). Only the final stage
+# of each request is kept (ResponseComplete or Panic), so a request counts once.
+name: kubernetes-audit
+description: Kubernetes API server audit log
+routing: {services: [k8s-audit, kubernetes-audit, kube-audit]}
+processors:
+  # annotation keys contain dots, so no path reaches them: read the decision from the raw line
+  - regex: {field: msg, pattern: '"authorization\.k8s\.io/decision": ?"(?P<decision>[a-z]+)"'}
+    ignore_failure: true
+  - json: {field: msg, target: attrs.k8s}
+  - drop: {}
+    if: "attrs.k8s.stage in ['RequestReceived', 'ResponseStarted']"
+  - date: {field: attrs.k8s.requestReceivedTimestamp, formats: [ISO8601]}
+    ignore_failure: true
+  - script:
+      source: |
+        attrs.verb = attrs.k8s.verb
+        attrs.resource = attrs.k8s.objectRef.resource
+        attrs.subresource = attrs.k8s.objectRef.subresource
+        attrs.namespace = attrs.k8s.objectRef.namespace
+        attrs.object_name = attrs.k8s.objectRef.name
+        attrs.api_group = attrs.k8s.objectRef.apiGroup
+        attrs.response_code = int(attrs.k8s.responseStatus.code) if exists('attrs.k8s.responseStatus.code') else None
+        attrs.user_agent = attrs.k8s.userAgent
+        attrs.request_uri = attrs.k8s.requestURI
+        attrs.audit_id = attrs.k8s.auditID
+        attrs.anonymous = 'yes' if attrs.k8s.user.username == 'system:anonymous' else 'no'
+        attrs.human = 'no' if startswith(attrs.k8s.user.username, 'system:') else 'yes'
+        attrs.role_ref = field('attrs.k8s.requestObject.roleRef.name')
+        attrs.privileged = 'yes' if attrs.k8s.objectRef.resource == 'pods' and contains(str(attrs.k8s.requestObject), "'privileged': True") else 'no'
+        user_id = attrs.k8s.user.username
+        src_ip = field('attrs.k8s.sourceIPs.0')
+        level = 'warn' if exists('attrs.k8s.responseStatus.code') and int(attrs.k8s.responseStatus.code) >= 400 else 'info'
+        msg = str(attrs.k8s.verb) + ' ' + str(attrs.k8s.objectRef.resource) + ('/' + attrs.k8s.objectRef.subresource if exists('attrs.k8s.objectRef.subresource') else '') + (' in ' + attrs.k8s.objectRef.namespace if exists('attrs.k8s.objectRef.namespace') else '') + (' ' + attrs.k8s.objectRef.name if exists('attrs.k8s.objectRef.name') else '') + ' by ' + str(user_id) + ' -> ' + str(attrs.response_code)
+        attrs.ocsf.class_uid = 6003
+        attrs.ocsf.class_name = 'API Activity'
+        attrs.ocsf.api.operation = attrs.k8s.verb
+        attrs.ocsf.api.service.name = 'kubernetes'
+        attrs.ocsf.resources.type = attrs.k8s.objectRef.resource
+        attrs.ocsf.resources.name = attrs.k8s.objectRef.name
+        attrs.ocsf.actor.user.name = user_id
+        attrs.ocsf.src_endpoint.ip = src_ip
+        attrs.ocsf.status = 'Failure' if level == 'warn' else 'Success'
+        service = 'k8s-audit'
+  - remove: {field: attrs.k8s}
+  - compact: {field: attrs}

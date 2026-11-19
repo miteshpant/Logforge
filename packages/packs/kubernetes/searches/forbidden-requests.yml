@@ -1,0 +1,10 @@
+name: Kubernetes forbidden requests by user
+description: Alert template. Twenty or more requests refused with 403 for one user in fifteen minutes, often a stolen token probing what it can do. Enable it and add a channel.
+query: '| where service = "k8s-audit" and attrs.response_code = 403 | stats count() as denied, values(attrs.resource) as resources by user_id | where denied >= 20'
+every: 5m
+window: 15m
+enabled: false
+alert:
+  condition: {kind: rows, op: gt, value: 0}
+  severity: medium
+  throttle_minutes: 60
