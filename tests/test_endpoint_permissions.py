@@ -22,3 +22,27 @@ def test_mutating_methods_need_write(path, read, write):
     assert get_endpoint_permission(path, "GET") == read
     for method in ("POST", "PUT", "PATCH", "DELETE"):
         assert get_endpoint_permission(path, method) == write, method
+
+
+@pytest.mark.parametrize("method, path, permission", [
+    ("GET", "/v1/ai/status", "ai:read:tenant"),
+    ("GET", "/v1/ai/usage", "ai:read:tenant"),
+    ("POST", "/v1/ai/ask", "ai:read:tenant"),          # read-only: the tools only read
+    ("GET", "/v1/ai/settings", "settings:read:tenant"),  # tenant admin
+    ("PUT", "/v1/ai/settings", "settings:write:tenant"),
+    ("GET", "/v1/ai/audit", "settings:read:tenant"),
+    ("POST", "/v1/ai/query", "ai:write:tenant"),        # the older AI routes are unchanged
+])
+def test_ai_assistant_permissions(method, path, permission):
+    assert get_endpoint_permission(path, method) == permission
+
+
+def test_who_may_ask_and_who_may_configure_ai():
+    from authn_authz_middleware import check_permission
+
+    def can(role, permission):
+        return check_permission([{"tenant_id": "t", "role": role}], permission, "t")
+
+    assert can("security_analyst", "ai:read:tenant") and can("devops_engineer", "ai:read:tenant")
+    assert not can("viewer", "ai:read:tenant")
+    assert can("tenant_admin", "settings:write:tenant") and not can("security_analyst", "settings:write:tenant")

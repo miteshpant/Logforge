@@ -367,12 +367,12 @@ ROLE_PERMISSIONS = {
         "costs:*:tenant", "analytics:read:tenant", "tenants:read,write:tenant"
     ],
     UserRole.SECURITY_ANALYST: [
-        "security:*:tenant", "logs:read,search:tenant",
+        "security:*:tenant", "logs:read,search:tenant", "ai:read:tenant",
         "alerts:read,investigate:tenant", "compliance:read:tenant",
         "threat_hunting:*:tenant"
     ],
     UserRole.DEVOPS_ENGINEER: [
-        "logs:read,search:tenant", "alerts:*:tenant",
+        "logs:read,search:tenant", "alerts:*:tenant", "ai:read:tenant",
         "dashboards:*:tenant", "observability:*:tenant",
         "integrations:*:tenant"
     ],
@@ -455,6 +455,14 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in WRITE_METHODS:
             return "logs:write:tenant"  # Export is a read operation that generates output
         return "logs:read:tenant"
+    elif path in ("/v1/ai/settings", "/v1/ai/audit"):
+        # AI settings and the AI audit log are the tenant admin's.
+        if method in WRITE_METHODS:
+            return "settings:write:tenant"
+        return "settings:read:tenant"
+    elif path in ("/v1/ai/status", "/v1/ai/usage", "/v1/ai/ask"):
+        # Asking is read-only: the model's tools only read, as the person asking.
+        return "ai:read:tenant"
     elif path.startswith("/v1/ai"):
         if method in WRITE_METHODS:
             return "ai:write:tenant"

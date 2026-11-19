@@ -71,6 +71,7 @@ class DatabaseLayer:
         'LookupDAO': os.getenv('LOOKUP_SERVICE_KEY', 'lookup-dao-service-key'),
         'SavedSearchDAO': os.getenv('SAVED_SEARCH_SERVICE_KEY', 'saved-search-service-key'),
         'PackStore': os.getenv('PACK_STORE_SERVICE_KEY', 'pack-store-service-key'),
+        'AIStore': os.getenv('AI_STORE_SERVICE_KEY', 'ai-store-service-key'),
         # Streaming Configuration Service
         'StreamingConfigDAO': os.getenv('STREAMING_CONFIG_SERVICE_KEY', 'streaming-config-service-key'),
         # Migration Service
@@ -140,6 +141,7 @@ class DatabaseLayer:
         'LookupDAO': ['lookup_tables_mt', 'lookup_rows_mt'],  # LogforgeQL lookup tables and managed lists
         'SavedSearchDAO': ['saved_searches_mt', 'saved_search_runs_mt'],  # Saved / scheduled searches and runs
         'PackStore': ['pack_installs_mt'],  # Source pack installs (manifests)
+        'AIStore': ['ai_settings_mt', 'ai_audit_mt'],  # AI settings and the AI audit log
         # Streaming Configuration Service
         'StreamingConfigDAO': ['tenant_configs_mt'],  # Needs to manage streaming configurations in tenant configs table
         # Migration Service

@@ -161,6 +161,7 @@ class SubscriptionService:
             # AI endpoints
             "/v1/ai/health": "ai_assistant.basic",
             "/v1/ai/query": "ai_assistant.query",
+            "/v1/ai/ask": "ai_assistant.query",
             "/v1/ai/analysis": "ai_assistant.analysis",
             "/v1/ai/rca": "ai_assistant.rca",
             "/v1/ai/anomaly": "ai_assistant.anomaly",
