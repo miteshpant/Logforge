@@ -17,6 +17,19 @@ observability, self-hosted with one command. Apache 2.0.
 - **[Shipper recipes](https://github.com/miteshpant/Logforge/tree/main/packages/shipper-recipes)**:
   Vector, Fluent Bit and Fluentd configs that send logs to Logforge.
 
+## Guides
+
+- **[Detection-as-code](detection-as-code.md)**: correlation rules, backtesting,
+  tuning, and syncing rules from git.
+- **[Cases](cases.md)**: how alerts become cases, analyst actions, SLA metrics
+  and the audit export.
+- **[Threat intelligence](threat-intel.md)**: feeds, ingest-time matching,
+  retro-hunting and enrichment (GeoIP, assets, users).
+- **[Ingest pipelines](pipelines.md)**: parse, mask and shape logs on the way in;
+  routing, testing against samples, dead-letter queue.
+- **[Common schema](schema.md)**: OCSF fields in rules and queries, source
+  mappings, search-time `rex` / `parse` / `json`, and the field explorer.
+
 ## Where it's going
 
 - **[Roadmap](ROADMAP.md)**: short, claimable tasks, including good first issues.
