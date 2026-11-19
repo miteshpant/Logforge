@@ -16,6 +16,7 @@ from authn_authz_middleware import get_endpoint_permission
     ("/v1/alerts/rules/r1", "alerts:read:tenant", "alerts:write:tenant"),
     ("/v1/pipelines/nginx", "logs:read:tenant", "logs:write:tenant"),
     ("/v1/pipelines", "logs:read:tenant", "logs:write:tenant"),
+    ("/v1/packs/linux/install", "logs:read:tenant", "settings:write:tenant"),
 ])
 def test_mutating_methods_need_write(path, read, write):
     assert get_endpoint_permission(path, "GET") == read

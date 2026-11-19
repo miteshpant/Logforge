@@ -138,6 +138,7 @@ services:
       # Logforge's hand-written detection rules, loaded at startup alongside
       # the vendored SigmaHQ content (mitre_default_loader).
       - ../../packages/rules:/packages/rules:ro
+      - ../../packages/packs:/packages/packs:ro
     environment:
       - PYTHONPATH=/app
       - MIGRATIONS_DIR=/migrations

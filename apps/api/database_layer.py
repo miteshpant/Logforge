@@ -70,6 +70,7 @@ class DatabaseLayer:
         'FieldCatalogue': os.getenv('FIELD_CATALOGUE_SERVICE_KEY', 'field-catalogue-service-key'),
         'LookupDAO': os.getenv('LOOKUP_SERVICE_KEY', 'lookup-dao-service-key'),
         'SavedSearchDAO': os.getenv('SAVED_SEARCH_SERVICE_KEY', 'saved-search-service-key'),
+        'PackStore': os.getenv('PACK_STORE_SERVICE_KEY', 'pack-store-service-key'),
         # Streaming Configuration Service
         'StreamingConfigDAO': os.getenv('STREAMING_CONFIG_SERVICE_KEY', 'streaming-config-service-key'),
         # Migration Service
@@ -138,6 +139,7 @@ class DatabaseLayer:
         'FieldCatalogue': ['logs_raw_mt'],  # Field catalogue and top values (read only)
         'LookupDAO': ['lookup_tables_mt', 'lookup_rows_mt'],  # LogforgeQL lookup tables and managed lists
         'SavedSearchDAO': ['saved_searches_mt', 'saved_search_runs_mt'],  # Saved / scheduled searches and runs
+        'PackStore': ['pack_installs_mt'],  # Source pack installs (manifests)
         # Streaming Configuration Service
         'StreamingConfigDAO': ['tenant_configs_mt'],  # Needs to manage streaming configurations in tenant configs table
         # Migration Service

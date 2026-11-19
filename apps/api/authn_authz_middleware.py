@@ -412,6 +412,12 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in WRITE_METHODS:
             return "queries:write:tenant"
         return "queries:read:tenant"
+    elif path.startswith("/v1/packs"):
+        # Installing a pack writes pipelines, rules, searches and dashboards
+        # at once, so it takes the tenant-admin settings permission.
+        if method in WRITE_METHODS:
+            return "settings:write:tenant"
+        return "logs:read:tenant"
     elif path.startswith("/v1/pipelines"):
         # Ingest pipelines shape stored logs: managing them is a logs write.
         if method in WRITE_METHODS:
