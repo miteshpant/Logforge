@@ -5,8 +5,6 @@ fields, renames and converts them, masks personal data, enriches events,
 and drops noise, all before the log is stored, searched and checked by
 detection rules. Nothing needs a code change or a restart.
 
-![Ingest pipeline editor](images/pipelines.png)
-
 ## Where pipelines run
 
 Pipelines run in the ingest worker, after an event is accepted and before
