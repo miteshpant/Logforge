@@ -9,6 +9,9 @@ import { useTimeRange } from '@/contexts/TimeRangeContext'
 import QueryBar from '@/components/query/QueryBar'
 import FieldSidebar from '@/components/query/FieldSidebar'
 import AddToDashboard from '@/components/query/AddToDashboard'
+import QueryBuilder from '@/components/query/QueryBuilder'
+import QueryResults from '@/components/query/QueryResults'
+import { LOGQL_FIELDS } from '@/components/query/logqlSyntax'
 import { addFilter } from '@/lib/fieldFormat'
 import { useLiveTail } from '@/components/query/useLiveTail'
 import {
@@ -116,6 +119,7 @@ export default function LogExplorerPage() {
   const [logqlQuery, setLogqlQuery] = useState('')
   const [showFields, setShowFields] = useState(false)
   const [showAddToDashboard, setShowAddToDashboard] = useState(false)
+  const [showBuilder, setShowBuilder] = useState(false)
   const [catalogueFields, setCatalogueFields] = useState<string[]>([])
   const [logqlResult, setLogqlResult] = useState<LogQLResult | null>(null)
   const [logqlSyntaxError, setLogqlSyntaxError] = useState<string | null>(null)
@@ -451,6 +455,9 @@ export default function LogExplorerPage() {
       : []
 
   const showListLoading = !isTailing && mode === 'filters' && isLoading
+  const showQueryTable =
+    mode === 'logql' && !isTailing && !!logqlResult &&
+    (logqlResult.resultType === 'table' || logqlResult.resultType === 'timechart')
   const tailStatus = TAIL_STATUS_LABELS[tail.status]
 
   const toggleLogExpansion = (logId: string) => {
@@ -512,6 +519,19 @@ export default function LogExplorerPage() {
               LogQL
             </button>
           </div>
+
+          {mode === 'logql' && (
+            <button
+              data-testid="builder-toggle"
+              onClick={() => setShowBuilder(v => !v)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                showBuilder ? 'bg-blue-600 text-white' : 'bg-slate-800/30 text-slate-300 hover:bg-white/10'
+              }`}
+              title="Build a query from a form"
+            >
+              Builder
+            </button>
+          )}
 
           {/* Field explorer (Phase 5) */}
           <button
@@ -865,8 +885,31 @@ export default function LogExplorerPage() {
           </div>
         )}
 
+        {/* Query builder (Phase 6) */}
+        {mode === 'logql' && showBuilder && (
+          <QueryBuilder
+            fields={Array.from(new Set([...LOGQL_FIELDS, ...catalogueFields]))}
+            onClose={() => setShowBuilder(false)}
+            onUse={(query) => {
+              setLogqlQuery(query)
+              setShowBuilder(false)
+              requestAnimationFrame(() => logqlRunRef.current())
+            }}
+          />
+        )}
+
+        {/* Table and timechart results (Phase 6) */}
+        {showQueryTable && logqlResult && (
+          <QueryResults
+            resultType={logqlResult.resultType as 'table' | 'timechart'}
+            columns={logqlResult.columns}
+            rows={logqlResult.rows}
+            truncated={logqlResult.truncated}
+          />
+        )}
+
         {/* Log List */}
-        <div className="flex-1 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-2xl border border-white/5 shadow-xl overflow-hidden flex flex-col relative">
+        <div className={`${showQueryTable ? 'hidden' : ''} flex-1 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-2xl border border-white/5 shadow-xl overflow-hidden flex flex-col relative`}>
           {/* Table Header */}
           <div className="flex items-center gap-4 px-4 py-2 bg-slate-800/50 border-b border-white/5 text-xs font-semibold text-slate-400 uppercase">
             <div className="w-8" />

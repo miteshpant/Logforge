@@ -61,3 +61,23 @@ export function panelTypeFor(result: QueryResultShape): string {
   if (numeric.length > 0 && numeric.length < result.columns.length) return 'bar_chart'
   return 'table'
 }
+
+/** Timechart rows (_time, [split], values...) as chart rows, one key per series. */
+export function timechartSeries(columns: string[], rows: Record<string, any>[]): PanelSeries {
+  const valueCols = columns.filter(c => c !== '_time' && rows.some(r => typeof r[c] === 'number'))
+  const split = columns.find(c => c !== '_time' && !valueCols.includes(c))
+  const labels: string[] = []
+  for (const r of rows) if (!labels.includes(String(r._time))) labels.push(String(r._time))
+  if (split && valueCols.length === 1) {
+    const names: string[] = []
+    const points = new Map<string, number>()
+    for (const r of rows) {
+      const name = String(r[split] ?? '')
+      if (!names.includes(name)) names.push(name)
+      points.set(`${name}\u0000${r._time}`, typeof r[valueCols[0]] === 'number' ? r[valueCols[0]] : 0)
+    }
+    return seriesFromPanel({ labels, series: names.map(n => ({ name: n, data: labels.map(l => points.get(`${n}\u0000${l}`) ?? 0) })) })!
+  }
+  const byLabel = new Map(rows.map(r => [String(r._time), r]))
+  return seriesFromPanel({ labels, series: valueCols.map(c => ({ name: c, data: labels.map(l => byLabel.get(l)?.[c] ?? 0) })) })!
+}

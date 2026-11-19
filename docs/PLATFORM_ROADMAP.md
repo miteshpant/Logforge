@@ -664,6 +664,14 @@ analysts expect from SPL or ES|QL.
 >   rows read to 98 k. Before a query runs, ClickHouse estimates the rows it
 >   reads; a query over the plan's limit (`config/query_limits.yml`) is
 >   refused with advice. `POST /v1/query/estimate` returns the estimate.
+> - **Done: language reference and query builder.**
+>   [docs/query-language.md](./query-language.md) documents every command,
+>   function and aggregation, with 55 examples; a test fails if one is
+>   missing or an example stops compiling. The Log Explorer has a query
+>   builder (conditions, calculations, group by, over time, sort) that
+>   writes LogforgeQL into the query bar, shows `stats` / `top` /
+>   `timechart` results as a table (and a chart for timecharts) instead of
+>   log lines, and autocompletes the new commands and functions.
 > - **Bugs found and fixed:** a query starting with `| eval ...` (or any
 >   stage the original language didn't know) was silently run as a
 >   full-text search for that text; `stats ... | where n > 3` filtered the
@@ -674,8 +682,8 @@ analysts expect from SPL or ES|QL.
 >   dashboard widget failed whenever the UI sent a time range (the service
 >   called a string method on the datetimes the router passed); a quoted
 >   free-text search ("connection reset") searched for the quote marks.
-> - **Next:** the language reference
->   and query builder, then the acceptance run.
+> - **Next:** the acceptance run (30 analyst questions, latency at 100 M
+>   rows).
 
 ### Deliverables
 

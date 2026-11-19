@@ -42,3 +42,18 @@ describe('panelTypeFor', () => {
     expect(panelTypeFor({ resultType: 'events', columns: ['ts', 'msg'], rows: [] })).toBe('table')
   })
 })
+
+import { timechartSeries } from '../dashboardPanels'
+
+describe('timechartSeries', () => {
+  it('pivots long timechart rows into one key per series', () => {
+    const out = timechartSeries(['_time', 'service', 'count'], [
+      { _time: 't1', service: 'api', count: 1 }, { _time: 't1', service: 'web', count: 2 },
+      { _time: 't2', service: 'api', count: 3 }])
+    expect(out).toEqual({ names: ['api', 'web'], rows: [{ label: 't1', api: 1, web: 2 }, { label: 't2', api: 3, web: 0 }] })
+  })
+  it('uses each number column as a series without a split', () => {
+    expect(timechartSeries(['_time', 'avg', 'p99'], [{ _time: 't1', avg: 1, p99: 5 }])).toEqual({
+      names: ['avg', 'p99'], rows: [{ label: 't1', avg: 1, p99: 5 }] })
+  })
+})
