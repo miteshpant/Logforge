@@ -13106,6 +13106,14 @@ components:
           - type: 'null'
           description: Fields to exclude from results
           title: Exclude Fields
+        extractions:
+          default: []
+          description: Search-time extracted fields
+          items:
+            $ref: '#/components/schemas/QueryExtraction'
+          maxItems: 32
+          title: Extractions
+          type: array
         filters:
           default: []
           description: Query filters
@@ -15381,6 +15389,51 @@ components:
       - type
       - field
       title: QueryAggregation
+      type: object
+    QueryExtraction:
+      description: A field extracted at search time (LogforgeQL rex / parse / json).
+      properties:
+        group:
+          anyOf:
+          - maximum: 64.0
+            minimum: 1.0
+            type: integer
+          - type: 'null'
+          description: 'regex: capture group number'
+          title: Group
+        kind:
+          pattern: ^(regex|json)$
+          title: Kind
+          type: string
+        name:
+          pattern: ^[A-Za-z_][A-Za-z0-9_]{0,63}$
+          title: Name
+          type: string
+        path:
+          anyOf:
+          - items:
+              type: string
+            maxItems: 32
+            type: array
+          - type: 'null'
+          description: 'json: keys from the root'
+          title: Path
+        pattern:
+          anyOf:
+          - maxLength: 2000
+            type: string
+          - type: 'null'
+          description: 'regex: RE2 pattern'
+          title: Pattern
+        source:
+          default: msg
+          description: Field to extract from
+          title: Source
+          type: string
+      required:
+      - name
+      - kind
+      title: QueryExtraction
       type: object
     QueryFeedbackRequest:
       description: Query feedback request

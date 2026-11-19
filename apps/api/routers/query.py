@@ -249,7 +249,7 @@ def build_query_request(
         for key in (
             "start_time", "end_time", "text_search", "group_by", "time_series",
             "time_granularity", "sort_field", "sort_order", "limit", "offset",
-            "include_fields", "exclude_fields", "timeout_seconds",
+            "include_fields", "exclude_fields", "timeout_seconds", "extractions",
         )
         if key in payload and payload[key] is not None
     }

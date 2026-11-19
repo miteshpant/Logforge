@@ -43,6 +43,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from query_engine import (
+    ALLOWED_QUERY_FIELDS,
     AggregationType,
     QueryAggregation,
     QueryFilter,
@@ -126,6 +127,7 @@ class ParsedQuery:
     sort_order: SortOrder = SortOrder.DESC
     limit: Optional[int] = None
     last_seconds: Optional[int] = None
+    extractions: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def _parse_value(raw: str) -> Any:
@@ -253,7 +255,14 @@ def _split_conditions(expression: str) -> List[Tuple[str, str]]:
     return [(j, c) for j, c in conditions if c]
 
 
-def _parse_comparison(condition: str) -> QueryFilter:
+def _known(field_name: str, extracted) -> str:
+    """A field a stage may use: a schema/query field, or one extracted earlier."""
+    if field_name in extracted:
+        return field_name
+    return validate_field(field_name)
+
+
+def _parse_comparison(condition: str, extracted=frozenset()) -> QueryFilter:
     match = _COMPARISON_RE.match(condition)
     if not match:
         raise LogQLSyntaxError(
@@ -274,12 +283,13 @@ def _parse_comparison(condition: str) -> QueryFilter:
 
     # Validate the identifier here so the error names the offending field,
     # rather than surfacing later from the SQL builder.
-    validate_field(field_name)
+    _known(field_name, extracted)
 
     return QueryFilter(field=field_name, operator=operator, value=value)
 
 
 def _parse_stats(stage: str, parsed: ParsedQuery) -> None:
+    extracted = {e["name"] for e in parsed.extractions}
     """Parse `stats count() by service, level`."""
     body = stage[len("stats"):].strip()
     if not body:
@@ -293,7 +303,7 @@ def _parse_stats(stage: str, parsed: ParsedQuery) -> None:
         by_clause = body[by_match.end():]
         body = body[: by_match.start()]
         group_by = [
-            validate_field(f) for f in _split_top_level(by_clause, ",")
+            _known(f, extracted) for f in _split_top_level(by_clause, ",")
         ]
 
     for expression in _split_top_level(body, ","):
@@ -314,13 +324,142 @@ def _parse_stats(stage: str, parsed: ParsedQuery) -> None:
             )
 
         if agg_field != "*" and not agg_field.startswith("attrs."):
-            validate_field(agg_field)
+            _known(agg_field, extracted)
 
         parsed.aggregations.append(
             QueryAggregation(type=aggregation, field=agg_field)
         )
 
     parsed.group_by = group_by
+
+
+# ---------------------------------------------------------------------------
+# Search-time extraction (Phase 5): rex, parse, json
+# ---------------------------------------------------------------------------
+
+_FIELD_OPTION_RE = re.compile(r"^field=(?P<field>[A-Za-z_][A-Za-z0-9_.@$-]*)\s+")
+_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+_NAMED_GROUP_RE = re.compile(r"\(\?P?<(?P<name>[A-Za-z_][A-Za-z0-9_]*)>")
+_UNSUPPORTED_RE = [(re.compile(r"\(\?<?[=!]"), "lookaround ((?=...), (?!...), (?<=...)) is not supported"),
+                   (re.compile(r"\\[1-9]"), "backreferences (\\1) are not supported")]
+
+
+def _quoted(text: str, stage: str) -> Tuple[str, str]:
+    """Read a leading double- or single-quoted string; return (value, rest)."""
+    text = text.lstrip()
+    if not text or text[0] not in "\"'":
+        raise LogQLSyntaxError(f"`{stage}` expects a quoted pattern, got {text[:40]!r}")
+    quote, out, i = text[0], [], 1
+    while i < len(text):
+        char = text[i]
+        if char == "\\" and i + 1 < len(text) and text[i + 1] == quote:
+            out.append(quote)
+            i += 2
+            continue
+        if char == quote:
+            return "".join(out), text[i + 1:]
+        out.append(char)
+        i += 1
+    raise LogQLSyntaxError(f"`{stage}`: unterminated quoted string")
+
+
+def _source_option(body: str) -> Tuple[str, str]:
+    match = _FIELD_OPTION_RE.match(body)
+    if not match:
+        return "msg", body
+    source = match.group("field")
+    validate_field(source)
+    return source, body[match.end():]
+
+
+def _check_name(name: str, parsed: "ParsedQuery", stage: str) -> str:
+    if not _NAME_RE.match(name):
+        raise LogQLSyntaxError(f"`{stage}`: {name!r} is not a valid field name")
+    if name in ALLOWED_QUERY_FIELDS:
+        raise LogQLSyntaxError(f"`{stage}`: {name!r} is already a field; choose another name")
+    if any(e["name"] == name for e in parsed.extractions):
+        raise LogQLSyntaxError(f"`{stage}`: {name!r} is extracted twice")
+    return name
+
+
+def _regex_extractions(source: str, pattern: str, names: List[str], parsed: "ParsedQuery", stage: str) -> None:
+    for regex, message in _UNSUPPORTED_RE:
+        if regex.search(pattern):
+            raise LogQLSyntaxError(f"`{stage}`: {message}")
+    try:
+        compiled = re.compile(pattern)
+    except re.error as e:
+        raise LogQLSyntaxError(f"`{stage}`: invalid regular expression: {e}") from None
+    for index, name in enumerate(names, start=1):
+        parsed.extractions.append({"name": _check_name(name, parsed, stage), "kind": "regex", "source": source,
+                                   "pattern": pattern, "group": index})
+    if compiled.groups != len(names):
+        raise LogQLSyntaxError(f"`{stage}`: every group must be named (use (?:...) for the others)")
+
+
+def _parse_rex(body: str, parsed: "ParsedQuery") -> None:
+    source, body = _source_option(body)
+    pattern, rest = _quoted(body, "rex")
+    if rest.strip():
+        raise LogQLSyntaxError(f"`rex`: unexpected text after the pattern: {rest.strip()[:40]!r}")
+    names = [m.group("name") for m in _NAMED_GROUP_RE.finditer(pattern)]
+    if not names:
+        raise LogQLSyntaxError("`rex` needs at least one named group, e.g. (?<user>\\w+)")
+    if len(set(names)) != len(names):
+        raise LogQLSyntaxError("`rex`: a group name is used twice (redefinition)")
+    # RE2 (ClickHouse) and Python both accept (?P<name>...).
+    pattern = re.sub(r"\(\?<(?=[A-Za-z_])", "(?P<", pattern)
+    _regex_extractions(source, pattern, names, parsed, "rex")
+
+
+def _escape_literal(text: str) -> str:
+    """Escape regex metacharacters only (RE2 rejects some of re.escape's escapes, e.g. \\ )."""
+    return re.sub(r"([.^$*+?()\[\]{}|\\])", r"\\\1", text)
+
+
+def _parse_parse(body: str, parsed: "ParsedQuery") -> None:
+    source, body = _source_option(body)
+    template, rest = _quoted(body, "parse")
+    rest = rest.strip()
+    if not rest.lower().startswith("as "):
+        raise LogQLSyntaxError("`parse` needs names: parse \"order * by *\" as order_id, customer")
+    names = [n.strip() for n in rest[3:].split(",") if n.strip()]
+    pieces = template.split("*")
+    if len(pieces) - 1 != len(names):
+        raise LogQLSyntaxError(f"`parse`: the pattern has {len(pieces) - 1} wildcards but {len(names)} name"
+                               f"{'' if len(names) == 1 else 's'}")
+    if not names:
+        raise LogQLSyntaxError("`parse`: the pattern needs at least one *")
+    regex = ""
+    for i, piece in enumerate(pieces):
+        regex += _escape_literal(piece)
+        if i < len(names):
+            last = i == len(names) - 1 and pieces[-1] == ""
+            regex += "(.*)" if last else "(.*?)"
+    _regex_extractions(source, regex, names, parsed, "parse")
+
+
+def _parse_json(body: str, parsed: "ParsedQuery") -> None:
+    source, body = _source_option(body)
+    rest = body
+    while True:
+        path, rest = _quoted(rest, "json")
+        rest = rest.strip()
+        name = path.split(".")[-1]
+        alias = re.match(r"^as\s+([A-Za-z_][A-Za-z0-9_]*)\s*", rest, re.IGNORECASE)
+        if alias:
+            name = alias.group(1)
+            rest = rest[alias.end():].strip()
+        keys = [k for k in path.split(".") if k]
+        if not keys:
+            raise LogQLSyntaxError("`json`: empty path")
+        parsed.extractions.append({"name": _check_name(name, parsed, "json"), "kind": "json", "source": source,
+                                   "path": keys})
+        if not rest:
+            return
+        if not rest.startswith(","):
+            raise LogQLSyntaxError(f"`json`: expected , or the end, got {rest[:30]!r}")
+        rest = rest[1:]
 
 
 def parse(query: str) -> ParsedQuery:
@@ -348,7 +487,7 @@ def parse(query: str) -> ParsedQuery:
     # error. Only the first stage may be free text, and only when it does not
     # begin with a recognised stage keyword.
     first = stages[0].strip()
-    keywords = ("where", "stats", "sort", "limit", "last")
+    keywords = ("where", "stats", "sort", "limit", "last", "rex", "parse", "json")
     first_word = first.split()[0].lower() if first else ""
 
     if first == "*":
@@ -379,7 +518,12 @@ def parse(query: str) -> ParsedQuery:
                         "`or` is not supported between conditions yet. "
                         "Use a regex (`field =~ \"a|b\"`) or `in [a, b]`."
                     )
-                parsed.filters.append(_parse_comparison(condition))
+                parsed.filters.append(_parse_comparison(condition, {e["name"] for e in parsed.extractions}))
+
+        elif lowered.split()[0] in ("rex", "parse", "json"):
+            keyword = lowered.split()[0]
+            body = stage[len(keyword):].strip()
+            {"rex": _parse_rex, "parse": _parse_parse, "json": _parse_json}[keyword](body, parsed)
 
         elif lowered.startswith("stats"):
             _parse_stats(stage, parsed)
@@ -389,7 +533,7 @@ def parse(query: str) -> ParsedQuery:
             if not body:
                 raise LogQLSyntaxError("`sort` requires a field")
             parts = body.split()
-            parsed.sort_field = validate_field(parts[0])
+            parsed.sort_field = _known(parts[0], {e["name"] for e in parsed.extractions})
             if len(parts) > 1:
                 direction = parts[1].lower()
                 if direction not in ("asc", "desc"):
@@ -457,6 +601,9 @@ def compile_to_request_payload(query: str) -> Dict[str, Any]:
 
     if parsed.text_search:
         payload["text_search"] = parsed.text_search
+
+    if parsed.extractions:
+        payload["extractions"] = parsed.extractions
 
     if parsed.aggregations:
         payload["aggregations"] = [

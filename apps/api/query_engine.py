@@ -161,6 +161,9 @@ def field_sql(field: str) -> str:
     """SQL for an allow-listed field: the column itself, or a derived field's
     expression (parenthesised). Complex fields (attrs.a.b, ocsf.*) bind their
     keys into the statement being built."""
+    extracted = extracted_sql(field)
+    if extracted is not None:
+        return f"({extracted})"
     if is_complex_field(field):
         return f"({complex_field_sql(validate_field(field), _context_binder())})"
     field = validate_identifier(field)
@@ -292,6 +295,14 @@ def validate_field(field: str) -> str:
     return validate_identifier(field)
 
 
+_EXTRACTED: ContextVar = ContextVar("_EXTRACTED", default=None)  # name -> SQL, while a query is built
+
+
+def extracted_sql(field: str) -> Optional[str]:
+    mapping = _EXTRACTED.get()
+    return mapping.get(field) if mapping else None
+
+
 def field_alias(field: str) -> str:
     """A safe SQL alias for any field name (ocsf.actor.user.name -> ocsf_actor_user_name)."""
     return re.sub(r"[^A-Za-z0-9_]", "_", field)
@@ -339,7 +350,8 @@ class QueryFilter:
             A condition string containing only placeholders for values.
         """
         field_name = self._render_field_reference(params, param_prefix)
-        if (is_complex_field(self.field) and isinstance(self.value, (int, float))
+        if ((is_complex_field(self.field) or extracted_sql(self.field) is not None)
+                and isinstance(self.value, (int, float))
                 and not isinstance(self.value, bool) and self.operator in _NUMERIC_OPERATORS):
             # JSON values are extracted as text; compare numbers as numbers
             # (String = Int64 is a ClickHouse type error, and "10" > "9" is false).
@@ -405,6 +417,9 @@ class QueryFilter:
         bound as a parameter so it cannot terminate the JSONExtractString call.
         """
         field = self.field
+        extracted = extracted_sql(field)
+        if extracted is not None:
+            return f"({extracted})"
         if is_complex_field(field):
             counter = {"n": 0}
 
@@ -506,6 +521,26 @@ class QueryAggregation:
         return f"count() AS {alias}"
 
 
+class QueryExtraction(BaseModel):
+    """A field extracted at search time (LogforgeQL rex / parse / json)."""
+    name: str = Field(..., pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+    kind: str = Field(..., pattern=r"^(regex|json)$")
+    source: str = Field("msg", description="Field to extract from")
+    pattern: Optional[str] = Field(None, max_length=2000, description="regex: RE2 pattern")
+    group: Optional[int] = Field(None, ge=1, le=64, description="regex: capture group number")
+    path: Optional[List[str]] = Field(None, max_length=32, description="json: keys from the root")
+
+    def to_sql(self, bind) -> str:
+        source = field_sql(self.source)
+        if self.kind == "regex":
+            if not self.pattern or not self.group:
+                raise QueryFieldError(f"extraction {self.name}: a regex needs pattern and group")
+            return f"extractGroups({source}, {bind(self.pattern)})[{int(self.group)}]"
+        if not self.path:
+            raise QueryFieldError(f"extraction {self.name}: json needs a path")
+        return f"JSONExtractString({source}, {', '.join(bind(k) for k in self.path)})"
+
+
 class AdvancedQueryRequest(BaseModel):
     """Advanced query request model"""
     
@@ -516,6 +551,7 @@ class AdvancedQueryRequest(BaseModel):
     # Filtering
     filters: List[QueryFilter] = Field(default=[], description="Query filters")
     text_search: Optional[str] = Field(None, description="Full-text search in message field")
+    extractions: List[QueryExtraction] = Field(default=[], description="Search-time extracted fields", max_length=32)
     
     # Aggregation
     aggregations: List[QueryAggregation] = Field(default=[], description="Aggregation specifications")
@@ -651,7 +687,7 @@ class AdvancedQueryEngine:
         """Select the optimal table for the query"""
         # Derived fields are computed from logs_raw_mt's `attrs`, which the
         # normalized table doesn't have.
-        if self._uses_derived_fields(query):
+        if self._uses_derived_fields(query) or query.extractions:
             return self.base_table
 
         # Check if this is a multi-tenant query (has customer_id filter)
@@ -694,17 +730,26 @@ class AdvancedQueryEngine:
         if params is None:
             params = {}
         token = _FIELD_PARAMS.set(params)
+        extracted: Dict[str, str] = {}
+        extracted_token = _EXTRACTED.set(extracted)
         try:
+            bind = _context_binder()
+            for extraction in query.extractions:
+                if extraction.name in ALLOWED_QUERY_FIELDS or extraction.name in extracted:
+                    raise QueryFieldError(f"extraction name {extraction.name!r} is already a field")
+                extracted[extraction.name] = extraction.to_sql(lambda value: bind("x", value))
             return self._build_sql_statement(query, table, params)
         finally:
+            _EXTRACTED.reset(extracted_token)
             _FIELD_PARAMS.reset(token)
 
     def _build_sql_statement(self, query: AdvancedQueryRequest, table: str, params: Dict[str, Any]) -> str:
         # Validate every caller-supplied identifier up front so a bad request
         # fails cleanly before any SQL is assembled. Derived and complex
         # (attrs.a.b, ocsf.*) group-by fields are selected under a safe alias.
-        group_by_fields = [validate_field(f) for f in query.group_by]
-        plain = [f in ALLOWED_QUERY_FIELDS and f not in DERIVED_FIELD_SQL for f in group_by_fields]
+        group_by_fields = [f if extracted_sql(f) is not None else validate_field(f) for f in query.group_by]
+        plain = [f in ALLOWED_QUERY_FIELDS and f not in DERIVED_FIELD_SQL and extracted_sql(f) is None
+                 for f in group_by_fields]
         group_by_refs = [f if is_plain else field_alias(f) for f, is_plain in zip(group_by_fields, plain)]
 
         # SELECT clause. Derived group-by fields are selected under their own
@@ -739,6 +784,8 @@ class AdvancedQueryEngine:
                 )
             else:
                 select_clause = "*"
+                for extraction in query.extractions:
+                    select_clause += f", ({extracted_sql(extraction.name)}) AS {extraction.name}"
 
         # FROM clause -- `table` is engine-selected, not caller-supplied.
         from_clause = f"FROM {table}"
@@ -868,6 +915,10 @@ class AdvancedQueryEngine:
                     'user_id': row[10] if len(row) > 10 else None
                 }
             
+            if query.extractions and not query.include_fields:
+                values = row[len(row) - len(query.extractions):]
+                log_dict["extracted"] = {e.name: v for e, v in zip(query.extractions, values)}
+
             # Apply field filtering
             if query.exclude_fields:
                 for field in query.exclude_fields:
