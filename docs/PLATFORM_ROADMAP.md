@@ -414,7 +414,7 @@ every IP and domain context.
 > | Acceptance criterion | Result |
 > |---|---|
 > | abuse.ch feeds match a replayed malicious corpus, with none on the benign corpus beyond the feed's error rate | The detection harness enriches every event with the real matcher and the Feodo, URLhaus and ThreatFox fixtures. All three intel scenarios are detected; **0 matches** on 2,000 benign events and on near misses (a neighbouring IP, a parent domain, another path on a listed host). Gated in CI by `tests/test_detection_eval_intel.py` |
-> | Ingest throughput drops by less than 10% with enrichment on | **No measurable drop:** live ingest A/B with 100,000 indicators, median of 4 rounds: 2,868 events/s without and 3,100 with, inside the run-to-run noise. In process, matching adds 12 µs per event, which bounds the drop at about **3.5%** ([benchmarks](./benchmarks/README.md)) |
+> | Ingest throughput drops by less than 10% with enrichment on | Matching against 100,000 indicators adds **12 µs per event** in process, about **2%** of the ~590 µs an event costs end to end on this stack ([benchmarks](./benchmarks/README.md)). A live A/B on 2026-11-18 timed only request acceptance, which does not include enrichment; see the correction there |
 >
 > **Not done** (tracked in [ROADMAP.md](./ROADMAP.md)): URLhaus and
 > ThreatFox were not fetched live (they need an abuse.ch Auth-Key); feed

@@ -75,16 +75,18 @@ on the same 4-vCPU single-node stack, against 100,000 synthetic indicators
 | Live: `POST /v1/ingest/logs/batch`, 10 × 1,000 events, median of 4 rounds | 2,868 events/s | 3,100 events/s |
 
 Per round, the live runs were 2,803 / 3,684 / 2,833 / 2,904 events/s
-without indicators and 3,160 / 2,882 / 3,039 / 3,186 with them. Rounds
-alternate which side goes first. Before each run the indicator index is
-reloaded and the API is allowed to drain the previous run's work.
+without indicators and 3,160 / 2,882 / 3,039 / 3,186 with them.
 
-**Result: no measurable drop.** The median with indicators was 8% *higher*,
-which is inside the ±15–30% spread between rounds. So the live A/B can only
-say that any drop is smaller than its noise. The in-process figure gives the
-bound: 12 µs added to about 349 µs per event at 2,868 events/s is about
-**3.5%**, under the 10% limit. GeoIP, asset and reverse-DNS lookups were not
-enabled in this run.
+**Correction (2026-11-19).** The live row measured how fast the API
+*accepts* batches, not how fast it processes them. `POST
+/v1/ingest/logs/batch` returns once a batch is queued; normalisation,
+enrichment, detection and storage run afterwards in the ingest worker. The
+live A/B therefore did not include enrichment, and its "no measurable drop"
+says nothing about it. The evidence is the in-process cost: 12 µs per event.
+Against the end-to-end cost of an event on this stack (about 590 µs,
+measured by the pipeline benchmark below, which times until events are
+stored), that is about **2%**, under the 10% limit. GeoIP, asset and
+reverse-DNS lookups were not enabled.
 
 These numbers are higher than the 277 events/s baseline above because this
 run times smaller bursts with the API drained between them. The baseline
@@ -95,4 +97,4 @@ measured 50 batches back to back, with detection work piling up.
 | Date | Setup | Ingest (events/s) | Ingest → searchable | Slowest query p95 @ 10 M |
 |---|---|---|---|---|
 | 2026-11-17 | single node, 4 vCPU | 277 | 36.8 s | 311 ms (full-text search) |
-| 2026-11-18 | single node, 4 vCPU; enrichment A/B, bursts of 10,000 | 2,868 without / 3,100 with 100k indicators | — | — |
+| 2026-11-18 | single node, 4 vCPU; enrichment, in process | +12 µs per event with 100k indicators (request acceptance only was timed live; see the correction) | — | — |

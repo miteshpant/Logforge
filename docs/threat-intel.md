@@ -122,9 +122,9 @@ Internal addresses get no GeoIP lookup.
 
 ## Cost
 
-Matching against 100,000 indicators adds about 12 µs per event, about 3.5%
-of ingest cost at roughly 2,900 events/s. A live A/B showed no measurable
-drop; see [Benchmarks](benchmarks/README.md).
+Matching against 100,000 indicators adds about 12 µs per event, about 2% of
+what an event costs end to end on the reference stack (see
+[Benchmarks](benchmarks/README.md)).
 
 ## Limits
 

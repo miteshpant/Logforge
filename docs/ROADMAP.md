@@ -58,6 +58,22 @@ markers).
   download; impossible-travel rules (which need GeoIP) are still to be
   written; matches are stamped as `attrs.threat`, not ECS
   `threat.indicator.*`.
+- **Ingest pipeline follow-ups from Phase 4** ([guide](./pipelines.md)):
+  `route` only records a destination in `attrs.route` (separate tables
+  and retention tiers are not implemented); pipeline metrics are per API
+  process and reset on restart; the editor takes processors as JSON, with
+  no form-based builder; the OTLP and JSON parsers and the normalizer's
+  field mappings (`field_mapping.yml`, schema registry) are not expressed
+  as pipelines yet, only nginx, syslog, CEF and text are; the legacy
+  parser classes remain as the reference for the parity tests; the runner
+  costs about 39 µs per event against the processors' 22 µs (stats are
+  taken per step and each routed event is snapshotted for the dead-letter
+  queue), which could be trimmed.
+- **Per-request quota mutations.** Every ingest request runs
+  `ALTER TABLE tenant_quotas_mt UPDATE ...`. ClickHouse mutations are
+  heavyweight and queue up under load; this is the likely cause of the
+  several-fold run-to-run swings in the end-to-end benchmarks. Counters
+  belong in an append-only table (or Redis) summed on read.
 - **OpenTelemetry metric aliases ignore units.** `cpu.utilization` is a 0–1
   ratio while the canonical `cpu_usage` is a percentage. Mapping one to the
   other needs a unit conversion in `metric_name_mappings.yml` and the
