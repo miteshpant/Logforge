@@ -8,6 +8,7 @@ import { apiClient } from '@/lib/api'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
 import QueryBar from '@/components/query/QueryBar'
 import FieldSidebar from '@/components/query/FieldSidebar'
+import AddToDashboard from '@/components/query/AddToDashboard'
 import { addFilter } from '@/lib/fieldFormat'
 import { useLiveTail } from '@/components/query/useLiveTail'
 import {
@@ -114,6 +115,7 @@ export default function LogExplorerPage() {
   // --- LogQL mode (LF-023) --------------------------------------------------
   const [logqlQuery, setLogqlQuery] = useState('')
   const [showFields, setShowFields] = useState(false)
+  const [showAddToDashboard, setShowAddToDashboard] = useState(false)
   const [catalogueFields, setCatalogueFields] = useState<string[]>([])
   const [logqlResult, setLogqlResult] = useState<LogQLResult | null>(null)
   const [logqlSyntaxError, setLogqlSyntaxError] = useState<string | null>(null)
@@ -655,6 +657,27 @@ export default function LogExplorerPage() {
             Create case
           </button>
           {caseError && <span role="alert" className="text-sm text-red-400">{caseError}</span>}
+
+          {mode === 'logql' && (
+            <button
+              data-testid="add-to-dashboard"
+              onClick={() => setShowAddToDashboard(true)}
+              disabled={!logqlQuery.trim()}
+              title="Make this query a dashboard panel"
+              className="flex items-center gap-2 px-4 py-2 border border-white/10 rounded-lg text-slate-300 hover:bg-white/5 disabled:opacity-50"
+            >
+              Add to dashboard
+            </button>
+          )}
+          {showAddToDashboard && (
+            <AddToDashboard
+              query={logqlQuery}
+              result={logqlResult?.resultType
+                ? { resultType: logqlResult.resultType, columns: logqlResult.columns, rows: logqlResult.rows }
+                : null}
+              onClose={() => setShowAddToDashboard(false)}
+            />
+          )}
 
           <button
             data-testid="logs-refresh"

@@ -68,6 +68,17 @@ MAX_JOIN_DEPTH = 2
 # Column types the compiler tracks, so it can convert where ClickHouse needs it
 # (attrs and ocsf values are text; comparing text with a number is an error).
 NUM, STR, BOOL, TIME, NULL, LIST = "num", "str", "bool", "time", "null", "list"
+ALL_TYPE = "all"
+
+
+class _All:
+    """A dashboard variable set to All: comparisons with it are true."""
+
+    def __repr__(self) -> str:
+        return "ALL"
+
+
+ALL = _All()
 
 LOG_COLUMNS = ("ts", "host", "service", "level", "msg", "trace_id", "span_id", "attrs", "status", "src_ip",
                "user_id", "ingested_at", "severity_num", "facility", "parser_version", "customer_id")
@@ -286,6 +297,8 @@ class Compiler:
         key = name[1:]
         if key not in self.variables:
             raise PipelineError(f"Unknown variable: ${key}")
+        if self.variables[key] is ALL:
+            return Col("1", ALL_TYPE, literal=name)
         return self.literal(self.variables[key])
 
 
@@ -297,7 +310,13 @@ def like_escape(text: str) -> str:
 # Type helpers
 # ---------------------------------------------------------------------------
 
+def _not_all(col: Col) -> None:
+    if col.type == ALL_TYPE:
+        raise PipelineError(f"{col.literal} is All here; All can only be compared with = or in")
+
+
 def to_num(col: Col) -> str:
+    _not_all(col)
     if col.type in (NUM, BOOL, NULL):
         return col.sql
     if col.type == STR:
@@ -308,6 +327,7 @@ def to_num(col: Col) -> str:
 
 
 def to_str(col: Col) -> str:
+    _not_all(col)
     if col.type == STR:
         return col.sql
     if col.type == LIST:
@@ -316,6 +336,7 @@ def to_str(col: Col) -> str:
 
 
 def nonempty(col: Col) -> str:
+    _not_all(col)
     if col.type == STR:
         return f"(isNotNull({col.sql}) AND {col.sql} != '')"
     return f"isNotNull({col.sql})"
@@ -622,6 +643,8 @@ class Parser:
         return Col(f"(NOT {result.sql})", BOOL) if negate else result
 
     def membership(self, left: Col, values: Col) -> Col:
+        if values.type == ALL_TYPE:
+            return Col("1", BOOL)
         items = values.items if values.type == LIST else [values]
         if not items:
             return Col("0", BOOL)
@@ -723,6 +746,10 @@ class Parser:
 
 
 def compare(left: Col, op: str, right: Col) -> Col:
+    if ALL_TYPE in (left.type, right.type):
+        if op not in ("=", "!="):
+            _not_all(left if left.type == ALL_TYPE else right)
+        return Col("1" if op == "=" else "0", BOOL)
     if right.type == NULL or left.type == NULL:
         other = left if right.type == NULL else right
         if op not in ("=", "!="):
@@ -892,6 +919,7 @@ class Pipeline:
             col = parser.expr()
             if col.type == LIST:
                 raise PipelineError("`eval`: a list cannot be a field value")
+            _not_all(col)
             scope = self.add_column(scope, name, col)
             if not parser.done():
                 parser.expect_op(",")
@@ -1418,6 +1446,8 @@ def _split(query: str) -> Tuple[Optional[str], List[str]]:
             stages = stages[1:]
         elif first and word not in STAGES and not query.lstrip().startswith("|"):
             text, stages = first, stages[1:]
+            if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
+                text = re.sub(r"\\([\\" + text[0] + r"])", r"\1", text[1:-1])  # "a phrase" searches a phrase
     return text, stages
 
 

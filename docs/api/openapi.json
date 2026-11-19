@@ -1453,6 +1453,21 @@
             "title": "Tags",
             "type": "array"
           },
+          "variables": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variables"
+          },
           "widgets": {
             "default": [],
             "items": {
@@ -13814,7 +13829,7 @@
     },
     "/v1/dashboards/{dashboard_id}/data": {
       "get": {
-        "description": "Get dashboard data with all widget results",
+        "description": "Get dashboard data with all widget results.\n\nDashboard variables are passed as `var-<name>=<value>` (`*` is All);\nquery panels run with them bound as values.",
         "operationId": "get_dashboard_data_v1_dashboards__dashboard_id__data_get",
         "parameters": [
           {
@@ -13962,6 +13977,65 @@
           }
         },
         "summary": "Get Dashboard Shares",
+        "tags": [
+          "Dashboards"
+        ]
+      }
+    },
+    "/v1/dashboards/{dashboard_id}/variables": {
+      "get": {
+        "description": "The dashboard's variables and the values each offers over the time range.",
+        "operationId": "get_dashboard_variables_v1_dashboards__dashboard_id__variables_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dashboard_id",
+            "required": true,
+            "schema": {
+              "title": "Dashboard Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start_time",
+            "required": false,
+            "schema": {
+              "title": "Start Time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_time",
+            "required": false,
+            "schema": {
+              "title": "End Time",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Dashboard Variables",
         "tags": [
           "Dashboards"
         ]

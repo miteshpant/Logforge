@@ -196,3 +196,10 @@ def test_join_runs_the_subsearch_on_the_same_tenant_and_window_bounded():
 def test_join_keeps_event_fields_available():
     q = compile_("| join user_id [ | stats dc(src_ip) as ips by user_id ] | where ips > 3 | head 5", lookups=LOOKUPS)
     assert q.result_type == "events" and q.columns[-1] == "ips"
+
+
+def test_quoted_free_text_searches_for_the_text_inside_the_quotes():
+    q = compile_('"connection reset" | stats count() as n')
+    assert "%connection reset%" in q.params.values()
+    q = compile_('timeout 50% | head 1')
+    assert "%timeout 50\\%%" in q.params.values()  # LIKE wildcards in the text are literal

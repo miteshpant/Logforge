@@ -447,7 +447,8 @@ async def execute_pipeline_text(query_text: str, customer_id: str, start: dateti
     return await asyncio.to_thread(execute, query_engine.client, compiled, settings)
 
 
-async def validate_pipeline_text(query_text: str, customer_id: str) -> None:
+async def validate_pipeline_text(query_text: str, customer_id: str,
+                                 variables: Optional[Dict[str, Any]] = None) -> None:
     """Raise ValueError (the message is for the user) if the query does not compile."""
     from logql_pipeline import PipelineError, compile_pipeline
 
@@ -455,7 +456,7 @@ async def validate_pipeline_text(query_text: str, customer_id: str) -> None:
     end = datetime.now(timezone.utc)
     try:
         compile_pipeline(query_text, customer_id=customer_id, start=end - timedelta(hours=1), end=end,
-                         lookups=lookups, variables=None)
+                         lookups=lookups, variables=variables)
     except (PipelineError, QueryFieldError) as exc:
         raise ValueError(str(exc)) from None
 

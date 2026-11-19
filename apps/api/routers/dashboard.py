@@ -50,6 +50,8 @@ class DashboardRequest(BaseModel):
     widgets: List[Dict[str, Any]] = []
     layout: Dict[str, Any] = {}
     filters: List[Dict[str, Any]] = []
+    # Phase 6: dashboard variables (stored in the `filters` column).
+    variables: Optional[List[Dict[str, Any]]] = None
     tags: List[str] = []
     is_public: bool = False
 
@@ -68,6 +70,64 @@ class ShareRequest(BaseModel):
     permission_level: str = "view"  # view, edit, admin
     expires_at: Optional[str] = None
     created_by: str = "system"
+
+# ---------------------------------------------------------------------------
+# Phase 6: dashboard variables and query panels
+# ---------------------------------------------------------------------------
+
+def _with_variables(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate request variables and store them in the `filters` column."""
+    import dashboard_queries
+
+    variables = data.pop("variables", None)
+    if variables is not None:
+        try:
+            data["filters"] = dashboard_queries.validate_variables(variables)
+        except dashboard_queries.VariableError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    return data
+
+
+async def _variable_defs(dashboard_id: str, customer_id: str) -> List[Dict[str, Any]]:
+    import dashboard_queries
+
+    dashboard = await get_dashboard_service().get_dashboard(dashboard_id, customer_id)
+    if not dashboard:
+        return []
+    try:
+        return dashboard_queries.validate_variables(dashboard.get("filters") or [])
+    except dashboard_queries.VariableError:
+        return []  # filters stored before Phase 6 are not variables
+
+
+async def _check_widget_query(dashboard_id: str, customer_id: str, widget: Dict[str, Any]) -> None:
+    """A query panel's LogforgeQL must compile with the dashboard's variables."""
+    query = (widget.get("query_definition") or {}).get("logql")
+    if not query:
+        return
+    if not isinstance(query, str) or len(query) > 20_000:
+        raise HTTPException(status_code=400, detail="query_definition.logql must be a query string")
+    from routers import query as query_router
+
+    placeholders = {v["name"]: "x" for v in await _variable_defs(dashboard_id, customer_id)}
+    try:
+        await query_router.validate_pipeline_text(query, customer_id, variables=placeholders)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+def _window(start_time: Optional[str], end_time: Optional[str]):
+    from datetime import datetime, timedelta, timezone
+
+    try:
+        if start_time and end_time:
+            return (datetime.fromisoformat(start_time.replace("Z", "+00:00")),
+                    datetime.fromisoformat(end_time.replace("Z", "+00:00")))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="start_time and end_time must be ISO times")
+    end = datetime.now(timezone.utc)
+    return end - timedelta(hours=24), end
+
 
 @router.get("")
 async def list_dashboards(
@@ -96,6 +156,8 @@ async def get_dashboard_config(dashboard_id: str, customer_id: str = MiddlewareT
     """Get dashboard configuration and metadata"""
     try:
         dashboard = await get_dashboard_service().get_dashboard(dashboard_id, customer_id)
+        if dashboard:
+            dashboard = {**dashboard, "variables": dashboard.get("filters") or []}
 
         if not dashboard:
             # Try default dashboard engine as fallback
@@ -118,12 +180,24 @@ async def get_dashboard_config(dashboard_id: str, customer_id: str = MiddlewareT
 
 @router.get("/{dashboard_id}/data")
 async def get_dashboard_data(
+    request: Request,
     dashboard_id: str,
     start_time: str = Query(None, description="Start time for data range"),
     end_time: str = Query(None, description="End time for data range"),
     customer_id: str = MiddlewareTenant
 ):
-    """Get dashboard data with all widget results"""
+    """Get dashboard data with all widget results.
+
+    Dashboard variables are passed as `var-<name>=<value>` (`*` is All);
+    query panels run with them bound as values.
+    """
+    import dashboard_queries
+
+    requested = {k[4:]: v for k, v in request.query_params.items() if k.startswith("var-")}
+    try:
+        variables = dashboard_queries.resolve(await _variable_defs(dashboard_id, customer_id), requested)
+    except dashboard_queries.VariableError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     try:
         # Parse time range from query parameters
         time_range = None
@@ -137,7 +211,8 @@ async def get_dashboard_data(
                 logger.warning("Invalid time range format", error=str(e))
 
         # Get dashboard data
-        data = await get_dashboard_service().get_dashboard_data(dashboard_id, customer_id, time_range)
+        data = await get_dashboard_service().get_dashboard_data(dashboard_id, customer_id, time_range,
+                                                                variables=variables)
 
         if not data:
             raise HTTPException(status_code=404, detail="Dashboard not found")
@@ -154,13 +229,15 @@ async def create_dashboard(dashboard_request: DashboardRequest, customer_id: str
     """Create a new custom dashboard"""
     try:
         # Add customer_id to dashboard data
-        dashboard_data = dashboard_request.model_dump()
+        dashboard_data = _with_variables(dashboard_request.model_dump())
         dashboard_data['customer_id'] = customer_id
 
         # Create dashboard
         result = await get_dashboard_service().create_dashboard(dashboard_data)
         return result
 
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -171,10 +248,12 @@ async def update_dashboard(dashboard_id: str, dashboard_request: DashboardReques
     """Update an existing dashboard"""
     try:
         # Update dashboard
-        update_data = dashboard_request.model_dump()
+        update_data = _with_variables(dashboard_request.model_dump())
         result = await get_dashboard_service().update_dashboard(dashboard_id, customer_id, update_data)
         return result
 
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -191,6 +270,16 @@ async def delete_dashboard(dashboard_id: str, customer_id: str = MiddlewareTenan
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete dashboard: {str(e)}")
+
+@router.get("/{dashboard_id}/variables")
+async def get_dashboard_variables(dashboard_id: str, start_time: str = Query(None), end_time: str = Query(None),
+                                  customer_id: str = MiddlewareTenant):
+    """The dashboard's variables and the values each offers over the time range."""
+    import dashboard_queries
+
+    defs = await _variable_defs(dashboard_id, customer_id)
+    start, end = _window(start_time, end_time)
+    return {"variables": defs, "options": await dashboard_queries.options(defs, customer_id, start, end)}
 
 # Dashboard Widget-Level Endpoints
 
@@ -226,10 +315,13 @@ async def create_widget(dashboard_id: str, widget_request: WidgetRequest, custom
         widget_data = widget_request.model_dump()
         widget_data['dashboard_id'] = dashboard_id
         widget_data['customer_id'] = customer_id
+        await _check_widget_query(dashboard_id, customer_id, widget_data)
 
         result = await get_dashboard_service().create_widget(widget_data)
         return result
 
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -240,9 +332,12 @@ async def update_widget(dashboard_id: str, widget_id: str, widget_request: Widge
     """Update a dashboard widget"""
     try:
         update_data = widget_request.model_dump()
+        await _check_widget_query(dashboard_id, customer_id, update_data)
         result = await get_dashboard_service().update_widget(widget_id, customer_id, update_data)
         return result
 
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
