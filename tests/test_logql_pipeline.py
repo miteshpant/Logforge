@@ -203,3 +203,48 @@ def test_quoted_free_text_searches_for_the_text_inside_the_quotes():
     assert "%connection reset%" in q.params.values()
     q = compile_('timeout 50% | head 1')
     assert "%timeout 50\\%%" in q.params.values()  # LIKE wildcards in the text are literal
+
+
+# ---------------------------------------------------------------------------
+# Hourly counts (P6.5): exact count queries read the hourly projection
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("query", [
+    "| stats count() by service",
+    '| where level = "error" or status >= 500 | stats count() as n by service, level',
+    "| timechart span=1h count() by service",
+    "| timechart span=6h count()",
+    "| top limit=3 service",
+    '| eval failed = if(status >= 500, "yes", "no") | stats count() by failed | sort -count',
+    "| stats count() as n by service | where n > 10 | stats count() as services",
+    "| last 7d | stats count()",
+])
+def test_count_queries_use_the_hourly_counts(query):
+    q = compile_(query, end=END, start=END - timedelta(days=7, minutes=30))
+    assert q.rollup, query
+    assert "toStartOfHour(ts) >=" in q.sql and "UNION ALL" in q.sql and "sum(`_n`)" in q.sql
+
+
+@pytest.mark.parametrize("query", [
+    "| stats dc(src_ip) by service",              # not a count
+    "| stats count() by host",                    # host is not in the projection
+    '| where attrs.outcome = "x" | stats count()',  # a field outside it
+    "error | stats count()",                      # free text
+    "| timechart span=5m count()",                # finer than an hour
+    "| head 10 | stats count()",                  # row stages before the count
+    "| stats count() by service | lookup users service",
+    "| where service = \"api\"",                  # events, no aggregation
+    '| where ts > "2026-11-19" | stats count()',  # ts is hourly in the projection
+    "| eventstats count() by service | stats count()",
+])
+def test_other_queries_scan_the_events(query):
+    lookups = {"users": lp.LookupMeta("users", 1, ["service", "x"], "service")}
+    assert not compile_(query, start=END - timedelta(days=7), lookups=lookups).rollup, query
+
+
+def test_windows_under_two_hours_scan_the_events():
+    assert not compile_("| stats count()", start=END - timedelta(minutes=90)).rollup
+
+
+def test_the_projection_can_be_switched_off():
+    assert not compile_("| stats count() by service", start=END - timedelta(days=7), rollup=False).rollup

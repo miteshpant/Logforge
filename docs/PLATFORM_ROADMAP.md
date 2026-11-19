@@ -654,6 +654,16 @@ analysts expect from SPL or ES|QL.
 >   query, free text, with an All option); `$name` in a panel's query is
 >   bound as a value, and the time picker sets the window. The Log
 >   Explorer's **Add to dashboard** turns the current query into a panel.
+> - **Done: performance and cost limits.** An hourly-counts projection
+>   on the log table (migration 023) answers count queries over service,
+>   level and status: whole hours come from the projection, the partial
+>   hours at each end of the window from the events, so answers are exact
+>   (checked against counting the events). On 10 M rows those queries read
+>   2 M rows instead of 9.9 M and run 1.2–4× faster. Bloom-filter skip
+>   indexes on trace id, source IP and user id cut a trace lookup from 10 M
+>   rows read to 98 k. Before a query runs, ClickHouse estimates the rows it
+>   reads; a query over the plan's limit (`config/query_limits.yml`) is
+>   refused with advice. `POST /v1/query/estimate` returns the estimate.
 > - **Bugs found and fixed:** a query starting with `| eval ...` (or any
 >   stage the original language didn't know) was silently run as a
 >   full-text search for that text; `stats ... | where n > 3` filtered the
@@ -664,7 +674,7 @@ analysts expect from SPL or ES|QL.
 >   dashboard widget failed whenever the UI sent a time range (the service
 >   called a string method on the datetimes the router passed); a quoted
 >   free-text search ("connection reset") searched for the quote marks.
-> - **Next:** rollups and cost limits, the language reference
+> - **Next:** the language reference
 >   and query builder, then the acceptance run.
 
 ### Deliverables

@@ -379,3 +379,28 @@ def test_left_join_keeps_unmatched_rows_and_events_keep_their_fields(ch):
         ips[e["user_id"]].add(e["src_ip"])
     busy = {u for u, s in ips.items() if len(s) > 35}
     assert got[0]["n"] == sum(1 for e in events if e["user_id"] in busy)
+
+
+# ---------------------------------------------------------------------------
+# Hourly counts (P6.5): the same answer as counting the events
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("query", [
+    "| stats count() by service",
+    '| where level = "error" or status >= 500 | stats count() as n by service, level',
+    "| timechart span=1h count() by service",
+    "| timechart span=2h count()",
+    "| top limit=3 service",
+    "| rare limit=2 status by service",
+    '| eval failed = if(status >= 500, "yes", "no") | stats count() by failed',
+    "| bin span=3h ts | stats count() as n by ts, level",
+    "| stats count() as n by service, status | where n > 30 | stats count() as combos, sum(n) as total",
+])
+def test_hourly_counts_give_the_same_answer_as_the_events(ch, query):
+    client, table, _ = ch
+    # a window that starts and ends mid-hour, so both edges are partial hours
+    start, end = START + timedelta(minutes=17), END - timedelta(minutes=23)
+    rolled = lp.compile_pipeline(query, customer_id=TENANT, start=start, end=end, table=table)
+    raw = lp.compile_pipeline(query, customer_id=TENANT, start=start, end=end, table=table, rollup=False)
+    assert rolled.rollup and not raw.rollup
+    assert lp.execute(client, rolled)["rows"] == lp.execute(client, raw)["rows"]

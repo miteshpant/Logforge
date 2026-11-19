@@ -18873,6 +18873,48 @@
         ]
       }
     },
+    "/v1/query/estimate": {
+      "post": {
+        "description": "Estimate what a LogforgeQL query would read, without running it.\n\nSame body as /query/logql. Returns the estimated rows, the tenant's plan\nlimit, and whether the query reads the hourly counts.",
+        "operationId": "estimate_query_v1_query_estimate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Request Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Estimate Query",
+        "tags": [
+          "Query"
+        ]
+      }
+    },
     "/v1/query/logql": {
       "post": {
         "description": "Execute a LogforgeQL text query (ENH-028).\n\nExamples:\n    {\"query\": \"error | where service = \\\"api\\\" | limit 100\"}\n    {\"query\": \"error | limit 50\", \"since\": \"24h\"}\n    {\"query\": \"error\", \"start_time\": \"2026-08-15T00:00:00Z\",\n     \"end_time\": \"2026-08-15T06:00:00Z\"}\n\nLF-022: when no time range is supplied, the query runs over the last hour\n(the effective window is echoed back as `time_range`). A relative range\ncan be given as `\"since\": \"15m\" | \"24h\" | \"7d\"`. Ranges wider than\nLOGFORGE_MAX_QUERY_WINDOW_DAYS (default 31) are rejected with a 400.\n\nThe query compiles to an `AdvancedQueryRequest` and is executed by the\nparameterised builder, so it can never become an injection surface, and the\ntenant filter is applied by `build_query_request` exactly as for every other\nendpoint.",

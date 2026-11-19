@@ -37,7 +37,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -55,6 +55,18 @@ from query_engine import (
 
 class PipelineError(LogQLSyntaxError):
     """A query that cannot be compiled. The message is shown to the user."""
+
+
+class RollupUnsupported(Exception):
+    """The query cannot be answered exactly from the hourly counts."""
+
+
+# The hourly-counts projection on logs_raw_mt (migration 023): count() per
+# (customer_id, hour, service, level, status). Count queries over these
+# fields read it instead of the events.
+ROLLUP_DIMS = ("service", "level", "status")
+_ROLLUP_PRE_STAGES = ("where", "eval", "bin", "last")
+_AGG_STAGES = ("stats", "timechart", "top", "rare")
 
 
 MAX_ROWS = 10_000          # rows a query may return
@@ -195,6 +207,7 @@ class CompiledQuery:
     result_type: str
     limit: int
     explicit_limit: bool
+    rollup: bool = False
 
 
 @dataclass
@@ -219,6 +232,8 @@ class Compiler:
         self.lookups = lookups or {}
         self.lookup_table = lookup_table
         self.join_depth = 0
+        self.rollup_mode = False    # compiling against the hourly counts
+        self.rollup_active = False  # ... and the first aggregation has not run yet
 
     def lookup(self, name: str) -> "LookupMeta":
         meta = self.lookups.get(name)
@@ -263,12 +278,37 @@ class Compiler:
 
     # -- the base relation ----------------------------------------------------
     def base(self, text_search: Optional[str]) -> Scope:
+        if self.rollup_mode:
+            return self.rollup_base()
         where = [f"customer_id = {self.bind(self.customer_id)}", f"ts >= {self.bind(self.start)}",
                  f"ts <= {self.bind(self.end)}"]
         if text_search:
             where.append(f"msg LIKE {self.bind('%' + like_escape(text_search) + '%')}")
         sql = f"SELECT * FROM {self.table} WHERE {' AND '.join(where)}"
         return Scope(sql=sql, cols={}, open=True, events=True, real=set(LOG_COLUMNS))
+
+    def rollup_base(self) -> Scope:
+        """Counts per (hour, service, level, status): whole hours from the
+        projection, the partial hours at each end of the window from the
+        events, so the totals are exact."""
+        h0 = self.start.replace(minute=0, second=0, microsecond=0)
+        if h0 < self.start:
+            h0 += timedelta(hours=1)
+        h1 = self.end.replace(minute=0, second=0, microsecond=0)
+        dims = ", ".join(ROLLUP_DIMS)
+        tenant = f"customer_id = {self.bind(self.customer_id)}"
+        hours = (f"SELECT toStartOfHour(ts) AS _hour, {dims}, count() AS _n FROM {self.table} WHERE {tenant} "
+                 f"AND toStartOfHour(ts) >= {self.bind(h0)} AND toStartOfHour(ts) < {self.bind(h1)} "
+                 f"GROUP BY _hour, {dims}")
+        # One branch per edge: an OR of two ts ranges defeats granule pruning
+        # (it read 1.7 M rows for two partial hours of a 10 M-row tenant).
+        edges = []
+        for low, high, op in ((self.start, h0, "<"), (h1, self.end, "<=")):
+            edges.append(f"SELECT toStartOfHour(ts) AS _hour, {dims}, count() AS _n FROM {self.table} "
+                         f"WHERE customer_id = {self.bind(self.customer_id)} AND ts >= {self.bind(low)} "
+                         f"AND ts {op} {self.bind(high)} GROUP BY _hour, {dims}")
+        return Scope(sql=f"SELECT * FROM ({hours} UNION ALL {edges[0]} UNION ALL {edges[1]})", cols={}, open=True,
+                     events=False, kind="table", real={"_hour", "_n", *ROLLUP_DIMS})
 
     # -- field resolution -----------------------------------------------------
     def resolve(self, scope: Scope, name: str) -> Col:
@@ -281,6 +321,8 @@ class Compiler:
         raise PipelineError(f"{name} is not available{after}. Available: {available}")
 
     def base_field(self, name: str) -> Col:
+        if self.rollup_mode and name not in ROLLUP_DIMS:
+            raise RollupUnsupported(name)
         try:
             if is_complex_field(name):
                 return Col(f"({complex_field_sql(validate_field(name), self.bind_hint)})", STR)
@@ -984,6 +1026,7 @@ class Pipeline:
         select = ", ".join([f"{c.sql} AS {q(n)}" for n, c in by] + [f"{c.sql} AS {q(n)}" for n, c in aggs])
         group = f" GROUP BY {', '.join(q(n) for n, _ in by)}" if by else ""
         cols = {n: Col(q(n), c.type) for n, c in by + aggs}
+        self.c.rollup_active = False
         return Scope(sql=f"SELECT {select} FROM ({scope.sql}){group}", cols=cols, open=False, events=False,
                      kind="table", order=[(q(n), "ASC") for n, _ in by], limit=None, closed_by="stats")
 
@@ -999,12 +1042,18 @@ class Pipeline:
     def timechart(self, scope: Scope, body: str) -> Scope:
         options, body = _options(body, ("span", "limit"), "timechart")
         if "span" in options:
-            interval, _ = _span(options["span"], "timechart")
+            interval, seconds = _span(options["span"], "timechart")
         else:
-            interval = auto_interval(self.c.start, self.c.end)
+            interval, seconds = auto_span(self.c.start, self.c.end)
         limit = _positive(options.get("limit", "10"), "timechart limit", MAX_SERIES) \
             if options.get("limit") != "0" else 0
-        ts = self.c.resolve(scope, "ts")
+        if self.c.rollup_active:
+            if seconds % 3600:
+                raise RollupUnsupported("span under an hour")
+            ts = Col("`_hour`", TIME)
+        else:
+            ts = self.c.resolve(scope, "ts")
+        count_sql = "sum(`_n`)" if self.c.rollup_active else "count()"
         if ts.type != TIME:
             raise PipelineError("`timechart` needs events with a ts")
         parser = Parser(self.c, scope, tokenize(body), "timechart")
@@ -1020,7 +1069,7 @@ class Pipeline:
             name, col = by[0]
             series = to_str(col)
             if limit:
-                top = (f"SELECT {series} AS k FROM ({scope.sql}) GROUP BY k ORDER BY count() DESC, k "
+                top = (f"SELECT {series} AS k FROM ({scope.sql}) GROUP BY k ORDER BY {count_sql} DESC, k "
                        f"LIMIT {limit}")
                 series = f"if({series} IN ({top}), {series}, 'OTHER')"
             select.append(f"{series} AS {q(name)}")
@@ -1032,6 +1081,7 @@ class Pipeline:
             select.append(f"{col.sql} AS {q(name)}")
             cols[name] = Col(q(name), col.type)
         sql = f"SELECT {', '.join(select)} FROM ({scope.sql}) GROUP BY {', '.join(group)}"
+        self.c.rollup_active = False
         order = [("`_time`", "ASC")] + ([(q(by[0][0]), "ASC")] if by else [])
         frozen = False
         if not by:
@@ -1061,7 +1111,9 @@ class Pipeline:
             raise PipelineError(f"`{stage}`: a field is used twice")
         partition = f"PARTITION BY {', '.join(q(n) for n, _ in by)}" if by else ""
         select = [f"{c.sql} AS {q(n)}" for n, c in by + fields]
-        select += ["count() AS `count`", f"100 * count() / sum(count()) OVER ({partition}) AS `percent`"]
+        count_sql = "sum(`_n`)" if self.c.rollup_active else "count()"
+        self.c.rollup_active = False
+        select += [f"{count_sql} AS `count`", f"100 * {count_sql} / sum({count_sql}) OVER ({partition}) AS `percent`"]
         direction = "ASC" if rare else "DESC"
         order = [(q(n), "ASC") for n, _ in by] + [("`count`", direction)] + [(q(n), "ASC") for n in names]
         order_sql = ", ".join(f"{s} {d}" for s, d in order)
@@ -1167,6 +1219,13 @@ class Pipeline:
                 raise PipelineError(f"`bin`: {target!r} is not a valid name")
         if not parser.done():
             parser.fail(parser.peek(), "expected the end of bin")
+        if self.c.rollup_active and name == "ts":
+            interval, seconds = _span(options["span"], "bin") if "span" in options else \
+                auto_span(self.c.start, self.c.end)
+            if seconds % 3600:
+                raise RollupUnsupported("bin under an hour")
+            return self.add_column(scope, target, Col(f"toStartOfInterval(toDateTime(`_hour`, 'UTC'), {interval})",
+                                                      TIME))
         col = self.c.resolve(scope, name)
         if col.type == TIME:
             interval = _span(options["span"], "bin")[0] if "span" in options else \
@@ -1370,6 +1429,10 @@ _PERCENTILE_RE = re.compile(r"^(?:p|perc)(\d{1,2})$")
 
 
 def aggregate(c: Compiler, func: str, args: List[Col], stage: str) -> Col:
+    if c.rollup_active:
+        if func in ("count", "c") and not args:
+            return Col("sum(`_n`)", NUM)
+        raise RollupUnsupported(func)
     def one() -> Col:
         if len(args) != 1:
             raise PipelineError(f"`{stage}`: {func} needs a field, e.g. {func}(bytes)")
@@ -1420,14 +1483,18 @@ def aggregate(c: Compiler, func: str, args: List[Col], stage: str) -> Col:
                         f"max, median, p1..p99, percentile, stdev, var, values, list, earliest, latest")
 
 
-def auto_interval(start: datetime, end: datetime) -> str:
-    """A span giving at most ~50 buckets over the window."""
+def auto_span(start: datetime, end: datetime) -> Tuple[str, int]:
+    """A span giving at most ~50 buckets over the window: (interval, seconds)."""
     seconds = max(1.0, (end - start).total_seconds())
     for span in _AUTO_SPANS:
         interval, width = _span(span, "timechart")
         if seconds / width <= 50:
-            return interval
-    return _span(_AUTO_SPANS[-1], "timechart")[0]
+            return interval, width
+    return _span(_AUTO_SPANS[-1], "timechart")
+
+
+def auto_interval(start: datetime, end: datetime) -> str:
+    return auto_span(start, end)[0]
 
 
 # ---------------------------------------------------------------------------
@@ -1511,6 +1578,9 @@ def run_stages(compiler: Compiler, query: str) -> Tuple["Pipeline", Scope, bool]
         body = stage[len(keyword):].strip()
         if keyword not in STAGES:
             raise PipelineError(f"Unknown stage: {stage.split()[0]!r}. Supported: {', '.join(STAGES)}")
+        if compiler.rollup_mode and (keyword in ("lookup", "join") or (
+                compiler.rollup_active and keyword not in _ROLLUP_PRE_STAGES + _AGG_STAGES)):
+            raise RollupUnsupported(keyword)
         if keyword == "last":
             if logql._DURATION_RE.match(body) is None:
                 raise PipelineError(f"`last` requires a duration like 15m, 24h or 7d, got {body!r}")
@@ -1564,15 +1634,34 @@ def final_select(pipeline: "Pipeline", scope: Scope, limit: int) -> Tuple[str, L
 def compile_pipeline(query: str, customer_id: str, start: datetime, end: datetime, table: str = "logs_raw_mt",
                      variables: Optional[Dict[str, Any]] = None, max_rows: int = MAX_ROWS,
                      lookups: Optional[Dict[str, LookupMeta]] = None,
-                     lookup_table: str = "lookup_rows_mt") -> CompiledQuery:
+                     lookup_table: str = "lookup_rows_mt", rollup: bool = True) -> CompiledQuery:
+    """Compile a query. Counts over service / level / status come from the
+    hourly-counts projection when that gives the exact answer (rollup=True
+    and the window is at least two hours); everything else reads events."""
     if not customer_id:
         raise PipelineError("a tenant is required")
+    text, _ = _split(query)
+    if rollup and not text and end - start >= timedelta(hours=2):
+        compiler = Compiler(customer_id, start, end, table, variables, max_rows, lookups, lookup_table)
+        compiler.rollup_mode = compiler.rollup_active = True
+        try:
+            pipeline, scope, explicit_limit = run_stages(compiler, query)
+            if compiler.rollup_active:
+                raise RollupUnsupported("no aggregation")
+            return _finish(compiler, pipeline, scope, explicit_limit, max_rows, rolled=True)
+        except (RollupUnsupported, PipelineError, QueryFieldError):
+            pass  # compile against the events below; real errors are raised there
     compiler = Compiler(customer_id, start, end, table, variables, max_rows, lookups, lookup_table)
     pipeline, scope, explicit_limit = run_stages(compiler, query)
+    return _finish(compiler, pipeline, scope, explicit_limit, max_rows, rolled=False)
+
+
+def _finish(compiler: Compiler, pipeline: "Pipeline", scope: Scope, explicit_limit: bool, max_rows: int,
+            rolled: bool) -> CompiledQuery:
     limit = scope.limit if scope.limit is not None else (DEFAULT_EVENT_ROWS if scope.events else max_rows)
     sql, columns = final_select(pipeline, scope, limit)
     return CompiledQuery(sql=sql, params=compiler.params, columns=columns, result_type=scope.kind,
-                         limit=int(limit), explicit_limit=explicit_limit)
+                         limit=int(limit), explicit_limit=explicit_limit, rollup=rolled)
 
 
 # ---------------------------------------------------------------------------

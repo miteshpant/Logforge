@@ -1,0 +1,31 @@
+# Query cost limits per subscription tier (Phase 6).
+#
+# max_rows_scanned: the most rows one LogforgeQL pipeline query may read, as
+# estimated by ClickHouse before it runs (EXPLAIN ESTIMATE). A query over the
+# limit is refused with a message saying how to narrow it. Count queries over
+# service / level / status read the hourly-counts projection, so they cost a
+# small fraction of the events they cover.
+#
+# Tiers not listed use `default`. LOGFORGE_QUERY_MAX_ROWS overrides every
+# tier (for single-tenant deployments).
+
+default:
+  max_rows_scanned: 500000000
+
+tiers:
+  startup:
+    max_rows_scanned: 200000000
+  education:
+    max_rows_scanned: 200000000
+  non_profit:
+    max_rows_scanned: 200000000
+  smb:
+    max_rows_scanned: 1000000000
+  healthcare:
+    max_rows_scanned: 2000000000
+  government:
+    max_rows_scanned: 2000000000
+  enterprise:
+    max_rows_scanned: 5000000000
+  financial:
+    max_rows_scanned: 5000000000

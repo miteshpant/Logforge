@@ -7408,6 +7408,38 @@ paths:
       summary: Aggregate Logs
       tags:
       - Query
+  /v1/query/estimate:
+    post:
+      description: 'Estimate what a LogforgeQL query would read, without running it.
+
+
+        Same body as /query/logql. Returns the estimated rows, the tenant''s plan
+
+        limit, and whether the query reads the hourly counts.'
+      operationId: estimate_query_v1_query_estimate_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              additionalProperties: true
+              title: Request Body
+              type: object
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Estimate Query
+      tags:
+      - Query
   /v1/query/logql:
     post:
       description: "Execute a LogforgeQL text query (ENH-028).\n\nExamples:\n    {\"query\": \"error |\

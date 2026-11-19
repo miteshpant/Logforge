@@ -439,12 +439,20 @@ async def execute_pipeline_text(query_text: str, customer_id: str, start: dateti
         raise HTTPException(status_code=400, detail=str(exc))
     if not query_engine:
         raise HTTPException(status_code=500, detail="Query engine not initialized")
+    import query_cost
+
+    estimated = await asyncio.to_thread(query_cost.estimate_rows, query_engine.client, compiled.sql, compiled.params)
+    try:
+        query_cost.check(estimated, await query_cost.tier_for(customer_id))
+    except query_cost.QueryTooExpensive as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     settings = {
         "readonly": 2,
         "max_execution_time": PIPELINE_QUERY_TIMEOUT_SECONDS,
         "max_bytes_to_read": AdvancedQueryEngine.DEFAULT_MAX_BYTES_TO_READ,
     }
-    return await asyncio.to_thread(execute, query_engine.client, compiled, settings)
+    result = await asyncio.to_thread(execute, query_engine.client, compiled, settings)
+    return {**result, "estimated_rows": estimated, "rollup": compiled.rollup}
 
 
 async def validate_pipeline_text(query_text: str, customer_id: str,
@@ -491,10 +499,48 @@ async def run_pipeline_query(query_text: str, request_body: Dict[str, Any], cust
         "truncated": result["truncated"],
         "aggregations": {},
         "execution_time_ms": round((time.time() - began) * 1000, 2),
-        "query_info": {"engine": "pipeline", "rows_returned": len(result["rows"])},
+        "query_info": {"engine": "pipeline", "rows_returned": len(result["rows"]),
+                       "estimated_rows": result.get("estimated_rows"), "hourly_counts": result.get("rollup", False)},
         "customer_id": customer_id,
         "time_range": _time_range_payload(start, end),
     }
+
+
+@router.post("/query/estimate")
+async def estimate_query(request_body: Dict[str, Any], customer_id: str = MiddlewareTenant):
+    """Estimate what a LogforgeQL query would read, without running it.
+
+    Same body as /query/logql. Returns the estimated rows, the tenant's plan
+    limit, and whether the query reads the hourly counts.
+    """
+    import asyncio
+
+    import query_cost
+    from logql_pipeline import PipelineError, compile_pipeline, requested_seconds
+
+    query_text = request_body.get("query")
+    if not query_text or not isinstance(query_text, str):
+        raise HTTPException(status_code=400, detail="A 'query' string is required")
+    seconds = requested_seconds(query_text)
+    payload: Dict[str, Any] = {}
+    if seconds:
+        end = datetime.now(timezone.utc)
+        payload = {"start_time": (end - timedelta(seconds=seconds)).isoformat(), "end_time": end.isoformat()}
+    start, end = logql_window(payload, request_body)
+    variables = _check_variables(request_body.get("variables"))
+    try:
+        compiled = compile_pipeline(query_text, customer_id=customer_id, start=start, end=end, variables=variables,
+                                    lookups=await _lookup_metas(customer_id, query_text))
+    except (PipelineError, QueryFieldError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not query_engine:
+        raise HTTPException(status_code=500, detail="Query engine not initialized")
+    rows = await asyncio.to_thread(query_cost.estimate_rows, query_engine.client, compiled.sql, compiled.params)
+    tier = await query_cost.tier_for(customer_id)
+    limit = query_cost.load_limits().max_rows(tier)
+    return {"estimated_rows": rows, "limit_rows": limit, "plan": tier or "default",
+            "within_limit": rows is None or rows <= limit, "rollup": compiled.rollup,
+            "time_range": _time_range_payload(start, end)}
 
 
 @router.post("/query/aggregate")
