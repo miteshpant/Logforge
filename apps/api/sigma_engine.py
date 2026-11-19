@@ -375,6 +375,11 @@ class SigmaConditionEvaluator:
                             break
                     if current_value is not None:
                         return current_value
+                if field_name.startswith("ocsf."):
+                    # Phase 5 common schema: map today's fields to OCSF at read time.
+                    from ocsf_schema import resolve
+
+                    return resolve(log_entry, field_name[len("ocsf."):])
                 return None
             value = log_entry.get(field_name)
             if value not in (None, ""):

@@ -48,7 +48,7 @@ from query_engine import (
     QueryFilter,
     QueryOperator,
     SortOrder,
-    validate_identifier,
+    validate_field,
 )
 
 
@@ -274,8 +274,7 @@ def _parse_comparison(condition: str) -> QueryFilter:
 
     # Validate the identifier here so the error names the offending field,
     # rather than surfacing later from the SQL builder.
-    if not field_name.startswith(("attrs.", "raw_data.")):
-        validate_identifier(field_name)
+    validate_field(field_name)
 
     return QueryFilter(field=field_name, operator=operator, value=value)
 
@@ -294,7 +293,7 @@ def _parse_stats(stage: str, parsed: ParsedQuery) -> None:
         by_clause = body[by_match.end():]
         body = body[: by_match.start()]
         group_by = [
-            validate_identifier(f) for f in _split_top_level(by_clause, ",")
+            validate_field(f) for f in _split_top_level(by_clause, ",")
         ]
 
     for expression in _split_top_level(body, ","):
@@ -315,7 +314,7 @@ def _parse_stats(stage: str, parsed: ParsedQuery) -> None:
             )
 
         if agg_field != "*" and not agg_field.startswith("attrs."):
-            validate_identifier(agg_field)
+            validate_field(agg_field)
 
         parsed.aggregations.append(
             QueryAggregation(type=aggregation, field=agg_field)
@@ -390,7 +389,7 @@ def parse(query: str) -> ParsedQuery:
             if not body:
                 raise LogQLSyntaxError("`sort` requires a field")
             parts = body.split()
-            parsed.sort_field = validate_identifier(parts[0])
+            parsed.sort_field = validate_field(parts[0])
             if len(parts) > 1:
                 direction = parts[1].lower()
                 if direction not in ("asc", "desc"):

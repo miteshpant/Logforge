@@ -1,0 +1,214 @@
+# Logforge common schema: today's fields -> OCSF (Open Cybersecurity Schema
+# Framework, 1.3) attribute paths, with the OpenTelemetry semantic-convention
+# name of each field for observability data.
+#
+# Read at query and detection time ("schema-on-read"): `ocsf.<path>` resolves
+# to an explicit attrs.ocsf.<path> when a source-mapping pipeline set one,
+# otherwise to the first non-empty field in `from` (top-level columns first,
+# then attrs.*), converted as `convert` says.
+#
+# Entries with `set_by: source mapping` (class, activity, status of an event)
+# cannot be derived from generic fields: the source's pipeline sets them.
+#
+# docs/schema.md is checked against this file (tests/test_ocsf_schema.py).
+
+version: 1
+ocsf_version: "1.3.0"
+
+fields:
+  # -- base event --------------------------------------------------------------
+  - ocsf: time
+    type: timestamp_t (epoch ms)
+    from: [ts]
+    convert: epoch_ms
+    otel: Timestamp
+    description: When the event occurred.
+  - ocsf: message
+    type: string_t
+    from: [msg]
+    otel: Body
+    description: The log message.
+  - ocsf: severity
+    type: string_t
+    from: [level]
+    otel: SeverityText
+    description: The event's level as sent (info, warn, error, ...).
+  - ocsf: severity_id
+    type: integer_t
+    from: [level]
+    convert: severity_id
+    otel: SeverityNumber (different scale)
+    description: "OCSF severity: 1 Informational, 3 Medium (warn), 4 High (error), 5 Critical, 6 Fatal."
+  - ocsf: class_uid
+    type: integer_t
+    set_by: source mapping
+    otel: null
+    description: "Event class, e.g. 3002 Authentication, 4002 HTTP Activity, 1007 Process Activity."
+  - ocsf: class_name
+    type: string_t
+    set_by: source mapping
+    otel: null
+    description: Event class name, e.g. Authentication.
+  - ocsf: category_uid
+    type: integer_t
+    set_by: source mapping
+    otel: null
+    description: "Event category, e.g. 3 Identity & Access Management, 4 Network Activity."
+  - ocsf: activity_id
+    type: integer_t
+    set_by: source mapping
+    otel: null
+    description: "Activity within the class; for Authentication 1 Logon, 2 Logoff."
+  - ocsf: activity_name
+    type: string_t
+    from: [attrs.event_type, attrs.action]
+    otel: event.name
+    description: The activity, e.g. Logon.
+  - ocsf: status
+    type: string_t
+    from: [attrs.result, attrs.outcome, attrs.status_text]
+    convert: status_name
+    otel: null
+    description: Success or Failure.
+  - ocsf: status_id
+    type: integer_t
+    from: [attrs.result, attrs.outcome, attrs.status_text]
+    convert: status_id
+    otel: null
+    description: "1 Success, 2 Failure, 99 Other."
+  - ocsf: status_detail
+    type: string_t
+    from: [attrs.reason, attrs.failure_reason]
+    otel: null
+    description: Why it failed (bad password, locked out, ...).
+  - ocsf: metadata.product.name
+    type: string_t
+    from: [service]
+    otel: service.name
+    description: The product or service that produced the event.
+  - ocsf: metadata.correlation_uid
+    type: string_t
+    from: [trace_id]
+    otel: trace_id
+    description: Correlation (trace) id.
+  - ocsf: device.hostname
+    type: string_t
+    from: [host, attrs.hostname]
+    otel: host.name
+    description: The host the event came from.
+
+  # -- actor and endpoints -----------------------------------------------------
+  - ocsf: actor.user.name
+    type: string_t
+    from: [user_id, attrs.user, attrs.username, attrs.user_name, attrs.account]
+    otel: user.name
+    description: The user who performed the activity (the account logging in, for Authentication).
+  - ocsf: user.name
+    type: string_t
+    from: [attrs.target_user, attrs.TargetUserName]
+    otel: null
+    description: The user acted upon, when different from the actor.
+  - ocsf: src_endpoint.ip
+    type: ip_t
+    from: [src_ip, attrs.src_ip, attrs.source_ip, attrs.client_ip, attrs.remote_addr]
+    otel: client.address / source.address
+    description: Where the activity came from.
+  - ocsf: src_endpoint.port
+    type: port_t
+    from: [attrs.src_port, attrs.source_port]
+    otel: client.port / source.port
+    description: Source port.
+  - ocsf: dst_endpoint.ip
+    type: ip_t
+    from: [attrs.dst_ip, attrs.dest_ip, attrs.destination_ip, attrs.server_ip]
+    otel: server.address / destination.address
+    description: Where the activity went.
+  - ocsf: dst_endpoint.port
+    type: port_t
+    from: [attrs.dst_port, attrs.dest_port, attrs.port]
+    otel: server.port / destination.port
+    description: Destination port.
+  - ocsf: dst_endpoint.hostname
+    type: string_t
+    from: [attrs.dest_host, attrs.dhost]
+    otel: server.address
+    description: Destination host name.
+  - ocsf: connection_info.protocol_name
+    type: string_t
+    from: [attrs.protocol, attrs.proto]
+    otel: network.protocol.name
+    description: Network protocol.
+
+  # -- HTTP ----------------------------------------------------------------------
+  - ocsf: http_request.http_method
+    type: string_t
+    from: [attrs.method, attrs.http_method]
+    otel: http.request.method
+    description: HTTP method.
+  - ocsf: http_request.url.path
+    type: string_t
+    from: [attrs.uri, attrs.path, attrs.http_path, attrs.request_uri]
+    otel: url.path
+    description: Request path.
+  - ocsf: http_request.url.url_string
+    type: url_t
+    from: [attrs.url]
+    otel: url.full
+    description: Full URL.
+  - ocsf: http_request.user_agent
+    type: string_t
+    from: [attrs.user_agent, attrs.http_user_agent]
+    otel: user_agent.original
+    description: User agent.
+  - ocsf: http_response.code
+    type: integer_t
+    from: [attrs.status_code, attrs.response, status]
+    convert: int
+    otel: http.response.status_code
+    description: HTTP status code.
+
+  # -- process and file -----------------------------------------------------------
+  - ocsf: process.name
+    type: string_t
+    from: [attrs.process_name, attrs.Image]
+    otel: process.executable.name
+    description: Process name or image.
+  - ocsf: process.cmd_line
+    type: string_t
+    from: [attrs.command_line, attrs.CommandLine]
+    otel: process.command_line
+    description: Command line.
+  - ocsf: process.pid
+    type: integer_t
+    from: [attrs.process_id, attrs.pid]
+    convert: int
+    otel: process.pid
+    description: Process id.
+  - ocsf: process.parent_process.pid
+    type: integer_t
+    from: [attrs.parent_process_id, attrs.ppid]
+    convert: int
+    otel: process.parent_pid
+    description: Parent process id.
+  - ocsf: file.name
+    type: string_t
+    from: [attrs.file_name]
+    otel: file.name
+    description: File name.
+  - ocsf: file.path
+    type: string_t
+    from: [attrs.file_path]
+    otel: file.path
+    description: File path.
+
+  # -- DNS and registry -------------------------------------------------------------
+  - ocsf: query.hostname
+    type: string_t
+    from: [attrs.query, attrs.dns_query]
+    otel: dns.question.name
+    description: DNS query name.
+  - ocsf: reg_key.path
+    type: string_t
+    from: [attrs.registry_key, attrs.TargetObject]
+    otel: null
+    description: Windows registry key.
