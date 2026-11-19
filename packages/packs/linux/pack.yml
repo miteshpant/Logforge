@@ -1,0 +1,52 @@
+id: linux
+name: Linux
+version: 1.0.0
+description: >
+  sshd and sudo from auth.log, auditd and syslog. Parses logins (mapped to
+  OCSF Authentication), sudo commands and audited process executions, with
+  rules for invalid-user probing, root shells through sudo, programs run from
+  temporary directories and reads of /etc/shadow.
+sources:
+  - name: Authentication log (sshd, sudo)
+    service: auth
+    paths: [/var/log/auth.log, /var/log/secure]
+  - name: Linux audit log
+    service: auditd
+    paths: [/var/log/audit/audit.log]
+  - name: System log
+    service: syslog
+    paths: [/var/log/syslog, /var/log/messages]
+samples:
+  - file: samples/auth.log
+    service: auth
+    pipeline: linux-auth
+    expect:
+      - contains: "Failed password"
+        fields: {service: sshd, attrs.result: failed, attrs.ocsf.status_id: 2, attrs.ocsf.class_uid: 3002}
+        min: 4
+      - contains: "Accepted publickey"
+        fields: {attrs.result: success, user_id: deploy}
+      - contains: "Invalid user"
+        fields: {attrs.auth_failure: invalid_user}
+        min: 2
+      - contains: "COMMAND=/bin/bash"
+        fields: {service: sudo, attrs.sudo_user: alice, attrs.sudo_target: root, attrs.sudo_command: /bin/bash}
+    rules: [linux-ssh-invalid-user, linux-sudo-root-shell]
+  - file: samples/audit.log
+    service: auditd
+    pipeline: linux-auditd
+    expect:
+      - contains: "xmrig"
+        fields: {attrs.audit_type: SYSCALL, attrs.exe: /tmp/.cache/xmrig, user_id: "1001", attrs.ocsf.class_uid: 1007}
+      - contains: "shadow-access"
+        fields: {attrs.audit_key: shadow-access, attrs.comm: cat}
+    rules: [linux-auditd-exec-from-tmp, linux-auditd-shadow-read]
+  - file: samples/syslog
+    service: syslog
+    pipeline: linux-syslog
+    expect:
+      - contains: "Out of memory"
+        fields: {service: kernel, host: web-01}
+      - contains: "backup.sh"
+        fields: {service: CRON}
+    rules: []

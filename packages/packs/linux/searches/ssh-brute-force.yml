@@ -1,0 +1,10 @@
+name: SSH brute force by source
+description: Alert template. 20 or more failed SSH logins from one source in an hour. Enable it and add a channel.
+query: '| where service = "sshd" and attrs.result = "failed" | stats count() as failures, dc(user_id) as users by src_ip | where failures >= 20 | sort -failures'
+every: 15m
+window: 1h
+enabled: false
+alert:
+  condition: {kind: rows, op: gt, value: 0}
+  severity: high
+  throttle_minutes: 60

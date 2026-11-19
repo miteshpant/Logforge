@@ -1,0 +1,67 @@
+title: SSH login attempt for a user that does not exist
+id: linux-ssh-invalid-user
+status: stable
+description: sshd rejected a login for an account that does not exist, which is how username guessing and credential stuffing look.
+author: Logforge
+tags: [attack.credential_access, attack.t1110]
+logsource: {product: linux, service: sshd}
+detection:
+  selection: {service: sshd, auth_failure: invalid_user}
+  condition: selection
+fixtures:
+  true_positive: {service: sshd, auth_failure: invalid_user, user: admin, src_ip: 203.0.113.50}
+  true_negative: {service: sshd, auth_failure: wrong_password, user: deploy, src_ip: 10.0.0.5}
+level: low
+---
+title: Root shell through sudo
+id: linux-sudo-root-shell
+status: stable
+description: A user started an interactive root shell with sudo (sudo -i, sudo su, sudo bash).
+author: Logforge
+tags: [attack.privilege_escalation, attack.t1548.003]
+logsource: {product: linux, service: sudo}
+detection:
+  selection:
+    service: sudo
+    sudo_target: root
+    sudo_command|endswith: [/bin/bash, /bin/sh, /bin/zsh, /usr/bin/bash, /usr/bin/su, /bin/su]
+  condition: selection
+fixtures:
+  true_positive: {service: sudo, sudo_user: alice, sudo_target: root, sudo_command: /bin/bash}
+  true_negative: {service: sudo, sudo_user: alice, sudo_target: root, sudo_command: /usr/bin/systemctl restart nginx}
+level: medium
+---
+title: Program run from a temporary directory
+id: linux-auditd-exec-from-tmp
+status: stable
+description: auditd recorded an execve of a binary under /tmp, /var/tmp or /dev/shm, where droppers and miners usually run from.
+author: Logforge
+tags: [attack.execution, attack.t1059.004]
+logsource: {product: linux, service: auditd}
+detection:
+  selection:
+    service: auditd
+    audit_type: SYSCALL
+    syscall: "59"
+    exe|startswith: [/tmp/, /var/tmp/, /dev/shm/]
+  condition: selection
+fixtures:
+  true_positive: {service: auditd, audit_type: SYSCALL, syscall: "59", exe: /tmp/.x/miner, comm: miner}
+  true_negative: {service: auditd, audit_type: SYSCALL, syscall: "59", exe: /usr/bin/curl, comm: curl}
+level: high
+---
+title: /etc/shadow read by an unexpected program
+id: linux-auditd-shadow-read
+status: stable
+description: A watched credential file (audit key shadow-access) was read by a program other than the ones that manage passwords.
+author: Logforge
+tags: [attack.credential_access, attack.t1003.008]
+logsource: {product: linux, service: auditd}
+detection:
+  selection: {service: auditd, audit_key: shadow-access}
+  filter: {comm: [passwd, chpasswd, unix_chkpwd, useradd, usermod, sshd, login, sudo]}
+  condition: selection and not filter
+fixtures:
+  true_positive: {service: auditd, audit_key: shadow-access, comm: cat, exe: /usr/bin/cat}
+  true_negative: {service: auditd, audit_key: shadow-access, comm: unix_chkpwd, exe: /usr/sbin/unix_chkpwd}
+level: high

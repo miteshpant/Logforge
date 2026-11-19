@@ -1,0 +1,4 @@
+Nov 19 10:00:01 web-01 CRON[4012]: (root) CMD (/usr/local/bin/backup.sh)
+Nov 19 10:03:44 web-01 kernel: [812345.123456] Out of memory: Killed process 3311 (java) total-vm:8123456kB
+Nov 19 10:04:10 web-01 systemd[1]: Started Daily apt download activities.
+Nov 19 10:08:00 db-01 postgres[922]: LOG:  checkpoint complete: wrote 1203 buffers

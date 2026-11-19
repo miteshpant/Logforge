@@ -1,0 +1,32 @@
+name: Linux overview
+description: Logins, sudo and audited executions across Linux hosts (Linux pack)
+variables:
+  - name: host
+    label: Host
+    type: query
+    query: '| where service in ["sshd", "sudo", "auditd", "kernel"] | stats count() by host'
+    include_all: true
+    default: "*"
+panels:
+  - name: Failed SSH logins
+    type: metric
+    query: '| where service = "sshd" and attrs.result = "failed" and host = $host | stats count() as failures'
+  - name: Successful SSH logins
+    type: metric
+    query: '| where service = "sshd" and attrs.result = "success" and host = $host | stats count() as logins'
+  - name: sudo commands
+    type: metric
+    query: '| where service = "sudo" and host = $host | stats count() as commands'
+  - name: Programs run from /tmp
+    type: metric
+    query: '| where service = "auditd" and attrs.exe startswith "/tmp/" and host = $host | stats count() as runs'
+  - name: SSH logins over time
+    type: line_chart
+    query: '| where service = "sshd" and isnotnull(attrs.result) and host = $host | timechart count() by attrs.result'
+  - name: Top failing source IPs
+    type: bar_chart
+    query: '| where service = "sshd" and attrs.result = "failed" and host = $host | top limit=10 src_ip'
+  - name: sudo commands by user
+    type: table
+    size: {w: 4, h: 2}
+    query: '| where service = "sudo" and host = $host | stats count() as runs, latest(ts) as last_run by attrs.sudo_user, attrs.sudo_target, attrs.sudo_command | sort -runs | head 20'

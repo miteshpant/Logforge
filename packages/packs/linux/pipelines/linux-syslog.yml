@@ -1,0 +1,10 @@
+# Everything else from /var/log/syslog or /var/log/messages: the RFC 3164
+# header becomes ts, host and service (the program name).
+name: linux-syslog
+description: System log lines (kernel, cron, systemd, daemons)
+routing: {services: [syslog, messages]}
+processors:
+  - syslog: {field: msg}
+    ignore_failure: true
+  - set: {field: level, value: error}
+    if: "contains(msg, 'Out of memory') or contains(msg, 'segfault')"
