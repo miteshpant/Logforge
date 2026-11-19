@@ -1,0 +1,36 @@
+name: AWS activity
+description: CloudTrail API activity and VPC traffic (AWS pack)
+variables:
+  - name: region
+    label: Region
+    type: query
+    query: '| where service = "cloudtrail" | stats count() by attrs.aws_region'
+    include_all: true
+    default: "*"
+panels:
+  - name: API calls
+    type: metric
+    query: '| where service = "cloudtrail" and attrs.aws_region = $region | stats count() as calls'
+  - name: Failed calls
+    type: metric
+    query: '| where service = "cloudtrail" and attrs.aws_region = $region and isnotnull(attrs.error_code) | stats count() as failed'
+  - name: Console sign-ins
+    type: metric
+    query: '| where service = "cloudtrail" and attrs.event_name = "ConsoleLogin" | stats count() as signins'
+  - name: Rejected flows
+    type: metric
+    query: '| where service = "vpcflow" and attrs.action = "REJECT" | stats count() as rejected'
+  - name: API calls by service
+    type: line_chart
+    query: '| where service = "cloudtrail" and attrs.aws_region = $region | timechart count() by attrs.event_source'
+  - name: Top API calls
+    type: bar_chart
+    query: '| where service = "cloudtrail" and attrs.aws_region = $region | top limit=10 attrs.event_name'
+  - name: Changes by principal
+    type: table
+    size: {w: 2, h: 2}
+    query: '| where service = "cloudtrail" and attrs.aws_region = $region and not attrs.event_name startswith "Get" and not attrs.event_name startswith "List" and not attrs.event_name startswith "Describe" | stats count() as calls, values(attrs.event_name) as actions by user_id | sort -calls | head 10'
+  - name: Traffic accepted from the internet by port
+    type: table
+    size: {w: 2, h: 2}
+    query: '| where service = "vpcflow" and attrs.action = "ACCEPT" and attrs.src_private = "no" | stats count() as flows, sum(attrs.bytes) as bytes, dc(src_ip) as sources by attrs.dst_port | sort -flows | head 10'

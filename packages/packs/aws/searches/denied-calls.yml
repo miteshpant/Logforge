@@ -1,0 +1,3 @@
+name: AWS calls denied by IAM
+description: API calls that failed with AccessDenied or UnauthorizedOperation, by principal and call.
+query: '| where service = "cloudtrail" and attrs.error_code in ["AccessDenied", "UnauthorizedOperation", "Client.UnauthorizedOperation"] | stats count() as denied by user_id, attrs.event_source, attrs.event_name | sort -denied'

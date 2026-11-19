@@ -1,0 +1,35 @@
+id: aws
+name: AWS CloudTrail and VPC Flow Logs
+version: 1.0.0
+description: >
+  CloudTrail management events (one JSON record per line) mapped to OCSF API
+  Activity, and VPC Flow Logs (version 2, space-separated) mapped to OCSF
+  Network Activity. Rules for root sign-ins, CloudTrail being stopped or
+  deleted, new access keys, public S3 buckets and internet traffic accepted
+  on admin ports.
+sources:
+  - name: CloudTrail (S3 or CloudWatch Logs, one record per line)
+    service: cloudtrail
+    paths: ["s3://<trail bucket>/AWSLogs/<account>/CloudTrail/"]
+  - name: VPC Flow Logs (version 2)
+    service: vpcflow
+    paths: ["s3://<flow log bucket>/AWSLogs/<account>/vpcflowlogs/"]
+samples:
+  - file: samples/cloudtrail.jsonl
+    service: cloudtrail
+    pipeline: aws-cloudtrail
+    expect:
+      - fields: {attrs.event_name: ConsoleLogin, attrs.identity_type: Root, src_ip: 198.51.100.5,
+                 attrs.ocsf.class_uid: 6003, attrs.ocsf.api.operation: ConsoleLogin}
+      - fields: {attrs.event_name: StopLogging, attrs.event_source: cloudtrail.amazonaws.com, user_id: ops-admin}
+      - fields: {attrs.error_code: AccessDenied, level: warn}
+    rules: [aws-root-console-login, aws-cloudtrail-tampering, aws-access-key-created, aws-s3-bucket-made-public]
+  - file: samples/vpcflow.log
+    service: vpcflow
+    pipeline: aws-vpc-flow
+    expect:
+      - fields: {attrs.action: ACCEPT, attrs.dst_port: 22, attrs.src_private: "no", src_ip: 203.0.113.14,
+                 attrs.ocsf.class_uid: 4001}
+      - fields: {attrs.action: REJECT, attrs.protocol_name: tcp}
+        min: 2
+    rules: [aws-vpc-admin-port-from-internet]

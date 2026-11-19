@@ -1,0 +1,40 @@
+# VPC Flow Logs, default version 2 format:
+# version account-id interface-id srcaddr dstaddr srcport dstport protocol packets bytes start end action log-status
+name: aws-vpc-flow
+description: AWS VPC Flow Logs (version 2)
+routing: {services: [vpcflow, vpc-flow, aws-vpcflow]}
+processors:
+  - regex:
+      field: msg
+      target: attrs._f
+      patterns:
+        - '^(?P<version>\d+) (?P<account>\S+) (?P<eni>\S+) (?P<src>\S+) (?P<dst>\S+) (?P<srcport>\S+) (?P<dstport>\S+) (?P<proto>\S+) (?P<packets>\S+) (?P<bytes>\S+) (?P<start>\d+) (?P<end>\d+) (?P<action>ACCEPT|REJECT|-) (?P<status>\S+)$'
+  - drop: {}
+    if: "attrs._f.status == 'NODATA' or attrs._f.status == 'SKIPDATA'"
+  - script:
+      source: |
+        src_ip = attrs._f.src
+        attrs.dst_ip = attrs._f.dst
+        attrs.src_port = int(attrs._f.srcport)
+        attrs.dst_port = int(attrs._f.dstport)
+        attrs.protocol_name = 'tcp' if attrs._f.proto == '6' else ('udp' if attrs._f.proto == '17' else ('icmp' if attrs._f.proto == '1' else attrs._f.proto))
+        attrs.packets = int(attrs._f.packets)
+        attrs.bytes = int(attrs._f.bytes)
+        attrs.action = attrs._f.action
+        attrs.interface_id = attrs._f.eni
+        attrs.account_id = attrs._f.account
+        attrs.src_private = 'yes' if cidr(attrs._f.src, '10.0.0.0/8') or cidr(attrs._f.src, '172.16.0.0/12') or cidr(attrs._f.src, '192.168.0.0/16') else 'no'
+        level = 'warn' if attrs._f.action == 'REJECT' else 'info'
+        msg = attrs._f.action + ' ' + attrs.protocol_name + ' ' + attrs._f.src + ':' + attrs._f.srcport + ' -> ' + attrs._f.dst + ':' + attrs._f.dstport + ' ' + attrs._f.bytes + ' bytes'
+        attrs.ocsf.class_uid = 4001
+        attrs.ocsf.class_name = 'Network Activity'
+        attrs.ocsf.src_endpoint.ip = attrs._f.src
+        attrs.ocsf.src_endpoint.port = int(attrs._f.srcport)
+        attrs.ocsf.dst_endpoint.ip = attrs._f.dst
+        attrs.ocsf.dst_endpoint.port = int(attrs._f.dstport)
+        attrs.ocsf.traffic.bytes = int(attrs._f.bytes)
+        attrs.ocsf.disposition = 'Allowed' if attrs._f.action == 'ACCEPT' else 'Blocked'
+        service = 'vpcflow'
+  - date: {field: attrs._f.start, formats: [UNIX]}
+    ignore_failure: true
+  - remove: {field: attrs._f}
