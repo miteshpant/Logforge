@@ -125,3 +125,20 @@ def test_garbage_datetime_is_a_400():
     with pytest.raises(HTTPException) as exc:
         resolve_time_window("not-a-date", None)
     assert exc.value.status_code == 400
+
+
+def test_logql_last_stage_sets_the_window_when_the_body_has_none():
+    """Found in Phase 5: `| last 24h` was overwritten by the 1-hour default
+    whenever the body carried no range, so it silently searched one hour."""
+    from routers.query import logql_window
+
+    start, end = logql_window({"start_time": "2026-11-18T03:00:00+00:00",
+                               "end_time": "2026-11-19T03:00:00+00:00"}, {})
+    assert (end - start).total_seconds() == 86400
+    # An explicit range in the body still wins.
+    start, end = logql_window({"start_time": "2026-11-18T03:00:00+00:00", "end_time": "2026-11-19T03:00:00+00:00"},
+                              {"since": "15m"})
+    assert (end - start).total_seconds() == 900
+    # No `last` and no body range: the documented 1-hour default.
+    start, end = logql_window({}, {})
+    assert (end - start).total_seconds() == 3600

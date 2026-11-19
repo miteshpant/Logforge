@@ -121,6 +121,16 @@ def _parse_since(value: str) -> timedelta:
     return int(match.group(1)) * _RELATIVE_UNITS[match.group(2)]
 
 
+def logql_window(payload: Dict[str, Any], request_body: Dict[str, Any]) -> Tuple[datetime, datetime]:
+    """The window a LogforgeQL query scans. An explicit range in the request
+    body wins; otherwise the query's own `| last <duration>`; otherwise the
+    last hour (LF-022). Every path goes through the max-window guard."""
+    if any(request_body.get(k) is not None for k in ("start_time", "end_time", "since")):
+        return resolve_time_window(start_time=request_body.get("start_time"), end_time=request_body.get("end_time"),
+                                   since=request_body.get("since"))
+    return resolve_time_window(start_time=payload.get("start_time"), end_time=payload.get("end_time"))
+
+
 def resolve_time_window(
     start_time: Any = None,
     end_time: Any = None,
@@ -345,14 +355,7 @@ async def logql_query(
         # confusing 500 or an empty result set.
         raise HTTPException(status_code=400, detail=str(exc))
 
-    # Time range comes from the request body, not the query language, so the
-    # caller keeps explicit control over how much data is scanned. LF-022:
-    # absent bounds default to the last hour instead of a 400.
-    start, end = resolve_time_window(
-        start_time=request_body.get("start_time"),
-        end_time=request_body.get("end_time"),
-        since=request_body.get("since"),
-    )
+    start, end = logql_window(payload, request_body)
     payload["start_time"] = start
     payload["end_time"] = end
 
