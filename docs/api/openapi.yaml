@@ -7006,6 +7006,34 @@ paths:
       summary: Simulate Pipeline
       tags:
       - pipelines
+  /v1/pipelines/stats:
+    get:
+      description: Counters for every pipeline that ran in this API process since it started.
+      operationId: tenant_pipeline_stats_v1_pipelines_stats_get
+      parameters:
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Tenant Pipeline Stats
+      tags:
+      - pipelines
   /v1/pipelines/{pipeline_id}:
     delete:
       operationId: delete_pipeline_v1_pipelines__pipeline_id__delete
@@ -7104,6 +7132,40 @@ paths:
       security:
       - HTTPBearer: []
       summary: Update Pipeline
+      tags:
+      - pipelines
+  /v1/pipelines/{pipeline_id}/stats:
+    get:
+      description: Per-version, per-processor counters and timings (this API process, since start).
+      operationId: pipeline_stats_v1_pipelines__pipeline_id__stats_get
+      parameters:
+      - in: path
+        name: pipeline_id
+        required: true
+        schema:
+          title: Pipeline Id
+          type: string
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Pipeline Stats
       tags:
       - pipelines
   /v1/pipelines/{pipeline_id}/versions:

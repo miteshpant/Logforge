@@ -135,6 +135,37 @@ async def simulate_pipeline(body: SimulateBody, customer_id: str = Header(..., a
     return {"pipeline": record.id, "results": simulate(record.pipeline, docs, ctx)}
 
 
+def _merge_stats(snapshots: List[Dict[str, Any]]) -> Dict[str, Any]:
+    events = {"in": 0, "ok": 0, "dropped": 0, "failed": 0}
+    rate = 0.0
+    for snap in snapshots:
+        for key in events:
+            events[key] += snap["events"][key]
+        rate += snap.get("events_per_second", 0.0)
+    return {"events": events, "events_per_second": round(rate, 2)}
+
+
+@router.get("/stats")
+async def tenant_pipeline_stats(customer_id: str = Header(..., alias="X-Customer-ID"),
+                                user: User = Depends(get_current_user)):
+    """Counters for every pipeline that ran in this API process since it started."""
+    registry = _registry()
+    by_pipeline: Dict[str, List[Dict[str, Any]]] = {}
+    for (tenant, pipeline_id, _), stats in list(registry._stats.items()):
+        if tenant == customer_id:
+            by_pipeline.setdefault(pipeline_id, []).append(stats.snapshot())
+    return {"pipelines": {pid: _merge_stats(snaps) for pid, snaps in by_pipeline.items()}, "scope": "process"}
+
+
+@router.get("/{pipeline_id}/stats")
+async def pipeline_stats(pipeline_id: str, customer_id: str = Header(..., alias="X-Customer-ID"),
+                         user: User = Depends(get_current_user)):
+    """Per-version, per-processor counters and timings (this API process, since start)."""
+    versions = _registry().stats_for(customer_id, pipeline_id)
+    return {"pipeline": pipeline_id, "scope": "process",
+            "versions": [{"version": v, **s.snapshot()} for v, s in sorted(versions.items(), reverse=True)]}
+
+
 @router.get("/dlq")
 async def list_dead_letters(pipeline_id: Optional[str] = None, status: Optional[str] = Query("pending"),
                             limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0),

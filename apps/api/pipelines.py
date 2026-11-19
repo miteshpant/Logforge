@@ -117,8 +117,10 @@ class Result:
 class PipelineStats:
     """Per-processor counters for one pipeline version (thread-safe)."""
 
-    def __init__(self):
+    def __init__(self, clock=time.time):
         self._lock = threading.Lock()
+        self._clock = clock
+        self.since: Optional[float] = None  # when the first event arrived
         self.events = {"in": 0, "ok": 0, "dropped": 0, "failed": 0}
         self.processors: List[Dict[str, Any]] = []
 
@@ -137,12 +139,18 @@ class PipelineStats:
 
     def event(self, status: str) -> None:
         with self._lock:
+            if self.since is None:
+                self.since = self._clock()
             self.events["in"] += 1
             self.events[status] += 1
 
     def snapshot(self) -> Dict[str, Any]:
         with self._lock:
-            return {"events": dict(self.events),
+            elapsed = (self._clock() - self.since) if self.since is not None else 0.0
+            total_us = sum(p["time_us"] for p in self.processors)
+            return {"events": dict(self.events), "since": self.since,
+                    "events_per_second": round(self.events["in"] / elapsed, 2) if elapsed > 0 else 0.0,
+                    "avg_us": round(total_us / self.events["in"], 2) if self.events["in"] else 0.0,
                     "processors": [{**p, "time_us": round(p["time_us"], 1),
                                     "avg_us": round(p["time_us"] / p["count"], 2) if p["count"] else 0.0}
                                    for p in self.processors]}

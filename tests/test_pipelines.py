@@ -130,3 +130,15 @@ def test_simulate_returns_each_step():
     assert second["status"] == "failed" and second["steps"][0]["status"] == "error"
     assert second["error"]["message"] == "grok: no grok pattern matched msg"
     assert docs[0]["attrs"] == {}  # the inputs are not changed
+
+
+def test_stats_report_throughput_and_pipeline_latency():
+    clock = iter([100.0, 102.0])
+    stats = PipelineStats(clock=lambda: next(clock))
+    pipeline = nginx_pipeline()
+    for _ in range(4):
+        pipeline.run({"msg": NGINX, "level": "info", "attrs": {}}, ProcessorContext(), stats=stats)
+    snapshot = stats.snapshot()  # second clock reading: 2 s after the first event
+    assert snapshot["events_per_second"] == 2.0 and snapshot["since"] == 100.0
+    assert snapshot["avg_us"] >= 0 and snapshot["avg_us"] == pytest.approx(
+        sum(p["time_us"] for p in snapshot["processors"]) / 4, abs=0.1)  # processor times are rounded to 0.1

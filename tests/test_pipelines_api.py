@@ -118,3 +118,21 @@ def test_simulate_inline_and_saved(api):
     assert api.post("/v1/pipelines/simulate", headers=H, json={"pipeline_id": "nope", "docs": [LINE]}).status_code == 404
     too_many = api.post("/v1/pipelines/simulate", headers=H, json={"pipeline": NGINX, "docs": [LINE] * 101})
     assert too_many.status_code == 422
+
+
+def test_stats_per_pipeline_and_for_the_tenant(api, monkeypatch):
+    import routers.pipelines_api as pipelines_api
+    from pipeline_processors import ProcessorContext
+
+    api.post("/v1/pipelines", headers=H, json=NGINX)
+    registry = pipelines_api._registry()
+    record = registry.dao.rows[("acme", "nginx")][-1]
+    for line in [LINE, "garbage"]:
+        record.pipeline.run({"msg": line, "attrs": {}}, ProcessorContext(), stats=registry.stats("acme", record))
+    one = api.get("/v1/pipelines/nginx/stats", headers=H).json()
+    assert one["versions"][0]["version"] == 1 and one["versions"][0]["events"] == {"in": 2, "ok": 1, "dropped": 0,
+                                                                                  "failed": 1}
+    assert [p["type"] for p in one["versions"][0]["processors"]] == ["grok", "convert"]
+    summary = api.get("/v1/pipelines/stats", headers=H).json()
+    assert summary["pipelines"]["nginx"]["events"]["failed"] == 1
+    assert api.get("/v1/pipelines/none/stats", headers=H).json()["versions"] == []

@@ -132,6 +132,7 @@ const navSections: NavSection[] = [
     items: [
       { name: 'Authentication', href: '/settings/authentication', icon: Key },
       { name: 'Integrations', href: '/settings/integrations', icon: Puzzle },
+      { name: 'Ingest Pipelines', href: '/settings/pipelines', icon: GitBranch },
       { name: 'Roles & Access', href: '/settings/roles', icon: UserCog },
       { name: 'Cost Analytics', href: '/settings/costs', icon: DollarSign },
       { name: 'Compliance', href: '/settings/compliance', icon: ClipboardCheck },
