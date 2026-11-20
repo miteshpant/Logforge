@@ -322,10 +322,9 @@ def from_env():
     import clickhouse_connect
 
     cfg = st.load_config()
-    client = clickhouse_connect.get_client(
-        host=os.getenv("CLICKHOUSE_HOST", "clickhouse"), port=int(os.getenv("CLICKHOUSE_PORT", "8123")),
-        username=os.getenv("CLICKHOUSE_USER", "logforge"), password=os.getenv("CLICKHOUSE_PASSWORD", ""),
-        database=os.getenv("CLICKHOUSE_DATABASE", "logforge"))
+    from app_config import clickhouse_settings
+
+    client = clickhouse_connect.get_client(**clickhouse_settings())
     return TierManager(client, S3Objects(cfg.archive_bucket), cfg)
 
 

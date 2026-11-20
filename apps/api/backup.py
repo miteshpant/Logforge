@@ -182,7 +182,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     v.add_argument("--database")
     args = parser.parse_args(argv)
     client = from_env().client
-    database = os.getenv("CLICKHOUSE_DATABASE", "logforge")
+    from app_config import clickhouse_settings
+
+    database = clickhouse_settings()["database"]
     objects = S3Manifests()
     if args.command == "create":
         out: Any = create(client, objects, database, args.name or name_for(datetime.now(timezone.utc)), args.base)
