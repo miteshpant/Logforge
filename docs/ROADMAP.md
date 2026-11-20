@@ -41,9 +41,9 @@ markers).
   which needs per-user notifications; "create case" should be available
   wherever an alert is shown (SIEM dashboard, Centrum incidents); a case
   per host splits lateral movement across hosts (link source and
-  destination hosts); the grouping lock is per API process, so two
-  replicas can open duplicate cases for one entity; SLA targets should be
-  configurable per tenant.
+  destination hosts); ~~the grouping lock is per API process~~ (done: a Redis
+  lock per tenant and entity, with the local lock as fallback); SLA targets
+  should be configurable per tenant.
 - **Threat-intel follow-ups from Phase 3**
   ([guide](./threat-intel.md)): URLhaus and ThreatFox need an abuse.ch
   Auth-Key (anonymous downloads return 410), so those feeds have only been

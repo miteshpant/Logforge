@@ -261,10 +261,12 @@ async def _get_rate_counter():
     global _rate_counter
     if _rate_counter is None:
         try:
-            from events.management.cache.redis_manager import get_redis_manager
+            from events.management.cache.redis_manager import get_raw_client
 
-            redis = await get_redis_manager()
-            _rate_counter = RedisRateCounter(getattr(redis, "client", None) or redis)
+            client = await get_raw_client()
+            if client is None:
+                raise ConnectionError("Redis not reachable")
+            _rate_counter = RedisRateCounter(client)
         except Exception as e:
             logger.warning("Redis unavailable; AI rate limits are per process", error=str(e))
             _rate_counter = LocalRateCounter()

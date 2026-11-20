@@ -422,6 +422,21 @@ async def get_redis_manager() -> RedisManager:
     """Get the global Redis manager instance."""
     return redis_manager
 
+async def get_raw_client():
+    """The connected ``redis.asyncio`` client, connecting the manager if needed;
+    ``None`` if Redis can't be reached. Never the manager itself: its ``set``
+    has another signature (no ``nx``), so a lock or counter would silently pass."""
+    manager = await get_redis_manager()
+    if manager is None:
+        return None
+    if manager.client is None:
+        try:
+            await manager.connect()
+        except Exception:
+            return None
+    return manager.client
+
+
 async def init_redis(**kwargs) -> RedisManager:
     """Initialize global Redis manager with optional override parameters."""
     global redis_manager
