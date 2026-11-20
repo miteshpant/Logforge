@@ -14,11 +14,12 @@ and the reason.
 
 from __future__ import annotations
 
+import contextvars
 import json
 import time
 import uuid
 from collections import defaultdict, deque
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -82,6 +83,25 @@ def _audit_store():
 
 def _build_provider(settings: ProviderSettings):
     return build_provider(settings)
+
+
+_REDACT: "contextvars.ContextVar[frozenset]" = contextvars.ContextVar("logforge_ai_redact", default=frozenset())
+
+
+def current_redact_fields() -> frozenset:
+    """The redacted fields of the AI session this request runs in (empty outside one)."""
+    return _REDACT.get()
+
+
+@contextmanager
+def redacting(fields):
+    import field_masking
+
+    token = _REDACT.set(field_masking.normalise_fields(fields))
+    try:
+        yield
+    finally:
+        _REDACT.reset(token)
 
 
 def _redact_fields(tenant_fields: list[str]) -> list[str]:
@@ -361,6 +381,7 @@ async def ai_session(*, tenant_id: str, user_id: str, roles: list[dict[str, Any]
         if max(month, used + spent["tokens"]) >= limits["monthly_token_budget"]:
             raise LimitExceeded("this tenant's monthly AI token budget ran out during the request")
 
+    redact_token = _REDACT.set(frozenset(_redact_fields(limits["redact_fields"])))
     session = AISession(request_id=request_id, tenant_id=tenant_id, user_id=user_id, roles=roles, feature=feature,
                         provider=provider, provider_settings=provider_settings,
                         redactor=Redactor(_redact_fields(limits["redact_fields"])), limits=limits, config=config,
@@ -374,6 +395,7 @@ async def ai_session(*, tenant_id: str, user_id: str, roles: list[dict[str, Any]
         await audit("error", {"error": type(e).__name__})
         raise
     finally:
+        _REDACT.reset(redact_token)
         try:
             await flush()
         except Exception as e:  # don't hide the request's own error; the rows are lost, so say so loudly

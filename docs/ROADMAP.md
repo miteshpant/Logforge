@@ -25,10 +25,8 @@ markers).
   path, move post-ingest work (normalisation, detection) out of the
   request-serving process into separate workers, and run the API with
   multiple workers instead of a single `--reload` process.
-- **The normalizer maps `hostname` onto the DNS `query` field**
-  (`apps/api/config/field_mapping.yml`), so every event with a host name
-  carries `query: <hostname>` and DNS rules on `query` can match host names.
-  Remove the mapping and check the evaluation baseline.
+- ~~**The normalizer maps `hostname` onto the DNS `query` field**~~: done;
+  the mapping is gone and the detection evaluation in CI still passes.
 - **Detection engine follow-ups from Phase 1**
   ([platform roadmap](./PLATFORM_ROADMAP.md)): sequence rules have no `until`
   (abort) condition; no correlation over alerts (e.g. "3+ distinct
@@ -184,10 +182,10 @@ markers).
     tenant and minute shared by all replicas (per process only while Redis
     is down). The budget check already re-reads the month's usage from the
     audit log before every model call.
-  - **Redact renamed values:** redact at the query layer too, so values
-    renamed in a query (`| eval v = attrs.password`) are still covered.
-  - **Enforce API key scopes:** they are set at login but never checked
-    (pre-existing, every route).
+  - ~~**Redact renamed values**~~: done. The AI's query tool refuses a query
+    that names a redacted field (the tenant's `redact_fields` or the asker's
+    masked fields), so a value can't come back under another name.
+  - ~~**Enforce API key scopes**~~: done; checked on every route.
   - ~~**Fix the rule-based NLQ.**~~ Done: per-intent permission checks,
     every value bound as a parameter, refused under a data scope, and open
     to `ai:read` again. Its latency question read a column that doesn't

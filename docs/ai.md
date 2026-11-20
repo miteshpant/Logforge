@@ -101,7 +101,10 @@ every step ──▶ audit log (what was actually sent, after redaction)
     `api_key`, `ssn` and others from `ai.yml`, plus fields a tenant adds.
     Matches are case-insensitive, on any word of the key (`db_password`,
     `password_hash`, `sessionid`), or the end of a dotted path
-    (`attrs.customer_email`, at any depth).
+    (`attrs.customer_email`, at any depth). A query that names a field the
+    tenant added, or one the asker's role masks, is refused by `run_query`,
+    since a renamed value (`| eval v = attrs.secret`) would no longer match
+    by name.
   * **Secret-looking values anywhere in text:** `password=`, `"password":`,
     `access_token=` and "password is ..." pairs, bearer and basic
     credentials, cookies, credentials in URLs, private keys (even cut
