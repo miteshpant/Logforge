@@ -393,6 +393,15 @@ async def initialize_engines():
         except Exception as e:
             logger.error(f"Failed to start the saved search scheduler: {e}")
 
+        # Storage tiers (Phase 12): buckets, the tiered policy and table TTLs,
+        # then the hourly retention job (LOGFORGE_RETENTION_JOB).
+        try:
+            from routers.storage_tiers_api import start as start_storage_tiers
+            if start_storage_tiers():
+                logger.info("Retention job started")
+        except Exception as e:
+            logger.error(f"Failed to start storage tiers: {e}")
+
         logger.info("All engines initialized successfully")
 
     except Exception as e:

@@ -11946,6 +11946,70 @@ paths:
       summary: Update Retention Policy
       tags:
       - Storage
+  /v1/storage/tiers:
+    get:
+      operationId: get_tiers_v1_storage_tiers_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Get Tiers V1 Storage Tiers Get
+                type: object
+          description: Successful Response
+      summary: Get Tiers
+      tags:
+      - storage tiers
+  /v1/storage/tiers/policies/{data_type}:
+    put:
+      operationId: set_policy_v1_storage_tiers_policies__data_type__put
+      parameters:
+      - in: path
+        name: data_type
+        required: true
+        schema:
+          title: Data Type
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Set Policy V1 Storage Tiers Policies  Data Type  Put
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Set Policy
+      tags:
+      - storage tiers
+  /v1/storage/tiers/run:
+    post:
+      operationId: run_now_v1_storage_tiers_run_post
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Run Now V1 Storage Tiers Run Post
+                type: object
+          description: Successful Response
+      summary: Run Now
+      tags:
+      - storage tiers
   /v1/stream/ai-insights:
     get:
       description: Stream real-time AI insights and anomaly detections
@@ -16859,6 +16923,21 @@ components:
       required:
       - samples
       title: PipelineDraftBody
+      type: object
+    PolicyBody:
+      properties:
+        archive_days:
+          default: 0
+          minimum: 0.0
+          title: Archive Days
+          type: integer
+        searchable_days:
+          minimum: 1.0
+          title: Searchable Days
+          type: integer
+      required:
+      - searchable_days
+      title: PolicyBody
       type: object
     PricingModel:
       description: Pricing model types
