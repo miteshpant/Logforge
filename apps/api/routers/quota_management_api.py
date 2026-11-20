@@ -324,7 +324,7 @@ async def get_current_quota_status(
             reset_period,
             last_reset,
             round((current_usage / quota_limit) * 100, 2) as utilization_percent
-        FROM tenant_quotas_mt
+        FROM tenant_quotas_v
         WHERE tenant_id = %(tenant_id)s
         ORDER BY quota_type
         """

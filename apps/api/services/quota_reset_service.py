@@ -127,7 +127,7 @@ class QuotaResetService:
                 SELECT 
                     id, tenant_id, quota_type, quota_limit, current_usage, 
                     last_reset, customer_id, created_at, updated_at
-                FROM tenant_quotas_mt 
+                FROM tenant_quotas_v 
                 WHERE quota_type = %(quota_type)s 
                 AND last_reset < %(cutoff_time)s
                 AND current_usage > 0
@@ -264,7 +264,7 @@ class QuotaResetService:
                 
                 query = """
                 SELECT MAX(last_reset) as last_reset
-                FROM tenant_quotas_mt 
+                FROM tenant_quotas_v 
                 WHERE quota_type = %(quota_type)s
                 """
                 
@@ -298,7 +298,7 @@ class QuotaResetService:
             SELECT 
                 id, tenant_id, quota_type, quota_limit, current_usage, 
                 last_reset, customer_id, created_at, updated_at
-            FROM tenant_quotas_mt 
+            FROM tenant_quotas_v 
             WHERE tenant_id = %(tenant_id)s 
             {quota_filter}
             """

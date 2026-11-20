@@ -208,11 +208,12 @@ markers).
   panels have one query each and no per-panel time range. The query builder
   writes `where`, `stats`, `timechart`, `sort` and `head` only. Queries the
   first LogforgeQL accepted still run on the original engine.
-- **Per-request quota mutations.** Every ingest request runs
-  `ALTER TABLE tenant_quotas_mt UPDATE ...`. ClickHouse mutations are
-  heavyweight and queue up under load; this is the likely cause of the
-  several-fold run-to-run swings in the end-to-end benchmarks. Counters
-  belong in an append-only table (or Redis) summed on read.
+- ~~**Per-request quota mutations.**~~ Done: usage is appended to
+  `quota_usage_events_mt` (migration 036) and read through `tenant_quotas_v`,
+  which adds it to the stored baseline since the last reset. No mutation per
+  request, and concurrent requests no longer lose increments (10 concurrent
+  calls counted 10). Not re-measured: whether this removes the run-to-run
+  swings in the end-to-end ingest benchmarks.
 - **OpenTelemetry metric aliases ignore units.** `cpu.utilization` is a 0–1
   ratio while the canonical `cpu_usage` is a percentage. Mapping one to the
   other needs a unit conversion in `metric_name_mappings.yml` and the

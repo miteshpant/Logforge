@@ -443,14 +443,8 @@ class TenantService:
             quota_updated = False
             for quota in db_quotas:
                 if quota['quota_type'] == f"{usage_type}_quota" or quota['quota_type'] == usage_type:
-                    current_used = quota['current_usage']
-                    new_used = current_used + amount
-                    
-                    # Update usage in database
-                    await self.tenant_dao.update_tenant_quota(
-                        tenant_id, 
-                        quota['quota_type'], 
-                        {'current_usage': new_used}
+                    await self.tenant_dao.add_quota_usage(
+                        tenant_id, str(quota['quota_type']), quota['last_reset'], amount
                     )
                     quota_updated = True
                     break

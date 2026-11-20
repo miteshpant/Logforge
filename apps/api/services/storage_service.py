@@ -589,7 +589,7 @@ class StorageService:
             # Get customer-specific quotas from tenant_quotas_mt (correct table)
             tenant_quotas_query = """
                 SELECT quota_type, quota_limit, current_usage, reset_period
-                FROM tenant_quotas_mt 
+                FROM tenant_quotas_v 
                 WHERE customer_id = %(customer_id)s
             """
             quotas_result = await self.storage_dao.db.execute_query(tenant_quotas_query, {"customer_id": customer_id})
