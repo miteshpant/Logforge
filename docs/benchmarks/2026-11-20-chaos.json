@@ -1,0 +1,43 @@
+{
+  "run": "6b3b0d950b",
+  "duration_seconds": 102.8,
+  "timeline": [
+    {
+      "at": 20.0,
+      "event": "kill ClickHouse replica ch1 (SIGKILL)"
+    },
+    {
+      "at": 41.2,
+      "event": "start ch1"
+    },
+    {
+      "at": 61.4,
+      "event": "kill API replica api1 (SIGKILL)"
+    },
+    {
+      "at": 81.7,
+      "event": "start api1"
+    },
+    {
+      "at": 102.8,
+      "event": "load stopped; waiting for ingest to drain"
+    }
+  ],
+  "acknowledged_events": 4780,
+  "stored_rows": 4840,
+  "stored_distinct": 4780,
+  "missing": 0,
+  "missing_sample": [],
+  "duplicates": 60,
+  "rows_per_replica": {
+    "ch1": 4840,
+    "ch2": 4840
+  },
+  "write_retries": 0,
+  "read_failures": 0,
+  "longest_write_gap_seconds": 4.4,
+  "longest_read_gap_seconds": 5.0,
+  "target_gap_seconds": 10.0,
+  "no_data_loss": true,
+  "no_downtime": true
+}

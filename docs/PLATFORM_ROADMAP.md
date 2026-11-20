@@ -1131,6 +1131,40 @@ human control.
 
 **Goal:** make long retention cheap and the platform resilient.
 
+> **Status: done, one criterion not met (2026-11-20).** Guides: [Storage](./storage.md), [Deployment](./deployment.md).
+>
+> | Acceptance criterion | Result |
+> |---|---|
+> | One year of retention for a 50 GB/day tenant costs less than a published target (documented reference architecture) | **Not met.** Target $2,000/month, set before measuring; reference architecture $3,030/month (`scripts/reference_architecture.py`). Storage for the year is $65/month (measured: 29 B/event in ClickHouse, 33 B in Parquet). Compute is the rest, mostly API replicas: 343 events/s each, measured on a shared 4-vCPU host. |
+> | Losing one ClickHouse replica or API pod causes no data loss and no downtime in a chaos test | **Met** after three fixes the test found (`scripts/chaos_test.py`, HA compose). No acknowledged event lost in 10 runs with all fixes; every gap without a successful write or read under 10 s except two runs (a busy host; a reverted config). |
+>
+> - **Done: tiered storage:** hot (local disk), warm (S3 volume), cold
+>   (Parquet). Retention per tenant and data type; days are archived,
+>   verified, then deleted.
+> - **Done: archive search and rehydration:** LogforgeQL over Parquet for up
+>   to a year; rehydration without double-counting entities.
+> - **Done: cost visibility:** ingest by source and level, storage per
+>   tier, steady-state cost, noise to drop. Settings → Storage & Retention.
+> - **Done: scale-out:** HA compose with a Replicated database, Keeper, API
+>   replicas and HAProxy. Durable ingest: Kafka acknowledges before the API
+>   answers; the consumer commits only written batches.
+> - **Done: Helm chart:** API, UI, migrations hook, retention and backup
+>   CronJobs. Linted and rendered in CI; not installed on a cluster here.
+> - **Done: backup and restore:** BACKUP/RESTORE to S3 through a named
+>   collection, full and incremental, verified table by table in CI.
+> - **Fixed on the way:**
+>   - the saved-search scheduler failed every tick after a search's
+>     first run;
+>   - three ways an acknowledged batch could be lost;
+>   - HAProxy marking busy replicas down.
+> - **Gaps:**
+>   - the cost target;
+>   - the Replicated database engine is experimental in ClickHouse 23.8;
+>   - the HA compose runs one Keeper and one Redpanda broker (production:
+>     three each);
+>   - ingest delivery is at least once, so failures leave duplicates;
+>   - warm and hot sizes per tenant are estimates.
+
 ### Deliverables
 
 1. **Tiered storage:** hot (ClickHouse local disks), warm (ClickHouse

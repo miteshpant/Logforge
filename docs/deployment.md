@@ -179,11 +179,74 @@ tiered logs table (ATTEMPT_TO_READ_AFTER_EOF on 23.8), and a regular `s3`
 disk keeps the backup's file names on the server's local disk, so a lost
 server's backups couldn't be restored.
 
-## Capacity and cost
-
-See [Phase 12 results](#phase-12-results) and
-`scripts/reference_architecture.py`.
-
 ## Phase 12 results
 
-Filled in from the runs below.
+### Chaos test
+
+13 runs after the first durability fix (`docs/benchmarks/2026-11-20-chaos-runs.json`):
+
+- **Before the fixes:** two runs lost 40 and 20 acknowledged events when
+  the API replica was killed.
+- **What fixed it:** each loss was traced and fixed in turn: the
+  consumer's offset commits, the endpoint answering before Kafka had the
+  batch, and the producer's batch buffer (which lost 100 events in run 2).
+- **With all three fixes (runs 4–13):** no acknowledged event lost.
+- **Latest run (13):**
+  - 4,780 events acknowledged, all stored on both replicas, plus 60
+    duplicates;
+  - longest gap without a successful write 4.4 s, without a successful
+    read 5.0 s.
+
+The gaps stayed under the 10 s target in every run but two:
+
+- run 4 had a 52 s outage, while another heavy test shared the 4-vCPU
+  host;
+- run 9 went to 10.6 s with slower health checks, which were reverted.
+
+### Ingest throughput
+
+`tests/bench/ingest_bench.py`: 8 shippers sending 500-event batches for
+60 s, through HAProxy, to two API replicas.
+
+| | Events/s | Failed requests |
+|---|---|---|
+| Accepted | 731 | 0 |
+| Stored in both ClickHouse replicas | 686 | |
+
+That is about 343 events/s per API replica, on one 4-vCPU host that also
+runs both ClickHouse replicas, Keeper and Redpanda. Dedicated nodes should
+do better; this is the number measured.
+
+The first run returned 503s for 11,092 requests. Under load an API
+replica answered `/health` in over a second, the check's timeout, so
+HAProxy marked both replicas down. Checks may now take 5 s.
+
+### Reference architecture: 50 GB/day, a year of retention
+
+`python scripts/reference_architecture.py`
+(`docs/benchmarks/2026-11-20-reference-architecture.json`) uses the
+measured sizes (297 B raw, 29 B in ClickHouse, 33 B in Parquet per
+event), 30 days searchable (7 hot, 23 warm) and 365 days archived, two
+ClickHouse replicas, and peak = 3 × average.
+
+| | Size | Monthly |
+|---|---|---|
+| Events | 168 M a day (1,948/s average, 5,845/s peak) | |
+| Hot, both replicas | 64 GiB on gp3 (100 GiB per node) | $16 |
+| Warm, both replicas | 209 GiB on S3 | $5 |
+| Cold Parquet | 1,733 GiB on S3-IA | $22 |
+| Redpanda disks, S3 requests | | $23 |
+| ClickHouse, 2 × 16 vCPU / 64 GiB | | $1,121 |
+| Keeper, 3 × 2 vCPU | | $91 |
+| Redpanda, 3 × 4 vCPU | | $420 |
+| API, 18 replicas at 343 events/s each | | $1,261 |
+| UI and jobs | | $70 |
+| **Total** | | **$3,030 (≈ $36,400 a year)** |
+
+**The target, $2,000 a month, set before measuring, is not met.**
+
+- **Storage is cheap:** a year of retention costs $65 a month in storage.
+- **Compute is the cost,** and ingest throughput per API replica most of
+  all.
+- **Prices:** on-demand AWS list prices (late 2026), assumptions rather
+  than quotes; change `PRICES` in the script for yours.

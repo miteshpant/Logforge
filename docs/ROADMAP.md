@@ -80,6 +80,26 @@ markers).
   persistent per-tenant index with type history. LogforgeQL extraction
   uses RE2, so no lookaround or backreferences, and allows at most 32
   extracted fields per query.
+- **Storage and scale follow-ups from Phase 12** ([storage](./storage.md), [deployment](./deployment.md)):
+  - **Ingest throughput, for the cost target:**
+    - measure per-replica throughput on dedicated nodes;
+    - run several uvicorn workers per pod;
+    - move the log consumer out of the API process.
+
+    The reference architecture needs 18 API replicas at today's 343 events/s.
+  - **Exactly-once ingest:** deduplicate redelivered batches (a batch id,
+    ClickHouse insert deduplication tokens). Today a failure stores a batch
+    twice.
+  - **ClickHouse 24.x:** a production-ready Replicated database that
+    converts MergeTree tables itself, so `REPLICATED_ENGINES` can go.
+  - **Bind mutation timestamps as parameters** (about 16 `now64()`
+    mutations), so `allow_nondeterministic_mutations` can go.
+  - **Three Keepers and three Redpanda brokers in the HA compose**, and the
+    chaos test killing them too.
+  - **Install the Helm chart on a real cluster in CI** (kind), and publish
+    the images it names.
+  - **Exact per-tenant hot/warm sizes:** tenants share parts, so they're
+    estimated from rows by age.
 - **Entity analytics follow-ups from Phase 11** ([guide](./entities.md)):
   - **Stored risk:** keep each entity's daily risk, so pages show how it
     moved and ranking doesn't recompute 14 days of alerts.

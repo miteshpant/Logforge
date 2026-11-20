@@ -1,0 +1,14 @@
+{
+  "writers": 8,
+  "batch": 500,
+  "api_replicas": 2,
+  "seconds_sending": 64.3,
+  "accepted_events": 47000,
+  "failed_requests": 0,
+  "accepted_per_second": 731,
+  "request_bytes": 10688884,
+  "stored_events": 47000,
+  "seconds_until_stored": 68.5,
+  "stored_per_second": 686,
+  "machine": "4 vCPUs, every service on one host"
+}
