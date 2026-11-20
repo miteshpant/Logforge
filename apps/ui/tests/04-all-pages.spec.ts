@@ -10,6 +10,8 @@ import { loginViaUi, watchForProblems } from './support/session'
  */
 const ROUTES = [
   '/centrum',
+  '/support',
+  '/account',
   '/observability/service-map',
   '/observability/traces',
   '/observability/apm',

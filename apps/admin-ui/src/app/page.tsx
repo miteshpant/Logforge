@@ -39,22 +39,22 @@ const navigationCards = [
     color: "bg-green-50 hover:bg-green-100"
   },
   {
-    title: "Billing & Subscriptions",
-    description: "Manage subscription tiers and billing",
+    title: "Billing",
+    description: "Bills across tenants, the monthly run, feature rates",
     href: "/billing", 
     icon: CreditCard,
     color: "bg-purple-50 hover:bg-purple-100"
   },
   {
-    title: "Feature Management",
-    description: "Configure feature availability",
+    title: "Features by plan",
+    description: "What each subscription tier includes",
     href: "/features",
     icon: Settings,
     color: "bg-orange-50 hover:bg-orange-100"
   },
   {
-    title: "Support & Tickets",
-    description: "Handle customer support requests", 
+    title: "Support",
+    description: "Answer tenants' support tickets",
     href: "/support",
     icon: HelpCircle,
     color: "bg-yellow-50 hover:bg-yellow-100"

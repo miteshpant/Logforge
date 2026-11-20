@@ -22,6 +22,8 @@ from routers.alerts import router as alerts_router
 from routers.security_api import router as security_router
 from routers.cases_api import router as cases_router
 from routers.inbox_api import router as inbox_router
+from routers.platform_admin_api import router as platform_admin_router
+from routers.support_api import admin_router as support_admin_router, router as support_router
 from routers.threat_intel_api import router as threat_intel_router
 from routers.pipelines_api import router as pipelines_router
 from routers.fields_api import router as fields_router
@@ -141,6 +143,9 @@ app.include_router(quota_management_router, tags=["Quota Management"])
 # router's /{detection_id}/... patterns.
 app.include_router(cases_router)
 app.include_router(inbox_router)
+app.include_router(platform_admin_router)
+app.include_router(support_router)
+app.include_router(support_admin_router)
 app.include_router(threat_intel_router)
 app.include_router(pipelines_router)
 app.include_router(fields_router)

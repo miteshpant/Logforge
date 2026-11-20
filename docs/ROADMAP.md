@@ -99,7 +99,10 @@ markers).
   - ~~**Authentication on `/metrics`**~~: done; set `LOGFORGE_METRICS_TOKEN`
     ([self-monitoring](./deployment.md#self-monitoring)).
   - **Run the release workflow** on the first tag, and check `cosign verify`.
-  - **Admin UI** billing, features and support pages.
+  - ~~**Admin UI** billing, features and support pages~~: done. Billing
+    (bills across tenants, an idempotent server-side monthly run, bill PDFs,
+    feature rates), features by plan, and support tickets that tenant
+    members open and platform admins answer ([platform administration](./admin.md)).
   - ~~**Retire the Enterprise RBAC and OIDC-config routes**~~: done. They,
     `/v1/enterprise/auth/providers` and `/v1/enterprise/auth/mfa/setup` answer
     410 Gone naming `/v1/roles/custom`, `/v1/sso/providers` or `/v1/auth/mfa`.
@@ -243,8 +246,8 @@ markers).
 
 ## Remove demo / fake data from the UI
 
-- The admin UI `billing`, `features` and `support` pages are "Coming soon"
-  placeholders (still so after Phase 14).
+- ~~The admin UI `billing`, `features` and `support` pages are "Coming soon"
+  placeholders~~: done ([platform administration](./admin.md)).
 
 ## Features
 

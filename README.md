@@ -29,7 +29,7 @@ Measured on one 4-vCPU VM running the whole compose stack, unless noted. Each ro
 | **Ingest, 2 API replicas** | **731 events/s accepted, 686/s stored**, 47,000 events, 0 failed requests ([run](./docs/benchmarks/2026-11-20-ingest-ha.json)) |
 | **Log pattern clustering** | **1 M lines to templates in 8.5 s** (target 30 s) ([run](./docs/benchmarks/2026-11-20-patterns.json)) |
 | **AI with no model** | investigation copilot finds the root cause in **90%** of 20 seeded scenarios with **0 fabricated evidence**; drafted detections pass the fixture gate **90%** of the time ([evaluations](./docs/ai.md)) |
-| **API surface** | **396 paths / 475 operations**, OpenAPI 3.1 generated from code and checked in CI ([spec](./docs/api/openapi.yaml)) |
+| **API surface** | **406 paths / 486 operations**, OpenAPI 3.1 generated from code and checked in CI ([spec](./docs/api/openapi.yaml)) |
 | **Detection content** | ~300 Sigma rules (vendored SigmaHQ plus Logforge's own), each loaded only if its fixtures pass; correlation rules across batches ([rules](./packages/rules/)) |
 
 ## Architecture
@@ -167,7 +167,7 @@ For a full assessment (architecture, security posture, code quality and prioriti
 | Legacy `/v1/ai/*` query and recommendation endpoints (superseded by the AI features above) | 🧪 Keyword templates and canned output | `apps/api/services/ai_service.py` |
 | Billing | 🟡 Usage metering and invoices computed, no payment provider | `apps/api/routers/usage_api.py` |
 | Tenant web UI (Next.js) | ✅ Screens are wired to the API | `apps/ui/` |
-| Platform admin UI (Next.js) | 🟡 Tenants, users, usage and audit work; billing, features and support pages are placeholders | `apps/admin-ui/` |
+| Platform admin UI (Next.js) | ✅ Tenants, users, usage, audit, billing (monthly run, bill PDFs, rates), features by plan, support tickets | `apps/admin-ui/`, [guide](./docs/admin.md) |
 
 ---
 
@@ -293,7 +293,7 @@ Each endpoint is mapped to a permission such as `logs:write:tenant` in `apps/api
 
 ## API reference
 
-The API has **396 paths (475 operations)**. The OpenAPI 3.1 spec is generated from the code and committed in two equivalent forms:
+The API has **406 paths (486 operations)**. The OpenAPI 3.1 spec is generated from the code and committed in two equivalent forms:
 
 - **[`docs/api/openapi.yaml`](./docs/api/openapi.yaml)** and **[`docs/api/openapi.json`](./docs/api/openapi.json)**. Import either into Postman, Insomnia or Swagger Editor, or generate a client with `openapi-generator`. GitHub displays these files as source rather than as rendered API docs.
 - **Hosted docs:** once GitHub Pages is enabled, the [Publish docs](./.github/workflows/pages.yml) workflow builds the documentation site at `https://miteshpant.github.io/Logforge/` (MkDocs, from `docs/`), with the Redoc API reference at `/api/` and both spec files alongside it.

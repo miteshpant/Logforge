@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ArrowLeft, CreditCard, CheckCircle, AlertTriangle, Calendar, DollarSign, User, Settings, ChevronDown, ChevronRight, Download, Eye } from 'lucide-react'
-import { apiRequest } from '@/lib/api'
+import { apiRequest, downloadBill } from '@/lib/api'
 import { authService } from '@/lib/auth'
 
 interface Subscription {
@@ -359,29 +359,7 @@ export default function SubscriptionManagementPage() {
     try {
       setDownloadingPDF(prev => new Set([...prev, billId]))
       
-      // Fetch PDF from billing API
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7080'}/v1/billing/bills/${billId}/pdf`, {
-        headers: {
-          'Authorization': `Bearer ${authService.getToken()}`,
-          'X-Customer-ID': 'platform'
-        }
-      })
-      
-      if (response.ok) {
-        const blob = await response.blob()
-        const url = window.URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `bill-${billId}.pdf`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        window.URL.revokeObjectURL(url)
-      } else {
-        const errorText = await response.text()
-        throw new Error(`HTTP ${response.status}: ${errorText}`)
-      }
-      
+      await downloadBill(billId)
     } catch (error) {
       console.error('Failed to download PDF:', error)
       setError('Failed to download PDF: ' + (error instanceof Error ? error.message : 'API endpoint not available'))
