@@ -80,6 +80,22 @@ markers).
   persistent per-tenant index with type history. LogforgeQL extraction
   uses RE2, so no lookaround or backreferences, and allows at most 32
   extracted fields per query.
+- **Response follow-ups from Phase 13** ([response automation](./response.md)):
+  - **Compliance reports** (the Phase 13 deliverable not done): evidence
+    for SOC 2 and ISO 27001 controls from the audit log, retention and
+    access reviews.
+  - **More ticket systems with sync:** ServiceNow and Linear. Today they
+    can only be reached by a webhook action.
+  - **Approve from Slack or Teams** (interactive messages), with the same
+    role check as in Logforge.
+  - **Built-in containment connectors** (Okta and Entra ID user disable,
+    AWS security groups), each behind an approval.
+  - **Branches and parallel steps in playbooks**, and a run history kept
+    longer than 180 days for audits.
+  - **A Unicode font in the PDF report** (today Latin-1 only).
+  - **Retire the older `/v1/enterprise/integrations` API** and its tables
+    (`integrations_mt` in `init_simple.sql`, `enterprise_integrations_mt`).
+    The Settings → Integrations page no longer uses them.
 - **Storage and scale follow-ups from Phase 12** ([storage](./storage.md), [deployment](./deployment.md)):
   - **Ingest throughput, for the cost target:**
     - measure per-replica throughput on dedicated nodes;

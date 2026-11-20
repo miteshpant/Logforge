@@ -135,3 +135,16 @@ def test_permissions():
     assert perm("/v1/reports/attack-navigator", "GET") == "security:read:tenant"
     assert perm("/v1/reports/schedules", "GET") == "settings:read:tenant"
     assert perm("/v1/reports/schedules", "POST") == "settings:write:tenant"
+
+
+def test_coverage_comes_from_the_security_service(monkeypatch):
+    # _coverage is replaced in the other tests; this one exercises its real import
+    import routers.reports_api as module
+    import routers.security_api as security_api
+
+    class Service:
+        async def get_mitre_coverage(self, tenant):
+            return {"tenant": tenant, **COVERAGE}
+
+    monkeypatch.setattr(security_api, "get_security_service", lambda: Service())
+    assert asyncio.run(module._coverage("acme"))["tenant"] == "acme"

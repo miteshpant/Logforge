@@ -59,7 +59,7 @@ import {
   Link2,
   TrendingUp,
   MessageSquare,
-  Key, Briefcase , HardDrive } from 'lucide-react'
+  Key, Briefcase , HardDrive, Workflow, FileBarChart } from 'lucide-react'
 import { TenantSelector } from '@/components/TenantSelector'
 import PWASupport from '@/components/PWASupport'
 
@@ -115,6 +115,8 @@ const navSections: NavSection[] = [
       { name: 'Detection Rules', href: '/security/rules', icon: FileText },
       { name: 'Threat Intel', href: '/security/threat-intel', icon: Globe },
       { name: 'Threat Hunting', href: '/security/threat-hunting', icon: Crosshair },
+      { name: 'Playbooks', href: '/security/playbooks', icon: Workflow },
+      { name: 'Reports', href: '/security/reports', icon: FileBarChart },
     ],
   },
   {

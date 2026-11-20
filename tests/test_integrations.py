@@ -170,3 +170,12 @@ def test_missing_config_and_unknown_kinds_are_errors():
 def test_containment_actions_are_marked():
     assert actions.KINDS["containment_webhook"].containment is True
     assert actions.KINDS["slack"].containment is False
+
+
+def test_containment_requests_say_whether_they_are_a_dry_run():
+    out, reqs = run("containment_webhook", {"url": "https://soar.test/contain"}, {},
+                    {"action": "block_ip", "target": "203.0.113.7", "reason": "brute force"})
+    assert out.ok and json.loads(reqs[0].content)["dry_run"] is False
+    out, reqs = run("containment_webhook", {"url": "https://soar.test/contain"}, {},
+                    {"action": "block_ip", "target": "203.0.113.250", "dry_run": True})
+    assert json.loads(reqs[0].content)["dry_run"] is True

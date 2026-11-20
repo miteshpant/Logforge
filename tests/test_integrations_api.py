@@ -115,3 +115,13 @@ def test_permissions():
 
     assert get_endpoint_permission("/v1/integrations", "GET") == "settings:read:tenant"
     assert get_endpoint_permission("/v1/integrations/x/test", "POST") == "settings:write:tenant"
+
+
+def test_testing_a_containment_integration_is_a_dry_run(api):
+    created = api.post("/v1/integrations", json={"name": "Firewall", "kind": "containment_webhook",
+                                                 "config": {"url": "https://soar.test/contain"}}).json()["integration"]
+    assert api.post(f"/v1/integrations/{created['id']}/test", json={}).json()["result"]["ok"] is True
+    assert json.loads(api.sent[-1].content)["dry_run"] is True
+    # a caller can't turn the test into a real containment request
+    api.post(f"/v1/integrations/{created['id']}/test", json={"inputs": {"action": "block_ip", "target": "198.51.100.1"}})
+    assert json.loads(api.sent[-1].content)["dry_run"] is True

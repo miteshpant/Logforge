@@ -51,7 +51,7 @@ def _client():
 
 
 async def _coverage(tenant_id: str) -> Dict[str, Any]:
-    from services.security_service import get_security_service
+    from routers.security_api import get_security_service
 
     return await get_security_service().get_mitre_coverage(tenant_id)
 

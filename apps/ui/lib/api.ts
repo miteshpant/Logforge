@@ -321,6 +321,23 @@ class ApiClient {
   }
 
   /**
+   * GET a file (a PDF or CSV export) with the session's headers. Throws with
+   * the API's error message on failure.
+   */
+  async getBlob(endpoint: string): Promise<{ blob: Blob; filename: string | null }> {
+    this.hydrateAuthFromStorage()
+    const url = endpoint.startsWith('http') ? endpoint : `${this.baseURL}${endpoint}`
+    const response = await fetch(url, { headers: { ...this.defaultHeaders } })
+    if (!response.ok) {
+      let message = `Download failed (${response.status})`
+      try { message = describeApiError(await response.json()) || message } catch { /* not JSON */ }
+      throw new Error(message)
+    }
+    const disposition = response.headers.get('content-disposition') || ''
+    return { blob: await response.blob(), filename: /filename="([^"]+)"/.exec(disposition)?.[1] ?? null }
+  }
+
+  /**
    * Get SSE stream connection
    * Returns a cleanup function to close the connection
    */

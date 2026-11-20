@@ -7,6 +7,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout'
 import TriagePanel from '@/components/ai/TriagePanel'
 import CopilotPanel from '@/components/ai/CopilotPanel'
 import CaseReportPanel from '@/components/ai/CaseReportPanel'
+import CaseTickets from '@/components/response/CaseTickets'
 import { ArrowLeft, Link2, Loader2, MessageSquare, Pin, ShieldAlert, Tag, User } from 'lucide-react'
 import { caseAction, CaseDetail, Evidence, getCase, Severity, unpinEvidence, updateCase } from '@/lib/api/cases'
 import { threatBadge } from '@/lib/intelFormat'
@@ -233,6 +234,8 @@ export default function CaseDetailPage() {
                 </div>
               ))}
             </section>
+
+            <CaseTickets caseId={c.id} refreshKey={c.status} />
 
             {Object.keys(c.entities).length > 0 && (
               <section className="space-y-2">

@@ -627,8 +627,10 @@ class SecurityDAO:
             ALTER TABLE security_events_mt 
             UPDATE {', '.join(update_fields)}
             WHERE id = %(detection_id)s AND customer_id = %(customer_id)s
+            SETTINGS mutations_sync = 1
             """
-            
+            # mutations_sync: return once the alert says so. Closing a case sets its alerts' verdicts and the
+            # case page reads them straight back; an async mutation could still show them as new.
             await self.db.execute_query(query, params)
             logger.debug(f"Security event status updated: {detection_id} -> {status}")
             return True

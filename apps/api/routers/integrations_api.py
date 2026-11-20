@@ -42,7 +42,7 @@ SAMPLE_INPUTS = {
     "email": {"subject": "Logforge test", "body": "{{ alert.title }}"},
     "jira_issue": {"summary": "Logforge test: {{ alert.title }}", "description": "Created by a test from Logforge."},
     "github_issue": {"title": "Logforge test: {{ alert.title }}", "body": "Created by a test from Logforge."},
-    "containment_webhook": {"action": "block_ip", "target": "203.0.113.250", "reason": "Logforge test (dry run)"},
+    "containment_webhook": {"action": "block_ip", "target": "203.0.113.250", "reason": "Logforge test"},
 }
 
 
@@ -169,6 +169,8 @@ async def test(integration_id: str, body: TestBody, customer_id: str = Middlewar
     if not found:
         raise HTTPException(status_code=404, detail="No such integration")
     inputs = body.inputs or SAMPLE_INPUTS.get(found["kind"], {})
+    if actions.KINDS[found["kind"]].containment:  # a test never contains anything for real
+        inputs = {**inputs, "dry_run": True}
     async with _http() as http:
         result = await actions.run(found["kind"], found["config"], found["secrets"], inputs,
                                    sample_context(customer_id), http=http)

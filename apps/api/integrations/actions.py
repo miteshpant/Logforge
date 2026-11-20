@@ -250,7 +250,8 @@ async def _github_issue(config, secrets, inputs, http):
 
 async def _containment_webhook(config, secrets, inputs, http):
     """Ask an external system (an IdP automation, a firewall's API, a SOAR) to
-    contain: {"action": "disable_user"|"block_ip", "target": ..., "reason": ...}."""
+    contain: {"action": "disable_user"|"block_ip", "target": ..., "reason": ..., "dry_run": bool}.
+    A dry run (the integration's Test button) must not change anything."""
     action = inputs.get("action", "")
     if action not in ("disable_user", "block_ip", "isolate_host"):
         return ActionResult(False, error="action must be disable_user, block_ip or isolate_host")
@@ -258,7 +259,8 @@ async def _containment_webhook(config, secrets, inputs, http):
         return ActionResult(False, error="no target")
     return await _webhook(config, secrets, {"body": {"action": action, "target": inputs["target"],
                                                      "reason": inputs.get("reason", ""),
-                                                     "requested_by": inputs.get("requested_by", "")}}, http)
+                                                     "requested_by": inputs.get("requested_by", ""),
+                                                     "dry_run": bool(inputs.get("dry_run"))}}, http)
 
 
 KINDS: Dict[str, Kind] = {k.name: k for k in [

@@ -206,7 +206,7 @@ def work_a_case(source_ip: str):
         time.sleep(2)
     else:
         print("no case opened for the brute force (is detection running?)")
-        return
+        return None
     case_id = found["cases"][0]["id"]
     call("POST", f"/v1/security/cases/{case_id}/assign", {"assignee": ANALYST})
     call("POST", f"/v1/security/cases/{case_id}/status", {"status": "investigating"})
@@ -217,6 +217,74 @@ def work_a_case(source_ip: str):
         "kind": "search", "ref": source_ip, "title": "Everything from the source address"})
     call("POST", f"/v1/security/cases/{case_id}/tags", {"add": ["bastion", "credential-access"]})
     print(f"case worked: {case_id}")
+    return case_id
+
+
+# Response automation (Phase 13). Hosts are reserved .example names: nothing
+# outside the stack is called, and both playbooks are left disabled so the
+# dispatcher doesn't start them on new alerts.
+INTEGRATIONS = [
+    {"name": "SOC Slack", "kind": "slack", "config": {},
+     "secrets": {"webhook_url": "https://hooks.slack.example/services/T0DEMO/B0DEMO/demo"}},
+    {"name": "Security Jira", "kind": "jira_issue",
+     "config": {"base_url": "https://acme.atlassian.example", "email": "secops-bot@acme.example", "project": "SEC"},
+     "secrets": {"api_token": "demo-token", "webhook_secret": "demo-webhook-secret"}},
+    {"name": "Firewall", "kind": "containment_webhook", "config": {"url": "https://soar.acme.example/contain"},
+     "secrets": {"signing_secret": "demo-signing-secret"}},
+]
+RESPONSE_PLAYBOOK = """name: Brute force response
+trigger:
+  on: alert
+  when: alert.severity in ["high", "critical"] and alert.rule_id == "ssh_brute_force"
+steps:
+  - id: intel
+    enrich: {indicator: "{{ alert.entities.src_ip.0 }}"}
+  - id: notify
+    action: {integration: SOC Slack, inputs: {text: "{{ alert.title }} ({{ steps.intel.output.verdict }})"}}
+  - id: ticket
+    action: {integration: Security Jira, inputs: {summary: "{{ alert.title }}"}}
+    link_case: true
+  - id: approve
+    approval: {prompt: "Block {{ alert.entities.src_ip.0 }} at the firewall?", timeout: 4h}
+  - id: block
+    action: {integration: Firewall, inputs: {action: block_ip, target: "{{ alert.entities.src_ip.0 }}"}}
+"""
+CONTAIN_PLAYBOOK = """name: Contain a brute-force source
+trigger:
+  on: alert
+  when: alert.severity == "critical" and alert.rule_id == "ssh_brute_force"
+steps:
+  - id: intel
+    enrich: {indicator: "{{ alert.entities.src_ip.0 }}"}
+  - id: approve
+    approval: {prompt: "Block {{ alert.entities.src_ip.0 }} at the firewall for 24 hours?", timeout: 4h}
+  - id: block
+    action: {integration: Firewall, inputs: {action: block_ip, target: "{{ alert.entities.src_ip.0 }}"}}
+"""
+
+
+def seed_response(case_id):
+    """Integrations, two playbooks, and a containment waiting for approval on the case."""
+    existing = {i["name"]: i["id"] for i in call("GET", "/v1/integrations")["integrations"]}
+    for item in INTEGRATIONS:
+        if item["name"] in existing:
+            call("PUT", f"/v1/integrations/{existing[item['name']]}", item)
+        else:
+            call("POST", "/v1/integrations", item)
+    playbooks = {p["name"]: p["id"] for p in call("GET", "/v1/playbooks")["playbooks"]}
+    ids = {}
+    for definition in (RESPONSE_PLAYBOOK, CONTAIN_PLAYBOOK):
+        name = definition.split("\n", 1)[0].split(": ", 1)[1]
+        body = {"definition": definition, "enabled": False}
+        saved = call("PUT", f"/v1/playbooks/{playbooks[name]}", body) if name in playbooks else \
+            call("POST", "/v1/playbooks", body)
+        ids[name] = saved["playbook"]["id"]
+    if case_id and not call("GET", "/v1/playbooks/runs?status=waiting_approval")["runs"]:
+        alert_ids = call("GET", f"/v1/security/cases/{case_id}")["case"]["alert_ids"]
+        run = call("POST", f"/v1/playbooks/{ids['Contain a brute-force source']}/run",
+                   {"alert_id": alert_ids[0], "case_id": case_id})["run"]
+        print(f"playbook run {run['id']}: {run['status']}")
+    print(f"response: {len(INTEGRATIONS)} integrations, {len(ids)} playbooks")
 
 
 DASHBOARD = "Service health"
@@ -267,5 +335,6 @@ if __name__ == "__main__":
     brute_source = seed_attacks()
     seed_threat_intel()
     seed_pipeline()
-    work_a_case(brute_source)
+    case_id = work_a_case(brute_source)
     seed_dashboard()
+    seed_response(case_id)

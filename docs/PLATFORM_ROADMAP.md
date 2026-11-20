@@ -1196,6 +1196,46 @@ human control.
 
 **Goal:** act on findings, not only observe them (SOAR-lite).
 
+> **Status: done, compliance reports not yet (2026-11-20).** Guide: [Response automation](./response.md).
+>
+> | Acceptance criterion | Result |
+> |---|---|
+> | A playbook can take an alert to a Slack notification and a Jira ticket, and a resolved ticket closes the case, covered by an integration test with mocked services | **Met** (`tests/test_response_acceptance_live.py`, in CI's live job against ClickHouse). Slack and Jira are mocked. The stores, case service, dispatcher and webhook route are real. |
+>
+> - **Done: integrations:**
+>   - webhook, Slack, Teams, PagerDuty, Opsgenie, email, Jira and GitHub
+>     issues, and containment through the customer's own automation;
+>   - secrets sealed at rest and never returned;
+>   - templates that can't reach Python internals or be injected from logs;
+>   - private addresses refused unless allowed.
+>   Settings → Integrations.
+> - **Done: playbooks:**
+>   - YAML triggered by alerts and cases;
+>   - enrich, action, search and approval steps;
+>   - a containment step refused unless an approval comes before it;
+>   - run once per alert or case, with one dispatcher across replicas.
+>   Security → Playbooks, with approvals at the top.
+> - **Done: bi-directional ticket sync:** Jira and GitHub, by signed webhook
+>   or polling; the ticket wins when both moved. Tickets on the case page.
+> - **Done: exports and reports:**
+>   - ATT&CK Navigator layer;
+>   - a security operations report as JSON, CSV or PDF;
+>   - daily, weekly or monthly reports by email.
+>   Security → Reports.
+> - **Fixed on the way:**
+>   - five bugs the unit tests' fakes hid, found by running against
+>     ClickHouse (see the [guide](./response.md#how-it-was-tested));
+>   - case verdicts on alerts were written asynchronously, so a closed
+>     case's page could still show its alerts as new;
+>   - an integration's Test button now sends containment requests as a dry
+>     run.
+> - **Gaps:**
+>   - compliance reports;
+>   - ticket sync for systems other than Jira and GitHub;
+>   - no built-in containment connectors;
+>   - playbooks are linear (no branches or parallel steps);
+>   - approvals are decided in Logforge only.
+
 ### Deliverables
 
 1. **Actions:** webhook, Slack, Microsoft Teams, PagerDuty/Opsgenie, email,

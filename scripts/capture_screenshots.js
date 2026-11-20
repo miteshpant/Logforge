@@ -234,6 +234,21 @@ async function main() {
   await page.waitForTimeout(500)
   await shot(page, 'storage-costs')
 
+  // Phase 13: integrations, playbooks with an approval waiting, reports
+  await page.goto(`${UI}/settings/integrations`, { waitUntil: 'load' })
+  await page.getByTestId('integrations-table').waitFor({ timeout: 30000 })
+  await page.waitForTimeout(800)
+  await shot(page, 'integrations')
+  await page.goto(`${UI}/security/playbooks`, { waitUntil: 'load' })
+  await page.getByTestId('playbooks-table').waitFor({ timeout: 30000 })
+  await page.getByTestId('runs').locator('li').first().click()
+  await page.waitForTimeout(800)
+  await shot(page, 'playbooks')
+  await page.goto(`${UI}/security/reports`, { waitUntil: 'load' })
+  await page.getByTestId('report-Summary').waitFor({ timeout: 60000 })
+  await page.waitForTimeout(800)
+  await shot(page, 'reports')
+
   await browser.close()
   if (errors.length) {
     console.error('page errors:', errors)
