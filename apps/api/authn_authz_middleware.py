@@ -415,6 +415,9 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in WRITE_METHODS:
             return "security:write:tenant"
         return "security:read:tenant"
+    elif path == "/v1/query/advanced":
+        # An aggregation over the tenant's logs: reading them, like GET /v1/logs.
+        return "logs:read:tenant"
     elif path.startswith("/v1/query/"):
         if method in WRITE_METHODS:
             return "queries:write:tenant"
@@ -523,6 +526,10 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in WRITE_METHODS:
             return "observability:write:tenant"
         return "observability:read:tenant"
+    elif path == "/v1/stream/alerts":
+        return "alerts:read:tenant"  # the live alert feed: what GET /v1/alerts shows
+    elif path == "/v1/stream/security":
+        return "security:read:tenant"  # live security events: what the SIEM pages show
     elif path.startswith("/v1/stream/"):
         return "observability:read:tenant"  # Streaming endpoints require observability read access
     elif path.startswith("/v1/streaming/config"):

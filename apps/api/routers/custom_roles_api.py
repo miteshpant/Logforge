@@ -131,6 +131,19 @@ async def remove_member(role_id: str, user_id: str, request: Request, customer_i
 async def my_access(request: Request, customer_id: str = MiddlewareTenant) -> Dict[str, Any]:
     roles = await asyncio.to_thread(_store().roles_of, customer_id, _user(request))
     permissions, scope = cr.effective(roles)
+    from authn_authz_middleware import ROLE_PERMISSIONS, UserRole
+
+    granted = []
+    for assignment in getattr(request.state, "roles", None) or []:
+        if assignment.get("tenant_id") not in (customer_id, "platform"):
+            continue
+        try:
+            granted += ROLE_PERMISSIONS.get(UserRole(assignment["role"]), [])
+        except ValueError:
+            continue
+    # role_permissions: the built-in roles' grants ("logs:read,search:tenant"),
+    # so the UI can leave out what the caller would be refused.
     return {"custom_roles": [r.name for r in roles], "permissions": permissions,
+            "role_permissions": sorted(set(granted)),
             "data_scope": {"services": list(scope.services)} if scope else None,
             "masked_fields": sorted(cr.masked_fields(roles))}

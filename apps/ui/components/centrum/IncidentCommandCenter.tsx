@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
 import { apiClient } from '@/lib/api'
 import { createCase } from '@/lib/api/cases'
+import { useAccess } from '@/lib/access'
 import {
   AlertTriangle,
   AlertCircle,
@@ -87,6 +88,7 @@ const STATUS_CONFIG = {
 export default function IncidentCommandCenter({ isLoading: externalLoading, timeRange }: IncidentCommandCenterProps) {
   const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
+  const { can } = useAccess()
   const [actionError, setActionError] = useState<string | null>(null)
   const { getApiTimeRange, currentTimeRange } = useTimeRange()
   const [incidents, setIncidents] = useState<Incident[]>([])
@@ -431,25 +433,25 @@ export default function IncidentCommandCenter({ isLoading: externalLoading, time
 
                     {/* Action Buttons */}
                     <div className="flex items-center gap-2 pt-2 flex-wrap">
-                      {incident.status === 'triggered' && (
+                      {incident.status === 'triggered' && can('alerts:write') && (
                         <button data-testid="incident-acknowledge" disabled={busy === incident.id}
                           onClick={(e) => { e.stopPropagation(); setStatus(incident, 'acknowledge') }}
                           className="px-4 py-2 rounded-lg bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 text-sm font-medium transition-colors disabled:opacity-50">
                           Acknowledge
                         </button>
                       )}
-                      {incident.status !== 'resolved' && (
+                      {incident.status !== 'resolved' && can('alerts:write') && (
                         <button data-testid="incident-resolve" disabled={busy === incident.id}
                           onClick={(e) => { e.stopPropagation(); setStatus(incident, 'resolve') }}
                           className="px-4 py-2 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 text-sm font-medium transition-colors disabled:opacity-50">
                           Resolve
                         </button>
                       )}
-                      <button data-testid="incident-open-case" disabled={busy === incident.id}
+                      {can('security:write') && <button data-testid="incident-open-case" disabled={busy === incident.id}
                         onClick={(e) => { e.stopPropagation(); openCase(incident) }}
                         className="px-4 py-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 text-sm font-medium transition-colors disabled:opacity-50">
                         Open case
-                      </button>
+                      </button>}
                       <button onClick={(e) => { e.stopPropagation(); navigateToAlert(incident.id) }}
                         className="px-4 py-2 rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 text-sm font-medium transition-colors">
                         View Full Details

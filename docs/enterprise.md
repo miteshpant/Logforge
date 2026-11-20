@@ -93,7 +93,11 @@ custom role adds to it:
   - Roles without a scope don't widen it.
   - An empty scope reads no logs.
 
-`/v1/auth/access` shows a user their custom roles, permissions and scope.
+`/v1/auth/access` shows a user their custom roles, permissions and scope,
+and their built-in role's grants (`role_permissions`). The UI uses it to
+leave out what a role can't read: Centrum, the landing page, shows a viewer
+the logs summary but not usage, alerts or security, instead of failing
+requests.
 
 How the scope is enforced:
 

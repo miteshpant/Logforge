@@ -12,6 +12,7 @@ import IncidentCommandCenter from '@/components/centrum/IncidentCommandCenter'
 import AIInsightsWidget from '@/components/centrum/AIInsightsWidget'
 import AnomalyStatsWidget from '@/components/centrum/AnomalyStatsWidget'
 import { apiClient } from '@/lib/api'
+import { useAccess } from '@/lib/access'
 
 // Lazy load streaming panel to improve initial page load
 const LiveStreamingPanel = lazy(() => import('@/components/centrum/LiveStreamingPanel'))
@@ -27,6 +28,13 @@ const MemoizedAnomalyStats = memo(AnomalyStatsWidget)
 
 export default function CentrumPage() {
   const { getApiTimeRange, currentTimeRange, refreshTrigger } = useTimeRange()
+  // Each widget reads one area; a role without it doesn't see the widget
+  // (rather than an error), e.g. usage is the admin's, security the analyst's.
+  const { ready, can } = useAccess()
+  const show = {
+    usage: can('usage:read'), observability: can('observability:read'), alerts: can('alerts:read'),
+    logs: can('logs:read'), security: can('security:read'), ai: can('ai:read'),
+  }
   const [logsData, setLogsData] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [alertsData, setAlertsData] = useState<any>(null)
@@ -299,98 +307,98 @@ export default function CentrumPage() {
 
   // Load Usage when enabled - immediate
   useEffect(() => {
-    if (enableUsage) {
+    if (enableUsage && show.usage) {
       console.log('📊 Loading Usage data...')
       loadUsageOverview()
     }
-  }, [enableUsage, currentTimeRange.value, refreshTrigger])
+  }, [enableUsage, show.usage, currentTimeRange.value, refreshTrigger])
 
   // Load Logs when enabled - 100ms delay to stagger API calls
   useEffect(() => {
-    if (enableLogs) {
+    if (enableLogs && show.logs) {
       const timer = setTimeout(() => {
         console.log('📝 Loading Logs data...')
         loadLogsOverview()
       }, 100)
       return () => clearTimeout(timer)
     }
-  }, [enableLogs, currentTimeRange.value, refreshTrigger])
+  }, [enableLogs, show.logs, currentTimeRange.value, refreshTrigger])
 
   // Load Alerts when enabled - 200ms delay
   useEffect(() => {
-    if (enableAlerts) {
+    if (enableAlerts && show.alerts) {
       const timer = setTimeout(() => {
         console.log('🚨 Loading Alerts data...')
         loadAlertsOverview()
       }, 200)
       return () => clearTimeout(timer)
     }
-  }, [enableAlerts, currentTimeRange.value, refreshTrigger])
+  }, [enableAlerts, show.alerts, currentTimeRange.value, refreshTrigger])
 
   // Load Observability when enabled - 300ms delay
   useEffect(() => {
-    if (enableObservability) {
+    if (enableObservability && show.observability) {
       const timer = setTimeout(() => {
         console.log('👁️ Loading Observability data...')
         loadObservabilityOverview()
       }, 300)
       return () => clearTimeout(timer)
     }
-  }, [enableObservability, currentTimeRange.value, refreshTrigger])
+  }, [enableObservability, show.observability, currentTimeRange.value, refreshTrigger])
 
   // Load Security when enabled - 400ms delay
   useEffect(() => {
-    if (enableSecurity) {
+    if (enableSecurity && show.security) {
       const timer = setTimeout(() => {
         console.log('🔒 Loading Security data...')
         loadSecurityOverview()
       }, 400)
       return () => clearTimeout(timer)
     }
-  }, [enableSecurity, currentTimeRange.value, refreshTrigger])
+  }, [enableSecurity, show.security, currentTimeRange.value, refreshTrigger])
 
   return (
     <DashboardLayout>
       <div className="space-y-6 max-w-7xl mx-auto" data-testid="centrum-container">
         {/* Usage Stats - Top Row */}
-        <MemoizedUsageStats
+        {ready && show.usage && <div data-testid="centrum-usage"><MemoizedUsageStats
           data={usageData}
           isLoading={isLoadingUsage}
-        />
+        /></div>}
 
         {/* Observability + APM Stats */}
-        <MemoizedObservabilityStats
+        {ready && show.observability && <MemoizedObservabilityStats
           data={observabilityData}
           isLoading={isLoadingObservability}
-        />
+        />}
 
         {/* Incident Command Center - Full Width */}
-        <IncidentCommandCenter timeRange={currentTimeRange.label} />
+        {ready && show.alerts && <IncidentCommandCenter timeRange={currentTimeRange.label} />}
 
         {/* Main Widgets - Logs, Alerts, and Security Overview */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <MemoizedLogsOverview
+          {ready && show.logs && <div data-testid="centrum-logs"><MemoizedLogsOverview
             data={logsData}
             isLoading={isLoading}
             timeRange={currentTimeRange.label}
-          />
-          <MemoizedAlertsOverview
+          /></div>}
+          {ready && show.alerts && <div data-testid="centrum-alerts"><MemoizedAlertsOverview
             data={alertsData}
             isLoading={isLoadingAlerts}
             timeRange={currentTimeRange.label}
-          />
-          <MemoizedSecurityEvents
+          /></div>}
+          {ready && show.security && <div data-testid="centrum-security"><MemoizedSecurityEvents
             data={securityData}
             isLoading={isLoadingSecurity}
             timeRange={currentTimeRange.label}
-          />
+          /></div>}
         </div>
 
         {/* AI Intelligence Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {ready && show.ai && <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <MemoizedAIInsights />
           <MemoizedAnomalyStats />
-        </div>
+        </div>}
 
         {/* Live Streaming Panel - Bottom Row (Lazy Loaded) */}
         <Suspense fallback={
@@ -401,7 +409,8 @@ export default function CentrumPage() {
             </div>
           </div>
         }>
-          <LiveStreamingPanel />
+          {ready && <LiveStreamingPanel streams={{ alerts: show.alerts, security: show.security,
+            traces: show.observability, metrics: show.observability }} />}
         </Suspense>
       </div>
     </DashboardLayout>

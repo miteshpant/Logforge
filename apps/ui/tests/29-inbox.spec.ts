@@ -32,10 +32,6 @@ test('a case @mention shows under the mentioned user\'s bell', async ({ page, re
   await page.fill('[data-testid="password-input"]', password)
   await page.locator('[data-testid="login-button"]:not([disabled])').click()
   await page.waitForURL(/\/centrum$/)
-  // Centrum calls admin-only endpoints (usage, advanced query, alert stream)
-  // and gets 403s for an analyst; that's tracked separately. Watch from the
-  // cases list, an analyst's page.
-  await page.goto('/security/cases', { waitUntil: 'load' })
   const problems = watchForProblems(page)
 
   await expect(page.getByTestId('inbox-unread')).toHaveText('1', { timeout: 30_000 })
