@@ -1073,6 +1073,35 @@ human control.
 
 **Goal:** see risk per user, host, IP and service, not just per alert.
 
+> **Status: done (2026-11-20).** Guide: [Entities](./entities.md).
+>
+> | Acceptance criterion | Result |
+> |---|---|
+> | On the evaluation corpus, the compromised entities rank in the top 5 by risk within the scenario window | **Met in 10 of 10 scenarios**, all within the top 4 (`tests/test_entity_risk_eval.py`, every change). 14 days and ~930 alerts per scenario, with daily churn, recurring admin activity, an internal scanner, failed-login bursts and weak intel hits. |
+> | Pattern clustering reduces 1 M log lines to a browsable set of templates in under 30 s | **Met**: 1 M lines (80 message shapes, plus a 200 k-line baseline) to 20 templates in 8.5 s on 4 vCPUs (`tests/bench/patterns_bench.py`, `docs/benchmarks/2026-11-20-patterns.json`). |
+>
+> - **Done: entity model** (migration 026): users, hosts, addresses, services
+>   and cloud accounts with first/last seen and event counts, and the
+>   entities seen together, kept by materialized views; `GET /v1/entities`.
+> - **Done: entity pages:** risk, why, anomalies, events, alerts, cases,
+>   related entities; the copilot starts from an entity.
+> - **Done: risk scoring** (`entity_risk.py`): severity with decay,
+>   diminishing repeats, rarity across the tenant, ATT&CK progression within
+>   24 hours shared by linked entities, intel and anomalies, with factors.
+> - **Done: behaviour baselines** (`entity_baselines.py`): hours, new
+>   countries, volume (the 3-sigma rule of `services/anomaly_detector.py`),
+>   peer-group spread.
+> - **Done: log pattern clustering** (`log_patterns.py`, `| patterns [new|rare]`),
+>   with new-pattern alerts through saved searches.
+> - **Gaps:**
+>   - The risk scenarios were written by the scoring's author.
+>   - Risk is computed per request from the last 14 days of alerts (up to
+>     20,000, cached a minute), not stored per entity with history.
+>   - Baselines feed risk only for the top 30 users, hosts and addresses.
+>   - Peer groups are all entities of a type, not learned groups.
+>   - `services/multi_metric_anomaly_detector.py` is not used.
+>   - `| patterns` reads up to 1 M lines of the window.
+
 ### Deliverables
 
 1. **Entity model:** entities extracted from events (user, host, IP, service,

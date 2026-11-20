@@ -80,6 +80,16 @@ markers).
   persistent per-tenant index with type history. LogforgeQL extraction
   uses RE2, so no lookaround or backreferences, and allows at most 32
   extracted fields per query.
+- **Entity analytics follow-ups from Phase 11** ([guide](./entities.md)):
+  - **Stored risk:** keep each entity's daily risk, so pages show how it
+    moved and ranking doesn't recompute 14 days of alerts.
+  - **Learned peer groups:** cluster by role (hosts used, services) instead
+    of comparing with every entity of a type.
+  - **Baselines for every entity in the ranking**, not just the top 30.
+  - **Patterns at scale:** cluster in a background job per service and keep
+    templates, so `| patterns` covers more than 1 M lines.
+  - **Independent scenarios:** risk scenarios written by someone other than
+    the author of the scoring.
 - **AI follow-ups from Phase 10** ([guide](./ai.md#investigation-and-authoring-phase-10)):
   - **Record the models:** `record_copilot.py` (needs ClickHouse) and
     `record_rule_draft.py`, then commit the recordings and baselines.
