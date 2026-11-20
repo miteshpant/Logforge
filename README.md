@@ -324,8 +324,8 @@ apps/
     events/           Kafka publishers, consumers, handlers
     config/           Field mappings, topics (events.yml), pricing, quotas, MITRE catalogue
     content/rules/    Vendored SigmaHQ detection rules (DRL 1.1)
-  ui/                 Tenant web UI (Next.js 14)
-  admin-ui/           Platform admin UI (Next.js 14)
+  ui/                 Tenant web UI (Next.js 15)
+  admin-ui/           Platform admin UI (Next.js 15)
 packages/
   rules/              Logforge's own Sigma rules, correlation bundles and content pack (loaded at startup)
   packs/              Source content packs: pipelines, rules, searches, dashboards, samples (docs/packs.md)

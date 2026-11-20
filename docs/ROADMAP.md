@@ -81,10 +81,8 @@ markers).
   uses RE2, so no lookaround or backreferences, and allows at most 32
   extracted fields per query.
 - **Enterprise follow-ups from Phase 14** ([enterprise access](./enterprise.md), [security](./security.md)):
-  - **Next.js 15.5+ for both UIs** (React 19, async request APIs). Next 14 has
-    advisories fixed only there; they're allowlisted until 2027-01-31
-    (`security/audit-allowlist.json`), and three Server Components DoS ones
-    apply.
+  - ~~**Next.js 15.5+ for both UIs**~~: done. Both run Next.js 15.5.29 and
+    React 19; the audit allowlist and `trivyignore` are empty.
   - **SAML** sign-in. (MFA is done: TOTP with backup codes, enforced at
     sign-in; see [enterprise.md](./enterprise.md#two-step-sign-in-totp).)
   - ~~**Data scopes for traces, metrics and alerts**, archive search under a
