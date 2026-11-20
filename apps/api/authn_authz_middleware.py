@@ -443,6 +443,9 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in WRITE_METHODS:
             return "settings:write:tenant"
         return "settings:read:tenant"
+    elif path.startswith("/v1/inbox"):
+        # Your own notifications: everyone signed in to the tenant.
+        return "tenant_profile:read:tenant"
     elif path.startswith("/v1/reports/compliance"):
         # The access review lists every user and key: compliance, not SOC, readers.
         return "compliance:read:tenant"

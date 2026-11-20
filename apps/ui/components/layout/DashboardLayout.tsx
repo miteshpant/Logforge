@@ -61,6 +61,7 @@ import {
   MessageSquare,
   Key, Briefcase , HardDrive, Workflow, FileBarChart } from 'lucide-react'
 import { TenantSelector } from '@/components/TenantSelector'
+import InboxBell from '@/components/layout/InboxBell'
 import PWASupport from '@/components/PWASupport'
 
 interface NavItem {
@@ -417,10 +418,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               {/* Tenant Selector */}
               <TenantSelector />
 
-              {/* Settings */}
-              <Button variant="ghost" size="sm">
-                <Settings className="w-5 h-5" />
-              </Button>
+              {/* Notifications: case mentions and assignments */}
+              <InboxBell />
             </div>
           </div>
         </header>

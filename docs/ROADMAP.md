@@ -39,9 +39,11 @@ markers).
   between API replicas).
 - **Cases follow-ups from Phase 2**
   ([platform roadmap](./PLATFORM_ROADMAP.md)): ~~merge and split need UI~~
-  (done: pick alerts to split off, merge another open case, on the case page); @mentions are recorded on notes but not delivered,
-  which needs per-user notifications; "create case" should be available
-  wherever an alert is shown (SIEM dashboard, Centrum incidents); a case
+  (done: pick alerts to split off, merge another open case, on the case page); ~~@mentions are recorded on notes but not delivered~~
+  (done: a bell in the header and email, also for assignments); ~~"create
+  case" should be available wherever an alert is shown~~ (done: SIEM
+  dashboard and Centrum incidents, whose Acknowledge and Resolve buttons
+  also work now); a case
   per host splits lateral movement across hosts (link source and
   destination hosts); ~~the grouping lock is per API process~~ (done: a Redis
   lock per tenant and entity, with the local lock as fallback); ~~SLA targets

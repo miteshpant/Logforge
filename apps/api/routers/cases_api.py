@@ -18,6 +18,7 @@ from authn_authz_middleware import get_current_user
 from cases import CaseError
 from error_handling import internal_error
 from models import User
+import user_inbox
 
 router = APIRouter(prefix="/v1/security/cases", tags=["cases"])
 
@@ -26,6 +27,12 @@ def _case_service():
     from services.case_service import CaseService
 
     return CaseService()
+
+
+async def _notify(tenant_id: str, build) -> None:
+    from dependencies import get_clickhouse_client
+
+    await user_inbox.notify(get_clickhouse_client(), tenant_id, build)
 
 
 def _actor(user: Any) -> str:
@@ -249,15 +256,19 @@ async def update_case(case_id: str, body: CaseUpdate, customer_id: str = Header(
 @router.post("/{case_id}/assign")
 async def assign_case(case_id: str, body: Assign, customer_id: str = Header(..., alias="X-Customer-ID"),
                       current_user: User = Depends(get_current_user)) -> Dict[str, Any]:
-    return _dict(await _run(_case_service().act(customer_id, case_id, "assign", _actor(current_user),
-                                                assignee=body.assignee)))
+    actor = _actor(current_user)
+    case = await _run(_case_service().act(customer_id, case_id, "assign", actor, assignee=body.assignee))
+    await _notify(customer_id, lambda members: user_inbox.assignment_notice(case, actor, members))
+    return _dict(case)
 
 
 @router.post("/{case_id}/comments")
 async def comment_case(case_id: str, body: Comment, customer_id: str = Header(..., alias="X-Customer-ID"),
                        current_user: User = Depends(get_current_user)) -> Dict[str, Any]:
-    return _dict(await _run(_case_service().act(customer_id, case_id, "comment", _actor(current_user),
-                                                text=body.text)))
+    actor = _actor(current_user)
+    case = await _run(_case_service().act(customer_id, case_id, "comment", actor, text=body.text))
+    await _notify(customer_id, lambda members: user_inbox.mention_notices(case, body.text, actor, members))
+    return _dict(case)
 
 
 @router.post("/{case_id}/status")

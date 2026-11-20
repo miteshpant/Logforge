@@ -4071,6 +4071,27 @@
         "title": "QuestionBody",
         "type": "object"
       },
+      "ReadBody": {
+        "properties": {
+          "ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Notifications to mark read; omit for all",
+            "title": "Ids"
+          }
+        },
+        "title": "ReadBody",
+        "type": "object"
+      },
       "RefreshRequest": {
         "description": "Token refresh request (LF-015).\n\nCarries the opaque refresh token; deliberately does NOT require a valid\naccess token, since its whole purpose is renewing an expired session.",
         "properties": {
@@ -17528,6 +17549,127 @@
         "summary": "Webhook",
         "tags": [
           "integrations"
+        ]
+      }
+    },
+    "/v1/inbox": {
+      "get": {
+        "description": "Your notifications, newest first, and how many are unread.",
+        "operationId": "list_inbox_v1_inbox_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Inbox V1 Inbox Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Inbox",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/v1/inbox/read": {
+      "post": {
+        "operationId": "mark_read_v1_inbox_read_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Mark Read V1 Inbox Read Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Mark Read",
+        "tags": [
+          "Notifications"
         ]
       }
     },
