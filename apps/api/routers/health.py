@@ -4,7 +4,10 @@ Health and core API endpoints
 
 from datetime import datetime, timezone
 from typing import Dict, Any
-from fastapi import APIRouter, HTTPException
+import hmac
+import os
+
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from models import HealthResponse
 from services.health_service import HealthService
@@ -13,7 +16,7 @@ router = APIRouter()
 
 
 @router.get("/metrics", response_class=PlainTextResponse, include_in_schema=False)
-async def metrics():
+async def metrics(request: Request):
     """
     Prometheus metrics endpoint (ENH-019).
 
@@ -22,12 +25,20 @@ async def metrics():
     publish/failure counts. Before this existed, an on-call engineer had only
     logs -- no ingest lag, queue depth, error rate or latency percentiles.
 
-    Not authenticated, by convention for Prometheus scrape targets: it is
-    expected to be exposed on an internal network or restricted at the ingress.
-    It reports no tenant-identifying data -- all labels are bounded
-    (method, route template, status class, publisher name).
+    With LOGFORGE_METRICS_TOKEN set, scrapers must send it as a bearer token
+    (Prometheus: `authorization: {credentials: ...}`). Without it the endpoint
+    is open, as Prometheus targets conventionally are: keep it on an internal
+    network then. It reports no tenant-identifying data -- all labels are
+    bounded (method, route template, status class, publisher name).
     """
     from self_metrics import collect_pipeline_gauges, get_registry
+
+    token = os.getenv("LOGFORGE_METRICS_TOKEN", "")
+    if token:
+        sent = request.headers.get("authorization", "")
+        if not hmac.compare_digest(sent, f"Bearer {token}"):
+            raise HTTPException(status_code=401, detail="A metrics token is required",
+                                headers={"WWW-Authenticate": "Bearer"})
 
     collect_pipeline_gauges()
     return PlainTextResponse(

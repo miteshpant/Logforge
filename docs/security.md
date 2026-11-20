@@ -105,7 +105,8 @@ The workflow hasn't run yet: the first tag will be its first run.
   - Redaction runs before anything reaches an LLM.
   - Integrations may not call private addresses unless allowed.
   - The user list is tenant scoped (Phase 14 fixed a cross-tenant listing).
-  - `/metrics` is unauthenticated: keep it on the internal network.
+  - `/metrics` needs a bearer token when `LOGFORGE_METRICS_TOKEN` is set; it's
+    open without one.
 - **Denial of service**
   - Request size limits and query cost limits (`EXPLAIN ESTIMATE`).
   - Rate limits and token budgets for AI.
@@ -125,7 +126,6 @@ The workflow hasn't run yet: the first tag will be its first run.
   (refused), and there's no field-level masking.
 - **Sign-in:** no SAML, and MFA enrollment exists but isn't enforced at
   sign-in.
-- **`/metrics`** has no authentication.
 - **Prompt injection** from log content is mitigated (tools are read-only and
   answers are cited), not prevented.
 - **Next.js 14:** the UIs run it until the Next.js 15 migration.

@@ -268,3 +268,29 @@ def test_pipeline_gauge_collection_never_raises():
     from self_metrics import collect_pipeline_gauges
 
     collect_pipeline_gauges()  # must not raise with no infra running
+
+
+# ---------------------------------------------------------------------------
+# Authentication (roadmap: "Authentication on /metrics")
+# ---------------------------------------------------------------------------
+
+def _metrics_client():
+    from routers.health import router
+
+    app = FastAPI()
+    app.include_router(router)
+    return TestClient(app)
+
+
+def test_metrics_need_the_token_when_one_is_set(monkeypatch):
+    monkeypatch.setenv("LOGFORGE_METRICS_TOKEN", "scrape-secret")
+    client = _metrics_client()
+    assert client.get("/metrics").status_code == 401
+    assert client.get("/metrics", headers={"Authorization": "Bearer wrong"}).status_code == 401
+    ok = client.get("/metrics", headers={"Authorization": "Bearer scrape-secret"})
+    assert ok.status_code == 200 and "logforge_" in ok.text
+
+
+def test_metrics_are_open_without_a_token(monkeypatch):
+    monkeypatch.delenv("LOGFORGE_METRICS_TOKEN", raising=False)
+    assert _metrics_client().get("/metrics").status_code == 200

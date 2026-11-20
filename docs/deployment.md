@@ -253,8 +253,11 @@ ClickHouse replicas, and peak = 3 × average.
 
 ## Self-monitoring
 
-The API serves Prometheus metrics at `/metrics` (unauthenticated: keep it
-on the internal network). The compose stack has a `monitoring` profile with
+The API serves Prometheus metrics at `/metrics`. Set
+`LOGFORGE_METRICS_TOKEN` and scrapers must send it as a bearer token. In
+Prometheus that's `authorization: {credentials_file: /etc/prometheus/metrics-token}`
+on the job. Without a token the endpoint is open: keep it on the internal
+network. The compose stack has a `monitoring` profile with
 Prometheus and Grafana:
 
 ```bash

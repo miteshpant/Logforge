@@ -165,6 +165,8 @@ services:
       - REDIS_PORT=6379
       - REDIS_DB=0
       - CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:3002
+      # Optional: require this bearer token on /metrics (see docs/deployment.md#self-monitoring)
+      - LOGFORGE_METRICS_TOKEN=${LOGFORGE_METRICS_TOKEN:-}
     depends_on:
       clickhouse:
         condition: service_healthy
