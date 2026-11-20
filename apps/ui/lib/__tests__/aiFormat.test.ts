@@ -48,3 +48,50 @@ describe('parseLogsLink', () => {
     expect(parseLogsLink('?logql=x&from=garbage&to=2026-11-19T10:00:00Z', now)).toEqual({ query: 'x', start: null, end: null })
   })
 })
+
+// -- Phase 9 ---------------------------------------------------------------------------
+import { draftSummary, eventForExplain, fallbackLabel } from '../aiFormat'
+
+describe('fallbackLabel', () => {
+  it('says how an answer was made without a model', () => {
+    expect(fallbackLabel('rule_based')).toBe('Rule-based draft (AI off)')
+    expect(fallbackLabel('template')).toBe('Built from the evidence, without AI')
+    expect(fallbackLabel('heuristic')).toBe('Heuristic draft, without AI')
+    expect(fallbackLabel('ai')).toBeNull()
+  })
+})
+
+describe('Phase 9 flags', () => {
+  it('explains the new flags', () => {
+    expect(flagMessages(['model_answer_unusable'])[0]).toMatch(/nothing usable/)
+    expect(flagMessages(['heuristic_parsed_more'])[0]).toMatch(/heuristic draft parsed more/)
+    expect(flagMessages(['related_activity_not_permitted'])[0]).toMatch(/permission/)
+  })
+})
+
+describe('draftSummary', () => {
+  it('summarises a simulation report', () => {
+    expect(draftSummary({ valid: true, parsed: 6, total: 6, fields: { a: 1, b: 2 }, failures: [], error: null }))
+      .toBe('Parsed 6 of 6 lines, 2 fields')
+    expect(draftSummary({ valid: true, parsed: 1, total: 3, fields: { a: 1 }, failures: [], error: null }))
+      .toBe('Parsed 1 of 3 lines, 1 field')
+    expect(draftSummary({ valid: false, parsed: 0, total: 3, fields: {}, failures: [], error: 'bad grok' }))
+      .toBe('Invalid: bad grok')
+  })
+})
+
+describe('eventForExplain', () => {
+  it('turns a Log Explorer row back into the event the API stores', () => {
+    const row = {
+      id: 'x', timestamp: '2026-11-19T10:00:00Z', level: 'warning', service: 'sshd', message: 'Failed password',
+      host: 'web-01', trace_id: 't1',
+      metadata: { host: 'web-01', src_ip: '203.0.113.5', user_id: 'root', status: 401, port: 22 },
+    }
+    const event = eventForExplain(row)
+    expect(event).toEqual({
+      ts: '2026-11-19T10:00:00Z', level: 'warn', service: 'sshd', msg: 'Failed password', host: 'web-01',
+      trace_id: 't1', src_ip: '203.0.113.5', user_id: 'root', status: 401,
+      attrs: { src_ip: '203.0.113.5', user_id: 'root', status: 401, port: 22 },
+    })
+  })
+})

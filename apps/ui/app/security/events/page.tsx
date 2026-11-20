@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createCase } from '@/lib/api/cases'
 import { threatBadge, ThreatSummary } from '@/lib/intelFormat'
 import DashboardLayout from '@/components/layout/DashboardLayout'
+import TriagePanel from '@/components/ai/TriagePanel'
 import { apiClient } from '@/lib/api'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
 import {
@@ -547,6 +548,9 @@ export default function SecurityEventsPage() {
                   </div>
                 </div>
               )}
+
+              {/* Triage summary (Phase 9) */}
+              <TriagePanel key={selectedEvent.id} kind="alert" id={selectedEvent.id} />
 
               {/* Investigation Results */}
               {investigationData[selectedEvent.id] && (

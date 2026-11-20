@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
+import TriagePanel from '@/components/ai/TriagePanel'
 import { ArrowLeft, Link2, Loader2, MessageSquare, Pin, ShieldAlert, Tag, User } from 'lucide-react'
 import { caseAction, CaseDetail, Evidence, getCase, Severity, updateCase } from '@/lib/api/cases'
 import { threatBadge } from '@/lib/intelFormat'
@@ -145,6 +146,7 @@ export default function CaseDetailPage() {
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           {/* Timeline */}
           <section className="xl:col-span-2 space-y-4">
+            <TriagePanel kind="case" id={detail.case.id} />
             <h2 className="text-sm font-semibold text-white flex items-center gap-2"><MessageSquare className="w-4 h-4" /> Timeline</h2>
             <div className="space-y-2">
               <textarea data-testid="comment-input" value={comment} onChange={e => setComment(e.target.value)} rows={3}

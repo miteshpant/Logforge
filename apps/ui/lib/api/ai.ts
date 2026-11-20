@@ -67,3 +67,42 @@ export async function saveAISettings(settings: AISettings): Promise<AISettingsRe
 export async function askAI(question: string): Promise<AIAnswer> {
   return (await apiClient.post<AIAnswer>('/v1/ai/ask', { question })).data as AIAnswer
 }
+
+// -- Phase 9 -----------------------------------------------------------------------------
+import type { DraftReport } from '../aiFormat'
+
+interface Fallback { reason?: string; reason_code?: string; provider: AIProviderInfo | null; request_id?: string }
+
+export interface QueryDraft extends Fallback {
+  query: string | null; explanation: string; valid: boolean; mode: 'ai' | 'rule_based'; error: string | null
+  fields_used: string[]; unknown_fields: string[]
+}
+export interface CitedSection { key: string; title: string; sentences: string[] }
+export interface CitedSummary extends Fallback {
+  subject: { kind: string; id: string; title?: string | null }
+  mode: 'ai' | 'template'
+  sections: CitedSection[]
+  citations: AICitation[]
+  dropped: string[]
+  flags: string[]
+}
+export interface Explanation extends CitedSummary {
+  fields: { field: string; value: unknown; meaning: string }[]
+  queries: { label: string; query: string }[]
+}
+export interface PipelineDraft extends Fallback {
+  pipeline: { name: string; description?: string; processors: Record<string, any>[]; on_failure?: Record<string, any>[] }
+  explanation: string; report: DraftReport; mode: 'ai' | 'heuristic'; flags: string[]
+}
+
+async function post<T>(endpoint: string, body: unknown): Promise<T> {
+  const response = await apiClient.post<T>(endpoint, body)
+  if (!response.success) throw new Error(response.error || `Request failed: ${endpoint}`)
+  return response.data as T
+}
+
+export const draftQuery = (question: string) => post<QueryDraft>('/v1/ai/nl2query', { question })
+export const triage = (kind: 'alert' | 'case', id: string) => post<CitedSummary>('/v1/ai/triage', { kind, id })
+export const explainEvent = (event: Record<string, unknown>) => post<Explanation>('/v1/ai/explain', { event })
+export const draftPipeline = (samples: string[], service: string) =>
+  post<PipelineDraft>('/v1/ai/pipeline-draft', { samples, service })

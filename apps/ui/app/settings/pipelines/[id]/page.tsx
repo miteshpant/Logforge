@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
+import PipelineDraftPanel from '@/components/ai/PipelineDraftPanel'
 import { ArrowLeft, FlaskConical, Loader2, RotateCcw, Save, Trash2 } from 'lucide-react'
 import {
   createPipeline, DeadLetter, deadLetters, deletePipeline, discardDeadLetters, getPipeline, PipelineBody, PipelineDef,
@@ -38,6 +39,7 @@ export default function PipelineEditorPage() {
   const [isDefault, setIsDefault] = useState(false)
   const [processorsText, setProcessorsText] = useState('[\n]')
   const [samples, setSamples] = useState('')
+  const [draftOnFailure, setDraftOnFailure] = useState<any[] | null>(null)
   const [results, setResults] = useState<SimulationResult[] | null>(null)
   const [tab, setTab] = useState<'editor' | 'metrics' | 'dlq'>('editor')
   const [stats, setStats] = useState<VersionStats[]>([])
@@ -102,7 +104,7 @@ export default function PipelineEditorPage() {
       default: isDefault,
     },
     processors: parsed.processors,
-    on_failure: record?.on_failure || [],
+    on_failure: draftOnFailure ?? (record?.on_failure || []),
   })
 
   const run = async (key: string, fn: () => Promise<void>) => {
@@ -227,6 +229,13 @@ export default function PipelineEditorPage() {
               {parsed.error
                 ? <p data-testid="pipeline-json-error" className="text-xs text-red-400">{parsed.error}</p>
                 : <p className="text-xs text-slate-500">{parsed.processors.length} processors. Each step is {'{"<processor>": {options}, "if": "...", "ignore_failure": true}'}; see the guide for the processor list.</p>}
+              {!readOnly && (
+                <PipelineDraftPanel service={services.split(',')[0]?.trim() || undefined} onUse={draft => {
+                  setProcessorsText(JSON.stringify(draft.processors, null, 2))
+                  if (draft.on_failure?.length) setDraftOnFailure(draft.on_failure)
+                  setNotice('Draft loaded into the editor: review it, simulate, then save.')
+                }} />
+              )}
             </section>
 
             <section className="space-y-4">

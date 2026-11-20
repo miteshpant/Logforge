@@ -13,6 +13,8 @@ import AddToDashboard from '@/components/query/AddToDashboard'
 import QueryBuilder from '@/components/query/QueryBuilder'
 import QueryResults from '@/components/query/QueryResults'
 import { LOGQL_FIELDS } from '@/components/query/logqlSyntax'
+import AskQueryBox from '@/components/ai/AskQueryBox'
+import ExplainPanel from '@/components/ai/ExplainPanel'
 import { addFilter } from '@/lib/fieldFormat'
 import { useLiveTail } from '@/components/query/useLiveTail'
 import {
@@ -49,6 +51,7 @@ import {
   SlidersHorizontal,
   Terminal,
   ListTree,
+  Sparkles,
 } from 'lucide-react'
 
 interface LogStats {
@@ -248,6 +251,14 @@ export default function LogExplorerPage() {
     }
   }, [logqlQuery, isRunningQuery, getApiTimeRange])
   logqlRunRef.current = runQuery
+
+  // A drafted or suggested query (Phase 9): switch to LogforgeQL, fill it in and run it.
+  const useDraftedQuery = useCallback((query: string) => {
+    setMode('logql')
+    setLogqlQuery(query)
+    setLogqlSyntaxError(null)
+    requestAnimationFrame(() => requestAnimationFrame(() => logqlRunRef.current()))
+  }, [])
 
   // Deep links (AI answer citations): ?logql=<LogforgeQL>&since=24h, or &from=<iso>&to=<iso>.
   useEffect(() => {
@@ -752,6 +763,9 @@ export default function LogExplorerPage() {
           </div>
         )}
 
+        {/* Ask in plain English (Phase 9): drafts a LogforgeQL query to run or edit */}
+        <AskQueryBox onUse={useDraftedQuery} />
+
         {/* Query input area */}
         {mode === 'logql' ? (
           <div className="mb-4">
@@ -1024,6 +1038,18 @@ export default function LogExplorerPage() {
                               {log.message}
                             </p>
                           </div>
+                          <button
+                            data-testid="log-explain"
+                            onClick={e => {
+                              e.stopPropagation()
+                              setSelectedLog(log)
+                            }}
+                            title="Explain this event"
+                            className="flex items-center gap-1 px-2 py-0.5 rounded border border-white/10 text-xs text-slate-300 hover:bg-white/10 shrink-0"
+                          >
+                            <Sparkles className="w-3 h-3 text-blue-300" />
+                            Explain
+                          </button>
                           <div className="w-24">
                             {log.trace_id && (
                               <button
@@ -1162,6 +1188,7 @@ export default function LogExplorerPage() {
                     <p className="text-sm text-white font-mono">{selectedLog.trace_id}</p>
                   </div>
                 )}
+                <ExplainPanel log={selectedLog} onUseQuery={query => { setSelectedLog(null); useDraftedQuery(query) }} />
                 <div>
                   <label className="text-xs text-slate-400">Metadata</label>
                   <pre className="mt-2 p-4 bg-slate-900 text-green-400 rounded-lg text-xs overflow-x-auto">

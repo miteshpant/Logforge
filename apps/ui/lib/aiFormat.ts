@@ -27,6 +27,14 @@ const FLAGS: Record<string, string> = {
   refused: 'The model declined to answer.',
   truncated: 'The answer was cut off.',
   tool_limit: 'The model hit the limit on lookups before finishing.',
+  // Phase 9
+  model_answer_unusable: 'The model gave nothing usable, so this was built from the evidence instead.',
+  heuristic_parsed_more: "The heuristic draft parsed more lines than the model's, so it is shown instead.",
+  model_draft_invalid: "The model's pipeline didn't validate, so the heuristic draft is shown instead.",
+  related_activity_not_permitted: "Related activity wasn't looked up: you don't have permission to search logs.",
+  related_activity_failed: "Related activity couldn't be looked up.",
+  intel_not_permitted: "Threat intelligence wasn't checked: you don't have permission to read it.",
+  intel_lookup_failed: "Threat intelligence couldn't be checked.",
 }
 
 export function flagMessages(flags: string[]): string[] {
@@ -63,4 +71,47 @@ export function parseLogsLink(search: string, now: Date = new Date()):
     return { query, start: new Date(now.getTime() - ms), end: now }
   }
   return { query, start: null, end: null }
+}
+
+// -- Phase 9: query drafts, triage, explanations, pipeline drafts -------------------------
+
+const FALLBACKS: Record<string, string> = {
+  rule_based: 'Rule-based draft (AI off)',
+  template: 'Built from the evidence, without AI',
+  heuristic: 'Heuristic draft, without AI',
+}
+
+/** How an answer was made when no model made it; null for model answers. */
+export function fallbackLabel(mode: string): string | null {
+  return FALLBACKS[mode] ?? null
+}
+
+export interface DraftReport {
+  valid: boolean; parsed: number; total: number; fields: Record<string, unknown>
+  failures: { sample: string; status?: string; error: string }[]; error: string | null
+}
+
+export function draftSummary(report: DraftReport): string {
+  if (!report.valid) return `Invalid: ${report.error}`
+  const n = Object.keys(report.fields).length
+  return `Parsed ${report.parsed} of ${report.total} lines, ${n} ${n === 1 ? 'field' : 'fields'}`
+}
+
+const LIFTED = ['src_ip', 'dst_ip', 'user_id', 'status'] as const
+
+/** A Log Explorer row as the stored event ({ts, msg, attrs, ...}) for /v1/ai/explain. */
+export function eventForExplain(log: {
+  timestamp: string; level: string; service: string; message: string; host?: string; trace_id?: string
+  metadata?: Record<string, unknown>
+}): Record<string, unknown> {
+  const attrs: Record<string, unknown> = { ...(log.metadata || {}) }
+  delete attrs.host
+  const event: Record<string, unknown> = {
+    ts: log.timestamp, level: log.level === 'warning' ? 'warn' : log.level, service: log.service, msg: log.message,
+  }
+  if (log.host) event.host = log.host
+  if (log.trace_id) event.trace_id = log.trace_id
+  for (const key of LIFTED) if (attrs[key] !== undefined) event[key] = attrs[key]
+  event.attrs = attrs
+  return event
 }

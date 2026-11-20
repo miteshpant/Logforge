@@ -30,7 +30,9 @@ rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 | **Field explorer** (every field, its top values, add to query; common-schema fields)<br>![Field explorer](./docs/images/field-explorer.png) | **Query builder** (a form that writes LogforgeQL)<br>![Query builder](./docs/images/query-builder.png) |
 | **Query results** (a `timechart` as a chart and a table)<br>![Query results](./docs/images/query-results.png) | **Dashboards from queries** (LogforgeQL panels, Service and Level variables)<br>![Dashboards from queries](./docs/images/dashboard-queries.png) |
 | **Content Packs** (one-step installs for common sources)<br>![Content Packs](./docs/images/content-packs.png) | **Content pack plan** (what installing or upgrading changes, before it does)<br>![Content pack plan](./docs/images/content-pack.png) |
-| **AI answers** (cited sources, external-model indicator, audit log; off by default; shown with a scripted test stand-in)<br>![AI answers](./docs/images/ai-answer.png) | |
+| **AI answers** (cited sources, external-model indicator, audit log; off by default; shown with a scripted test stand-in)<br>![AI answers](./docs/images/ai-answer.png) | **Ask in plain English** (a LogforgeQL draft to run or edit; shown with AI off: the rule-based draft)<br>![Ask in plain English](./docs/images/ai-ask-query.png) |
+| **Triage summary** (what happened, ATT&CK context, entities, related activity, next steps; every sentence cited; shown with AI off)<br>![Triage summary](./docs/images/ai-triage.png) | **Explain this event** (what it is, matching rules, field meanings, follow-up queries; shown with AI off)<br>![Explain this event](./docs/images/ai-explain.png) |
+| **Pipeline draft from samples** (simulated before it's offered; shown with AI off: the heuristic drafter)<br>![Pipeline draft](./docs/images/ai-pipeline-draft.png) | |
 
 ## Contents
 
