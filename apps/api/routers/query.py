@@ -1019,7 +1019,11 @@ async def get_logs(
         LIMIT {int(limit)} OFFSET {int(offset)}
         """
 
-        result = clickhouse_client.query(query, parameters=params)
+        # Off the event loop: a synchronous query here stalled every other request
+        # for its whole duration (to_thread keeps the request's scope context).
+        import asyncio
+
+        result = await asyncio.to_thread(clickhouse_client.query, query, parameters=params)
 
         # Convert to expected format
         logs = []
@@ -1040,7 +1044,7 @@ async def get_logs(
         count_query = f"""
         SELECT count() FROM logs_raw_mt WHERE {where_clause}
         """
-        total_result = clickhouse_client.query(count_query, parameters=params)
+        total_result = await asyncio.to_thread(clickhouse_client.query, count_query, parameters=params)
         total = total_result.result_rows[0][0] if total_result.result_rows else 0
 
         return {
