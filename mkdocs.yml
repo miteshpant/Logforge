@@ -51,6 +51,8 @@ nav:
   - Content packs: packs.md
   - AI: ai.md
   - Entities and UEBA: entities.md
+  - Storage and retention: storage.md
+  - Deployment and backups: deployment.md
   # Static Redoc page (docs/api/index.html); nav entries must be pages or URLs.
   - API reference: https://miteshpant.github.io/Logforge/api/
   - Roadmap:
