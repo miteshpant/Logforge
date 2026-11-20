@@ -412,6 +412,11 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in WRITE_METHODS:
             return "queries:write:tenant"
         return "queries:read:tenant"
+    elif path.startswith("/v1/entities") or path.startswith("/v1/patterns"):
+        # Entity analytics (Phase 11): risk, alerts and cases per entity are security data.
+        if method in WRITE_METHODS:
+            return "security:write:tenant"
+        return "security:read:tenant"
     elif path.startswith("/v1/packs"):
         # Installing a pack writes pipelines, rules, searches and dashboards
         # at once, so it takes the tenant-admin settings permission.
