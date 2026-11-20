@@ -17407,6 +17407,60 @@
         ]
       }
     },
+    "/v1/hooks/{tenant_id}/{integration_id}": {
+      "post": {
+        "description": "A ticket changed in Jira or GitHub: bring the linked cases in step.",
+        "operationId": "webhook_v1_hooks__tenant_id___integration_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "title": "Tenant Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "integration_id",
+            "required": true,
+            "schema": {
+              "title": "Integration Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Webhook V1 Hooks  Tenant Id   Integration Id  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Webhook",
+        "tags": [
+          "integrations"
+        ]
+      }
+    },
     "/v1/ingest": {
       "post": {
         "description": "Auto-detect format and ingest logs",
@@ -17953,6 +18007,73 @@
           }
         },
         "summary": "Kinds",
+        "tags": [
+          "integrations"
+        ]
+      }
+    },
+    "/v1/integrations/tickets": {
+      "get": {
+        "operationId": "case_tickets_v1_integrations_tickets_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Case Tickets V1 Integrations Tickets Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Case Tickets",
+        "tags": [
+          "integrations"
+        ]
+      }
+    },
+    "/v1/integrations/tickets/sync": {
+      "post": {
+        "operationId": "sync_now_v1_integrations_tickets_sync_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Sync Now V1 Integrations Tickets Sync Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Sync Now",
         "tags": [
           "integrations"
         ]

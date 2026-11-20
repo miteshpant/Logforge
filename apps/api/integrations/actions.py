@@ -273,7 +273,7 @@ KINDS: Dict[str, Kind] = {k.name: k for k in [
     Kind("containment_webhook", "Containment (via your automation)", ("url",), (),
          ("action", "target", "reason"), _containment_webhook, containment=True),
 ]}
-SECRET_KEYS = {"signing_secret", "password"}  # optional secrets some kinds take
+SECRET_KEYS = {"signing_secret", "password", "webhook_secret"}  # optional secrets some kinds take
 
 
 def validate(kind: str, config: Dict[str, Any], secrets: Dict[str, str]) -> Kind:

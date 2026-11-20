@@ -427,6 +427,9 @@ async def initialize_engines():
             from playbooks.service import start as start_playbooks
             if start_playbooks():
                 logger.info("Playbook dispatcher started")
+            from integrations.sync_service import start as start_ticket_sync
+            if start_ticket_sync():
+                logger.info("Ticket sync started")
         except Exception as e:
             logger.error(f"Failed to start playbooks: {e}")
 

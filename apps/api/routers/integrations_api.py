@@ -9,6 +9,12 @@ need settings:write: tenant admins).
   PUT    /v1/integrations/{id}         secrets left out are kept, "" removes one
   DELETE /v1/integrations/{id}
   POST   /v1/integrations/{id}/test    {inputs}: run the action once with a sample alert and case
+  GET    /v1/integrations/tickets?case_id=   tickets linked to a case
+  POST   /v1/integrations/tickets/sync       sync this tenant's linked tickets now
+
+  POST   /v1/hooks/{tenant}/{integration}    Jira or GitHub issue webhooks (no login: authenticated
+                                             by the integration's webhook_secret, as an
+                                             X-Hub-Signature-256 HMAC or ?token=)
 """
 
 from __future__ import annotations
@@ -25,6 +31,7 @@ from tenant_dependencies import MiddlewareTenant
 from integrations import actions, templates
 
 router = APIRouter(prefix="/v1/integrations", tags=["integrations"])
+hooks_router = APIRouter(prefix="/v1/hooks", tags=["integrations"])
 
 SAMPLE_INPUTS = {
     "webhook": {"body": {"alert": "{{ alert.id }}", "title": "{{ alert.title }}"}},
@@ -104,6 +111,31 @@ async def create(body: IntegrationBody, request: Request, customer_id: str = Mid
     return {"integration": await asyncio.to_thread(store.save, customer_id, row, body.secrets, _user(request))}
 
 
+def _cases():
+    from services.case_service import CaseService
+
+    return CaseService()
+
+
+@router.get("/tickets")
+async def case_tickets(case_id: str, customer_id: str = MiddlewareTenant) -> Dict[str, Any]:
+    from dependencies import get_clickhouse_client
+
+    from integrations.tickets import TicketStore
+
+    return {"tickets": await asyncio.to_thread(TicketStore(get_clickhouse_client()).for_case, customer_id, case_id)}
+
+
+@router.post("/tickets/sync")
+async def sync_now(customer_id: str = MiddlewareTenant) -> Dict[str, Any]:
+    from dependencies import get_clickhouse_client
+
+    from integrations.sync_service import poll
+
+    async with _http() as http:
+        return await poll(get_clickhouse_client(), _cases(), http, tenant_id=customer_id)
+
+
 @router.get("/{integration_id}")
 async def get_one(integration_id: str, customer_id: str = MiddlewareTenant) -> Dict[str, Any]:
     found = await asyncio.to_thread(_store().get, customer_id, integration_id)
@@ -141,3 +173,27 @@ async def test(integration_id: str, body: TestBody, customer_id: str = Middlewar
         result = await actions.run(found["kind"], found["config"], found["secrets"], inputs,
                                    sample_context(customer_id), http=http)
     return {"result": result.to_dict()}
+
+
+@hooks_router.post("/{tenant_id}/{integration_id}", status_code=202)
+async def webhook(tenant_id: str, integration_id: str, request: Request) -> Dict[str, Any]:
+    """A ticket changed in Jira or GitHub: bring the linked cases in step."""
+    import json as _json
+
+    from integrations import sync
+    from integrations.sync_service import on_webhook
+
+    body = await request.body()
+    store = _store()
+    found = await asyncio.to_thread(store.get, tenant_id, integration_id, True)
+    # the same answer for an unknown integration and a bad signature: don't reveal which exist
+    if not found or not sync.verify(dict(request.headers), dict(request.query_params), body,
+                                     (found.get("secrets") or {}).get("webhook_secret", "")):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        payload = _json.loads(body or b"{}")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Body is not JSON")
+    async with _http() as http:
+        done = await on_webhook(store.client, _cases(), tenant_id, found, payload, http)
+    return {"synced": done}

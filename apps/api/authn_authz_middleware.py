@@ -928,7 +928,9 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         """Check if endpoint is public (no auth required)"""
         # Strip query parameters from path before matching
         clean_path = path.split('?')[0]
-        return clean_path in self.public_endpoints
+        # Phase 13: ticket webhooks authenticate themselves (an HMAC or token
+        # from the integration's webhook_secret), see routers/integrations_api.
+        return clean_path in self.public_endpoints or clean_path.startswith("/v1/hooks/")
 
     def _is_admin_endpoint(self, path: str) -> bool:
         """Check if endpoint is admin (bypasses feature validation)"""
