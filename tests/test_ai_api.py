@@ -352,3 +352,42 @@ def test_pipeline_draft_with_ai_is_audited(api):
 def test_pipeline_draft_samples_are_bounded(api):
     assert api.post("/v1/ai/pipeline-draft", headers=ACME, json={"samples": []}).status_code == 422
     assert api.post("/v1/ai/pipeline-draft", headers=ACME, json={"samples": ["x"] * 51}).status_code == 422
+
+
+# -- Phase 9: explain this event --------------------------------------------------------
+
+@pytest.fixture
+def no_library(monkeypatch):
+    from ai import explain
+
+    monkeypatch.setattr(explain, "library_rules", lambda: [])
+
+
+def test_explain_without_ai_is_the_template(api, no_library):
+    from test_ai_explain import HTTP
+
+    r = api.post("/v1/ai/explain", headers=ACME, json={"event": HTTP})
+    body = r.json()
+    assert r.status_code == 200, r.text
+    assert body["mode"] == "template" and body["reason_code"] == "tenant_off"
+    assert "server error" in body["sections"][0]["sentences"][0] and body["queries"] and body["fields"]
+    viewer = {**ACME, "X-Test-Role": "viewer"}
+    assert api.post("/v1/ai/explain", headers=viewer, json={"event": HTTP}).status_code == 403
+
+
+def test_explain_with_ai_is_audited(api, no_library):
+    import json as _json
+
+    from test_ai_explain import HTTP
+
+    opt_in(api)
+    api.state["provider"] = ScriptedProvider(answer(_json.dumps({"what": ["A request failed with 503 [C1]."]})))
+    api.state["provider"].name = "claude"
+    body = api.post("/v1/ai/explain", headers=ACME, json={"event": HTTP}).json()
+    assert body["mode"] == "ai" and body["sections"][0]["sentences"] == ["A request failed with 503 [C1]."]
+    assert all(e["feature"] == "explain" for e in api.audit.rows)
+
+
+def test_explain_bounds_the_event(api, no_library):
+    assert api.post("/v1/ai/explain", headers=ACME, json={"event": {"msg": "x" * 40_000}}).status_code == 422
+    assert api.post("/v1/ai/explain", headers=ACME, json={"event": "text"}).status_code == 422

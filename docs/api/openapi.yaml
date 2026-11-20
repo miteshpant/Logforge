@@ -1478,6 +1478,40 @@ paths:
       summary: Correlate Events
       tags:
       - ai
+  /v1/ai/explain:
+    post:
+      description: 'Explain one event: what it is, what its fields mean, why it matters (the shipped detection
+        rules it
+
+        matches, threat intelligence for its addresses) and follow-up queries, every sentence cited. With
+        AI off,
+
+        or if the model''s answer has nothing cited, the explanation is built from the reference by template.'
+      operationId: ai_explain_v1_ai_explain_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExplainBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Ai Explain V1 Ai Explain Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Ai Explain
+      tags:
+      - ai-assistant
   /v1/ai/health:
     get:
       description: Health check for AI service
@@ -15148,6 +15182,17 @@ components:
       - kind
       - ref
       title: Evidence
+      type: object
+    ExplainBody:
+      properties:
+        event:
+          additionalProperties: true
+          description: The event as the Log Explorer shows it
+          title: Event
+          type: object
+      required:
+      - event
+      title: ExplainBody
       type: object
     FatigueScoreResponse:
       properties:

@@ -131,6 +131,28 @@ before the drafter, but the drafter was developed with these files in view,
 so they are held out from the drafting, not from its author. Record a model
 with `record_pipeline_draft.py --provider ... --update-baseline`.
 
+## Explain this event (Phase 9)
+
+The content packs' sample files, parsed by the packs' own pipelines (as
+pack CI does), give 83 events; each sample also lists the rules its events
+must fire (28). `tests/test_ai_explain_eval.py` scores, per `explain_eval.py`:
+
+| System | Events | Uncited sentences | Identified | Rule recall |
+|---|---|---|---|---|
+| Template (AI off) | 83 | 0 | 90.4% | 100% |
+| Model (`ai.explain.write`) | 83 | 0 by construction | not recorded | — |
+
+"Identified" means the explanation says what the event is from a reference
+entry (Windows or Sysmon event ID, auditd record type, a known message,
+HTTP status, OCSF class) rather than "an event from <service>". The misses
+are application lines (a Kubernetes container's own messages, a Postgres
+checkpoint, an nginx buffering notice), where a model adds the most. The
+reference entries were extended while looking at these events (a Sysmon
+mix-up, auditd types, cron, systemd and two nginx errors), so this set is
+not held out from the reference's author. Rule recall comes from matching
+the event against the shipped library with the detection engine's matcher.
+Record a model with `record_explain.py --provider ...`.
+
 ## Status
 
 This is the Phase 0 skeleton: scorers, small seed datasets (8 / 5 / 5 items)

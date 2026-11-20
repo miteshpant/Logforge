@@ -6,6 +6,7 @@ used; with AI off, /ask returns the rule-based answer.
 Permissions (checked here with the caller's roles, and by the middleware):
   GET /status, GET /usage, POST /ask    ai:read
   POST /nl2query                        ai:read and logs:read
+  POST /explain                         ai:read and logs:read
   POST /pipeline-draft                  ai:read and logs:write (who may edit pipelines)
   POST /triage                          ai:read; the evidence is read with
                                         the caller's own permissions
@@ -15,6 +16,7 @@ Permissions (checked here with the caller's roles, and by the middleware):
 
 from __future__ import annotations
 
+import json
 from typing import Any, Literal
 
 from ai import assistant
@@ -22,7 +24,7 @@ from ai.providers import ProviderError
 from authn_authz_middleware import check_permission
 from error_handling import internal_error
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from tenant_dependencies import MiddlewareTenant
 
 router = APIRouter(prefix="/v1/ai", tags=["ai-assistant"])
@@ -44,6 +46,17 @@ class TriageBody(BaseModel):
 class PipelineDraftBody(BaseModel):
     samples: list[str] = Field(..., min_length=1, max_length=50)
     service: str = Field("sample", min_length=1, max_length=200)
+
+
+class ExplainBody(BaseModel):
+    event: dict[str, Any] = Field(..., description="The event as the Log Explorer shows it")
+
+    @field_validator("event")
+    @classmethod
+    def _bounded(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if len(json.dumps(value, default=str)) > 32_000:
+            raise ValueError("event is too large (32 KB at most)")
+        return value
 
 
 class SettingsBody(BaseModel):
@@ -239,3 +252,33 @@ async def ai_pipeline_draft(body: PipelineDraftBody, request: Request,
         raise HTTPException(status_code=502, detail=f"The AI provider failed: {e}")
     except Exception as e:
         raise internal_error(e, "AI pipeline drafting failed", customer_id=customer_id)
+
+
+@router.post("/explain")
+async def ai_explain(body: ExplainBody, request: Request, customer_id: str = MiddlewareTenant) -> dict[str, Any]:
+    """Explain one event: what it is, what its fields mean, why it matters (the shipped detection rules it
+    matches, threat intelligence for its addresses) and follow-up queries, every sentence cited. With AI off,
+    or if the model's answer has nothing cited, the explanation is built from the reference by template."""
+    from ai.explain import gather, template, write
+    from ai.tools import ToolContext
+
+    _require(request, customer_id, "ai:read:tenant")
+    _require(request, customer_id, "logs:read:tenant")
+    roles = getattr(request.state, "roles", None) or []
+    try:
+        bundle = await gather(body.event, ToolContext(tenant_id=customer_id, user_id=_user_id(request), roles=roles))
+    except Exception as e:
+        raise internal_error(e, "Failed to gather the event's evidence", customer_id=customer_id)
+    try:
+        async with assistant.ai_session(tenant_id=customer_id, user_id=_user_id(request), roles=roles,
+                                        feature="explain") as session:
+            out = await write(bundle, session.provider, redactor=session.redactor, session=session)
+            return {**out, "provider": session.provider_info(), "request_id": session.request_id}
+    except assistant.AIUnavailable as e:
+        return {**template(bundle), "reason_code": e.code, "reason": str(e), "provider": None}
+    except assistant.LimitExceeded as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    except ProviderError as e:
+        raise HTTPException(status_code=502, detail=f"The AI provider failed: {e}")
+    except Exception as e:
+        raise internal_error(e, "AI event explanation failed", customer_id=customer_id)

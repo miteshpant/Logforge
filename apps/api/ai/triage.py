@@ -363,7 +363,7 @@ def _result(bundle: Bundle, sections: dict[str, list[str]], *, mode: str, droppe
 
 # -- the model ---------------------------------------------------------------------
 
-def evidence_prompt(bundle: Bundle, redactor: Redactor) -> str:
+def evidence_prompt(bundle: Bundle, redactor: Redactor, task: str | None = None) -> str:
     from .orchestrator import _cut
 
     secrets: set[str] = set()
@@ -380,7 +380,8 @@ def evidence_prompt(bundle: Bundle, redactor: Redactor) -> str:
             text = text[:EVIDENCE_CHARS] + "…"
         lines.append(f"[{item.cid}] {item.kind}: {text}")
     subject = bundle.subject
-    text = f"Summarise this {subject['kind']} ({subject['id']}) for triage.\n\nEvidence:\n" + "\n".join(lines)
+    task = task or f"Summarise this {subject['kind']} ({subject['id']}) for triage."
+    text = f"{task}\n\nEvidence:\n" + "\n".join(lines)
     return redactor.scrub(text, secrets)
 
 
