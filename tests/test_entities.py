@@ -92,13 +92,18 @@ def api(monkeypatch):
     async def ranking(tenant):
         from entity_risk import attribute
 
-        return rank(alerts, T), attribute(alerts)
+        return rank(alerts, T), attribute(alerts), []
 
     async def cases(tenant, value):
         return [{"id": "c1", "title": "web-1 compromise", "status": "new", "severity": "high"}]
 
     monkeypatch.setattr(module, "_ranking", ranking)
     monkeypatch.setattr(module, "_cases", cases)
+
+    async def baseline(tenant, entity_type, value):
+        return [{"kind": "hour", "label": "4 event(s) at 03:00 UTC", "severity": "medium", "ts": T.isoformat()}]
+
+    monkeypatch.setattr(module, "_baseline", baseline)
     app = FastAPI()
     app.include_router(module.router)
     return TestClient(app)
@@ -115,5 +120,6 @@ def test_the_entities_api(api):
     assert api.get("/v1/entities?type=planet", headers=h).status_code == 422
     assert body["risk"]["score"] > 0 and body["rank"] == 1 and body["risk"]["factors"][0]["kind"] == "alert"
     assert body["alerts"][0]["id"] == "a1" and body["cases"][0]["id"] == "c1"
+    assert body["anomalies"][0]["kind"] == "hour" and body["flags"] == []
     risk = api.get("/v1/entities/risk", headers=h).json()
     assert risk["entities"][0]["value"] == "web-1" and risk["window_days"] == 14
