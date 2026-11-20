@@ -31,6 +31,8 @@ const PAGES = [
   ['detection-rules', '/security/rules', 'main'],
   ['cases', '/security/cases', '[data-testid="case-row"]'],
   ['threat-intel', '/security/threat-intel', '[data-testid="intel-indicator"]'],
+  ['account', '/account', '[data-testid="mfa-state"]'],
+  ['support', '/support', '[data-testid="ticket-row"]'],
 ]
 
 async function shot(page, name) {

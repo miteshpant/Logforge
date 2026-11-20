@@ -46,6 +46,8 @@ subscription page.
 
 ![Support](images/admin-support.png)
 
+![Support, as a tenant member sees it](images/support.png)
+
 Tenant members ask from **Contact support** in their profile menu (the
 tenant UI's `/support` page): a subject, a description and a priority. Here,
 platform admins see every tenant's tickets by status, reply, change the

@@ -151,6 +151,8 @@ What a scope doesn't cover yet:
 
 ## Two-step sign-in (TOTP)
 
+![Your account](images/account.png)
+
 Any user can turn it on from **Your account** (the profile menu → Profile
 Settings, `/account`): scan or type the key into an authenticator app, confirm
 with a code, and keep the eight one-time backup codes shown once. From then on
