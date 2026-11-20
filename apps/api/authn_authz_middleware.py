@@ -364,24 +364,29 @@ ROLE_PERMISSIONS = {
         "security:*:tenant", "users:*:tenant", "settings:*:tenant",
         "storage:*:tenant", "queries:*:tenant", "ai:*:tenant", "enterprise:*:tenant",
         "observability:*:tenant", "roles:*:tenant", "usage:*:tenant", "billing:read:tenant",
-        "costs:*:tenant", "analytics:read:tenant", "tenants:read,write:tenant"
+        "costs:*:tenant", "analytics:read:tenant", "tenants:read,write:tenant",
+        "tenant_profile:read:tenant"
     ],
     UserRole.SECURITY_ANALYST: [
+        "tenant_profile:read:tenant",
         "security:*:tenant", "logs:read,search:tenant", "ai:read:tenant",
         "alerts:read,investigate:tenant", "compliance:read:tenant",
         "threat_hunting:*:tenant"
     ],
     UserRole.DEVOPS_ENGINEER: [
+        "tenant_profile:read:tenant",
         "logs:read,search:tenant", "alerts:*:tenant", "ai:read:tenant",
         "dashboards:*:tenant", "observability:*:tenant",
         "integrations:*:tenant"
     ],
     UserRole.COMPLIANCE_OFFICER: [
+        "tenant_profile:read:tenant",
         "compliance:*:tenant", "audit:read:tenant",
         "reports:generate:tenant", "legal_hold:*:tenant",
         "logs:read:tenant"
     ],
     UserRole.VIEWER: [
+        "tenant_profile:read:tenant",
         "logs:read:tenant", "dashboards:read:tenant",
         "alerts:read:own", "reports:read:tenant"
     ]
@@ -520,6 +525,12 @@ def get_endpoint_permission(path: str, method: str) -> str:
         # /v1/tenants (list all) requires platform admin
         # /v1/tenants (create) requires platform admin
         return "platform:admin:platform"
+    elif method == "GET" and path.startswith("/v1/tenants/") and (
+            path.count("/") == 3 or (path.count("/") == 4 and path.endswith("/subscription"))):
+        # The tenant's own profile and plan: every member reads them (the UI loads
+        # both at sign-in to know what to offer).
+        # tenant_path_denied() keeps the id in the path to the caller's own tenant.
+        return "tenant_profile:read:tenant"
     elif path.startswith("/v1/tenants/") and path.count("/") >= 3:
         # /v1/tenants/{tenant_id}/* allows both platform admin and tenant admin
         if method in WRITE_METHODS:
@@ -537,6 +548,23 @@ def get_endpoint_permission(path: str, method: str) -> str:
         return "roles:read:tenant"
     else:
         return "platform:general:tenant"
+
+_TENANT_PATH_LITERALS = frozenset({"stats"})
+
+
+def tenant_path_denied(path: str, tenant_id: str, user_roles: List[Dict[str, Any]]) -> Optional[str]:
+    """/v1/tenants/{id}/...: the id must be the tenant the caller is acting in, unless
+    they hold a platform role. Without this a tenant admin could read any tenant by
+    putting its id in the path while sending their own X-Customer-ID."""
+    if not path.startswith("/v1/tenants/"):
+        return None
+    target = path.split("/")[3]
+    if not target or target in _TENANT_PATH_LITERALS or target == tenant_id:
+        return None
+    if any(r.get("tenant_id") == "platform" for r in user_roles):
+        return None
+    return f"No access to tenant: {target}"
+
 
 def api_key_denied(state, required_permission: str):
     """For an API key request, why its permissions don't allow `required_permission` (else None)."""
@@ -824,6 +852,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "/openapi.json",
             "/redoc",
             "/v1/auth/login",
+            "/v1/auth/login/mfa",
             # LF-015: the refresh endpoint authenticates via the refresh token
             # in its body — requiring a valid (unexpired) access token here
             # made refresh useless by design.
@@ -903,6 +932,9 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             # Phase 14: a tenant's custom roles add permissions and may carry a data scope.
             custom = await _custom_roles_of(tenant_id, user.id) if tenant_id and tenant_id != "platform" else []
             if tenant_id and not request.url.path.startswith("/v1/auth/"):
+                denied = tenant_path_denied(request.url.path, tenant_id, user_roles)
+                if denied:
+                    raise HTTPException(403, denied)
                 required_permission = get_endpoint_permission(request.url.path, request.method)
                 if not check_permission(user_roles, required_permission, tenant_id):
                     from custom_roles import effective, grants
