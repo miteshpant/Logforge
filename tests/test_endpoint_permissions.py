@@ -31,6 +31,9 @@ def test_mutating_methods_need_write(path, read, write):
     ("POST", "/v1/ai/nl2query", "ai:read:tenant"),     # drafts a query; reads only the field catalogue
     ("POST", "/v1/ai/pipeline-draft", "ai:read:tenant"),  # and logs:write, checked in the route
     ("POST", "/v1/ai/explain", "ai:read:tenant"),       # and logs:read, checked in the route
+    ("POST", "/v1/ai/copilot/plan", "ai:read:tenant"),  # searches run as the caller
+    ("POST", "/v1/ai/copilot/run", "ai:read:tenant"),
+    ("DELETE", "/v1/security/cases/c1/evidence/e1", "security:write:tenant"),  # unpin
     ("POST", "/v1/ai/triage", "ai:read:tenant"),       # evidence is read with the caller's own permissions
     ("GET", "/v1/ai/settings", "settings:read:tenant"),  # tenant admin
     ("PUT", "/v1/ai/settings", "settings:write:tenant"),

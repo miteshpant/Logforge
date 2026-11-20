@@ -54,6 +54,16 @@ def test_create_from_alerts_with_evidence(client):
     assert detail["alerts"][0]["entities"]["src_ip"] == ["203.0.113.9"]
 
 
+def test_evidence_can_be_unpinned(client):
+    case = create(client, evidence=[{"kind": "search", "ref": "src_ip:203.0.113.9"}])
+    base = f"/v1/security/cases/{case['id']}"
+    pin = next(e for e in client.get(base, headers=H).json()["timeline"] if e["kind"] == "evidence_pinned")
+    response = client.delete(f"{base}/evidence/{pin['id']}", headers=H)
+    assert response.status_code == 200, response.text
+    detail = client.get(base, headers=H).json()
+    assert detail["timeline"][-1]["kind"] == "evidence_unpinned" and detail["evidence"] == []
+
+
 def test_full_analyst_flow(client):
     case_id = create(client)["id"]
     base = f"/v1/security/cases/{case_id}"

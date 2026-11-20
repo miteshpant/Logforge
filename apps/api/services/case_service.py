@@ -229,7 +229,11 @@ class CaseService:
             except Exception:
                 row = None
             alerts.append(alert_summary(row) if row else {"id": alert_id, "missing": True})
-        return {"case": case_to_dict(case), "alerts": alerts, "timeline": [_serialise_event(e) for e in events]}
+        from cases import pinned_evidence
+
+        timeline = [_serialise_event(e) for e in events]
+        return {"case": case_to_dict(case), "alerts": alerts, "timeline": timeline,
+                "evidence": pinned_evidence(timeline)}
 
     async def list(self, tenant_id: str, **filters: Any) -> Tuple[List[Case], int]:
         return await self.dao.list(tenant_id, **filters)

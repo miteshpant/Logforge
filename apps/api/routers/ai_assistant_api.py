@@ -6,6 +6,7 @@ used; with AI off, /ask returns the rule-based answer.
 Permissions (checked here with the caller's roles, and by the middleware):
   GET /status, GET /usage, POST /ask    ai:read
   POST /nl2query                        ai:read and logs:read
+  POST /copilot/plan, /copilot/run     ai:read; searches run with the caller's own permissions
   POST /explain                         ai:read and logs:read
   POST /pipeline-draft                  ai:read and logs:write (who may edit pipelines)
   POST /triage                          ai:read; the evidence is read with
@@ -57,6 +58,14 @@ class ExplainBody(BaseModel):
         if len(json.dumps(value, default=str)) > 32_000:
             raise ValueError("event is too large (32 KB at most)")
         return value
+
+
+class CopilotBody(BaseModel):
+    subject: dict[str, Any] = Field(..., description='{"kind": "case"|"alert", "id": ...} or '
+                                                     '{"kind": "entity", "type": "src_ip"|"dst_ip"|"user"|"hostname", '
+                                                     '"value": ..., "at": "<ISO time>"}')
+    steps: list[dict[str, Any]] = Field(default_factory=list, max_length=8,
+                                        description="The steps to run, as planned or edited by the analyst")
 
 
 class SettingsBody(BaseModel):
@@ -282,3 +291,63 @@ async def ai_explain(body: ExplainBody, request: Request, customer_id: str = Mid
         raise HTTPException(status_code=502, detail=f"The AI provider failed: {e}")
     except Exception as e:
         raise internal_error(e, "AI event explanation failed", customer_id=customer_id)
+
+
+async def _copilot_context(body: CopilotBody, request: Request, customer_id: str):
+    from ai.copilot import gather_context
+    from ai.tools import ToolContext
+
+    roles = getattr(request.state, "roles", None) or []
+    ctx = ToolContext(tenant_id=customer_id, user_id=_user_id(request), roles=roles)
+    try:
+        return ctx, await gather_context(body.subject, ctx)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except LookupError:
+        raise HTTPException(status_code=404, detail=f"{body.subject.get('kind')} {body.subject.get('id')} not found")
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+
+@router.post("/copilot/plan")
+async def ai_copilot_plan(body: CopilotBody, request: Request, customer_id: str = MiddlewareTenant) -> dict[str, Any]:
+    """The read-only searches the copilot proposes for a case, alert or entity. Nothing runs: the analyst
+    reviews, edits or drops steps, then calls /copilot/run."""
+    from ai.copilot import plan
+
+    _require(request, customer_id, "ai:read:tenant")
+    _, context = await _copilot_context(body, request, customer_id)
+    return {"subject": context.subject, "anchor": context.anchor.isoformat(), "entities": context.entities,
+            "steps": [s.to_public() for s in plan(context)]}
+
+
+@router.post("/copilot/run")
+async def ai_copilot_run(body: CopilotBody, request: Request, customer_id: str = MiddlewareTenant) -> dict[str, Any]:
+    """Run the approved steps as the caller: a cited timeline, root-cause candidates, hypotheses and proposed
+    next steps. With AI on, the model writes the hypotheses; nothing it cites is outside what was fetched."""
+    from ai.copilot import run, validate_steps, write
+
+    _require(request, customer_id, "ai:read:tenant")
+    ctx, context = await _copilot_context(body, request, customer_id)
+    try:
+        steps = validate_steps(body.steps)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    try:
+        result = await run(context, steps, ctx)
+    except Exception as e:
+        raise internal_error(e, "The investigation searches failed", customer_id=customer_id)
+    roles = getattr(request.state, "roles", None) or []
+    try:
+        async with assistant.ai_session(tenant_id=customer_id, user_id=_user_id(request), roles=roles,
+                                        feature="copilot") as session:
+            out = await write(result, context, session.provider, redactor=session.redactor, session=session)
+            return {**out, "provider": session.provider_info(), "request_id": session.request_id}
+    except assistant.AIUnavailable as e:
+        return {**result, "reason_code": e.code, "reason": str(e), "provider": None}
+    except assistant.LimitExceeded as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    except ProviderError as e:
+        raise HTTPException(status_code=502, detail=f"The AI provider failed: {e}")
+    except Exception as e:
+        raise internal_error(e, "The copilot failed", customer_id=customer_id)

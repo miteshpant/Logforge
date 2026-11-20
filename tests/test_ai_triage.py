@@ -47,6 +47,11 @@ def run(coro):
 
 @pytest.fixture
 def data(monkeypatch):
+    return install_fakes(monkeypatch)
+
+
+def install_fakes(monkeypatch):
+    """The tools' data access, faked: the alert, case, activity and intel above."""
     queries = []
 
     async def alert(alert_id, tenant):

@@ -82,6 +82,28 @@ def test_tools_are_authorised_like_their_endpoints(monkeypatch):
         run(tools.execute("get_case", {"case_id": "c1"}, ctx(OTHER_TENANT_ADMIN)))
 
 
+def test_run_query_over_an_explicit_window(monkeypatch):
+    calls = []
+
+    async def fake_logql(body, customer_id):
+        calls.append(body)
+        return {"logs": [], "total_count": 0}
+
+    monkeypatch.setattr(tools, "_logql", fake_logql)
+    args = {"query": '| where host = "web-1"', "start": "2026-11-19T08:00:00+00:00", "end": "2026-11-19T10:00:00+00:00"}
+    out = run(tools.execute("run_query", args, ctx()))
+    assert calls == [{"query": '| where host = "web-1"', "start_time": "2026-11-19T08:00:00+00:00",
+                      "end_time": "2026-11-19T10:00:00+00:00"}]
+    assert "from=2026-11-19T08" in out.refs[0].link and "since" not in out.refs[0].link
+    for bad, why in [({"start": "yesterday", "end": "2026-11-19T10:00:00Z"}, "ISO"),
+                     ({"start": "2026-11-19T10:00:00Z", "end": "2026-11-19T09:00:00Z"}, "after"),
+                     ({"start": "2026-10-01T00:00:00Z", "end": "2026-11-19T00:00:00Z"}, "31 days"),
+                     ({"start": "2026-11-19T10:00:00Z"}, "both"),
+                     ({"start": "2026-11-19T08:00:00Z", "end": "2026-11-19T10:00:00Z", "since": "1h"}, "either")]:
+        with pytest.raises(ToolError, match=why):
+            run(tools.execute("run_query", {"query": "x", **bad}, ctx()))
+
+
 def test_arguments_are_checked(monkeypatch):
     with pytest.raises(ToolError, match="unknown tool"):
         run(tools.execute("delete_everything", {}, ctx()))

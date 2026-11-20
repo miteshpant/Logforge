@@ -285,10 +285,14 @@ def test_nl2query_with_ai_is_audited_and_returns_the_models_query(api, catalogue
 
 # -- Phase 9: alert and case triage -------------------------------------------------
 
-from test_ai_triage import data  # noqa: E402,F401  (fixture: the alert, case, activity and intel)
+@pytest.fixture
+def triage_data(monkeypatch):
+    from test_ai_triage import install_fakes
+
+    return install_fakes(monkeypatch)
 
 
-def test_triage_without_ai_is_the_cited_template(api, data):
+def test_triage_without_ai_is_the_cited_template(api, triage_data):
     r = api.post("/v1/ai/triage", headers=ACME, json={"kind": "alert", "id": "a-1"})
     body = r.json()
     assert r.status_code == 200, r.text
@@ -299,7 +303,7 @@ def test_triage_without_ai_is_the_cited_template(api, data):
     assert api.post("/v1/ai/triage", headers=analyst, json={"kind": "case", "id": "c-9"}).status_code == 200
 
 
-def test_triage_with_ai_is_audited_and_drops_uncited_sentences(api, data):
+def test_triage_with_ai_is_audited_and_drops_uncited_sentences(api, triage_data):
     import json as _json
 
     opt_in(api)
@@ -312,7 +316,7 @@ def test_triage_with_ai_is_audited_and_drops_uncited_sentences(api, data):
     assert body["request_id"] and all(e["feature"] == "triage" for e in api.audit.rows)
 
 
-def test_triage_errors(api, data):
+def test_triage_errors(api, triage_data):
     assert api.post("/v1/ai/triage", headers=ACME, json={"kind": "alert", "id": "nope"}).status_code == 404
     assert api.post("/v1/ai/triage", headers=ACME, json={"kind": "rule", "id": "a-1"}).status_code == 422
     viewer = {**ACME, "X-Test-Role": "viewer"}
@@ -391,3 +395,57 @@ def test_explain_with_ai_is_audited(api, no_library):
 def test_explain_bounds_the_event(api, no_library):
     assert api.post("/v1/ai/explain", headers=ACME, json={"event": {"msg": "x" * 40_000}}).status_code == 422
     assert api.post("/v1/ai/explain", headers=ACME, json={"event": "text"}).status_code == 422
+
+
+# -- Phase 10: investigation copilot -------------------------------------------------------
+
+@pytest.fixture
+def copilot_data(monkeypatch):
+    from test_ai_copilot import install_fakes
+
+    return install_fakes(monkeypatch)
+
+
+def test_copilot_plans_then_runs_what_the_analyst_approves(api, copilot_data):
+    from test_ai_copilot import HOST
+
+    plan = api.post("/v1/ai/copilot/plan", headers=ACME, json={"subject": HOST})
+    assert plan.status_code == 200, plan.text
+    steps = plan.json()["steps"]
+    assert steps[0]["title"] == "What happened on bastion-01 before the alert?" and plan.json()["anchor"]
+    # nothing ran yet: planning only
+    assert copilot_data == []
+    run = api.post("/v1/ai/copilot/run", headers=ACME, json={"subject": HOST, "steps": steps})
+    body = run.json()
+    assert run.status_code == 200, run.text
+    assert body["mode"] == "template" and body["reason_code"] == "tenant_off" and len(body["timeline"]) == 18
+    assert body["root_cause"] and api.audit.rows == []
+
+
+def test_copilot_with_ai_is_audited(api, copilot_data):
+    import json as _json
+
+    from test_ai_copilot import HOST
+
+    opt_in(api)
+    steps = api.post("/v1/ai/copilot/plan", headers=ACME, json={"subject": HOST}).json()["steps"]
+    api.state["provider"] = ScriptedProvider(answer(_json.dumps({"hypotheses": ["Root logged in [C2]."],
+                                                                 "root_cause": ["C2"]})))
+    api.state["provider"].name = "claude"
+    body = api.post("/v1/ai/copilot/run", headers=ACME, json={"subject": HOST, "steps": steps}).json()
+    assert body["mode"] == "ai" and body["hypotheses"] == ["Root logged in [C2]."] and body["request_id"]
+    assert all(e["feature"] == "copilot" for e in api.audit.rows)
+
+
+def test_copilot_refuses_bad_steps_and_subjects(api, copilot_data):
+    from test_ai_copilot import HOST
+
+    bad = [{"title": "x", "query": "| stats ((((", "start": "2026-11-19T00:00:00Z", "end": "2026-11-19T01:00:00Z"}]
+    r = api.post("/v1/ai/copilot/run", headers=ACME, json={"subject": HOST, "steps": bad})
+    assert r.status_code == 422 and "compile" in r.json()["detail"]
+    assert api.post("/v1/ai/copilot/plan", headers=ACME,
+                    json={"subject": {"kind": "entity", "type": "planet", "value": "x"}}).status_code == 422
+    assert api.post("/v1/ai/copilot/plan", headers=ACME,
+                    json={"subject": {"kind": "case", "id": "c-1"}}).status_code == 200
+    viewer = {**ACME, "X-Test-Role": "viewer"}
+    assert api.post("/v1/ai/copilot/plan", headers=viewer, json={"subject": HOST}).status_code == 403

@@ -1270,6 +1270,31 @@
         "title": "Comment",
         "type": "object"
       },
+      "CopilotBody": {
+        "properties": {
+          "steps": {
+            "description": "The steps to run, as planned or edited by the analyst",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "maxItems": 8,
+            "title": "Steps",
+            "type": "array"
+          },
+          "subject": {
+            "additionalProperties": true,
+            "description": "{\"kind\": \"case\"|\"alert\", \"id\": ...} or {\"kind\": \"entity\", \"type\": \"src_ip\"|\"dst_ip\"|\"user\"|\"hostname\", \"value\": ..., \"at\": \"<ISO time>\"}",
+            "title": "Subject",
+            "type": "object"
+          }
+        },
+        "required": [
+          "subject"
+        ],
+        "title": "CopilotBody",
+        "type": "object"
+      },
       "CorrelatedGroupsResponse": {
         "properties": {
           "groups": {
@@ -9913,6 +9938,94 @@
         "summary": "Save Baseline",
         "tags": [
           "ai"
+        ]
+      }
+    },
+    "/v1/ai/copilot/plan": {
+      "post": {
+        "description": "The read-only searches the copilot proposes for a case, alert or entity. Nothing runs: the analyst\nreviews, edits or drops steps, then calls /copilot/run.",
+        "operationId": "ai_copilot_plan_v1_ai_copilot_plan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopilotBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Ai Copilot Plan V1 Ai Copilot Plan Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ai Copilot Plan",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
+    "/v1/ai/copilot/run": {
+      "post": {
+        "description": "Run the approved steps as the caller: a cited timeline, root-cause candidates, hypotheses and proposed\nnext steps. With AI on, the model writes the hypotheses; nothing it cites is outside what was fetched.",
+        "operationId": "ai_copilot_run_v1_ai_copilot_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopilotBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Ai Copilot Run V1 Ai Copilot Run Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ai Copilot Run",
+        "tags": [
+          "ai-assistant"
         ]
       }
     },
@@ -21872,6 +21985,74 @@
           }
         ],
         "summary": "Pin Evidence",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/v1/security/cases/{case_id}/evidence/{evidence_id}": {
+      "delete": {
+        "description": "Take back a pin (the pin stays in the timeline, marked as taken back).",
+        "operationId": "unpin_evidence_v1_security_cases__case_id__evidence__evidence_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "evidence_id",
+            "required": true,
+            "schema": {
+              "title": "Evidence Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Unpin Evidence V1 Security Cases  Case Id  Evidence  Evidence Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Unpin Evidence",
         "tags": [
           "cases"
         ]

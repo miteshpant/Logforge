@@ -146,16 +146,47 @@ def _quote(value: Any) -> str:
 
 # -- the tools ---------------------------------------------------------------------
 
+MAX_WINDOW = timedelta(days=31)
+
+
+def _window(args: dict[str, Any]) -> tuple[str, str] | None:
+    """An explicit start/end window (ISO 8601), if given."""
+    start, end = args.get("start"), args.get("end")
+    if not start and not end:
+        return None
+    if not (start and end):
+        raise ToolError("run_query: give both start and end, or neither")
+    if args.get("since"):
+        raise ToolError("run_query: give either since or start/end")
+    try:
+        begin = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        finish = datetime.fromisoformat(end.replace("Z", "+00:00"))
+    except ValueError:
+        raise ToolError("run_query: start and end must be ISO 8601 times") from None
+    if begin.tzinfo is None or finish.tzinfo is None:
+        raise ToolError("run_query: start and end need a time zone (ISO 8601 with Z or +00:00)")
+    if finish <= begin:
+        raise ToolError("run_query: end must be after start")
+    if finish - begin > MAX_WINDOW:
+        raise ToolError("run_query: the window can be at most 31 days")
+    return begin.isoformat(), finish.isoformat()
+
+
 async def run_query(ctx: ToolContext, args: dict[str, Any]) -> ToolOutput:
-    query, since = args["query"], args.get("since") or "1h"
-    body = {"query": query, "since": since}
+    query, window = args["query"], _window(args)
+    since = None if window else (args.get("since") or "1h")
+    body = {"query": query, "start_time": window[0], "end_time": window[1]} if window else \
+        {"query": query, "since": since}
     try:
         result = await _logql(body, ctx.tenant_id)
     except HTTPException as e:
         raise ToolError(f"query failed: {e.detail}") from None
     rows = result.get("logs") or []
     refs = [Ref(kind="query", label=query if len(query) <= 120 else query[:117] + "…",
-                link=_logs_link(query, since=since), key={"query": query, "since": since})]
+                link=_logs_link(query, since=since, start=window[0] if window else None,
+                                end=window[1] if window else None),
+                key={"query": query, "since": since} if not window else {"query": query, "start": window[0],
+                                                                         "end": window[1]})]
     out_rows = []
     for row in rows[:MAX_ROWS]:
         row = _plain(row)
@@ -226,7 +257,9 @@ TOOLS: dict[str, Tool] = {t.name: t for t in [
          "(| where, | stats ... by, | timechart, | top, | sort, | head) to aggregate rather than reading raw events.",
          _schema({"query": {"type": "string", "description": "LogforgeQL, e.g. '| where service = \"sshd\" | "
                                                              "stats count() by src_ip | sort -count | head 10'"},
-                  "since": {"type": "string", "description": "How far back: 15m, 24h, 7d (default 1h)"}},
+                  "since": {"type": "string", "description": "How far back: 15m, 24h, 7d (default 1h)"},
+                  "start": {"type": "string", "description": "Or an explicit window: start, ISO 8601 with time zone"},
+                  "end": {"type": "string", "description": "End of the explicit window, ISO 8601 with time zone"}},
                  ["query"]),
          ("POST", "/v1/query/logql"), run_query),
     Tool("get_alert", "Fetch one security alert (detection) by id: rule, severity, time and the event that raised it.",

@@ -116,6 +116,22 @@ def test_tags_and_evidence():
     assert events[0]["kind"] == "evidence_pinned" and events[0]["data"]["kind"] == "search"
     with pytest.raises(CaseError, match="evidence kind"):
         apply_action(case, "pin_evidence", "alice", T0, evidence={"kind": "photo", "ref": "x"})
+    # pinning is reversible: unpinning records which pin it takes back
+    pinned = events[0]["id"]
+    case, events = apply_action(case, "unpin_evidence", "alice", T0, evidence_id=pinned)
+    assert events[0]["kind"] == "evidence_unpinned" and events[0]["data"] == {"evidence_id": pinned}
+    with pytest.raises(CaseError, match="evidence_id"):
+        apply_action(case, "unpin_evidence", "alice", T0, evidence_id="")
+
+
+def test_pinned_evidence_is_what_was_pinned_and_not_taken_back():
+    from cases import pinned_evidence
+
+    timeline = [{"id": "e1", "kind": "evidence_pinned", "data": {"kind": "search", "ref": "a"}},
+                {"id": "e2", "kind": "evidence_pinned", "data": {"kind": "event", "ref": "b"}},
+                {"id": "e3", "kind": "comment", "data": {}},
+                {"id": "e4", "kind": "evidence_unpinned", "data": {"evidence_id": "e1"}}]
+    assert [e["id"] for e in pinned_evidence(timeline)] == ["e2"]
 
 
 def test_merge_moves_alerts_and_entities_and_closes_the_sources():

@@ -246,6 +246,20 @@ def _pin_evidence(case: Case, actor: str, now: datetime, evidence: Dict[str, Any
     return case, [_event(case, "evidence_pinned", actor, now, data)]
 
 
+def _unpin_evidence(case: Case, actor: str, now: datetime, evidence_id: str) -> Tuple[Case, List[Event]]:
+    """Take back a pin: the pin stays in the timeline, marked as taken back."""
+    evidence_id = str(evidence_id or "").strip()
+    if not evidence_id:
+        raise CaseError("unpinning needs the evidence_id of the pin")
+    return case, [_event(case, "evidence_unpinned", actor, now, {"evidence_id": evidence_id})]
+
+
+def pinned_evidence(timeline: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The pins in a timeline that haven't been taken back, in order."""
+    taken_back = {str((e.get("data") or {}).get("evidence_id")) for e in timeline if e.get("kind") == "evidence_unpinned"}
+    return [e for e in timeline if e.get("kind") == "evidence_pinned" and str(e.get("id")) not in taken_back]
+
+
 def _describe(case: Case, actor: str, now: datetime, title: Optional[str] = None,
               description: Optional[str] = None, severity: Optional[str] = None) -> Tuple[Case, List[Event]]:
     changes: Dict[str, Any] = {}
@@ -270,6 +284,7 @@ _ACTIONS = {
     "comment": _comment,
     "tags": _tags,
     "pin_evidence": _pin_evidence,
+    "unpin_evidence": _unpin_evidence,
     "update": _describe,
 }
 
