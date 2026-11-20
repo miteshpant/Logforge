@@ -428,6 +428,12 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in WRITE_METHODS and not path.endswith("/validate"):
             return "settings:write:tenant"
         return "security:read:tenant"
+    elif path.startswith("/v1/reports/schedules"):
+        if method in WRITE_METHODS:
+            return "settings:write:tenant"
+        return "settings:read:tenant"
+    elif path.startswith("/v1/reports"):
+        return "security:read:tenant"
     elif path.startswith("/v1/integrations"):
         # Integrations hold the tenant's tokens for outside systems (Phase 13).
         if method in WRITE_METHODS:

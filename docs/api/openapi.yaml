@@ -9382,6 +9382,172 @@ paths:
       summary: Validate Query
       tags:
       - Query
+  /v1/reports/attack-navigator:
+    get:
+      operationId: attack_navigator_v1_reports_attack_navigator_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      summary: Attack Navigator
+      tags:
+      - reports
+  /v1/reports/schedules:
+    get:
+      operationId: list_schedules_v1_reports_schedules_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response List Schedules V1 Reports Schedules Get
+                type: object
+          description: Successful Response
+      summary: List Schedules
+      tags:
+      - reports
+    post:
+      operationId: create_schedule_v1_reports_schedules_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleBody'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Create Schedule
+      tags:
+      - reports
+  /v1/reports/schedules/{schedule_id}:
+    delete:
+      operationId: delete_schedule_v1_reports_schedules__schedule_id__delete
+      parameters:
+      - in: path
+        name: schedule_id
+        required: true
+        schema:
+          title: Schedule Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Delete Schedule
+      tags:
+      - reports
+    put:
+      operationId: update_schedule_v1_reports_schedules__schedule_id__put
+      parameters:
+      - in: path
+        name: schedule_id
+        required: true
+        schema:
+          title: Schedule Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Update Schedule
+      tags:
+      - reports
+  /v1/reports/schedules/{schedule_id}/send:
+    post:
+      operationId: send_now_v1_reports_schedules__schedule_id__send_post
+      parameters:
+      - in: path
+        name: schedule_id
+        required: true
+        schema:
+          title: Schedule Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Send Now
+      tags:
+      - reports
+  /v1/reports/soc:
+    get:
+      operationId: soc_report_v1_reports_soc_get
+      parameters:
+      - in: query
+        name: days
+        required: false
+        schema:
+          default: 30
+          maximum: 366
+          minimum: 1
+          title: Days
+          type: integer
+      - in: query
+        name: format
+        required: false
+        schema:
+          default: json
+          pattern: ^(json|csv|pdf)$
+          title: Format
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Soc Report
+      tags:
+      - reports
   /v1/roles:
     get:
       description: List available roles and their permissions
@@ -18041,6 +18207,47 @@ components:
           - type: 'null'
           title: Case Id
       title: RunBody
+      type: object
+    ScheduleBody:
+      properties:
+        enabled:
+          default: true
+          title: Enabled
+          type: boolean
+        every:
+          default: weekly
+          pattern: ^(daily|weekly|monthly)$
+          title: Every
+          type: string
+        format:
+          default: pdf
+          pattern: ^(pdf|csv)$
+          title: Format
+          type: string
+        hour:
+          default: 7
+          maximum: 23.0
+          minimum: 0.0
+          title: Hour
+          type: integer
+        integration_id:
+          title: Integration Id
+          type: string
+        name:
+          maxLength: 120
+          minLength: 1
+          title: Name
+          type: string
+        recipients:
+          items:
+            type: string
+          maxItems: 50
+          title: Recipients
+          type: array
+      required:
+      - name
+      - integration_id
+      title: ScheduleBody
       type: object
     SchemaInfo:
       description: Information about a registered schema

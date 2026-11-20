@@ -185,6 +185,10 @@ async def _email(config, secrets, inputs, http):
     msg["From"] = config.get("from_address") or os.getenv("LOGFORGE_SMTP_FROM", "logforge@localhost")
     msg["To"] = ", ".join(recipients)
     msg.set_content(inputs.get("body", ""))
+    for attachment in inputs.get("attachments") or []:  # set by Logforge (scheduled reports), not templates
+        maintype, _, subtype = str(attachment.get("content_type", "application/octet-stream")).partition("/")
+        msg.add_attachment(base64.b64decode(attachment["content_b64"]), maintype=maintype, subtype=subtype or "octet-stream",
+                           filename=attachment.get("filename", "report"))
 
     def send():
         host = config.get("smtp_host") or os.getenv("LOGFORGE_SMTP_HOST", "")

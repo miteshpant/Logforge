@@ -430,6 +430,9 @@ async def initialize_engines():
             from integrations.sync_service import start as start_ticket_sync
             if start_ticket_sync():
                 logger.info("Ticket sync started")
+            from routers.reports_api import start as start_reports
+            if start_reports():
+                logger.info("Report scheduler started")
         except Exception as e:
             logger.error(f"Failed to start playbooks: {e}")
 
