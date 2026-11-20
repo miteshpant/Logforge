@@ -241,9 +241,23 @@ async def submit_query_feedback(
         raise internal_error(e, "Failed to submit feedback")
 
 
+async def _grounded(rca_result, http_request: Request, customer_id: str, current_user) -> Dict[str, Any]:
+    """Phase 10: the cited analysis of an RCA result (the model's where AI is on, else the statistical one).
+    The statistical result stands on its own if this fails."""
+    from ai.rca import grounded_analysis
+
+    try:
+        return await grounded_analysis(rca_result, tenant_id=customer_id, user_id=str(getattr(current_user, "id", "")),
+                                       roles=getattr(http_request.state, "roles", None) or [])
+    except Exception as e:  # noqa: BLE001 - the RCA itself succeeded
+        logger.warning("Grounded RCA analysis failed", error=str(e), customer_id=customer_id)
+        return {"mode": "unavailable", "sections": [], "citations": [], "dropped": [], "flags": ["analysis_failed"]}
+
+
 @router.post("/investigate")
 async def start_investigation(
     request: InvestigationRequest,
+    http_request: Request,
     customer_id: str = Header(..., alias="X-Customer-ID"),
     current_user = Depends(get_current_user)
 ):
@@ -326,7 +340,7 @@ async def start_investigation(
 
         await ai_service.dao.create_investigation(investigation_data)
 
-        return {
+        response = {
             "investigation_id": investigation_id,
             "title": request.title,
             "status": "completed",
@@ -348,6 +362,10 @@ async def start_investigation(
             },
             "customer_id": customer_id
         }
+        from ai.rca import apply as apply_analysis
+
+        return apply_analysis(response, await _grounded(rca_result, http_request, customer_id, current_user),
+                              "next_steps")
 
     except Exception as e:
         logger.error("Failed to start investigation", error=str(e), customer_id=customer_id)
@@ -394,6 +412,7 @@ async def get_investigation_status(
 @router.post("/analyze-incident")
 async def analyze_incident_rca(
     request: AnalysisRequest,
+    http_request: Request,
     customer_id: str = Header(..., alias="X-Customer-ID"),
     current_user = Depends(get_current_user)
 ):
@@ -416,7 +435,7 @@ async def analyze_incident_rca(
             customer_id=customer_id
         )
 
-        return {
+        response = {
             "analysis_id": result.analysis_id,
             "incident_id": result.incident_id,
             "root_cause": {
@@ -456,6 +475,9 @@ async def analyze_incident_rca(
             },
             "customer_id": customer_id
         }
+        from ai.rca import apply as apply_analysis
+
+        return apply_analysis(response, await _grounded(result, http_request, customer_id, current_user))
 
     except Exception as e:
         logger.error("RCA analysis failed", error=str(e), customer_id=customer_id)
