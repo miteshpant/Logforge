@@ -174,6 +174,27 @@ Security → Reports, or `/v1/reports`.
   - response automation: runs by outcome, approvals given and refused.
 
   `GET /v1/reports/soc?days=30&format=json|csv|pdf`.
+- **Compliance evidence report** for the last 1 to 366 days (default 90),
+  for SOC 2 and ISO 27001 audits. Each section names the controls it is
+  evidence for:
+  - **Access review** (CC6.2, CC6.3; A.5.15, A.5.18): every user with a
+    role in the tenant, their built-in and custom roles, last sign-in and
+    MFA. The summary counts administrators, active users without MFA and
+    those not seen in 90 days.
+  - **API keys** (CC6.1; A.5.17, A.8.5): who created each, its scope, last
+    use and expiry; the summary counts keys unused for 90 days and keys
+    that never expire.
+  - **Audit trail** (CC7.2, CC8.1; A.8.15): the period's audited changes
+    by action and resource.
+  - **Retention** (CC6.5; A.5.33, A.8.10) and **legal holds** (A.5.33).
+  - **Incident response** (CC7.3–CC7.5; A.5.24, A.5.26): cases, open
+    cases and SLA misses.
+
+  `GET /v1/reports/compliance?days=90&format=json|csv|pdf`, or "Compliance
+  evidence" on the Reports page (PDF). It needs `compliance:read`, which
+  tenant administrators, compliance officers and security analysts have.
+  The report is evidence for an auditor, not an attestation: the controls
+  are met by how you use it (reviewing access each quarter, for example).
 - **ATT&CK Navigator layer** of detection coverage:
   `GET /v1/reports/attack-navigator`. Each technique is scored by its
   enabled, fixture-tested rules and commented with its last detection. Open
@@ -227,16 +248,14 @@ fixed:
 
 ## Limits
 
-- **Compliance reports** (from the Phase 13 deliverables) aren't done; the
-  security operations report isn't one.
 - **Ticket systems:** Jira and GitHub only. ServiceNow, Linear and others
   can be reached by a webhook action, without sync.
 - **Containment** goes only through your own automation (a webhook to a
   SOAR, a firewall API, an IdP workflow). Logforge has no built-in
   connectors that block or disable anything itself.
-- **Playbook steps run in order:** no branches, loops or parallel steps. A
-  run waits only at approvals; an approval is decided in Logforge, not from
-  Slack.
+- **Playbooks** branch with `if` and run adjacent steps in parallel, but
+  have no loops. A run waits only at approvals; an approval is decided in
+  Logforge, not from Slack.
 - **The PDF** uses the standard PDF fonts when all its text is Latin-1 (about
   1 KB a page). A report with other characters (a tenant, rule or case name in
   Greek, Cyrillic and so on) embeds DejaVu Sans and Sans Mono instead, which

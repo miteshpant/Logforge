@@ -367,7 +367,7 @@ ROLE_PERMISSIONS = {
         "storage:*:tenant", "queries:*:tenant", "ai:*:tenant", "enterprise:*:tenant",
         "observability:*:tenant", "roles:*:tenant", "usage:*:tenant", "billing:read:tenant",
         "costs:*:tenant", "analytics:read:tenant", "tenants:read,write:tenant",
-        "tenant_profile:read:tenant"
+        "tenant_profile:read:tenant", "compliance:read:tenant"
     ],
     UserRole.SECURITY_ANALYST: [
         "tenant_profile:read:tenant",
@@ -443,6 +443,9 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in WRITE_METHODS:
             return "settings:write:tenant"
         return "settings:read:tenant"
+    elif path.startswith("/v1/reports/compliance"):
+        # The access review lists every user and key: compliance, not SOC, readers.
+        return "compliance:read:tenant"
     elif path.startswith("/v1/reports"):
         return "security:read:tenant"
     elif path.startswith("/v1/integrations"):

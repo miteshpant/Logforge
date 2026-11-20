@@ -127,7 +127,7 @@ test('reports: on screen, as PDF and CSV, and the ATT&CK Navigator layer', async
   await expect(page.getByTestId('report-Case response')).toBeVisible()
   await expect(page.getByTestId('report-Detection coverage')).toBeVisible()
 
-  for (const [button, extension] of [['download-pdf', '.pdf'], ['download-csv', '.csv'], ['download-navigator', '.json']]) {
+  for (const [button, extension] of [['download-pdf', '.pdf'], ['download-csv', '.csv'], ['download-navigator', '.json'], ['download-compliance', '.pdf']]) {
     const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId(button).click()])
     expect(download.suggestedFilename().endsWith(extension)).toBeTruthy()
   }

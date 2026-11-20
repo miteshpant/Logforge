@@ -100,9 +100,10 @@ markers).
     `/v1/enterprise/auth/providers` and `/v1/enterprise/auth/mfa/setup` answer
     410 Gone naming `/v1/roles/custom`, `/v1/sso/providers` or `/v1/auth/mfa`.
 - **Response follow-ups from Phase 13** ([response automation](./response.md)):
-  - **Compliance reports** (the Phase 13 deliverable not done): evidence
-    for SOC 2 and ISO 27001 controls from the audit log, retention and
-    access reviews.
+  - ~~**Compliance reports**~~: done. `GET /v1/reports/compliance` (JSON,
+    CSV, PDF) gives evidence for named SOC 2 and ISO 27001 controls: access
+    review with MFA and last sign-in, API keys, audit trail, retention,
+    legal holds and incident response ([reports](./response.md#reports)).
   - **More ticket systems with sync:** ServiceNow and Linear. Today they
     can only be reached by a webhook action.
   - **Approve from Slack or Teams** (interactive messages), with the same

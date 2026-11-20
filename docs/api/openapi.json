@@ -22427,6 +22427,61 @@
         ]
       }
     },
+    "/v1/reports/compliance": {
+      "get": {
+        "description": "Evidence for SOC 2 and ISO 27001 controls: access review, API keys, audit\ntrail, retention, legal holds and incident response.",
+        "operationId": "compliance_report_v1_reports_compliance_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 90,
+              "maximum": 366,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "json",
+              "pattern": "^(json|csv|pdf)$",
+              "title": "Format",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compliance Report",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
     "/v1/reports/schedules": {
       "get": {
         "operationId": "list_schedules_v1_reports_schedules_get",

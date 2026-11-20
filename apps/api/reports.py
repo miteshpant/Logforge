@@ -118,6 +118,89 @@ def build(inputs: Dict[str, Any]) -> Dict[str, Any]:
             "generated_at": inputs.get("generated_at", end).isoformat(), "sections": sections}
 
 
+# -- compliance evidence ---------------------------------------------------------------------
+
+STALE_DAYS = 90
+ADMIN_ROLES = ("tenant_admin",)
+
+
+def _day(value: Any) -> str:
+    if not value:
+        return "never"
+    return value.strftime("%Y-%m-%d") if hasattr(value, "strftime") else str(value)[:10]
+
+
+def _older(value: Any, end: datetime, days: int) -> bool:
+    if not value:
+        return True
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value)
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return end - value > timedelta(days=days)
+
+
+def build_compliance(inputs: Dict[str, Any]) -> Dict[str, Any]:
+    """Evidence for SOC 2 and ISO 27001 controls from the tenant's own records:
+    the access review (users, roles, MFA, API keys), the audit trail, retention
+    and legal holds, and incident response. Each section names the controls."""
+    start, end = inputs["start"], inputs["end"]
+    users = inputs.get("users", [])
+    active = [u for u in users if u.get("status") == "active"]
+    keys = inputs.get("api_keys", [])
+    active_keys = [k for k in keys if k.get("is_active")]
+    audit = inputs.get("audit", [])
+    holds = inputs.get("legal_holds", [])
+    cm = inputs.get("case_metrics", {})
+    breaches = cm.get("sla_breaches", {})
+    sections = [
+        {"title": "Summary", "kind": "kv", "rows": [
+            ["Active users", len(active)],
+            ["Administrators", sum(1 for u in active if set(u.get("roles", [])) & set(ADMIN_ROLES))],
+            ["Active users without MFA", sum(1 for u in active if not u.get("mfa"))],
+            [f"Active users not seen in {STALE_DAYS} days", sum(1 for u in active if _older(u.get("last_login_at"), end, STALE_DAYS))],
+            ["Active API keys", len(active_keys)],
+            [f"API keys unused in {STALE_DAYS} days", sum(1 for k in active_keys if _older(k.get("last_used"), end, STALE_DAYS))],
+            ["API keys without an expiry", sum(1 for k in active_keys if not k.get("expires_at"))],
+            ["Audited changes", sum(int(a.get("count", 0)) for a in audit)],
+            ["Active legal holds", sum(1 for h in holds if h.get("status") == "active")],
+        ]},
+        {"title": "Access review (SOC 2 CC6.2, CC6.3; ISO 27001 A.5.15, A.5.18)", "kind": "table",
+         "columns": ["User", "Roles", "Status", "Last sign-in", "MFA"],
+         "note": f"Review each account: remove leavers, check administrators, and follow up on MFA off or no sign-in for {STALE_DAYS} days.",
+         "rows": [[u["email"], ", ".join(list(u.get("roles", [])) + list(u.get("custom_roles", []))),
+                   u.get("status", ""), _day(u.get("last_login_at")), "yes" if u.get("mfa") else "no"]
+                  for u in sorted(users, key=lambda u: u["email"])]},
+        {"title": "API keys (SOC 2 CC6.1; ISO 27001 A.5.17, A.8.5)", "kind": "table",
+         "columns": ["Key", "Created by", "Scope", "Last used", "Expires", "Active"],
+         "note": "Keys with an empty scope act with their creator's roles.",
+         "rows": [[k["name"], k.get("created_by", ""), ", ".join(k.get("permissions") or []) or "creator's roles",
+                   _day(k.get("last_used")), _day(k.get("expires_at")) if k.get("expires_at") else "never",
+                   "yes" if k.get("is_active") else "no"] for k in keys]},
+        {"title": "Audit trail (SOC 2 CC7.2, CC8.1; ISO 27001 A.8.15)", "kind": "table",
+         "columns": ["Action", "Resource", "Changes"],
+         "note": "Changes recorded in the audit log during the period, by kind. The full log: Settings, Compliance.",
+         "rows": sorted([[a["action_type"], a["resource_type"], int(a.get("count", 0))] for a in audit],
+                        key=lambda r: -r[2])},
+        {"title": "Retention (SOC 2 CC6.5; ISO 27001 A.5.33, A.8.10)", "kind": "table",
+         "columns": ["Data", "Searchable days", "Archive days"],
+         "rows": [[r["data_type"], r["searchable_days"], r["archive_days"] or "none"]
+                  for r in inputs.get("retention", [])]},
+        {"title": "Legal holds (ISO 27001 A.5.33)", "kind": "table", "columns": ["Reason", "Status", "From", "Until"],
+         "rows": [[h.get("reason", ""), h.get("status", ""), _day(h.get("start_date")),
+                   _day(h.get("end_date")) if h.get("end_date") else "open"] for h in holds]},
+        {"title": "Incident response (SOC 2 CC7.3, CC7.4, CC7.5; ISO 27001 A.5.24, A.5.26)", "kind": "kv", "rows": [
+            ["Cases in the period", cm.get("cases", 0)],
+            ["Open cases", cm.get("open_total", 0)],
+            ["Acknowledge SLA missed", sum((breaches.get("acknowledge") or {}).values())],
+            ["Resolve SLA missed", sum((breaches.get("resolve") or {}).values())],
+        ]},
+    ]
+    return {"title": "Compliance evidence report", "tenant": inputs.get("tenant", ""),
+            "period": {"start": f"{start:%Y-%m-%d}", "end": f"{end:%Y-%m-%d}", "days": (end - start).days},
+            "generated_at": inputs.get("generated_at", end).isoformat(), "sections": sections}
+
+
 def to_csv(report: Dict[str, Any]) -> str:
     out = io.StringIO()
     w = csv.writer(out)

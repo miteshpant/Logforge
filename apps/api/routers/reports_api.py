@@ -86,6 +86,72 @@ async def gather(tenant_id: str, start: datetime, end: datetime) -> Dict[str, An
             "playbook_runs": [{"status": r.status} for r in runs], "approvals": approvals}
 
 
+def _rows(client, sql: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+    result = client.query(sql, parameters=params)
+    return [dict(zip(result.column_names, r)) for r in result.result_rows]
+
+
+def _compliance_records(tenant_id: str, start: datetime, end: datetime) -> Dict[str, Any]:
+    """The access review, keys, audit summary and holds, newest version of each row."""
+    client = _client()
+    p = {"tenant": tenant_id, "start": start, "end": end}
+    users = _rows(client, """
+        SELECT u.id AS id, u.email AS email, r.state AS status, r.granted AS roles, u.last_login_at AS last_login_at
+        FROM (SELECT user_id, groupArrayIf(role, status = 'active') AS granted,
+                     if(countIf(status = 'active') > 0, 'active', 'inactive') AS state
+              FROM user_tenant_roles_mt WHERE tenant_id = {tenant:String} GROUP BY user_id) AS r
+        INNER JOIN (SELECT id, argMax(email, updated_at) AS email, max(last_login_at) AS last_login_at
+                    FROM users_mt GROUP BY id) AS u ON u.id = r.user_id
+        WHERE NOT endsWith(u.email, '.system')""", p)  # API keys' service accounts: in the key section
+    ids = [u["id"] for u in users]
+    mfa = {r["user_id"] for r in _rows(client, "SELECT user_id FROM user_mfa_mt FINAL "
+                                       "WHERE confirmed = 1 AND deleted = 0 AND user_id IN {ids:Array(String)}",
+                                       {"ids": ids})} if ids else set()
+    custom: Dict[str, List[str]] = {}
+    for r in _rows(client, """
+            SELECT m.user_id AS user_id, r.name AS name FROM custom_role_members_mt AS m FINAL
+            INNER JOIN (SELECT id, name FROM custom_roles_mt FINAL WHERE customer_id = {tenant:String} AND deleted = 0) AS r
+              ON r.id = m.role_id WHERE m.customer_id = {tenant:String} AND m.deleted = 0""", p):
+        custom.setdefault(r["user_id"], []).append(r["name"])
+    for u in users:
+        u["mfa"] = u["id"] in mfa
+        u["custom_roles"] = sorted(custom.get(u["id"], []))
+    keys = _rows(client, """
+        SELECT argMax(name, updated_at) AS name, argMax(created_by, updated_at) AS created_by,
+               argMax(permissions, updated_at) AS permissions, max(last_used) AS last_used,
+               argMax(expires_at, updated_at) AS expires_at, argMax(is_active, updated_at) AS is_active
+        FROM api_keys_enterprise_mt WHERE customer_id = {tenant:String} GROUP BY id ORDER BY name""", p)
+    creators = list({k["created_by"] for k in keys if k.get("created_by")})
+    if creators:
+        emails = {r["id"]: r["email"] for r in _rows(client, "SELECT id, argMax(email, updated_at) AS email "
+                                                     "FROM users_mt WHERE id IN {ids:Array(String)} GROUP BY id",
+                                                     {"ids": creators})}
+        for k in keys:
+            k["created_by"] = emails.get(k.get("created_by"), k.get("created_by", ""))
+    audit = _rows(client, """
+        SELECT action_type, resource_type, count() AS count FROM enterprise_audit_logs_mt
+        WHERE tenant_id = {tenant:String} AND timestamp >= {start:DateTime64(3)} AND timestamp < {end:DateTime64(3)}
+        GROUP BY action_type, resource_type""", p)
+    holds = _rows(client, """
+        SELECT argMax(reason, updated_at) AS reason, argMax(status, updated_at) AS status,
+               argMax(start_date, updated_at) AS start_date, argMax(end_date, updated_at) AS end_date
+        FROM legal_holds_mt WHERE customer_id = {tenant:String} GROUP BY id ORDER BY start_date""", p)
+    return {"users": users, "api_keys": keys, "audit": audit, "legal_holds": holds}
+
+
+async def gather_compliance(tenant_id: str, start: datetime, end: datetime) -> Dict[str, Any]:
+    from services.case_service import CaseService
+    from tier_manager import TierManager
+
+    import storage_tiers as st
+
+    records = await asyncio.to_thread(_compliance_records, tenant_id, start, end)
+    policies = await asyncio.to_thread(lambda: TierManager(_client(), None, st.load_config()).policies(tenant_id))
+    return {"tenant": tenant_id, "start": start, "end": end, "generated_at": datetime.now(timezone.utc),
+            "retention": [p.__dict__ for p in policies.values()],
+            "case_metrics": await CaseService().metrics(tenant_id, max(1, (end - start).days)), **records}
+
+
 def render(report: Dict[str, Any], fmt: str):
     if fmt == "pdf":
         return reports.to_pdf(report)
@@ -114,6 +180,23 @@ async def soc_report(customer_id: str = MiddlewareTenant, days: int = Query(30, 
     if format == "json":
         return report
     name = f"logforge-soc-report-{report['period']['end']}.{format}"
+    return Response(render(report, format), media_type=CONTENT[format],
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@router.get("/compliance")
+async def compliance_report(customer_id: str = MiddlewareTenant, days: int = Query(90, ge=1, le=366),
+                            format: str = Query("json", pattern="^(json|csv|pdf)$")):
+    """Evidence for SOC 2 and ISO 27001 controls: access review, API keys, audit
+    trail, retention, legal holds and incident response."""
+    end = datetime.now(timezone.utc)
+    try:
+        report = reports.build_compliance(await gather_compliance(customer_id, end - timedelta(days=days), end))
+    except Exception as e:
+        raise internal_error(e, "Failed to build the report", customer_id=customer_id)
+    if format == "json":
+        return report
+    name = f"logforge-compliance-report-{report['period']['end']}.{format}"
     return Response(render(report, format), media_type=CONTENT[format],
                     headers={"Content-Disposition": f'attachment; filename="{name}"'})
 

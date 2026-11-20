@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { CalendarClock, Download, FileBarChart, Loader2, Map, Send, Trash2 } from 'lucide-react'
+import { CalendarClock, Download, FileBarChart, Loader2, Map, Send, ShieldCheck, Trash2 } from 'lucide-react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import {
   deleteSchedule, download, listIntegrations, listSchedules, saveSchedule, sendSchedule, socReport,
@@ -115,6 +115,9 @@ export default function ReportsPage() {
             <button data-testid="download-navigator" onClick={() => save('logforge-coverage-layer.json', '/v1/reports/attack-navigator')}
               title="Open in the MITRE ATT&CK Navigator: Open Existing Layer → Upload from local"
               className="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-white text-sm inline-flex items-center gap-1"><Map className="w-4 h-4" /> ATT&CK Navigator layer</button>
+            <button data-testid="download-compliance" onClick={() => save('logforge-compliance-report.pdf', `/v1/reports/compliance?days=${days}&format=pdf`)}
+              title="SOC 2 and ISO 27001 evidence: access review, API keys, audit trail, retention, legal holds, incident response"
+              className="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-white text-sm inline-flex items-center gap-1"><ShieldCheck className="w-4 h-4" /> Compliance evidence</button>
           </div>
         </div>
         {message && <p className="text-sm text-emerald-300" data-testid="reports-message">{message}</p>}
