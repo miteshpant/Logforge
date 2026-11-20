@@ -242,10 +242,24 @@ def rule_based(question: str, catalogue: dict[str, Any] | None = None) -> QueryD
         rest = re.sub(r"4xx(?:\s+errors?)?|client errors?|not found|\b404s?\b(?:\s+errors?)?", " ", rest)
 
     for service in sorted(_values(catalogue, "service"), key=len, reverse=True):
-        if re.search(rf"(?<![\w-]){re.escape(service.lower())}(?![\w-])", rest):
+        if re.search(rf"(?<![\w.-]){re.escape(service.lower())}(?![\w.-])", rest):
             filters.insert(0, f"service = {_q(service)}")
             said.insert(0, f"from {service}")
             break
+    # Any other value the catalogue has seen (a host, a user, a method ...)
+    # becomes a filter on its field.
+    taken = {f.split(" ", 1)[0] for f in filters}
+    for f in (catalogue or {}).get("fields", []):
+        name = f["name"]
+        if name in taken or name in ("service", "level", "msg", "ts") or name.startswith("ocsf."):
+            continue
+        for value in _values(catalogue, name):
+            if len(value) >= 3 and re.search(rf"(?<![\w.-]){re.escape(value.lower())}(?![\w.-])", rest):
+                filters.append(f"{name} = {_q(value)}")
+                said.append(f"where {name} is {value}")
+                taken.add(name)
+                rest = rest.replace(value.lower(), " ")
+                break
     if re.search(r"\berrors?\b|\bfail(?:ed|ures?)?\b", rest):
         filters.append('level = "error"')
         said.append("at level error")
@@ -262,7 +276,8 @@ def rule_based(question: str, catalogue: dict[str, Any] | None = None) -> QueryD
                   rest)
     if g:
         words = g.group(1).strip()
-        group = _resolve(words, catalogue) or _resolve(words.split()[-1], catalogue)
+        if words:
+            group = _resolve(words, catalogue) or _resolve(words.split()[-1], catalogue)
     top = re.search(r"\btop\s+(\d{1,3})\s+([a-z_ ]+?)(?=\s+(?:by|in|over|from|last|past)\b|[?.,!]|$)", rest)
     most = re.search(r"\bwhich\s+([a-z_ ]+?)\s+(?:\w+\s+){0,3}(?:the\s+)?most\b|\bmost common\s+([a-z_ ]+)", rest)
     trend = re.search(r"\bover time\b|\btrend\b|\bper (?:minute|hour|day)\b|\btimeline\b", rest)

@@ -1,0 +1,214 @@
+{"expected_query": "| where service in [\"api\", \"web\"] | stats count() as count by status", "id": "http-014", "question": "How many requests per status?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u009\" | stats count() as count", "id": "http-158", "question": "How many requests did u009 make?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u058\" | stats count() as count", "id": "http-169", "question": "Requests from u058", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] | top limit=10 attrs.user_agent", "id": "http-048", "question": "Top 10 user agents", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status = 404 | stats count() as count", "id": "http-005", "question": "How many 404 responses were there?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h18\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-152", "question": "Mean duration of requests served by h18", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h12\" | stats count() as count by attrs.uri", "id": "http-200", "question": "Which paths did h12 serve?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u033\" | stats count() as count", "id": "http-163", "question": "Requests from u033", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 | stats count() as count by service", "id": "http-029", "question": "Server errors per service", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h07\" | stats count() as count by status", "id": "http-122", "question": "Requests on h07 by status", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h19\" | stats count() as count", "id": "http-080", "question": "How many requests did h19 serve?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h07\" | stats count() as count", "id": "http-068", "question": "How many requests did h07 serve?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 and host = \"h12\" | stats count() as count", "id": "http-091", "question": "Server errors on host h12", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.method = \"PUT\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-042", "question": "Mean duration of PUT requests", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h19\" | stats count() as count by attrs.uri", "id": "http-208", "question": "Which paths did h19 serve?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status = 503 | stats count() as count by host", "id": "http-188", "question": "Which hosts returned 503?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] | stats count() as count by host", "id": "http-020", "question": "How many requests per host?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and src_ip = \"10.0.3.4\" | stats count() as count", "id": "http-111", "question": "Requests from 10.0.3.4", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h14\" | stats count() as count", "id": "http-073", "question": "Requests on host h14", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h04\" | stats count() as count", "id": "http-065", "question": "Requests on host h04", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h12\" | stats count() as count", "id": "http-071", "question": "Requests on host h12", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u003\" | stats count() as count", "id": "http-156", "question": "How many requests did u003 make?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h02\" | stats count() as count by status", "id": "http-118", "question": "Requests on h02 by status", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 and host = \"h16\" | stats count() as count", "id": "http-095", "question": "Server errors on host h16", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status = 500 | stats count() as count", "id": "http-007", "question": "Requests with status 500", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 | stats count() as count", "id": "http-002", "question": "Count 5xx responses", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u017\" | stats count() as count", "id": "http-160", "question": "How many requests did u017 make?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h16\" | stats count() as count by attrs.uri", "id": "http-203", "question": "Requests per path on h16", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u009\" | stats count() as count", "id": "http-157", "question": "Requests from u009", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h04\" | stats count() as count", "id": "http-066", "question": "How many requests did h04 serve?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u099\" | stats count() as count", "id": "http-181", "question": "Requests from u099", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u042\" | stats count() as count", "id": "http-166", "question": "How many requests did u042 make?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.method = \"POST\" | stats count() as count", "id": "http-034", "question": "Count POST requests", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 | stats count() as count by host", "id": "http-026", "question": "5xx responses by host", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 | stats count() as count by service", "id": "http-030", "question": "5xx responses by service", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status = 404 | stats count() as count", "id": "http-004", "question": "Requests with status 404", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.method = \"POST\" | stats count() as count", "id": "http-033", "question": "How many POST requests were there?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h18\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-151", "question": "Average response time on h18", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u091\" | stats count() as count", "id": "http-178", "question": "How many requests did u091 make?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 and host = \"h02\" | stats count() as count", "id": "http-084", "question": "5xx responses from h02", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h09\" | stats count() as count by status", "id": "http-123", "question": "Status codes returned by h09", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h07\" | stats count() as count by attrs.uri", "id": "http-195", "question": "Requests per path on h07", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and src_ip = \"203.0.113.4\" | stats count() as count", "id": "http-106", "question": "How many requests came from 203.0.113.4?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.method = \"POST\" | stats count() as count by status", "id": "http-211", "question": "POST requests per status", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h07\" | stats count() as count", "id": "http-067", "question": "Requests on host h07", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h09\" | stats count() as count", "id": "http-070", "question": "How many requests did h09 serve?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h01\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-136", "question": "Mean duration of requests served by h01", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h18\" | stats count() as count", "id": "http-078", "question": "How many requests did h18 serve?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h07\" | stats count() as count by attrs.uri", "id": "http-196", "question": "Which paths did h07 serve?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.method = \"GET\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-038", "question": "Mean duration of GET requests", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h04\" | stats count() as count by status", "id": "http-119", "question": "Status codes returned by h04", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 | stats count() as count", "id": "http-001", "question": "How many requests returned a server error?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h14\" | stats count() as count by attrs.uri", "id": "http-202", "question": "Which paths did h14 serve?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h19\" | stats count() as count by status", "id": "http-134", "question": "Requests on h19 by status", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 and host = \"h07\" | stats count() as count", "id": "http-087", "question": "Server errors on host h07", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h04\" | stats count() as count by attrs.uri", "id": "http-193", "question": "Requests per path on h04", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and src_ip = \"203.0.113.9\" | stats count() as count", "id": "http-107", "question": "Requests from 203.0.113.9", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h04\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-140", "question": "Mean duration of requests served by h04", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h16\" | stats count() as count by status", "id": "http-129", "question": "Status codes returned by h16", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 and host = \"h18\" | stats count() as count", "id": "http-097", "question": "Server errors on host h18", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status = 503 | stats count() as count by host", "id": "http-187", "question": "Status 503 responses per host", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u095\" | stats count() as count", "id": "http-180", "question": "How many requests did u095 make?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h01\" | stats count() as count by status", "id": "http-116", "question": "Requests on h01 by status", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 and host = \"h19\" | stats count() as count", "id": "http-099", "question": "Server errors on host h19", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.user_agent = \"sqlmap/1.7\" | stats count() as count", "id": "http-054", "question": "How many requests came from sqlmap?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h09\" | stats count() as count", "id": "http-069", "question": "Requests on host h09", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.user_agent = \"curl/8.4\" | stats count() as count by host", "id": "http-056", "question": "Which hosts did curl hit?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h09\" | stats count() as count by attrs.uri", "id": "http-197", "question": "Requests per path on h09", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.method = \"PUT\" | stats count() as count", "id": "http-036", "question": "Count PUT requests", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.user_agent = \"python-requests/2.31\" | stats count() as count", "id": "http-052", "question": "How many requests came from python?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 and host = \"h19\" | stats count() as count", "id": "http-100", "question": "5xx responses from h19", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 and host = \"h04\" | stats count() as count", "id": "http-085", "question": "Server errors on host h04", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status = 503 | stats count() as count", "id": "http-011", "question": "How many 503 responses were there?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 and host = \"h01\" | stats count() as count", "id": "http-082", "question": "5xx responses from h01", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h16\" | stats count() as count", "id": "http-076", "question": "How many requests did h16 serve?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.user_agent = \"python-requests/2.31\" | stats count() as count", "id": "http-051", "question": "Requests from python", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h01\" | stats count() as count by attrs.uri", "id": "http-190", "question": "Which paths did h01 serve?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u017\" | stats count() as count", "id": "http-159", "question": "Requests from u017", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status = 404 | stats count() as count by host", "id": "http-184", "question": "Which hosts returned 404?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 | stats count() as count by attrs.method", "id": "http-028", "question": "5xx responses by method", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 | timechart span=1d count()", "id": "http-101", "question": "Server errors over time", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h12\" | stats count() as count by attrs.uri", "id": "http-199", "question": "Requests per path on h12", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h16\" | stats count() as count by attrs.uri", "id": "http-204", "question": "Which paths did h16 serve?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u058\" | stats count() as count", "id": "http-170", "question": "How many requests did u058 make?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] | stats count() as count by service", "id": "http-022", "question": "Requests per service", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] | stats sum(attrs.bytes) as bytes by host", "id": "http-046", "question": "Sum of bytes by host", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.user_agent = \"sqlmap/1.7\" | stats count() as count by host", "id": "http-060", "question": "Which hosts did sqlmap hit?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 | stats count() as count", "id": "http-003", "question": "Number of server errors", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and src_ip = \"10.0.12.7\" | stats count() as count", "id": "http-114", "question": "How many requests came from 10.0.12.7?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h19\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-153", "question": "Average response time on h19", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.user_agent = \"curl/8.4\" | stats count() as count", "id": "http-050", "question": "How many requests came from curl?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 and host = \"h12\" | stats count() as count", "id": "http-092", "question": "5xx responses from h12", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u077\" | stats count() as count", "id": "http-174", "question": "How many requests did u077 make?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h01\" | stats count() as count by attrs.uri", "id": "http-189", "question": "Requests per path on h01", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h18\" | stats count() as count by status", "id": "http-131", "question": "Status codes returned by h18", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h07\" | stats count() as count by status", "id": "http-121", "question": "Status codes returned by h07", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.method = \"PUT\" | stats count() as count by status", "id": "http-214", "question": "Status codes of PUT requests", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.method = \"POST\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-040", "question": "Mean duration of POST requests", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and src_ip = \"203.0.113.1\" | stats count() as count", "id": "http-104", "question": "How many requests came from 203.0.113.1?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h18\" | stats count() as count by attrs.uri", "id": "http-206", "question": "Which paths did h18 serve?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status = 500 | stats count() as count", "id": "http-008", "question": "How many 500 responses were there?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u003\" | stats count() as count", "id": "http-155", "question": "Requests from u003", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h12\" | stats count() as count by status", "id": "http-125", "question": "Status codes returned by h12", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 and host = \"h09\" | stats count() as count", "id": "http-090", "question": "5xx responses from h09", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h01\" | stats count() as count", "id": "http-061", "question": "Requests on host h01", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u091\" | stats count() as count", "id": "http-177", "question": "Requests from u091", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u095\" | stats count() as count", "id": "http-179", "question": "Requests from u095", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status = 500 | stats count() as count", "id": "http-009", "question": "Count HTTP 500s", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.user_agent = \"sqlmap/1.7\" | stats count() as count by host", "id": "http-059", "question": "Requests from sqlmap per host", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and src_ip = \"203.0.113.1\" | stats count() as count", "id": "http-103", "question": "Requests from 203.0.113.1", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u084\" | stats count() as count", "id": "http-176", "question": "How many requests did u084 make?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h12\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-146", "question": "Mean duration of requests served by h12", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h04\" | stats count() as count by attrs.uri", "id": "http-194", "question": "Which paths did h04 serve?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] | stats sum(attrs.bytes) as bytes by host", "id": "http-045", "question": "Total bytes sent per host", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 and host = \"h09\" | stats count() as count", "id": "http-089", "question": "Server errors on host h09", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] | stats p95(attrs.duration_ms) as p95 by service", "id": "http-044", "question": "p95 duration by service", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.method = \"PUT\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-041", "question": "Average response time of PUT requests", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and src_ip = \"203.0.113.4\" | stats count() as count", "id": "http-105", "question": "Requests from 203.0.113.4", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and src_ip = \"10.0.12.7\" | stats count() as count", "id": "http-113", "question": "Requests from 10.0.12.7", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u099\" | stats count() as count", "id": "http-182", "question": "How many requests did u099 make?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h19\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-154", "question": "Mean duration of requests served by h19", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h12\" | stats count() as count", "id": "http-072", "question": "How many requests did h12 serve?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 and host = \"h18\" | stats count() as count", "id": "http-098", "question": "5xx responses from h18", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h14\" | stats count() as count by attrs.uri", "id": "http-201", "question": "Requests per path on h14", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 and host = \"h04\" | stats count() as count", "id": "http-086", "question": "5xx responses from h04", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h09\" | stats count() as count by status", "id": "http-124", "question": "Requests on h09 by status", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status = 404 | stats count() as count", "id": "http-006", "question": "Count HTTP 404s", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h19\" | stats count() as count by status", "id": "http-133", "question": "Status codes returned by h19", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h12\" | stats count() as count by status", "id": "http-126", "question": "Requests on h12 by status", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.method = \"PUT\" | stats count() as count by status", "id": "http-213", "question": "PUT requests per status", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u077\" | stats count() as count", "id": "http-173", "question": "Requests from u077", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] | stats p95(attrs.duration_ms) as p95 by service", "id": "http-043", "question": "95th percentile response time per service", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u084\" | stats count() as count", "id": "http-175", "question": "Requests from u084", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h18\" | stats count() as count by status", "id": "http-132", "question": "Requests on h18 by status", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u066\" | stats count() as count", "id": "http-172", "question": "How many requests did u066 make?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.method = \"GET\" | stats count() as count by status", "id": "http-209", "question": "GET requests per status", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h14\" | stats count() as count", "id": "http-074", "question": "How many requests did h14 serve?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h01\" | stats count() as count by status", "id": "http-115", "question": "Status codes returned by h01", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 and host = \"h07\" | stats count() as count", "id": "http-088", "question": "5xx responses from h07", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h14\" | stats count() as count by status", "id": "http-127", "question": "Status codes returned by h14", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h01\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-135", "question": "Average response time on h01", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u042\" | stats count() as count", "id": "http-165", "question": "Requests from u042", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] | stats count() as count by host", "id": "http-021", "question": "Break down requests by host", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h02\" | stats count() as count", "id": "http-063", "question": "Requests on host h02", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u050\" | stats count() as count", "id": "http-168", "question": "How many requests did u050 make?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h02\" | stats count() as count", "id": "http-064", "question": "How many requests did h02 serve?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h18\" | stats count() as count", "id": "http-077", "question": "Requests on host h18", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 and host = \"h14\" | stats count() as count", "id": "http-093", "question": "Server errors on host h14", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h02\" | stats count() as count by status", "id": "http-117", "question": "Status codes returned by h02", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status = 404 | stats count() as count by host", "id": "http-183", "question": "Status 404 responses per host", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h04\" | stats count() as count by status", "id": "http-120", "question": "Requests on h04 by status", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 and host = \"h01\" | stats count() as count", "id": "http-081", "question": "Server errors on host h01", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and src_ip = \"203.0.113.15\" | stats count() as count", "id": "http-110", "question": "How many requests came from 203.0.113.15?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h02\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-137", "question": "Average response time on h02", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h14\" | stats count() as count by status", "id": "http-128", "question": "Requests on h14 by status", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.user_agent = \"sqlmap/1.7\" | stats count() as count", "id": "http-053", "question": "Requests from sqlmap", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status = 500 | stats count() as count by host", "id": "http-185", "question": "Status 500 responses per host", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h02\" | stats count() as count by attrs.uri", "id": "http-191", "question": "Requests per path on h02", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] | stats count() as count by attrs.method", "id": "http-017", "question": "How many requests per method?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h07\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-141", "question": "Average response time on h07", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h19\" | stats count() as count by attrs.uri", "id": "http-207", "question": "Requests per path on h19", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 and host = \"h16\" | stats count() as count", "id": "http-096", "question": "5xx responses from h16", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.user_agent = \"curl/8.4\" | stats count() as count", "id": "http-049", "question": "Requests from curl", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u033\" | stats count() as count", "id": "http-164", "question": "How many requests did u033 make?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u066\" | stats count() as count", "id": "http-171", "question": "Requests from u066", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h16\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-149", "question": "Average response time on h16", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 | stats count() as count by attrs.method", "id": "http-027", "question": "Server errors per method", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] | top limit=10 attrs.user_agent", "id": "http-047", "question": "Most common user agents", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h09\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-144", "question": "Mean duration of requests served by h09", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h19\" | stats count() as count", "id": "http-079", "question": "Requests on host h19", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h14\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-147", "question": "Average response time on h14", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.method = \"GET\" | stats count() as count", "id": "http-031", "question": "How many GET requests were there?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h04\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-139", "question": "Average response time on h04", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.method = \"GET\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-037", "question": "Average response time of GET requests", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h09\" | stats count() as count by attrs.uri", "id": "http-198", "question": "Which paths did h09 serve?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h16\" | stats count() as count", "id": "http-075", "question": "Requests on host h16", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.method = \"PUT\" | stats count() as count", "id": "http-035", "question": "How many PUT requests were there?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h09\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-143", "question": "Average response time on h09", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status = 503 | stats count() as count", "id": "http-012", "question": "Count HTTP 503s", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.user_agent = \"python-requests/2.31\" | stats count() as count by host", "id": "http-057", "question": "Requests from python per host", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.method = \"GET\" | stats count() as count by status", "id": "http-210", "question": "Status codes of GET requests", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.method = \"POST\" | stats count() as count by status", "id": "http-212", "question": "Status codes of POST requests", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status = 500 | stats count() as count by host", "id": "http-186", "question": "Which hosts returned 500?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h14\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-148", "question": "Mean duration of requests served by h14", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h02\" | stats count() as count by attrs.uri", "id": "http-192", "question": "Which paths did h02 serve?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h18\" | stats count() as count by attrs.uri", "id": "http-205", "question": "Requests per path on h18", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u025\" | stats count() as count", "id": "http-161", "question": "Requests from u025", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u025\" | stats count() as count", "id": "http-162", "question": "How many requests did u025 make?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.user_agent = \"python-requests/2.31\" | stats count() as count by host", "id": "http-058", "question": "Which hosts did python hit?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.method = \"GET\" | stats count() as count", "id": "http-032", "question": "Count GET requests", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h12\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-145", "question": "Average response time on h12", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] | stats count() as count by attrs.method", "id": "http-016", "question": "Requests per method", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and src_ip = \"203.0.113.15\" | stats count() as count", "id": "http-109", "question": "Requests from 203.0.113.15", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h07\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-142", "question": "Mean duration of requests served by h07", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] | stats count() as count by service", "id": "http-024", "question": "Break down requests by service", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h01\" | stats count() as count", "id": "http-062", "question": "How many requests did h01 serve?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] | stats count() as count by attrs.method", "id": "http-018", "question": "Break down requests by method", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and src_ip = \"203.0.113.9\" | stats count() as count", "id": "http-108", "question": "How many requests came from 203.0.113.9?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and src_ip = \"10.0.3.4\" | stats count() as count", "id": "http-112", "question": "How many requests came from 10.0.3.4?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] | stats count() as count by service", "id": "http-023", "question": "How many requests per service?", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status = 503 | stats count() as count", "id": "http-010", "question": "Requests with status 503", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.user_agent = \"curl/8.4\" | stats count() as count by host", "id": "http-055", "question": "Requests from curl per host", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h16\" | stats count() as count by status", "id": "http-130", "question": "Requests on h16 by status", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] | stats count() as count by status", "id": "http-015", "question": "Break down requests by status", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h16\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-150", "question": "Mean duration of requests served by h16", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 and host = \"h14\" | stats count() as count", "id": "http-094", "question": "5xx responses from h14", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 | stats count() as count by host", "id": "http-025", "question": "Server errors per host", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and host = \"h02\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-138", "question": "Mean duration of requests served by h02", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] | stats count() as count by host", "id": "http-019", "question": "Requests per host", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] | stats count() as count by status", "id": "http-013", "question": "Requests per status", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and user_id = \"u050\" | stats count() as count", "id": "http-167", "question": "Requests from u050", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 | timechart span=1d count()", "id": "http-102", "question": "Daily count of 5xx responses", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and attrs.method = \"POST\" | stats avg(attrs.duration_ms) as avg_ms", "id": "http-039", "question": "Average response time of POST requests", "schema": "http"}
+{"expected_query": "| where service in [\"api\", \"web\"] and status >= 500 and host = \"h02\" | stats count() as count", "id": "http-083", "question": "Server errors on host h02", "schema": "http"}

@@ -145,3 +145,6 @@ playwright-report/
 test-results/
 blob-report/
 site/
+
+# AI evaluation run output (per-item results)
+tests/eval/ai/results/

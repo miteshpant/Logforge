@@ -51,11 +51,17 @@ def run(coro):
     ("Show 5xx errors from api-gateway over time", '| where service = "api-gateway" and status >= 500 | timechart count()'),
     ("404 errors per path", '| where status >= 400 and status < 500 | stats count() as count by attrs.path'),
     ("Top 5 users by events in the last 7 days", '| last 7d | top limit=5 user_id'),
+    # a value the catalogue has seen becomes a filter on its field
+    ("Requests on web-1 per path", '| where host = "web-1" | stats count() as count by attrs.path'),
+    ("What did bob do?", '| where user_id = "bob"'),
+    # a dotted name is not the service it starts with
+    ("Lookups of api-gateway.example.org", None),
+    ("Requests by web-1", '| where host = "web-1"'),  # "by" followed by a value, not a field
 ])
 def test_rule_based_translations(question, query):
     draft = rule_based(question, CATALOGUE)
     assert draft.query == query, draft
-    assert draft.valid and draft.explanation and draft.mode == "rule_based"
+    assert draft.valid == (query is not None) and draft.explanation and draft.mode == "rule_based"
 
 
 def test_rule_based_says_when_it_cannot():

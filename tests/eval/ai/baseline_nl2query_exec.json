@@ -1,0 +1,4 @@
+{
+  "model": {},
+  "rule_based": {"auth": 0.004, "dns": 0.112, "http": 0.098}
+}
