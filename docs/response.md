@@ -218,5 +218,8 @@ fixed:
 - **Playbook steps run in order:** no branches, loops or parallel steps. A
   run waits only at approvals; an approval is decided in Logforge, not from
   Slack.
-- **The PDF** uses the standard PDF fonts, so characters outside Latin-1
-  print as `?`.
+- **The PDF** uses the standard PDF fonts when all its text is Latin-1 (about
+  1 KB a page). A report with other characters (a tenant, rule or case name in
+  Greek, Cyrillic and so on) embeds DejaVu Sans and Sans Mono instead, which
+  adds about 0.9 MB; text stays searchable and copyable. DejaVu has no CJK
+  glyphs, so those characters print as `?`.

@@ -10,8 +10,9 @@ Exports and reports (Phase 13).
   within targets).
 - due / window: when a scheduled report is sent, and what period it covers.
 
-to_pdf writes PDF 1.4 itself (Helvetica, A4, compressed text streams):
-no PDF library is a dependency of the API.
+to_pdf writes PDF 1.4 itself (A4, compressed text streams): Helvetica for
+Latin-1 text, embedded DejaVu fonts otherwise (pdf_fonts.py). No PDF library
+is a dependency of the API.
 """
 
 from __future__ import annotations
@@ -163,11 +164,28 @@ def _escape(text: str) -> str:
 
 
 def to_pdf(report: Dict[str, Any]) -> bytes:
+    """A4 PDF. Latin-1 text uses the built-in Helvetica/Courier fonts; a report with
+    other characters (a tenant or rule name in Greek or Cyrillic...) embeds DejaVu
+    fonts instead (pdf_fonts.py), so its text isn't lost."""
+    import pdf_fonts
+
     width, height, margin = 595, 842, 50  # A4 in points
     fonts = {"title": ("F2", 16, 22), "h": ("F2", 12, 18), "t": ("F1", 9, 13), "m": ("F3", 8, 11)}
+    lines = _lines(report)
+    unicode = pdf_fonts.available() and not all(_latin1(text) for _, text in lines)
+    embedded = {key: pdf_fonts.TrueTypeFont.load(f) for key, f in pdf_fonts.FONTS.items()} if unicode else {}
+    used: Dict[str, list] = {key: [] for key in embedded}
+
+    def show(font: str, size: int, x: float, y: float, text: str) -> str:
+        if unicode:
+            hexed, glyphs = embedded[font].encode(text)
+            used[font] += glyphs
+            return f"BT /{font} {size} Tf {x} {y} Td {hexed} Tj ET"
+        return f"BT /{font} {size} Tf {x} {y} Td ({_escape(text)}) Tj ET"
+
     pages: List[List[str]] = [[]]
     y = height - margin
-    for style, text in _lines(report):
+    for style, text in lines:
         font, size, lead = fonts[style]
         chunks = [text[i:i + 110] for i in range(0, len(text), 110)] or [""]
         for chunk in chunks:
@@ -175,7 +193,8 @@ def to_pdf(report: Dict[str, Any]) -> bytes:
                 pages.append([])
                 y = height - margin
             y -= lead
-            pages[-1].append(f"BT /{font} {size} Tf {margin} {y} Td ({_escape(chunk)}) Tj ET")
+            pages[-1].append(show(font, size, margin, y, chunk))
+    footers = [show("F1", 8, margin, 25, f"Page {n} of {len(pages)}") for n in range(1, len(pages) + 1)]
     objects: List[bytes] = []
 
     def add(body: bytes) -> int:
@@ -184,12 +203,14 @@ def to_pdf(report: Dict[str, Any]) -> bytes:
 
     catalog = add(b"")  # filled in below
     pages_obj = add(b"")
-    f1 = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
-    f2 = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>")
-    f3 = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>")
+    if unicode:
+        f1, f2, f3 = (embedded[key].pdf_objects(add, used[key]) for key in ("F1", "F2", "F3"))
+    else:
+        f1 = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
+        f2 = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>")
+        f3 = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>")
     kids = []
-    for n, page in enumerate(pages, start=1):
-        footer = f"BT /F1 8 Tf {margin} 25 Td (Page {n} of {len(pages)}) Tj ET"
+    for page, footer in zip(pages, footers):
         stream = zlib.compress("\n".join(page + [footer]).encode("latin-1"))
         content = add(b"<< /Length %d /Filter /FlateDecode >>\r\nstream\r\n" % len(stream) + stream + b"\r\nendstream")
         kids.append(add(("<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %d %d] /Contents %d 0 R "
@@ -208,6 +229,14 @@ def to_pdf(report: Dict[str, Any]) -> bytes:
     out += b"".join(b"%010d 00000 n \n" % o for o in offsets)
     out += b"trailer\n<< /Size %d /Root %d 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, catalog, xref)
     return bytes(out)
+
+
+def _latin1(text: str) -> bool:
+    try:
+        text.encode("latin-1")
+        return True
+    except UnicodeEncodeError:
+        return False
 
 
 # -- schedules -------------------------------------------------------------------------------

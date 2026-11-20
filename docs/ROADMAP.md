@@ -111,7 +111,9 @@ markers).
     AWS security groups), each behind an approval.
   - **Branches and parallel steps in playbooks**, and a run history kept
     longer than 180 days for audits.
-  - **A Unicode font in the PDF report** (today Latin-1 only).
+  - ~~**A Unicode font in the PDF report**~~: done (embedded DejaVu when a
+    report has non-Latin-1 text). Still open: CJK, and subsetting the fonts
+    to shrink those PDFs.
   - ~~**Retire the older `/v1/enterprise/integrations` API**~~: done; it answers
     410 Gone naming `/v1/integrations`. Its tables (`integrations_mt`,
     `enterprise_integrations_mt`) are kept: dropping them deletes data, so it
