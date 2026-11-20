@@ -10,7 +10,7 @@ threat model. To report a vulnerability, see
 |---|---|
 | `pip-audit` on the API's requirements | any known vulnerability |
 | `npm audit` on the UI and admin UI, through `scripts/audit_gate.py` | a high or critical advisory not in `security/audit-allowlist.json`, or an allowlist entry that has expired |
-| Trivy on the API, UI and admin UI images | a critical vulnerability that has a fix |
+| Trivy on the API, UI and admin UI images | a critical vulnerability that has a fix, unless it's in `security/trivyignore` (same rules: a reason and an expiry) |
 | gitleaks | a committed secret |
 | bandit | nothing; it reports medium and high findings |
 
@@ -31,6 +31,11 @@ advisories:
 - Three Server Components denial-of-service advisories do apply. Until the
   upgrade, run the UIs behind a proxy with request limits.
 - The rest are two build-time PostCSS advisories.
+
+`security/trivyignore` holds the same Next.js advisories for the image scan,
+with the same expiry. The UI images' runtime stage has npm, npx, corepack
+and yarn removed: the standalone server needs only node, and npm bundled an
+old `tar` (CVE-2026-59873).
 
 ## Signed releases
 

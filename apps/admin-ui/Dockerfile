@@ -38,6 +38,11 @@ ENV NODE_ENV=production \
 # node_modules it needs; static assets are copied alongside it.
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+# The standalone server only needs node. npm, npx, corepack and yarn ship with
+# the base image (and npm bundles an old tar, CVE-2026-59873): remove them.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+      /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /opt/yarn-* \
+      /usr/local/bin/yarn /usr/local/bin/yarnpkg
 USER node
 EXPOSE 3002
 CMD ["node", "server.js"]
