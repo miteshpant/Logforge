@@ -428,7 +428,7 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in WRITE_METHODS and not path.endswith("/validate"):
             return "settings:write:tenant"
         return "security:read:tenant"
-    elif path.startswith("/v1/sso/"):
+    elif path.startswith("/v1/sso/") or path.startswith("/v1/scim/"):
         if method in WRITE_METHODS:
             return "settings:write:tenant"
         return "settings:read:tenant"
@@ -942,7 +942,9 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         # from the integration's webhook_secret), see routers/integrations_api.
         # Phase 14: SSO sign-in (discover, start, callback) happens before there is a session.
         return (clean_path in self.public_endpoints or clean_path.startswith("/v1/hooks/")
-                or clean_path.startswith("/v1/auth/sso/"))
+                or clean_path.startswith("/v1/auth/sso/")
+                # SCIM authenticates with its own tenant-scoped bearer token (routers/scim_api.py)
+                or clean_path.startswith("/scim/v2/"))
 
     def _is_admin_endpoint(self, path: str) -> bool:
         """Check if endpoint is admin (bypasses feature validation)"""

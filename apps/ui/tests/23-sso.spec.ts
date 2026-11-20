@@ -39,6 +39,13 @@ test('an admin adds an OIDC provider and its users are sent to it', async ({ pag
   await expect(page.getByTestId(`sso-provider-${name}`)).toContainText('secret set')
   await expect(page.getByTestId(`sso-provider-${name}`)).toContainText('secops → security_analyst')
   await expect(page.locator('body')).not.toContainText('e2e-client-secret')
+  // a SCIM token, shown once, then revoked
+  await page.getByTestId('scim-name').fill(`E2E SCIM ${n}`)
+  await page.getByTestId('scim-create').click()
+  await expect(page.getByTestId('scim-fresh')).toContainText('lfscim_')
+  page.once('dialog', d => d.accept())
+  await page.getByTestId(`scim-token-E2E SCIM ${n}`).getByRole('button', { name: 'Revoke' }).click()
+  await expect(page.getByTestId(`scim-token-E2E SCIM ${n}`)).toHaveCount(0)
   expect(problems.pageErrors).toEqual([])
   expect(problems.failedApiCalls).toEqual([])
 

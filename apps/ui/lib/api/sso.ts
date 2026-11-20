@@ -28,3 +28,11 @@ export const discoverProviders = (email: string) =>
 /** Where the browser goes to sign in with a provider. */
 export const startUrl = (providerId: string, next?: string | null) =>
   `${API_CONFIG.baseURL}/v1/auth/sso/${encodeURIComponent(providerId)}/start` + (next ? `?next=${encodeURIComponent(next)}` : '')
+
+// SCIM provisioning tokens (Phase 14)
+export interface ScimToken { id: string; tenant_id: string; name: string; created_by: string; created_at: string }
+export const listScimTokens = () =>
+  call<{ tokens: ScimToken[]; base_path: string }>(apiClient.get('/v1/scim/tokens'), 'Failed to load SCIM tokens')
+export const createScimToken = (name: string) =>
+  call<{ id: string; name: string; token: string }>(apiClient.post('/v1/scim/tokens', { name }), 'Failed to create the token')
+export const revokeScimToken = (id: string) => call(apiClient.delete(`/v1/scim/tokens/${id}`), 'Failed to revoke the token')

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import SsoProviders from '@/components/settings/SsoProviders'
+import ScimTokens from '@/components/settings/ScimTokens'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { apiClient } from '@/lib/api'
 import {
@@ -669,7 +670,7 @@ export default function AuthenticationPage() {
             )}
 
             {/* SSO Tab */}
-            {activeTab === 'sso' && <SsoProviders />}
+            {activeTab === 'sso' && <><SsoProviders /><ScimTokens /></>}
 
             {/* MFA Tab */}
             {activeTab === 'mfa' && (

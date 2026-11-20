@@ -90,6 +90,191 @@ paths:
       summary: Resilience Status
       tags:
       - Health
+  /scim/v2/ResourceTypes:
+    get:
+      operationId: resource_types_scim_v2_ResourceTypes_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      summary: Resource Types
+      tags:
+      - scim
+  /scim/v2/Schemas:
+    get:
+      operationId: schemas_scim_v2_Schemas_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      summary: Schemas
+      tags:
+      - scim
+  /scim/v2/ServiceProviderConfig:
+    get:
+      operationId: service_provider_config_scim_v2_ServiceProviderConfig_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      summary: Service Provider Config
+      tags:
+      - scim
+  /scim/v2/Users:
+    get:
+      operationId: list_users_scim_v2_Users_get
+      parameters:
+      - in: query
+        name: filter
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Filter
+      - in: query
+        name: startIndex
+        required: false
+        schema:
+          default: 1
+          title: Startindex
+          type: integer
+      - in: query
+        name: count
+        required: false
+        schema:
+          default: 100
+          title: Count
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List Users
+      tags:
+      - scim
+    post:
+      operationId: create_user_scim_v2_Users_post
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      summary: Create User
+      tags:
+      - scim
+  /scim/v2/Users/{user_id}:
+    delete:
+      operationId: delete_user_scim_v2_Users__user_id__delete
+      parameters:
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          title: User Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Delete User
+      tags:
+      - scim
+    get:
+      operationId: get_user_scim_v2_Users__user_id__get
+      parameters:
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          title: User Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get User
+      tags:
+      - scim
+    patch:
+      operationId: patch_user_scim_v2_Users__user_id__patch
+      parameters:
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          title: User Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Patch User
+      tags:
+      - scim
+    put:
+      operationId: replace_user_scim_v2_Users__user_id__put
+      parameters:
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          title: User Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Replace User
+      tags:
+      - scim
   /v1/admin/audit/bulk-insert:
     post:
       description: Bulk insert audit records (for testing/migration)
@@ -9896,6 +10081,75 @@ paths:
       summary: Delete Schema
       tags:
       - schema-registry
+  /v1/scim/tokens:
+    get:
+      operationId: list_tokens_v1_scim_tokens_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response List Tokens V1 Scim Tokens Get
+                type: object
+          description: Successful Response
+      summary: List Tokens
+      tags:
+      - scim
+    post:
+      operationId: create_token_v1_scim_tokens_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenBody'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Create Token V1 Scim Tokens Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Create Token
+      tags:
+      - scim
+  /v1/scim/tokens/{token_id}:
+    delete:
+      operationId: revoke_token_v1_scim_tokens__token_id__delete
+      parameters:
+      - in: path
+        name: token_id
+        required: true
+        schema:
+          title: Token Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Revoke Token V1 Scim Tokens  Token Id  Delete
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Revoke Token
+      tags:
+      - scim
   /v1/security/cases:
     get:
       description: Cases, most recently updated first.
@@ -20312,6 +20566,17 @@ components:
       - start_time
       - end_time
       title: TimeseriesQueryRequest
+      type: object
+    TokenBody:
+      properties:
+        name:
+          maxLength: 120
+          minLength: 1
+          title: Name
+          type: string
+      required:
+      - name
+      title: TokenBody
       type: object
     TraceQueryRequest:
       additionalProperties: true
