@@ -218,6 +218,22 @@ async function main() {
   await page.waitForTimeout(800)
   await shot(page, 'log-patterns')
 
+  // Phase 12: storage tiers, retention and costs
+  await page.goto(`${UI}/settings/storage`, { waitUntil: 'load' })
+  await page.getByTestId('cost-projection').waitFor({ timeout: 30000 })
+  await page.getByTestId('ingest-sources').locator('tbody tr').first().waitFor({ timeout: 30000 })
+  await page.waitForTimeout(800)
+  await shot(page, 'storage')
+  await page.evaluate(() => {
+    const el = document.querySelector('[data-testid="storage-costs"]')
+    el.scrollIntoView({ block: 'start' })
+    let parent = el.parentElement
+    while (parent && parent.scrollHeight <= parent.clientHeight) parent = parent.parentElement
+    ;(parent || window).scrollBy(0, -110)  // keep the section heading below the sticky header
+  })
+  await page.waitForTimeout(500)
+  await shot(page, 'storage-costs')
+
   await browser.close()
   if (errors.length) {
     console.error('page errors:', errors)

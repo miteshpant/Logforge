@@ -41,6 +41,7 @@ const ROUTES = [
   '/settings/packs',
   '/settings/packs/linux',
   '/settings/ai',
+  '/settings/storage',
 ]
 
 const SETTLE_MS = 3_000

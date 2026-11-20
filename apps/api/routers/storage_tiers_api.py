@@ -5,6 +5,7 @@ need storage:write, which tenant admins have).
   GET  /v1/storage/tiers                       the tiers, the tenant's retention per data type, its archives
   PUT  /v1/storage/tiers/policies/{data_type}  {searchable_days, archive_days}: the tenant's retention
   POST /v1/storage/tiers/run                   run retention now for the tenant (what the hourly job does)
+  GET  /v1/storage/tiers/costs                 ingest by source, storage per tier, projections, noise to drop
   POST /v1/storage/tiers/rehydrate             {data_type, first_day, last_day, keep_days}: archived days back
                                                into ClickHouse for keep_days
 
@@ -75,7 +76,7 @@ def _summary(mgr, tenant_id: str) -> Dict[str, Any]:
         held = sorted(mgr.holds(name, today, tenant_id).get(tenant_id, set()))
         policy = policies[name]
         types.append({"data_type": name, "table": dtype.table, "searchable_days": policy.searchable_days,
-                      "archive_days": policy.archive_days, "custom": name in custom,
+                      "archive_days": policy.archive_days, "custom": name in custom and policy != cfg.defaults[name],
                       "default": {"searchable_days": cfg.defaults[name].searchable_days,
                                   "archive_days": cfg.defaults[name].archive_days},
                       "archived_days": len(archived), "archived_rows": sum(n for n, _ in archived.values()),
@@ -96,6 +97,21 @@ async def get_tiers(customer_id: str = MiddlewareTenant) -> Dict[str, Any]:
         return await asyncio.to_thread(_summary, _manager(), customer_id)
     except Exception as e:
         raise internal_error(e, "Failed to read storage tiers", customer_id=customer_id)
+
+
+@router.get("/costs")
+async def get_costs(customer_id: str = MiddlewareTenant) -> Dict[str, Any]:
+    from datetime import datetime, timezone
+
+    import storage_costs
+
+    mgr = _manager()
+    try:
+        policies = await asyncio.to_thread(mgr.policies, customer_id)
+        return await asyncio.to_thread(storage_costs.report, mgr.client, mgr.cfg, policies, customer_id,
+                                       datetime.now(timezone.utc).date())
+    except Exception as e:
+        raise internal_error(e, "Failed to compute storage costs", customer_id=customer_id)
 
 
 @router.put("/policies/{data_type}")

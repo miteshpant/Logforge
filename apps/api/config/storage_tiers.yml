@@ -27,3 +27,11 @@ defaults:
   security: {searchable_days: 90, archive_days: 730}
   traces:   {searchable_days: 30, archive_days: 0}
   metrics:  {searchable_days: 90, archive_days: 0}
+
+# Price per GB-month of each tier, for the cost projections on Settings ->
+# Storage. These are public list prices (US East, late 2026: EBS gp3, S3
+# Standard, S3 Standard-IA): replace them with yours.
+prices:
+  hot: 0.08
+  warm: 0.023
+  cold: 0.0125

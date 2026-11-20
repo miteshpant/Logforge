@@ -180,3 +180,35 @@ def test_archive_search_and_rehydration(stack):
         mgr.objects.delete(st.archive_key(tenant, "logs", day))
     client.command("ALTER TABLE logs_raw_mt DELETE WHERE customer_id = {t:String} SETTINGS mutations_sync = 2",
                    parameters={"t": tenant})
+
+
+def test_cost_report(stack):
+    client, mgr, st, tm = stack
+    import storage_costs
+
+    tenant = f"tiers-cost-{uuid.uuid4().hex[:8]}"
+    today = date.today()
+    rows = []
+    for back in range(1, 9):
+        day = today - timedelta(days=back)
+        at = datetime.combine(day, time(9), tzinfo=timezone.utc)
+        for i in range(60):  # 60 debug lines from checkout, 20 info from auth, per day
+            rows.append([at + timedelta(seconds=i), "h1", "checkout", "debug", f"cart {i} recalculated", "", "", "{}",
+                         0, "", "", at, 7, 16, "v1", tenant])
+        for i in range(20):
+            rows.append([at + timedelta(seconds=i), "h1", "auth", "info", f"login ok u{i}", "", "", "{}", 0, "", "",
+                         at, 6, 16, "v1", tenant])
+    client.insert("logs_raw_mt", rows, column_names=COLUMNS)
+    out = storage_costs.report(client, mgr.cfg, mgr.policies(tenant), tenant, today)
+    assert out["ingest"]["events"] == 8 * 80
+    assert out["ingest"]["by_source"][0]["service"] == "checkout"
+    assert out["ingest"]["by_source"][0]["levels"] == {"debug": 480}
+    assert out["noise"][0]["service"] == "checkout" and out["noise"][0]["drop_step"]["if"] == "level == 'debug'"
+    logs = out["storage"][0]
+    assert logs["data_type"] == "logs" and logs["hot"]["rows"] + logs["warm"]["rows"] == 640
+    assert logs["bytes_per_row"] > 0
+    assert out["projection"]["daily_events"] == 80 and out["projection"]["days_used"] == 7
+    steady = out["projection"]["steady_state"]
+    assert steady["hot"]["days"] == mgr.cfg.hot_days and steady["monthly_cost"]["total"] > 0
+    client.command("ALTER TABLE logs_raw_mt DELETE WHERE customer_id = {t:String} SETTINGS mutations_sync = 2",
+                   parameters={"t": tenant})

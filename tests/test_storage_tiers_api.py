@@ -20,7 +20,7 @@ def api(monkeypatch):
     import storage_tiers as st
     import tier_manager as tm
 
-    client = FakeClient(stored=[("acme", "logs", 14, 730)], manifest={("acme", "logs"): {date(2026, 10, 1): 9}},
+    client = FakeClient(stored=[("acme", "logs", 14, 730), ("acme", "traces", 30, 0)], manifest={("acme", "logs"): {date(2026, 10, 1): 9}},
                         days={("acme", "logs"): {}, ("other", "logs"): {date(2020, 1, 1): 3}})
     monkeypatch.setattr(module, "_manager", lambda: tm.TierManager(client, FakeObjects(), st.load_config()))
     app = FastAPI()
@@ -37,6 +37,8 @@ def test_get_tiers_shows_the_tenants_policy_and_archives(api):
     assert logs["archived_days"] == 1 and logs["archived_rows"] == 9
     security = next(t for t in out["data_types"] if t["data_type"] == "security")
     assert security["custom"] is False
+    traces = next(t for t in out["data_types"] if t["data_type"] == "traces")
+    assert traces["custom"] is False  # saved, but the same as the default
     assert out["tiers"]["hot"]["days"] >= 1
     assert out["limits"]["max_searchable_days"] >= 30
 

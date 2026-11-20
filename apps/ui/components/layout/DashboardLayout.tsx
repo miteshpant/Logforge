@@ -59,7 +59,7 @@ import {
   Link2,
   TrendingUp,
   MessageSquare,
-  Key, Briefcase } from 'lucide-react'
+  Key, Briefcase , HardDrive } from 'lucide-react'
 import { TenantSelector } from '@/components/TenantSelector'
 import PWASupport from '@/components/PWASupport'
 
@@ -139,6 +139,7 @@ const navSections: NavSection[] = [
       { name: 'Content Packs', href: '/settings/packs', icon: Package },
       { name: 'AI', href: '/settings/ai', icon: Bot },
       { name: 'Roles & Access', href: '/settings/roles', icon: UserCog },
+      { name: 'Storage & Retention', href: '/settings/storage', icon: HardDrive },
       { name: 'Cost Analytics', href: '/settings/costs', icon: DollarSign },
       { name: 'Compliance', href: '/settings/compliance', icon: ClipboardCheck },
     ],

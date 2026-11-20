@@ -62,7 +62,7 @@ class Config:
     warm_policy: str = "tiered"
     archive_bucket: str = "logforge-archive"
     warm_bucket: str = "logforge-warm"
-    extra: Dict = field(default_factory=dict)
+    prices: Dict[str, float] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -85,7 +85,8 @@ def load_config(path: Optional[Path] = None) -> Config:
                   max_archive_days=int(raw["max_archive_days"]), data_types=types, defaults=defaults,
                   warm_policy=raw.get("warm_policy", "tiered"),
                   archive_bucket=os.getenv("LOGFORGE_ARCHIVE_BUCKET", raw.get("archive_bucket", "logforge-archive")),
-                  warm_bucket=raw.get("warm_bucket", "logforge-warm"))
+                  warm_bucket=raw.get("warm_bucket", "logforge-warm"),
+                  prices={k: float(v) for k, v in (raw.get("prices") or {}).items()})
 
 
 def validate(policy: Policy, cfg: Config) -> Policy:
