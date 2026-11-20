@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "logforge.fullname" . }}-config
+  labels: {{- include "logforge.labels" . | nindent 4 }}
+data:
+  PYTHONPATH: /app
+  CLICKHOUSE_HOST: {{ .Values.clickhouse.host | quote }}
+  CLICKHOUSE_PORT: {{ .Values.clickhouse.port | quote }}
+  CLICKHOUSE_USER: {{ .Values.clickhouse.user | quote }}
+  CLICKHOUSE_DATABASE: {{ .Values.clickhouse.database | quote }}
+  REDPANDA_BOOTSTRAP_SERVERS: {{ .Values.redpanda.brokers | quote }}
+  KAFKA_BOOTSTRAP_SERVERS: {{ .Values.redpanda.brokers | quote }}
+  KAFKA_SECURITY_PROTOCOL: {{ .Values.redpanda.securityProtocol | quote }}
+  REDIS_HOST: {{ .Values.redis.host | quote }}
+  REDIS_PORT: {{ .Values.redis.port | quote }}
+  LOGFORGE_S3_ENDPOINT: {{ .Values.objectStorage.endpoint | quote }}
+  LOGFORGE_S3_REGION: {{ .Values.objectStorage.region | quote }}
+  LOGFORGE_ARCHIVE_BUCKET: {{ .Values.objectStorage.archiveBucket | quote }}
+  LOGFORGE_BACKUP_BUCKET: {{ .Values.objectStorage.backupBucket | quote }}
+  # One retention runner per cluster: the CronJob, not the API replicas.
+  LOGFORGE_RETENTION_JOB: "off"

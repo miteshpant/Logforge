@@ -1,0 +1,78 @@
+{{- define "logforge.jobPod" -}}
+restartPolicy: OnFailure
+{{- with .root.Values.imagePullSecrets }}
+imagePullSecrets: {{- toYaml . | nindent 2 }}
+{{- end }}
+containers:
+  - name: {{ .name }}
+    image: {{ include "logforge.image" (dict "image" .root.Values.image.api "root" .root) }}
+    command: {{ toJson .command }}
+    envFrom: [{configMapRef: {name: {{ include "logforge.fullname" .root }}-config}}]
+    env: {{- include "logforge.apiEnv" .root | nindent 6 }}
+    resources:
+      requests: {cpu: 100m, memory: 256Mi}
+{{- end -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "logforge.fullname" . }}-retention
+  labels: {{- include "logforge.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.retention.schedule | quote }}
+  concurrencyPolicy: Forbid      # one run at a time across the cluster
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec: {{- include "logforge.jobPod" (dict "root" . "name" "retention" "command" (list "python" "-m" "tier_manager" "run")) | nindent 10 }}
+{{- if .Values.backup.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "logforge.fullname" . }}-backup
+  labels: {{- include "logforge.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.backup.successfulJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec: {{- include "logforge.jobPod" (dict "root" . "name" "backup" "command" (list "python" "-m" "backup" "create")) | nindent 10 }}
+{{- end }}
+{{- if .Values.migrations.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "logforge.fullname" . }}-migrations
+  labels: {{- include "logforge.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migrations
+          image: {{ include "logforge.image" (dict "image" .Values.image.migrations "root" .) }}
+          env:
+            - {name: CLICKHOUSE_HOST, value: {{ .Values.clickhouse.host | quote }}}
+            - {name: CLICKHOUSE_PORT, value: {{ .Values.clickhouse.port | quote }}}
+            - {name: CLICKHOUSE_USER, value: {{ .Values.clickhouse.user | quote }}}
+            - {name: CLICKHOUSE_DATABASE, value: {{ .Values.clickhouse.database | quote }}}
+            - {name: REPLICATED_ENGINES, value: {{ .Values.clickhouse.replicated | toString | quote }}}
+            {{- with .Values.clickhouse.cluster }}
+            - {name: CLICKHOUSE_CLUSTER, value: {{ . | quote }}}
+            {{- end }}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ include "logforge.secretName" . }}, key: clickhouse-password}}
+{{- end }}

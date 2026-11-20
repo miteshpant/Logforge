@@ -1,0 +1,7 @@
+Logforge {{ .Chart.AppVersion }} is installed as {{ include "logforge.fullname" . }}.
+
+  API: service {{ include "logforge.fullname" . }}-api:8080 ({{ .Values.api.replicas }} replicas)
+  Retention runs on "{{ .Values.retention.schedule }}"{{ if .Values.backup.enabled }}; backups on "{{ .Values.backup.schedule }}"{{ end }}.
+
+First run: create the platform admin with a setup token (README, "First run").
+ClickHouse needs the storage and backup configuration in docs/deployment.md.

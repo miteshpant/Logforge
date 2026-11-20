@@ -1,0 +1,10 @@
+# The schema (base schema and migrations), as an image: the Helm chart's
+# pre-install/pre-upgrade hook. Build from infra/docker/clickhouse:
+#   docker build -f Dockerfile.migrations -t logforge-migrations .
+# REPLICATED_ENGINES=true and CLICKHOUSE_CLUSTER make it replicated
+# (docs/deployment.md).
+FROM curlimages/curl:8.10.1
+COPY apply_schema.sh run_migrations.sh init_simple.sql /
+COPY migrations /migrations
+ENV MIGRATIONS_DIR=/migrations SCHEMA_FILE=/init_simple.sql
+ENTRYPOINT ["/bin/sh", "/apply_schema.sh"]

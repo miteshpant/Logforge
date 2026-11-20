@@ -1,0 +1,108 @@
+# Logforge Helm chart (Phase 12, docs/deployment.md).
+#
+# Deploys Logforge itself: the API (stateless replicas), the UI, schema
+# migrations, and the retention and backup jobs. ClickHouse (with Keeper),
+# Redpanda, Redis and object storage are run separately (their operators or
+# charts) and given here by address: see docs/deployment.md for a reference
+# setup and the ClickHouse configuration they need.
+
+image:
+  api:
+    repository: ghcr.io/miteshpant/logforge-api
+    tag: ""            # defaults to the chart's appVersion
+    pullPolicy: IfNotPresent
+  ui:
+    repository: ghcr.io/miteshpant/logforge-ui
+    tag: ""
+    pullPolicy: IfNotPresent
+  migrations:
+    repository: ghcr.io/miteshpant/logforge-migrations   # infra/docker/clickhouse/Dockerfile.migrations
+    tag: ""
+    pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+api:
+  replicas: 2
+  resources:
+    requests: {cpu: 500m, memory: 1Gi}
+    limits: {memory: 2Gi}
+  # Keep at least one replica through node drains and upgrades.
+  podDisruptionBudget:
+    minAvailable: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+  extraEnv: []         # [{name: ..., value: ...}]
+  nodeSelector: {}
+  tolerations: []
+  # Spread replicas across nodes, so losing a node loses one replica.
+  topologySpread: true
+
+ui:
+  enabled: true
+  replicas: 2
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 512Mi}
+
+clickhouse:
+  # An HTTP endpoint that reaches a healthy replica (a Service in front of
+  # the replicas; the API's writes and reads both go here).
+  host: clickhouse
+  port: 8123
+  database: logforge
+  user: logforge
+  # The password comes from the chart's Secret (secrets.clickhousePassword)
+  # or from secrets.existingSecret.
+  # Replicated deployment: migrations create Replicated* tables in a
+  # Replicated database (docs/deployment.md).
+  replicated: true
+  # The ClickHouse cluster name (remote_servers) the Replicated database is
+  # created ON CLUSTER; empty for a single server.
+  cluster: logforge
+
+redpanda:
+  brokers: redpanda:9092
+  securityProtocol: PLAINTEXT
+
+redis:
+  host: redis
+  port: 6379
+
+objectStorage:
+  # Where the API reaches the buckets (archive object sizes and deletes,
+  # backup manifests). ClickHouse reaches them through its own
+  # configuration (s3_storage.xml).
+  endpoint: http://minio:9000
+  region: us-east-1
+  archiveBucket: logforge-archive
+  warmBucket: logforge-warm
+  backupBucket: logforge-backups
+
+secrets:
+  # Use an existing Secret with the keys below instead of the chart's.
+  existingSecret: ""
+  jwtSecret: ""              # required: the same for every replica
+  clickhousePassword: ""
+  s3AccessKey: ""
+  s3SecretKey: ""
+
+retention:
+  # One runner per cluster: the API replicas don't run it.
+  schedule: "17 * * * *"
+backup:
+  enabled: true
+  schedule: "41 2 * * *"     # daily; incremental backups are `python -m backup create --base NAME`
+  successfulJobsHistoryLimit: 3
+
+migrations:
+  enabled: true              # a pre-install/pre-upgrade hook
+
+ingress:
+  enabled: false
+  className: ""
+  host: logforge.example.com
+  tls: []                    # [{secretName: ..., hosts: [...]}]
+  annotations: {}

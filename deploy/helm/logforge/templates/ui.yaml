@@ -1,0 +1,38 @@
+{{- if .Values.ui.enabled }}
+{{- $sel := dict "root" . "component" "ui" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "logforge.fullname" . }}-ui
+  labels: {{- include "logforge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+spec:
+  replicas: {{ .Values.ui.replicas }}
+  selector:
+    matchLabels: {{- include "logforge.selector" $sel | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "logforge.selector" $sel | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: ui
+          image: {{ include "logforge.image" (dict "image" .Values.image.ui "root" .) }}
+          imagePullPolicy: {{ .Values.image.ui.pullPolicy }}
+          ports: [{name: http, containerPort: 3000}]
+          readinessProbe:
+            httpGet: {path: /, port: http}
+            periodSeconds: 10
+          resources: {{- toYaml .Values.ui.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "logforge.fullname" . }}-ui
+  labels: {{- include "logforge.labels" . | nindent 4 }}
+spec:
+  selector: {{- include "logforge.selector" $sel | nindent 4 }}
+  ports: [{name: http, port: 3000, targetPort: http}]
+{{- end }}

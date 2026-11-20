@@ -43,6 +43,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r apps/api/requirements.txt
 
+      - name: Install Helm
+        # tests/test_helm_chart.py lints and renders deploy/helm/logforge.
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
       - name: Check OpenAPI spec is up to date
         # docs/api/openapi.{json,yaml} are the published API reference. If this fails,
         # run `python scripts/export_openapi.py` and commit the result.
@@ -50,6 +56,8 @@ jobs:
 
       - name: Run tests
         # tests/routes_tests needs the full stack; the route-tests job runs it.
+        env:
+          LOGFORGE_REQUIRE_HELM: "1"
         run: |
           pytest tests/ \
             --ignore=tests/routes_tests \
