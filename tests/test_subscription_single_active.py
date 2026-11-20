@@ -51,7 +51,8 @@ async def test_creating_a_subscription_retires_the_tenants_active_ones_first(dao
     assert retire[0].startswith("ALTER TABLE tenant_subscriptions_mt UPDATE status = 'inactive'")
     assert "WHERE tenant_id = %(tenant_id)s AND status = 'active'" in retire[0]
     assert "mutations_sync = 2" in retire[0]  # finished before the new row is visible
-    assert retire[1] == {"tenant_id": "t1"}
+    assert retire[1]["tenant_id"] == "t1"
+    assert "updated_at = toDateTime64(%(now)s, 3)" in retire[0] and retire[1]["now"]  # bound, not now64()
     assert insert[0].startswith("INSERT INTO tenant_subscriptions_mt")
 
 
