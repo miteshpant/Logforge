@@ -475,7 +475,11 @@ class SearchStore:
 
     @staticmethod
     def _run(row: Dict[str, Any]) -> Run:
-        return Run(**{c: row[c] for c in _RUN_COLUMNS[1:]})
+        data = {c: row[c] for c in _RUN_COLUMNS[1:]}
+        for key in ("run_at", "window_start", "window_end"):  # the database returns naive UTC
+            if isinstance(data[key], datetime) and data[key].tzinfo is None:
+                data[key] = data[key].replace(tzinfo=timezone.utc)
+        return Run(**data)
 
     async def last_runs(self, tenant_id: str, search_id: Optional[str] = None, limit: int = 1) -> List[Run]:
         params: Dict[str, Any] = {"tenant_id": tenant_id, "limit": int(limit)}

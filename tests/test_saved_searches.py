@@ -325,3 +325,28 @@ def test_alerts_without_a_rule_keep_their_own_severity_and_name():
     dao.db = DB()
     alert = asyncio.run(dao.list_alert_instances("acme"))["alerts"][0]
     assert alert["severity"] == "high" and alert["rule_name"] == "Brute force"
+
+
+def test_stored_run_times_are_utc_so_the_scheduler_can_compare_them():
+    """The database returns naive datetimes. last_runs passed them on as is, so
+    after a search's first run every scheduler tick failed comparing them with
+    an aware `now` ("can't subtract offset-naive and offset-aware datetimes"),
+    and no scheduled search ran again."""
+    from datetime import datetime, timezone
+
+    from saved_searches import SearchStore, is_due
+
+    naive = datetime(2026, 11, 19, 16, 42, 30)
+
+    class DB:
+        async def fetch_all(self, query, params):
+            return [{"search_id": "s1", "run_at": naive, "window_start": naive, "window_end": naive,
+                     "trigger": "schedule", "status": "ok", "rows": 0, "fired": 0, "alerted": 0, "throttled": 0,
+                     "value": None, "duration_ms": 1.0, "error": "", "alert_id": ""}]
+
+    run = asyncio.run(SearchStore(DB()).last_runs("acme", "s1"))[0]
+    assert run.run_at.tzinfo is not None and run.run_at.replace(tzinfo=None) == naive
+    assert run.window_start.tzinfo is not None
+    search = SavedSearch.from_dict(BRUTE)  # every 15 minutes
+    assert is_due(search, run.run_at, datetime(2026, 11, 19, 17, 0, tzinfo=timezone.utc))
+    assert not is_due(search, run.run_at, datetime(2026, 11, 19, 16, 50, tzinfo=timezone.utc))
