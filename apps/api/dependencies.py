@@ -149,6 +149,26 @@ def process_logs_and_tracking_background(
         processing_time_ms=processing_time_ms,
     )
 
+async def publish_logs_durably(logs: List[LogEntry], customer_id: str, endpoint: str, format_type: str,
+                               bytes_processed: int, processing_time_ms: int) -> bool:
+    """Publish a batch to the ingest topic; True once the broker acknowledged it (Phase 12)."""
+    if log_event_publisher is None:
+        return False
+    batch_info = {
+        "batch_id": f"batch_{customer_id}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}",
+        "log_count": len(logs), "bytes_processed": bytes_processed, "endpoint": endpoint,
+        "timestamp": datetime.now(timezone.utc).isoformat(), "success_count": len(logs), "error_count": 0,
+        "logs": [log.model_dump(mode='json') if hasattr(log, 'model_dump') else log.__dict__ for log in logs],
+    }
+    try:
+        return bool(await log_event_publisher.publish_batch_ingested(
+            customer_id=customer_id, batch_info=batch_info, source_format=format_type,
+            processing_time_ms=float(processing_time_ms)))
+    except Exception as e:
+        logger.error(f"Durable publish failed: {e}")
+        return False
+
+
 async def process_logs_and_tracking_async(
     logs: List[LogEntry],
     customer_id: str,
@@ -474,7 +494,8 @@ def setup_router_dependencies():
     from routers import ingestion, query, dashboard, storage, alerts
 
     # Setup router dependencies
-    ingestion.setup_dependencies(parser_factory, process_logs_background, process_logs_and_tracking_background)
+    ingestion.setup_dependencies(parser_factory, process_logs_background, process_logs_and_tracking_background,
+                                 publish_logs_durably)
     query.setup_dependencies(query_engine, clickhouse_client)
     dashboard.setup_dependencies(dashboard_engine)
     storage.setup_dependencies(ttl_manager)

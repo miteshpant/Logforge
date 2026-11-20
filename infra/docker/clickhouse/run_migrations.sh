@@ -11,6 +11,19 @@ CLICKHOUSE_PORT=${CLICKHOUSE_PORT:-8123}
 CLICKHOUSE_USER=${CLICKHOUSE_USER:-logforge}
 CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-logforge123}
 CLICKHOUSE_DATABASE=${CLICKHOUSE_DATABASE:-logforge}
+# REPLICATED_ENGINES=true (the HA deployment, docs/deployment.md): create
+# every MergeTree-family table as its Replicated* engine, so data replicates
+# between the replicas of a Replicated database. ClickHouse 23.8 doesn't
+# convert them itself.
+REPLICATED_ENGINES=${REPLICATED_ENGINES:-false}
+
+replicated_engines() {
+    if [ "$REPLICATED_ENGINES" = "true" ]; then
+        sed -E 's/ENGINE[[:space:]]*=[[:space:]]*(Replacing|Summing|Aggregating|Collapsing|VersionedCollapsing)?MergeTree/ENGINE = Replicated\1MergeTree/g'
+    else
+        cat
+    fi
+}
 
 # Use absolute path for migrations directory (container) or relative path (local)
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-$(dirname "$0")/migrations}"
@@ -37,7 +50,8 @@ execute_migration() {
     # how migration 007 "succeeded" while creating only 1 of its 9 tables.
     # NOTE: this means `--` must not appear inside SQL string literals in
     # migration files (none do today).
-    sed 's/--.*$//' "$migration_file" | grep -v '^[[:space:]]*$' | tr '\n' ' ' | sed 's/;/;\n/g' > "$temp_file"
+    sed 's/--.*$//' "$migration_file" | grep -v '^[[:space:]]*$' | tr '\n' ' ' | sed 's/;/;\n/g' |
+        replicated_engines > "$temp_file"
 
     # Execute each non-empty statement
     while IFS= read -r statement; do
@@ -88,7 +102,7 @@ create_migration_table() {
         --data "CREATE TABLE IF NOT EXISTS schema_migrations (
             migration_name String,
             executed_at DateTime64(3) DEFAULT now64(3)
-        ) ENGINE = MergeTree()
+        ) ENGINE = $(echo 'ENGINE = MergeTree()' | replicated_engines | sed 's/ENGINE = //')
         ORDER BY migration_name
         SETTINGS index_granularity = 8192;" \
         "http://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?database=${CLICKHOUSE_DATABASE}" > /dev/null

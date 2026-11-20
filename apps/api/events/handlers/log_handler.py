@@ -112,10 +112,10 @@ class LogEventHandler(EventHandler):
             ]
 
             write_buffer = get_write_buffer()
-            raw_buffer_success = await write_buffer.add_logs(
-                customer_id=customer_id,
-                raw_logs=raw_logs_dicts
-            )
+            # Phase 12: written now, and only then reported done, so the log
+            # consumer commits this message's offset once the batch is in
+            # ClickHouse (the shared buffer would ack it ~100 ms early).
+            raw_buffer_success = await write_buffer.write_now(customer_id, raw_logs_dicts)
 
             if not raw_buffer_success:
                 logger.error(

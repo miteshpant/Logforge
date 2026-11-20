@@ -2,6 +2,8 @@
 Log ingestion API endpoints - all formats and methods
 """
 
+import os
+
 import json
 import time
 import logging
@@ -30,6 +32,10 @@ router = APIRouter(prefix="/v1/ingest")
 parser_factory = None
 process_logs_background = None
 process_logs_and_tracking_background = None
+# Phase 12: publishes a batch to Kafka and returns once the broker
+# acknowledged it (set by setup_dependencies); the batch endpoint awaits it
+# unless LOGFORGE_DURABLE_INGEST=off.
+publish_logs_durably = None
 # ENH-010: `IngestionService()` opens a database connection in its constructor, so
 # building it at import time made this router un-importable -- and untestable --
 # without live infrastructure. Built on first use; the PEP 562 hook below
@@ -86,12 +92,14 @@ def check_ingest_capacity() -> None:
         )
 
 
-def setup_dependencies(pf, plb, pltb=None):
+def setup_dependencies(pf, plb, pltb=None, durable=None):
     """Setup dependencies from main app"""
     global parser_factory, process_logs_background, process_logs_and_tracking_background
     parser_factory = pf
     process_logs_background = plb
     process_logs_and_tracking_background = pltb
+    global publish_logs_durably
+    publish_logs_durably = durable
 
     import logging
     logger = logging.getLogger(__name__)
@@ -233,8 +241,16 @@ async def ingest_logs_batch(
         total_bytes_processed = sum(len(str(log.msg)) for log in batch.logs)
         processing_time_ms = int((time.time() - start_time) * 1000)
 
+        # Phase 12: answer only once Kafka holds the batch. Publishing after
+        # the answer (a background task) lost acknowledged batches whenever
+        # this replica died in between; a 503 here makes the shipper retry.
+        if publish_logs_durably and os.getenv("LOGFORGE_DURABLE_INGEST", "on").lower() not in ("off", "false", "0"):
+            if not await publish_logs_durably(batch.logs, customer_id, "/logs/batch", "json",
+                                              total_bytes_processed, processing_time_ms):
+                raise HTTPException(status_code=503, detail="The batch could not be queued for storage; retry it.",
+                                    headers={"Retry-After": "1"})
         # Move ALL tracking to background tasks for fast response
-        if process_logs_and_tracking_background:
+        elif process_logs_and_tracking_background:
             background_tasks.add_task(
                 process_logs_and_tracking_background,
                 batch.logs,

@@ -108,6 +108,12 @@ class SubscriberConfig:
     retry_delay_ms: int = 500
     auto_offset_reset: str = "latest"
     enable_auto_commit: bool = True
+    # Phase 12: commit a message's offset only once its handlers succeeded
+    # (for logs: the batch is in ClickHouse), retrying a failing message for
+    # up to retry_budget_s. Survives the consumer being killed: unfinished
+    # messages are redelivered (at-least-once) instead of lost.
+    commit_after_processing: bool = False
+    retry_budget_s: float = 120.0
     max_parallel_workers: int = 10
     health_check_interval_s: int = 30
     metrics_enabled: bool = True
@@ -144,6 +150,9 @@ class KafkaEventSubscriber(EventSubscriber):
         self._consumer_task: Optional[asyncio.Task] = None
         self._worker_tasks: List[asyncio.Task] = []
         self._event_queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
+        from .offsets import OffsetTracker
+
+        self._offsets = OffsetTracker() if config.commit_after_processing else None
 
         logger.info("KafkaEventSubscriber initialized", subscriber=config.name)
 
@@ -240,8 +249,27 @@ class KafkaEventSubscriber(EventSubscriber):
 
         self.is_consuming = True
         self._consumer_task = asyncio.create_task(self._consume_loop())
+        if self._offsets is not None:
+            self._commit_task = asyncio.create_task(self._commit_loop())
 
         logger.info("Started event consumption")
+
+    async def _commit_processed(self) -> None:
+        """Commit the offsets of finished messages (commit_after_processing)."""
+        offsets = self._offsets.committable() if self._offsets is not None else {}
+        if not offsets or not self.consumer:
+            return
+        try:
+            from aiokafka import TopicPartition
+
+            await self.consumer.commit({TopicPartition(t, p): o for (t, p), o in offsets.items()})
+        except Exception as e:  # a rebalance: the new owner re-reads from the last commit
+            logger.warning(f"Offset commit failed (subscriber={self.config.name}): {e}")
+
+    async def _commit_loop(self) -> None:
+        while self.is_consuming:
+            await asyncio.sleep(max(0.2, self.config.batch_timeout_ms / 1000))
+            await self._commit_processed()
 
     async def _consume_loop(self):
         """Main consumption loop"""
@@ -257,6 +285,9 @@ class KafkaEventSubscriber(EventSubscriber):
 
             async for message in self.consumer:
                 messages_received += 1
+                tp = (message.topic, message.partition)
+                if self._offsets is not None:
+                    self._offsets.track(tp, message.offset)
                 # Add message to queue for worker processing
                 try:
                     event_data = message.value
@@ -271,6 +302,8 @@ class KafkaEventSubscriber(EventSubscriber):
                     # Check if we have handlers for this event type
                     if self._should_process_event(event):
                         await self._event_queue.put((message, event))
+                    elif self._offsets is not None:
+                        self._offsets.done(tp, message.offset)
                         logger.debug(
                             f"Event queued for processing (event_type={event.event_type}, event_id={event.metadata.event_id})"
                         )
@@ -287,7 +320,9 @@ class KafkaEventSubscriber(EventSubscriber):
                     if (len(batch) >= self.config.max_batch_size or
                         current_time - last_commit_time >= self.config.batch_timeout_ms / 1000):
 
-                        if not self.config.enable_auto_commit:
+                        if self._offsets is not None:
+                            await self._commit_processed()
+                        elif not self.config.enable_auto_commit:
                             await self.consumer.commit()
 
                         batch.clear()
@@ -295,6 +330,8 @@ class KafkaEventSubscriber(EventSubscriber):
 
                 except Exception as e:
                     logger.error(f"Error processing message: {e}")
+                    if self._offsets is not None:  # unreadable: nothing to retry
+                        self._offsets.done(tp, message.offset)
                     continue
 
         except Exception as e:
@@ -318,7 +355,16 @@ class KafkaEventSubscriber(EventSubscriber):
                     continue
 
                 # Process the event
-                success = await self._process_event(event, message, worker_id)
+                if self._offsets is not None:
+                    success = await process_until_done(
+                        lambda: self._process_event(event, message, worker_id), self.config.retry_budget_s)
+                    if not success:
+                        logger.error("Event still failing after its retry budget; skipped",
+                                     subscriber=self.config.name, event_id=event.metadata.event_id,
+                                     budget_s=self.config.retry_budget_s)
+                    self._offsets.done((message.topic, message.partition), message.offset)
+                else:
+                    success = await self._process_event(event, message, worker_id)
 
                 if success:
                     self.metrics.record_event_consumed(0.0)  # TODO: track actual processing time
@@ -446,6 +492,23 @@ class KafkaEventSubscriber(EventSubscriber):
 # MockEventSubscriber removed - using only real Kafka subscribers
 
 
+async def process_until_done(attempt: Callable, budget_s: float, delay_s: float = 1.0) -> bool:
+    """Run `attempt` until it returns True or `budget_s` runs out (a replica
+    failing over takes seconds; the message must not be dropped meanwhile)."""
+    loop = asyncio.get_event_loop()
+    deadline = loop.time() + budget_s
+    while True:
+        try:
+            if await attempt():
+                return True
+        except Exception as e:
+            logger.warning(f"Event processing failed, retrying: {e}")
+        if loop.time() + delay_s > deadline:
+            return False
+        await asyncio.sleep(delay_s)
+        delay_s = min(delay_s * 2, 10.0)
+
+
 class EventSubscriberManager:
     """Manages multiple event subscribers"""
 
@@ -495,7 +558,9 @@ class EventSubscriberManager:
                 event_types=LOG_EVENT_TYPES,
                 enabled=True,
                 max_batch_size=500,  # Larger batches for throughput
-                max_parallel_workers=20
+                max_parallel_workers=20,
+                enable_auto_commit=False,
+                commit_after_processing=True,
             ),
             "tenant_subscriber": SubscriberConfig(
                 name="tenant_subscriber",
