@@ -7,6 +7,7 @@ import { apiClient } from '@/lib/api'
 
 interface CustomRole {
   id: string; name: string; description: string; permissions: string[]; services: string[] | null; members: string[]
+  masked_fields?: string[]
 }
 interface TenantUser { id: string; email: string; name: string; status: string }
 
@@ -35,7 +36,7 @@ export default function RolesPage() {
   const [roles, setRoles] = useState<CustomRole[] | null>(null)
   const [resources, setResources] = useState<string[]>([])
   const [users, setUsers] = useState<TenantUser[]>([])
-  const [draft, setDraft] = useState<{ id?: string; name: string; description: string; grants: Record<string, string>; scoped: boolean; services: string } | null>(null)
+  const [draft, setDraft] = useState<{ id?: string; name: string; description: string; grants: Record<string, string>; scoped: boolean; services: string; masked: string } | null>(null)
   const [adding, setAdding] = useState<Record<string, string>>({})
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -62,7 +63,8 @@ export default function RolesPage() {
       grants[res] = act === '*' ? '*' : act.includes('write') ? 'write' : 'read'
     }
     setDraft({ id: role?.id, name: role?.name || '', description: role?.description || '', grants,
-      scoped: !!role && role.services !== null, services: (role?.services || []).join(', ') })
+      scoped: !!role && role.services !== null, services: (role?.services || []).join(', '),
+      masked: (role?.masked_fields || []).join(', ') })
   }
 
   const save = async () => {
@@ -71,7 +73,8 @@ export default function RolesPage() {
     const permissions = Object.entries(draft.grants).filter(([, a]) => a)
       .map(([res, a]) => `${res}:${a === 'write' ? 'read,write' : a}:tenant`)
     const body = { name: draft.name, description: draft.description, permissions,
-      services: draft.scoped ? draft.services.split(/[\s,]+/).filter(Boolean) : null }
+      services: draft.scoped ? draft.services.split(/[\s,]+/).filter(Boolean) : null,
+      masked_fields: draft.masked.split(/[\s,]+/).filter(Boolean) }
     try {
       await call(draft.id ? apiClient.put(`/v1/roles/custom/${draft.id}`, body) : apiClient.post('/v1/roles/custom', body), 'Failed to save')
       setMessage(`Saved ${draft.name}.`); setDraft(null)
@@ -151,6 +154,16 @@ export default function RolesPage() {
                 Several scoped roles add up.
               </p>
             </div>
+            <div className="space-y-2">
+              <label className="text-sm text-slate-300 block">Masked fields
+                <input className={field} placeholder="email, password, attrs.card_number" value={draft.masked} data-testid="role-masked"
+                  onChange={e => setDraft({ ...draft, masked: e.target.value })} />
+              </label>
+              <p className="text-xs text-slate-500">
+                Their values show as [masked] wherever its holders see them, and their searches can&apos;t use these fields.
+                Live tail and file downloads are unavailable to them.
+              </p>
+            </div>
             <div className="flex gap-2">
               <button onClick={save} className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white text-sm" data-testid="role-save">Save</button>
               <button onClick={() => setDraft(null)} className="px-4 py-2 rounded bg-slate-700 text-white text-sm">Cancel</button>
@@ -171,6 +184,7 @@ export default function RolesPage() {
                   <p className="text-xs text-slate-400 mt-1">
                     {role.permissions.length ? role.permissions.map(p => p.replace(':tenant', '')).join(' · ') : 'no extra permissions'}
                     {' · '}{role.services === null ? 'all logs' : role.services.length ? `logs of ${role.services.join(', ')}` : 'no logs'}
+                    {role.masked_fields?.length ? ` · masks ${role.masked_fields.join(', ')}` : ''}
                   </p>
                 </div>
                 <div className="flex gap-2">

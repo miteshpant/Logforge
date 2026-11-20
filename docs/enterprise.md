@@ -117,6 +117,26 @@ How the scope is enforced:
 - **Failing closed.** If custom roles can't be read, the request fails (503)
   rather than run unscoped.
 
+### Masked fields
+
+A custom role can also mask fields (`email`, `password`, `attrs.card_number`).
+For its holders:
+
+- **Values read `[masked]`** in every JSON answer, at any depth: a log's
+  `attrs` (also when stored as a JSON string), tabular query results (by column
+  name), entities, cases, the field catalogue's examples.
+- **AI answers** can't repeat them: the AI tools redact the masked fields
+  before the model sees any data.
+- **Requests that name a masked field are refused (403)**: a query could
+  otherwise copy the value to another name (`| eval e = attrs.email`).
+- **Streams and file downloads are refused (403)** (live tail, CSV and PDF
+  exports, archive downloads): they can't be masked.
+
+Names match on their last segment, case-insensitively: `attrs.email` masks
+every `email` key. Values inside free text, such as a message that contains an
+address, aren't masked; mask at ingest with a pipeline's `mask` processor for
+that. `/v1/auth/access` lists the caller's masked fields.
+
 What a scope doesn't cover yet:
 
 - **Alerts** are hidden rather than filtered: alert rules would need to

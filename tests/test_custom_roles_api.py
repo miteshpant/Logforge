@@ -90,7 +90,7 @@ def test_members_and_my_access(api):
     assert api.put(f"/v1/roles/custom/{rid}/members/me").status_code == 200
     assert api.get("/v1/roles/custom").json()["roles"][0]["members"] == ["me"]
     assert api.get("/v1/auth/access").json() == {"custom_roles": ["Auth only"], "permissions": [],
-                                                 "data_scope": {"services": ["auth"]}}
+                                                 "data_scope": {"services": ["auth"]}, "masked_fields": []}
     assert api.delete(f"/v1/roles/custom/{rid}").status_code == 200
     assert api.get("/v1/auth/access").json()["data_scope"] is None
     assert api.store.held == set()

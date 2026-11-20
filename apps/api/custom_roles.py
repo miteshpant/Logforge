@@ -42,6 +42,7 @@ class CustomRole:
     description: str = ""
     permissions: List[str] = field(default_factory=list)
     services: Optional[List[str]] = None  # None: no data scope
+    masked_fields: List[str] = field(default_factory=list)  # field_masking.py
 
     def to_dict(self) -> Dict[str, Any]:
         return dict(self.__dict__)
@@ -82,6 +83,13 @@ def effective(roles: List[CustomRole]) -> Tuple[List[str], Optional[DataScope]]:
     return permissions, scope
 
 
+def masked_fields(roles: List[CustomRole]):
+    """Fields hidden from a holder of these roles: the union over them."""
+    from field_masking import normalise_fields
+
+    return normalise_fields(f for r in roles for f in (r.masked_fields or []))
+
+
 def allowed(user_roles: List[Dict[str, Any]], roles: List[CustomRole], required: str, tenant_id: str) -> bool:
     from authn_authz_middleware import check_permission
 
@@ -98,11 +106,13 @@ class CustomRoleStore:
     def list(self, tenant_id: str) -> List[CustomRole]:
         rows = self.client.query(
             "SELECT id, argMax(name, updated_at), argMax(description, updated_at), argMax(permissions, updated_at), "
-            "argMax(services, updated_at), argMax(scoped, updated_at), argMax(deleted, updated_at) "
+            "argMax(services, updated_at), argMax(scoped, updated_at), argMax(deleted, updated_at), "
+            "argMax(masked_fields, updated_at) "
             "FROM custom_roles_mt WHERE customer_id = {tenant:String} GROUP BY id", parameters={"tenant": tenant_id}
         ).result_rows
         return sorted([CustomRole(id=r[0], tenant_id=tenant_id, name=r[1], description=r[2], permissions=list(r[3]),
-                                  services=list(r[4]) if r[5] else None) for r in rows if not r[6]],
+                                  services=list(r[4]) if r[5] else None, masked_fields=list(r[7]))
+                     for r in rows if not r[6]],
                       key=lambda r: r.name.lower())
 
     def get(self, tenant_id: str, role_id: str) -> Optional[CustomRole]:
@@ -112,9 +122,9 @@ class CustomRoleStore:
         role.id = role.id or uuid.uuid4().hex
         self.client.insert("custom_roles_mt", [[
             role.tenant_id, role.id, role.name, role.description, list(role.permissions), list(role.services or []),
-            int(role.services is not None), int(deleted), user_id or ""]],
+            int(role.services is not None), int(deleted), user_id or "", list(role.masked_fields or [])]],
             column_names=["customer_id", "id", "name", "description", "permissions", "services", "scoped", "deleted",
-                          "updated_by"])
+                          "updated_by", "masked_fields"])
         self._cache.clear()
         return role
 

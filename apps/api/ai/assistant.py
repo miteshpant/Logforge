@@ -84,6 +84,14 @@ def _build_provider(settings: ProviderSettings):
     return build_provider(settings)
 
 
+def _redact_fields(tenant_fields: list[str]) -> list[str]:
+    """The tenant's redaction fields plus those the asker's custom roles mask: tool
+    output is redacted before the model sees it, so an answer can't repeat them."""
+    import field_masking
+
+    return sorted(set(tenant_fields or []) | set(field_masking.current()))
+
+
 def permission_check(roles: list[dict[str, Any]], tenant_id: str):
     from authn_authz_middleware import check_permission
 
@@ -355,7 +363,7 @@ async def ai_session(*, tenant_id: str, user_id: str, roles: list[dict[str, Any]
 
     session = AISession(request_id=request_id, tenant_id=tenant_id, user_id=user_id, roles=roles, feature=feature,
                         provider=provider, provider_settings=provider_settings,
-                        redactor=Redactor(limits["redact_fields"]), limits=limits, config=config,
+                        redactor=Redactor(_redact_fields(limits["redact_fields"])), limits=limits, config=config,
                         audit=audit, before_call=before_call)
     try:
         yield session

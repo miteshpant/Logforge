@@ -18903,6 +18903,12 @@ components:
           maxLength: 1000
           title: Description
           type: string
+        masked_fields:
+          items:
+            type: string
+          maxItems: 100
+          title: Masked Fields
+          type: array
         name:
           maxLength: 120
           minLength: 1

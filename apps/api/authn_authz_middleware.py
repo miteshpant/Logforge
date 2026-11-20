@@ -13,6 +13,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from fastapi import Request, HTTPException
+import json
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 import structlog
@@ -567,6 +568,52 @@ def tenant_path_denied(path: str, tenant_id: str, user_roles: List[Dict[str, Any
     return f"No access to tenant: {target}"
 
 
+# Routes a user with masked fields may still call although their requests or answers
+# name fields: their own account and access, and signing out.
+_MASKING_EXEMPT = ("/v1/auth/",)
+
+
+async def _masking_refusal(request: Request, masked) -> Optional[JSONResponse]:
+    """Refuse a request that names a masked field: a query could copy it to another name."""
+    import field_masking
+
+    if request.url.path.startswith(_MASKING_EXEMPT):
+        return None
+    payload: Any = dict(request.query_params)
+    if request.method in WRITE_METHODS and "json" in request.headers.get("content-type", ""):
+        try:
+            payload = [payload, json.loads((await request.body()) or b"null")]
+        except ValueError:
+            pass
+    named = field_masking.mentions(payload, masked)
+    if named:
+        return JSONResponse(status_code=403, content={
+            "detail": f"Your role masks the field '{named}', so requests can't use it"})
+    return None
+
+
+async def _masked_response(response, masked):
+    """Mask JSON answers; refuse other successful answers (streams, CSV, PDF) outright."""
+    import field_masking
+
+    content_type = response.headers.get("content-type", "")
+    if response.status_code >= 400 or response.status_code == 204:
+        return response
+    if "json" not in content_type:
+        return JSONResponse(status_code=403, content={
+            "detail": "Your role masks fields, and this response can't be masked (stream or file download)"})
+    if hasattr(response, "body_iterator"):  # what call_next returns
+        body = b"".join([chunk async for chunk in response.body_iterator])
+    else:
+        body = response.body
+    try:
+        data = json.loads(body or b"null")
+    except ValueError:
+        return JSONResponse(status_code=403, content={"detail": "Your role masks fields; this response can't be masked"})
+    headers = {k: v for k, v in response.headers.items() if k.lower() not in ("content-length", "content-type")}
+    return JSONResponse(status_code=response.status_code, content=field_masking.mask(data, masked), headers=headers)
+
+
 def api_key_denied(state, required_permission: str):
     """For an API key request, why its permissions don't allow `required_permission` (else None)."""
     if not getattr(state, "is_api_key_auth", False):
@@ -975,11 +1022,24 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
             scope = effective(custom)[1]
             request.state.data_scope = scope
+            # Fields the user's custom roles mask (field_masking.py).
+            import field_masking
+            from custom_roles import masked_fields
+
+            masked = masked_fields(custom)
+            if masked:
+                refused = await _masking_refusal(request, masked)
+                if refused:
+                    return refused
             scope_token = data_scope.set_scope(scope)
+            mask_token = field_masking.set_fields(masked)
             try:
                 response = await call_next(request)
             finally:
                 data_scope._SCOPE.reset(scope_token)
+                field_masking.reset(mask_token)
+            if masked:
+                response = await _masked_response(response, masked)
 
             # Step 8: Usage Tracking - Track API usage asynchronously
             if tenant_id and tenant_id != "platform":

@@ -90,8 +90,10 @@ markers).
   - ~~**Data scopes for traces, metrics and alerts**, archive search under a
     scope~~: done. Traces, metrics, the topology and security events are
     filtered by service; alert instances are hidden under a scope (they don't
-    record their services); archive reads carry the filter. Still open:
-    **field-level masking**, and alerts filtered rather than hidden.
+    record their services); archive reads carry the filter. Field-level
+    masking is done too ([masked fields](./enterprise.md#masked-fields)). Still
+    open: alerts filtered rather than hidden, and masking values inside free
+    text (use an ingest `mask` processor for that).
   - ~~**API key scopes**~~: done; a key's permissions are checked on every
     route ([security](./security.md)).
   - ~~**Authentication on `/metrics`**~~: done; set `LOGFORGE_METRICS_TOKEN`
