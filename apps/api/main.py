@@ -37,6 +37,7 @@ from routers.playbooks_api import router as playbooks_router
 from routers.reports_api import router as reports_router
 from routers.sso_api import login_router as sso_login_router, router as sso_router
 from routers.scim_api import router as scim_router, settings_router as scim_settings_router
+from routers.custom_roles_api import access_router as access_router, router as custom_roles_router
 from routers.enterprise_api import router as enterprise_router
 from routers.tenant_api import router as tenant_router
 from routers.subscription_api import router as subscription_router
@@ -81,6 +82,11 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 # Add unified authentication & authorization middleware
 from authn_authz_middleware import setup_unified_auth_middleware
 setup_unified_auth_middleware(app)
+
+# Phase 14: every ClickHouse query carries the request's data scope (data_scope.py)
+import data_scope  # noqa: E402
+
+data_scope.install()
 
 # ENH-012: request body size caps and per-tenant rate limiting.
 #
@@ -150,6 +156,8 @@ app.include_router(sso_login_router)
 app.include_router(sso_router)
 app.include_router(scim_router)
 app.include_router(scim_settings_router)
+app.include_router(custom_roles_router)
+app.include_router(access_router)
 app.include_router(enterprise_router)
 app.include_router(tenant_router)
 app.include_router(subscription_router)

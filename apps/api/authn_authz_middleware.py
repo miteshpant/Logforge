@@ -538,6 +538,21 @@ def get_endpoint_permission(path: str, method: str) -> str:
     else:
         return "platform:general:tenant"
 
+async def _custom_roles_of(tenant_id: str, user_id: str) -> list:
+    """The user's custom roles in the tenant (custom_roles.py, cached 30 s). A failure to read
+    them grants nothing extra, but would also drop a data scope, so it fails closed: 503."""
+    from custom_roles import CustomRoleStore
+    from dependencies import get_clickhouse_client
+
+    try:
+        return await asyncio.to_thread(CustomRoleStore(get_clickhouse_client()).roles_of, tenant_id, user_id)
+    except Exception as e:
+        if "UNKNOWN_TABLE" in str(e) or "doesn't exist" in str(e):
+            return []  # migration 034 not applied yet: no custom role, so no scope, can exist
+        logger.error("Couldn't read custom roles", tenant_id=tenant_id, user_id=user_id, error=str(e))
+        raise HTTPException(503, "Access control is temporarily unavailable")
+
+
 def check_permission(user_roles: List[Dict[str, Any]], required_permission: str, tenant_id: str) -> bool:
     """Check if user has required permission for tenant (supports tenant-less platform admins)"""
     resource, action, scope = required_permission.split(":")
@@ -870,10 +885,15 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
             # Step 4: Permission Check - Verify endpoint permissions
             # Skip permission checks for auth endpoints (they are user-level operations)
+            # Phase 14: a tenant's custom roles add permissions and may carry a data scope.
+            custom = await _custom_roles_of(tenant_id, user.id) if tenant_id and tenant_id != "platform" else []
             if tenant_id and not request.url.path.startswith("/v1/auth/"):
                 required_permission = get_endpoint_permission(request.url.path, request.method)
                 if not check_permission(user_roles, required_permission, tenant_id):
-                    raise HTTPException(403, f"Insufficient permissions for {request.url.path}")
+                    from custom_roles import effective, grants
+
+                    if not grants(effective(custom)[0], required_permission):
+                        raise HTTPException(403, f"Insufficient permissions for {request.url.path}")
 
             # Step 5: Feature Access - Check subscription (skip for admin endpoints)
             if not is_admin_endpoint and tenant_id:
@@ -897,8 +917,18 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             request.state.tenant_id = tenant_id
             request.state.roles = user_roles
 
-            # Step 7: Process request
-            response = await call_next(request)
+            # Step 7: Process request, inside the user's data scope (data_scope.py): every
+            # ClickHouse query this request makes reads only the scope's services' logs.
+            import data_scope
+            from custom_roles import effective
+
+            scope = effective(custom)[1]
+            request.state.data_scope = scope
+            scope_token = data_scope.set_scope(scope)
+            try:
+                response = await call_next(request)
+            finally:
+                data_scope._SCOPE.reset(scope_token)
 
             # Step 8: Usage Tracking - Track API usage asynchronously
             if tenant_id and tenant_id != "platform":

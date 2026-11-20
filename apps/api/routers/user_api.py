@@ -330,6 +330,12 @@ async def delete_user(
         logger.error("User deletion failed", user_id=user_id, error=str(e))
         raise HTTPException(500, "User deletion failed")
 
+def _role_service():
+    from routers.role_api import get_role_service
+
+    return get_role_service()
+
+
 @router.get("/users", response_model=UserListResponse)
 async def list_users(
     page: int = 1,
@@ -359,11 +365,24 @@ async def list_users(
             # Regular users can only see themselves
             users = [current_user]
             total_count = 1
-        else:
+        elif is_platform_admin:
             # Query database with proper filtering (search handled at database level)
             result = await get_user_service().list_users(page, page_size, status, search)
             users = result["users"]
             total_count = result["total_count"]
+        else:
+            # A tenant admin sees their tenant's users. This used to list every user on the
+            # platform, so any tenant admin could read other tenants' users and addresses.
+            ids = sorted({r.user_id for r in await _role_service().get_tenant_users(tenant_id)})
+            members = [u for u in [await get_user_service().get_user_by_id(i) for i in ids] if u]
+            if search:
+                needle = search.lower()
+                members = [u for u in members if needle in u.email.lower() or needle in (u.name or "").lower()]
+            if status:
+                members = [u for u in members if getattr(u.status, "value", u.status) == getattr(status, "value", status)]
+            members.sort(key=lambda u: u.email)
+            total_count = len(members)
+            users = members[(page - 1) * page_size: page * page_size]
         
         # Convert to response format  
         user_responses = [

@@ -555,6 +555,14 @@ async def run_archive_query(query_text: str, request_body: Dict[str, Any], custo
     import asyncio
     import time
 
+    import data_scope
+
+    # Archives are read with ClickHouse's s3() table function, which the data scope's
+    # logs_raw_mt filter doesn't reach: refuse rather than show out-of-scope services.
+    if data_scope.current() is not None:
+        raise HTTPException(status_code=403, detail="Archive search isn't available with a data scope; "
+                                                    "ask an administrator to rehydrate the days instead")
+
     import archive_query
     import pattern_query
     from logql_pipeline import PipelineError, execute
