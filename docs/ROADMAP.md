@@ -30,8 +30,9 @@ markers).
 - **Detection engine follow-ups from Phase 1**
   ([platform roadmap](./PLATFORM_ROADMAP.md)): ~~sequence rules have no `until`
   (abort) condition~~ (done: `until:` rules abandon a group's partial
-  sequence); no correlation over alerts (e.g. "3+ distinct
-  techniques on one host"); git sync is push-from-CI only (no server-side
+  sequence); ~~no correlation over alerts~~ (done: correlations can
+  reference `alerts`, e.g. the shipped "3+ techniques on one host in an
+  hour"); git sync is push-from-CI only (no server-side
   pull on a schedule or webhook); synced correlations can't reference the
   shipped library; the streaming state has a 200k-event soak test, not a
   24 h one; correlation state is per process (lost on restart, not shared

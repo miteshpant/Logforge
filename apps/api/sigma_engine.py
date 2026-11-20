@@ -16,7 +16,7 @@ import structlog
 
 # Import security analytics components
 from security_analytics import SigmaRule, DetectionSeverity, SecurityDetection
-from correlation import (CorrelationRule, CorrelationRuleError, get_correlation_store, order_for_chaining,
+from correlation import (CorrelationRule, CorrelationRuleError, feed_alert, get_correlation_store, order_for_chaining,
                          parse_timespan)
 from events.publishers.security_publisher import SecurityEventPublisher
 from events.constants import EVENT_SECURITY_DETECTION_TRIGGERED
@@ -434,6 +434,12 @@ def compile_correlation_rules(correlation_dicts, count_rules):
     return order_for_chaining(compiled), meta
 
 
+def _rule_techniques(rule_dict: Dict[str, Any]) -> List[str]:
+    from detection_replay import _techniques
+
+    return _techniques(rule_dict) or [str(t).upper() for t in rule_dict.get('mitre_techniques') or []]
+
+
 def _count_rule_name(rule_dict: Dict[str, Any]) -> str:
     return f"__count__:{rule_dict.get('id')}"
 
@@ -584,6 +590,8 @@ class SigmaRuleEngine:
                 # Names of the base rules this event matched (rule `name` and
                 # id), fed to the correlation engine.
                 matched_names = set()
+                # Alerts raised for this event, for correlations over alerts.
+                raised = []
 
                 for rule_dict in simple_rules:
                     try:
@@ -607,6 +615,8 @@ class SigmaRuleEngine:
                                                 normalized_log, {}, _event_time(normalized_log)):
                                 continue
                             matches.append(match_result)
+                            raised.append((str(rule_dict.get('id')), rule_dict.get('severity') or rule_dict.get('level'),
+                                           _rule_techniques(rule_dict)))
                             logger.info(f"🚨 Sigma rule match: {rule.id} - {rule.title}")
 
                             # Publish security detection event
@@ -623,22 +633,32 @@ class SigmaRuleEngine:
                     if selection and self.condition_evaluator.evaluate_selection(normalized_log, selection)[0]:
                         matched_names.add(_count_rule_name(rule_dict))
 
+                alerts = []
                 if correlation_rules and matched_names:
                     alerts = self.correlation_store.process(
                         customer_id, correlation_rules, normalized_log, matched_names,
                         _event_time(normalized_log))
-                    for alert in alerts:
-                        if correlation_meta.get(alert.rule.id, {}).get('generate') is False:
-                            continue  # building block: feeds other correlations only
-                        if self._suppressed(tuning, customer_id, alert.rule.id, normalized_log,
-                                            alert.group, alert.last_seen):
-                            continue
-                        match = self._correlation_match(alert, correlation_meta.get(alert.rule.id, {}),
-                                                        normalized_log, customer_id)
-                        matches.append(match)
-                        logger.info(f"🚨 Correlation match: {alert.rule.id} - {alert.rule.title} "
-                                    f"(group={alert.group}, value={alert.value})")
-                        await self._publish_detection_event(match)
+                pending = list(alerts)
+                while pending or raised:
+                    if raised:
+                        rid, severity, techniques = raised.pop(0)
+                        pending += feed_alert(self.correlation_store, customer_id, correlation_rules,
+                                              normalized_log, _event_time(normalized_log), rid, severity, techniques)
+                        continue
+                    alert = pending.pop(0)
+                    if correlation_meta.get(alert.rule.id, {}).get('generate') is False:
+                        continue  # building block: feeds other correlations only
+                    if self._suppressed(tuning, customer_id, alert.rule.id, normalized_log,
+                                        alert.group, alert.last_seen):
+                        continue
+                    match = self._correlation_match(alert, correlation_meta.get(alert.rule.id, {}),
+                                                    normalized_log, customer_id)
+                    matches.append(match)
+                    logger.info(f"🚨 Correlation match: {alert.rule.id} - {alert.rule.title} "
+                                f"(group={alert.group}, value={alert.value})")
+                    await self._publish_detection_event(match)
+                    if not alert.rule.reads_alerts:
+                        raised.append((alert.rule.id, alert.rule.level, alert.rule.techniques))
 
             return matches
 

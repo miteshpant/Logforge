@@ -19,7 +19,11 @@ def test_grouping_report_on_the_corpus():
     # Each scenario is one intrusion; its alerts land in one case, except
     # lateral movement, which by nature spans two hosts (linking source and
     # destination hosts is not done by entity grouping).
+    # Web scanning too: its alerts group by the scanner's address, and the
+    # "several techniques on one host" correlation opens the web server's
+    # own case (scanning, traversal and the other web scenarios on web-01).
     spread = {sid: n for sid, n in report["cases_per_scenario"].items() if n > 1}
-    assert spread == {"psexec-lateral-movement": 2}, f"scenarios split across cases: {spread}"
+    assert spread == {"psexec-lateral-movement": 2, "web-content-scanning": 2}, \
+        f"scenarios split across cases: {spread}"
     # Scenarios that reuse a host (the corpus has a handful of workstations)
     # share its case; that is intended: same host, same 24 h, one case.

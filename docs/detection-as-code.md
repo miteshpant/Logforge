@@ -63,6 +63,26 @@ correlation:
 are referenced like `rules` (they must be in the rule set, and backtests
 replay them).
 
+**Correlations over alerts** reference `alerts` (every alert another rule
+raises) or `alerts:<severity>` (`alerts:high`, ...). Each alert is fed in
+once, on the event that raised it, with `alert.rule_id`, `alert.severity`,
+`alert.technique` (the rule's first, primary ATT&CK technique) and
+`alert.techniques`. Three different techniques on one host within an hour:
+
+```yaml
+correlation:
+  type: value_count
+  rules: [alerts]
+  group-by: [hostname]
+  timespan: 1h
+  condition: {field: alert.technique, gte: 3}
+```
+
+The shipped `lf-c-multi-technique-host` is this rule. Alerts of correlations
+over alerts aren't fed back, so they can't loop. Their fixtures and
+backtests replay every rule in the set, since any of them can raise the
+alerts they count.
+
 Fixture timelines: a plain event comes 1 s after the previous one;
 `{repeat: N, every: 30s, event: ...}` repeats it; `{at: 5m, event: ...}`
 places it at an offset from the start.

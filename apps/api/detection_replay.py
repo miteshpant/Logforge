@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
-from correlation import CorrelationStore, parse_timespan
+from correlation import CorrelationStore, feed_alert, parse_timespan
 
 #: Default start of an expanded timeline, and spacing between plain events.
 TIMELINE_START = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -124,6 +124,7 @@ def replay(rules: List[Dict[str, Any]], events: List[Dict[str, Any]],
     for event in sorted(events, key=_event_time):
         ts = _event_time(event)
         matched = set()
+        raised = []
         for rule in simple_rules:
             if not detection_matches(evaluator, rule.get("detection") or {}, event):
                 continue
@@ -132,16 +133,23 @@ def replay(rules: List[Dict[str, Any]], events: List[Dict[str, Any]],
                 matched.add(str(rule["name"]))
             if rule.get("generate") is not False:
                 alerts.append(ReplayAlert(str(rule.get("id")), ts, techniques=_techniques(rule), event=event))
+                raised.append((str(rule.get("id")), rule.get("severity") or rule.get("level"), _techniques(rule)))
         for rule, _ in count_rules:
             selection = (rule.get("detection") or {}).get("selection") or {}
             if selection and evaluator.evaluate_selection(event, selection)[0]:
                 matched.add(_count_rule_name(rule))
-        if compiled and matched:
-            for alert in store.process(tenant_id, compiled, event, matched, ts):
-                source = meta.get(alert.rule.id, {})
-                if source.get("generate") is False:
-                    continue  # building block: feeds other correlations only
-                alerts.append(ReplayAlert(alert.rule.id, ts, group=alert.group, value=alert.value,
-                                          techniques=_techniques(source) or alert.rule.techniques,
-                                          event=event))
+        pending = list(store.process(tenant_id, compiled, event, matched, ts)) if compiled and matched else []
+        while pending or raised:
+            if raised:
+                pending += feed_alert(store, tenant_id, compiled, event, ts, *raised.pop(0))
+                continue
+            alert = pending.pop(0)
+            source = meta.get(alert.rule.id, {})
+            if source.get("generate") is False:
+                continue  # building block: feeds other correlations only
+            techniques = _techniques(source) or alert.rule.techniques
+            alerts.append(ReplayAlert(alert.rule.id, ts, group=alert.group, value=alert.value,
+                                      techniques=techniques, event=event))
+            if not alert.rule.reads_alerts:
+                raised.append((alert.rule.id, alert.rule.level, techniques))
     return alerts

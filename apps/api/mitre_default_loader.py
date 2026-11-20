@@ -606,13 +606,19 @@ class MitreDefaultLoader:
             return None, str(exc)
         if not parsed.techniques:
             return None, "no MITRE technique tag"
+        from correlation import is_alert_reference
+
         for reference in parsed.references:
-            if reference not in bases:
+            if reference not in bases and not is_alert_reference(reference):
                 return None, f"references unknown base rule {reference!r}"
-        referenced = [bases[r] for r in parsed.references]
+        if parsed.reads_alerts:
+            # A correlation over alerts is replayed with every alerting rule.
+            referenced = list({id(b): b for b in bases.values()}.values())
+        else:
+            referenced = [bases[r] for r in parsed.references]
 
         correlation = dict(rule["correlation"])
-        correlation["rules"] = [bases[r]["ref"] for r in parsed.rules]
+        correlation["rules"] = [r if is_alert_reference(r) else bases[r]["ref"] for r in parsed.rules]
         if parsed.until:
             correlation["until"] = [bases[r]["ref"] for r in parsed.until]
         candidate = {"id": "candidate", "title": str(title), "severity": level,
@@ -693,8 +699,9 @@ class MitreDefaultLoader:
                 continue  # aggregations aren't base rules
             name = rule.get("name")
             ref = str(name) if name else row["id"]
-            base = {"ref": ref, "replay": [{"id": row["id"], "name": name,
-                                            "generate": rule.get("generate", True), "detection": detection}]}
+            base = {"ref": ref, "replay": [{"id": row["id"], "name": name, "generate": rule.get("generate", True),
+                                            "detection": detection, "severity": rule.get("level"),
+                                            "tags": list(rule.get("tags") or [])}]}
             bases[str(rule["id"])] = base
             if name:
                 bases[str(name)] = base
@@ -704,8 +711,12 @@ class MitreDefaultLoader:
         # (unknown references, cycles) is rejected with the reason.
         pending = list(correlations)
         while pending:
+            # Correlations over alerts go last: they replay every other rule.
             ready = [(r, src) for r, src in pending
                      if all(str(ref) in bases for ref in self._references(r))]
+            if not ready:
+                ready = [(r, src) for r, src in pending if self._reads_alerts(r)
+                         and not any(not self._reads_alerts(o) for o, _ in pending)]
             final = not ready
             for rule, source in list(pending if final else ready):
                 pending.remove((rule, source))
@@ -719,12 +730,22 @@ class MitreDefaultLoader:
                 name = rule.get("name")
                 own = {"id": row["id"], "name": name, "generate": content["generate"],
                        "tags": content["tags"], "correlation": content["correlation"]}
-                deps = [r for ref in self._references(rule) for r in bases[str(ref)]["replay"]]
+                if self._reads_alerts(rule):
+                    deps = [r for b in {id(b): b for b in bases.values()}.values() for r in b["replay"]]
+                else:
+                    deps = [r for ref in self._references(rule) for r in bases[str(ref)]["replay"]]
+                deps = list({d["id"]: d for d in deps}.values())
                 base = {"ref": str(name) if name else row["id"], "replay": deps + [own]}
                 bases[str(rule["id"])] = base
                 if name:
                     bases[str(name)] = base
         return rows, awaiting
+
+    @classmethod
+    def _reads_alerts(cls, rule: Dict[str, Any]) -> bool:
+        from correlation import is_alert_reference
+
+        return any(is_alert_reference(str(r)) for r in cls._references(rule))
 
     @staticmethod
     def _references(rule: Dict[str, Any]) -> List[Any]:
