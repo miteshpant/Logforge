@@ -536,3 +536,33 @@ def test_rule_drafting_needs_rule_authors(api, rule_store):
     payload = {"description": item["description"], "samples": item["attack"], "technique": item["technique"]}
     assert api.post("/v1/ai/rule-draft", headers=viewer, json=payload).status_code == 403
     assert api.post("/v1/ai/rule-draft", headers=ACME, json={**payload, "samples": []}).status_code == 422
+
+
+# -- Phase 10: case reports -------------------------------------------------------------------
+
+@pytest.fixture
+def report_data(monkeypatch):
+    from test_ai_case_report import install_fakes
+
+    install_fakes(monkeypatch)
+
+
+def test_case_report_without_ai(api, report_data):
+    r = api.post("/v1/ai/case-report", headers=ACME, json={"case_id": "c-7", "audience": "review"})
+    body = r.json()
+    assert r.status_code == 200, r.text
+    assert body["mode"] == "template" and body["reason_code"] == "tenant_off"
+    assert body["markdown"].startswith("# bastion-01 compromise: Post-incident review")
+    assert api.post("/v1/ai/case-report", headers=ACME, json={"case_id": "nope"}).status_code == 404
+    assert api.post("/v1/ai/case-report", headers=ACME, json={"case_id": "c-7", "audience": "board"}).status_code == 422
+
+
+def test_case_report_with_ai_is_audited(api, report_data):
+    import json as _json
+
+    opt_in(api)
+    api.state["provider"] = ScriptedProvider(answer(_json.dumps({"summary": ["Root was compromised [C2]."]})))
+    api.state["provider"].name = "claude"
+    body = api.post("/v1/ai/case-report", headers=ACME, json={"case_id": "c-7"}).json()
+    assert body["mode"] == "ai" and body["audience"] == "management" and "Root was compromised" in body["markdown"]
+    assert all(e["feature"] == "case_report" for e in api.audit.rows)

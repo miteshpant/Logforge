@@ -1214,6 +1214,30 @@
         "title": "CaseCreate",
         "type": "object"
       },
+      "CaseReportBody": {
+        "properties": {
+          "audience": {
+            "default": "management",
+            "enum": [
+              "management",
+              "review"
+            ],
+            "title": "Audience",
+            "type": "string"
+          },
+          "case_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Case Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "case_id"
+        ],
+        "title": "CaseReportBody",
+        "type": "object"
+      },
       "CaseUpdate": {
         "properties": {
           "description": {
@@ -10022,6 +10046,50 @@
         "summary": "Save Baseline",
         "tags": [
           "ai"
+        ]
+      }
+    },
+    "/v1/ai/case-report": {
+      "post": {
+        "description": "An incident summary for management, or a post-incident review, from the case and its timeline. Every\nsentence cites the case, an alert or a timeline entry; `markdown` is the report for sharing.",
+        "operationId": "ai_case_report_v1_ai_case_report_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseReportBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Ai Case Report V1 Ai Case Report Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ai Case Report",
+        "tags": [
+          "ai-assistant"
         ]
       }
     },

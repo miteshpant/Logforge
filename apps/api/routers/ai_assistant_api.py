@@ -8,6 +8,7 @@ Permissions (checked here with the caller's roles, and by the middleware):
   POST /nl2query                        ai:read and logs:read
   POST /copilot/plan, /copilot/run     ai:read; searches run with the caller's own permissions
   POST /rule-draft, /rule-draft/enable ai:read and security:write; enabling re-runs the gate and a backtest
+  POST /case-report                     ai:read; the case is read with the caller's own permissions
   POST /explain                         ai:read and logs:read
   POST /pipeline-draft                  ai:read and logs:write (who may edit pipelines)
   POST /triage                          ai:read; the evidence is read with
@@ -83,6 +84,11 @@ class RuleEnableBody(BaseModel):
     known_good: Any = None
     backtest_days: int = Field(7, ge=1, le=30)
     max_alerts_per_day: float = Field(50, ge=0)
+
+
+class CaseReportBody(BaseModel):
+    case_id: str = Field(..., min_length=1, max_length=128)
+    audience: Literal["management", "review"] = "management"
 
 
 class SettingsBody(BaseModel):
@@ -473,3 +479,37 @@ async def ai_rule_draft_enable(body: RuleEnableBody, request: Request,
         row["created_by"] = "ai-draft"
     counts = await store.apply(customer_id, plan)
     return {"enabled": True, "rule_id": rule["id"], "created": counts.get("created", 0), "backtest": summary}
+
+
+@router.post("/case-report")
+async def ai_case_report(body: CaseReportBody, request: Request, customer_id: str = MiddlewareTenant) -> dict[str, Any]:
+    """An incident summary for management, or a post-incident review, from the case and its timeline. Every
+    sentence cites the case, an alert or a timeline entry; `markdown` is the report for sharing."""
+    from ai.case_report import gather, markdown, template, write
+    from ai.tools import ToolContext
+
+    _require(request, customer_id, "ai:read:tenant")
+    roles = getattr(request.state, "roles", None) or []
+    try:
+        bundle = await gather(body.case_id, ToolContext(tenant_id=customer_id, user_id=_user_id(request), roles=roles))
+    except LookupError:
+        raise HTTPException(status_code=404, detail=f"case {body.case_id} not found")
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        raise internal_error(e, "Failed to read the case", customer_id=customer_id)
+    try:
+        async with assistant.ai_session(tenant_id=customer_id, user_id=_user_id(request), roles=roles,
+                                        feature="case_report") as session:
+            report = await write(bundle, body.audience, session.provider, redactor=session.redactor, session=session)
+            return {**report, "markdown": markdown(report), "provider": session.provider_info(),
+                    "request_id": session.request_id}
+    except assistant.AIUnavailable as e:
+        report = template(bundle, body.audience)
+        return {**report, "markdown": markdown(report), "reason_code": e.code, "reason": str(e), "provider": None}
+    except assistant.LimitExceeded as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    except ProviderError as e:
+        raise HTTPException(status_code=502, detail=f"The AI provider failed: {e}")
+    except Exception as e:
+        raise internal_error(e, "The case report failed", customer_id=customer_id)
