@@ -167,6 +167,40 @@ async function main() {
   await page.waitForTimeout(800)
   await shot(page, 'ai-pipeline-draft')
 
+  // AI wave 2 (Phase 10), with AI off: the copilot on the analyst's case, a review report, a drafted rule.
+  await page.goto(`${UI}/security/cases`, { waitUntil: 'load' })
+  await page.getByTestId('case-row').filter({ hasText: 'investigating' }).first().getByRole('link').click()
+  await page.getByTestId('copilot-plan').click()
+  await page.getByTestId('copilot-step').first().waitFor({ timeout: 20000 })
+  await page.getByTestId('copilot-run').click()
+  await page.getByTestId('copilot-event').first().waitFor({ timeout: 30000 })
+  await page.getByTestId('copilot-panel').scrollIntoViewIfNeeded()
+  await page.getByTestId('copilot-result').scrollIntoViewIfNeeded()
+  await page.waitForTimeout(800)
+  await shot(page, 'ai-copilot')
+  await page.getByTestId('case-report-audience').selectOption('review')
+  await page.getByTestId('case-report-run').click()
+  await page.getByTestId('case-report-title').waitFor({ timeout: 20000 })
+  await page.getByTestId('case-report-panel').scrollIntoViewIfNeeded()
+  await page.waitForTimeout(800)
+  await shot(page, 'ai-case-report')
+
+  await page.goto(`${UI}/security/rules`, { waitUntil: 'load' })
+  await page.getByTestId('rule-draft-toggle').click()
+  await page.getByTestId('rule-draft-description').fill('Volume shadow copies deleted, as ransomware does before encrypting')
+  await page.getByTestId('rule-draft-technique').fill('T1490')
+  await page.getByTestId('rule-draft-samples').fill([
+    '{"event_type": "process_creation", "process_name": "vssadmin.exe", "command_line": "vssadmin.exe delete shadows /all /quiet", "hostname": "WS-051"}',
+    '{"event_type": "process_creation", "process_name": "vssadmin.exe", "command_line": "vssadmin delete shadows /for=C: /quiet", "hostname": "WS-043"}',
+  ].join('\n'))
+  await page.getByTestId('rule-draft-known-good').fill(
+    '{"event_type": "process_creation", "process_name": "vssadmin.exe", "command_line": "vssadmin.exe list shadows", "hostname": "WS-043"}')
+  await page.getByTestId('rule-draft-run').click()
+  await page.getByTestId('rule-draft-yaml').waitFor({ timeout: 20000 })
+  await page.getByTestId('rule-draft').scrollIntoViewIfNeeded()
+  await page.waitForTimeout(800)
+  await shot(page, 'ai-rule-draft')
+
   await browser.close()
   if (errors.length) {
     console.error('page errors:', errors)

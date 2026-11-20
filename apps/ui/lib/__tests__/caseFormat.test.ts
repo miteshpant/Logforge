@@ -61,3 +61,27 @@ describe('evidenceHref', () => {
     expect(evidenceHref({ kind: 'event', ref: 'e1' })).toBeNull()
   })
 })
+
+describe('taking evidence back (Phase 10)', () => {
+  it('describes an unpin and tells current pins from taken-back ones', async () => {
+    const { currentEvidence } = await import('../caseFormat')
+    expect(describeEvent({ id: 'u', case_id: 'c', ts: '', actor: 'alice', kind: 'evidence_unpinned', data: { evidence_id: 'e1' } } as any))
+      .toBe('alice took back a pinned item')
+    const timeline = [
+      { id: 'e1', kind: 'evidence_pinned', data: { kind: 'search', ref: 'a' } },
+      { id: 'e2', kind: 'evidence_pinned', data: { kind: 'event', ref: 'b' } },
+      { id: 'u1', kind: 'evidence_unpinned', data: { evidence_id: 'e1' } },
+    ] as any
+    expect(currentEvidence({ timeline } as any).map(e => e.id)).toEqual(['e2'])
+    expect(currentEvidence({ timeline, evidence: [timeline[0]] } as any).map(e => e.id)).toEqual(['e1'])
+  })
+})
+
+describe('links in Logforge', () => {
+  it('opens same-site paths but not protocol-relative ones', () => {
+    expect(evidenceHref({ kind: 'link', ref: '/observability/logs?logql=x' })).toBe('/observability/logs?logql=x')
+    expect(evidenceHref({ kind: 'link', ref: '//evil.example/x' })).toBeNull()
+    expect(evidenceHref({ kind: 'link', ref: '/\\evil.example' })).toBeNull()
+    expect(evidenceHref({ kind: 'link', ref: 'javascript:alert(1)' })).toBeNull()
+  })
+})

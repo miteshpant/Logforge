@@ -106,3 +106,50 @@ export const triage = (kind: 'alert' | 'case', id: string) => post<CitedSummary>
 export const explainEvent = (event: Record<string, unknown>) => post<Explanation>('/v1/ai/explain', { event })
 export const draftPipeline = (samples: string[], service: string) =>
   post<PipelineDraft>('/v1/ai/pipeline-draft', { samples, service })
+
+// -- Phase 10 ----------------------------------------------------------------------------
+
+export type CopilotSubject =
+  | { kind: 'case' | 'alert'; id: string }
+  | { kind: 'entity'; type: 'src_ip' | 'dst_ip' | 'user' | 'hostname'; value: string; at?: string }
+
+export interface CopilotStep {
+  id?: string; title: string; query: string; start: string; end: string; why?: string
+  entity?: { type: string; value: string } | null; value?: string
+}
+export interface CopilotPlan { subject: { kind: string; id: string; title?: string }; anchor: string; steps: CopilotStep[] }
+export interface CopilotEvent {
+  cid: string; ts: string; service?: string; host?: string; level?: string; msg: string; src_ip?: string; user_id?: string
+  steps: string[]; link: string; signals: string[]; score: number
+}
+export interface CopilotResult extends Fallback {
+  subject: { kind: string; id: string; title?: string }
+  anchor: string
+  mode: 'ai' | 'template'
+  steps: (CopilotStep & { cite?: string; link?: string; events: number; rows: Record<string, any>[]; error: string | null })[]
+  timeline: CopilotEvent[]
+  root_cause: string[]
+  hypotheses: string[]
+  next_steps: CopilotStep[]
+  citations: AICitation[]
+  dropped: string[]
+  flags: string[]
+}
+export interface RuleDraft extends Fallback {
+  yaml: string; rule: Record<string, any>; passed: boolean; mode: 'ai' | 'heuristic'; flags: string[]
+  attempts: { attempt: number; by: 'model' | 'heuristic'; passed: boolean; reason: string | null }[]
+}
+export interface RuleEnabled { enabled: boolean; rule_id: string; created: number; backtest: Record<string, any> }
+export interface CaseReport extends CitedSummary {
+  audience: 'management' | 'review'; title: string; markdown: string
+}
+
+export const copilotPlan = (subject: CopilotSubject) => post<CopilotPlan>('/v1/ai/copilot/plan', { subject })
+export const copilotRun = (subject: CopilotSubject, steps: CopilotStep[]) =>
+  post<CopilotResult>('/v1/ai/copilot/run', { subject, steps })
+export const draftRule = (body: { description: string; samples: unknown[]; technique?: string; known_good?: unknown;
+  level?: string }) => post<RuleDraft>('/v1/ai/rule-draft', body)
+export const enableRule = (body: { yaml: string; samples?: unknown[]; known_good?: unknown; backtest_days?: number;
+  max_alerts_per_day?: number }) => post<RuleEnabled>('/v1/ai/rule-draft/enable', body)
+export const caseReport = (caseId: string, audience: 'management' | 'review') =>
+  post<CaseReport>('/v1/ai/case-report', { case_id: caseId, audience })

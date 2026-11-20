@@ -35,6 +35,15 @@ const FLAGS: Record<string, string> = {
   related_activity_failed: "Related activity couldn't be looked up.",
   intel_not_permitted: "Threat intelligence wasn't checked: you don't have permission to read it.",
   intel_lookup_failed: "Threat intelligence couldn't be checked.",
+  // Phase 10
+  fabricated_evidence_dropped: 'The model named evidence not among the events fetched; it was removed.',
+  model_draft_failed: "The model's drafts failed the checks twice, so the heuristic draft is shown instead.",
+  steps_not_permitted: "Some searches weren't run: you don't have permission to search logs.",
+  timeline_truncated: 'The timeline holds the first 200 events found.',
+  corroboration_not_permitted: "The root cause wasn't checked against the logs: you don't have permission to search them.",
+  corroboration_failed: "The root cause couldn't be checked against the logs.",
+  model_unavailable: 'The model was unavailable, so the statistical analysis is shown.',
+  analysis_failed: 'The cited analysis could not be built; the statistical result is shown.',
 }
 
 export function flagMessages(flags: string[]): string[] {
@@ -79,6 +88,7 @@ const FALLBACKS: Record<string, string> = {
   rule_based: 'Rule-based draft (AI off)',
   template: 'Built from the evidence, without AI',
   heuristic: 'Heuristic draft, without AI',
+  statistical: 'Statistical analysis, without AI',
 }
 
 /** How an answer was made when no model made it; null for model answers. */
@@ -114,4 +124,33 @@ export function eventForExplain(log: {
   for (const key of LIFTED) if (attrs[key] !== undefined) event[key] = attrs[key]
   event.attrs = attrs
   return event
+}
+
+// -- Phase 10: copilot, reports -------------------------------------------------------------
+
+/** "bastion-01 compromise: Post-incident review" -> "bastion-01-compromise-post-incident-review.md" */
+export function reportFilename(title: string): string {
+  const slug = (title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80)
+  return `${slug || 'case-report'}.md`
+}
+
+/** How strongly a copilot timeline event stands out: none, weak (a signal) or strong (a root-cause candidate). */
+export function signalTone(score: number): 'none' | 'weak' | 'strong' {
+  if (score >= 3) return 'strong'
+  return score > 0 ? 'weak' : 'none'
+}
+
+/** Pasted samples, one per line: a JSON object, or the raw line (Phase 10 rule drafting). */
+export function parseSamples(text: string): (Record<string, unknown> | string)[] {
+  return (text || '').split('\n').map(line => line.trim()).filter(Boolean).map(line => {
+    if (line.startsWith('{')) {
+      try {
+        const value = JSON.parse(line)
+        if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>
+      } catch {
+        /* not JSON: keep the line */
+      }
+    }
+    return line
+  })
 }

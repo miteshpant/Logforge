@@ -192,3 +192,16 @@ def test_an_unusable_answer_keeps_the_template():
     out = run_(copilot.write(template, context, Scripted("hmm"), redactor=Redactor([])))
     assert out["mode"] == "template" and "model_answer_unusable" in out["flags"]
     assert out["hypotheses"] == template["hypotheses"]
+
+
+def test_a_burst_of_failures_without_a_success_is_a_lead_when_nothing_stronger_is_found():
+    timeline = [{"cid": f"C{i}", "ts": f"2026-11-19T02:10:{i:02d}+00:00", "msg": "authentication attempt",
+                 "src_ip": "198.18.1.2", "user_id": "deploy",
+                 "_event": {"msg": "authentication attempt", "attrs": {"result": "failed"}}} for i in range(1, 7)]
+    copilot._signals(timeline)
+    assert "the first of 6 failed logins from 198.18.1.2" in timeline[0]["signals"]
+    assert copilot._root_cause(timeline) == ["C1"]
+    # a single failed login is no lead
+    single = [dict(timeline[0], signals=[], score=0)]
+    copilot._signals(single)
+    assert copilot._root_cause(single) == []

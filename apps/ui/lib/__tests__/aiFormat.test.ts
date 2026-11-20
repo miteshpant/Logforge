@@ -95,3 +95,33 @@ describe('eventForExplain', () => {
     })
   })
 })
+
+// -- Phase 10 --------------------------------------------------------------------------
+import { reportFilename, signalTone } from '../aiFormat'
+
+describe('Phase 10 helpers', () => {
+  it('labels the statistical RCA and the new flags', () => {
+    expect(fallbackLabel('statistical')).toBe('Statistical analysis, without AI')
+    expect(flagMessages(['fabricated_evidence_dropped'])[0]).toMatch(/not among the events fetched/)
+    expect(flagMessages(['model_draft_failed'])[0]).toMatch(/heuristic draft/)
+  })
+  it('names a report file from its title', () => {
+    expect(reportFilename('bastion-01 compromise: Post-incident review')).toBe('bastion-01-compromise-post-incident-review.md')
+    expect(reportFilename('')).toBe('case-report.md')
+  })
+  it('colours a timeline event by its score', () => {
+    expect(signalTone(0)).toBe('none')
+    expect(signalTone(1.5)).toBe('weak')
+    expect(signalTone(3)).toBe('strong')
+  })
+})
+
+import { parseSamples } from '../aiFormat'
+
+describe('parseSamples', () => {
+  it('reads one event per line: a JSON object, or the raw line', () => {
+    expect(parseSamples('{"command_line": "vssadmin delete shadows"}\nFailed password for root\n\n  \n'))
+      .toEqual([{ command_line: 'vssadmin delete shadows' }, 'Failed password for root'])
+    expect(parseSamples('{not json')).toEqual(['{not json'])
+  })
+})

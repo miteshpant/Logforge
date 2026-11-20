@@ -45,6 +45,8 @@ MAX_STEPS = 8
 MAX_TIMELINE = 200
 MAX_PIVOTS = 3
 MAX_ENTITIES = 4
+BURST = 5  # failed logins from one source that make a burst
+_RULE_WEIGHT = {"low": 1, "medium": 2, "high": 3, "critical": 3}
 IP_TYPES = ("src_ip", "dst_ip")
 ENTITY_TYPES = ("src_ip", "dst_ip", "user", "hostname")
 WINDOWS = {  # (before the anchor, after it)
@@ -247,9 +249,9 @@ def _signals(timeline: list[dict[str, Any]]) -> None:
         score = 0.0
         for rule in matching_rules(entry.get("_event") or {}):
             signals.append(f"matches the rule \"{rule.get('title')}\"")
-            score += 3 if str(rule.get("level")) in ("high", "critical") else 2
+            score += _RULE_WEIGHT.get(str(rule.get("level")), 1)
         source = str(entry.get("src_ip") or entry.get("user_id") or "")
-        if _FAILED.search(msg):
+        if _FAILED.search(msg) or _failed_result(entry.get("_event") or {}):
             score += 0.5
             failures.setdefault(source, []).append(entry)
         elif _SUCCESS.search(msg) and source:
@@ -263,6 +265,19 @@ def _signals(timeline: list[dict[str, Any]]) -> None:
                 signals.append(label)
                 score += weight
         entry["signals"], entry["score"] = signals, score
+    for source, events in failures.items():
+        if len(events) >= BURST and not any(e.get("after_failures") for e in timeline if
+                                            str(e.get("src_ip") or e.get("user_id") or "") == source):
+            first = events[0]
+            first["signals"].append(f"the first of {len(events)} failed logins from {source}")
+            # a lead when nothing stronger was found (2), never a strong root cause on its own (3)
+            first["score"] = max(first["score"] + 0.5, 2.0)
+
+
+def _failed_result(event: dict[str, Any]) -> bool:
+    attrs = event.get("attrs") if isinstance(event.get("attrs"), dict) else {}
+    return any(str(attrs.get(k) or event.get(k) or "").lower() in ("failed", "failure")
+               for k in ("result", "outcome"))
 
 
 # -- running ---------------------------------------------------------------------
