@@ -80,6 +80,16 @@ markers).
   persistent per-tenant index with type history. LogforgeQL extraction
   uses RE2, so no lookaround or backreferences, and allows at most 32
   extracted fields per query.
+- **AI follow-ups from Phase 10** ([guide](./ai.md#investigation-and-authoring-phase-10)):
+  - **Record the models:** `record_copilot.py` (needs ClickHouse) and
+    `record_rule_draft.py`, then commit the recordings and baselines.
+  - **Unseen attacks:** add copilot scenarios and drafting behaviours written
+    by someone other than the author of the signals and the drafter.
+  - **Signals beyond keywords:** use rarity (first time a process, domain or
+    address is seen for a host or user) so roots with no known signal, like
+    a payload download, are found.
+  - **Case report evaluation:** a labelled set with required facts.
+  - **Drafting:** count and correlation rules are out of scope for drafts.
 - **AI follow-ups from Phase 9** ([guide](./ai.md#features-phase-9)):
   - **Record the models:** run `tests/eval/ai/record_nl2query_exec.py`,
     `record_triage.py`, `record_pipeline_draft.py` and `record_explain.py`

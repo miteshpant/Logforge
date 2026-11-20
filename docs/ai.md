@@ -155,6 +155,12 @@ key), so the gate currently reports both features as skipped.
 | `POST /v1/ai/triage` | `ai:read`; evidence read with the caller's own permissions | a cited triage summary of an alert or case (`mode: ai` or `template`) |
 | `POST /v1/ai/explain` | `ai:read` and `logs:read` | a cited explanation of one event (`mode: ai` or `template`) |
 | `POST /v1/ai/pipeline-draft` | `ai:read` and `logs:write` | a pipeline for sample lines, with its simulation report (`mode: ai` or `heuristic`) |
+| `POST /v1/ai/copilot/plan` | `ai:read`; searches run with the caller's own permissions | proposed read-only searches for a case, alert or entity; nothing runs |
+| `POST /v1/ai/copilot/run` | `ai:read` | runs the approved steps: cited timeline, root-cause candidates, hypotheses, next steps (`mode: ai` or `template`) |
+| `POST /v1/ai/rule-draft` | `ai:read` and `security:write` | a Sigma rule with fixtures, tested; nothing saved (`mode: ai` or `heuristic`) |
+| `POST /v1/ai/rule-draft/enable` | `ai:read` and `security:write` | re-checks a draft, backtests it, enables it; refuses (409) anything that fails |
+| `POST /v1/ai/case-report` | `ai:read`; the case is read with the caller's own permissions | a management summary or post-incident review, cited, with Markdown |
+| `DELETE /v1/security/cases/{id}/evidence/{pin}` | `security:write` | takes back a pin (it stays in the timeline, marked) |
 
 Tenant admins, security analysts and DevOps engineers have `ai:read`.
 
@@ -218,6 +224,67 @@ can't know which field holds what in a schema (that a sign-in is
 `attrs.outcome` in the auth services). The target is for the model. The
 triage set has no analyst ratings yet; the roadmap asks for analyst-rated
 helpfulness and accuracy, which needs people.
+
+## Investigation and authoring (Phase 10)
+
+**Investigation copilot** (case detail; `POST /v1/ai/copilot/plan`, `/run`).
+From a case, an alert or an entity (address, user, host, optionally at a
+time), it proposes read-only searches around the anchor (the alert's time):
+what else an address touched and its events, what happened on a host in the
+six hours before, what a user did. The analyst keeps, drops or edits them,
+then runs them; each runs through the assistant's tool as the analyst.
+Events become a timeline, each a citation. Signals score them: a shipped
+detection rule matches (weighted by its level), a login succeeds after
+failures from the same source, an account is created or made admin,
+credential dumping, logs or backups destroyed, an obfuscated or
+reverse-shell command, a web shell, a download to /tmp, persistence. The
+earliest strong signals are the root-cause candidates; the first of a burst
+of failures is a lead when nothing stronger is found. Entities in
+suspicious events become proposed next searches. With AI the model writes
+the hypotheses, root cause and next steps; a root cause that isn't a fetched
+event, or a sentence that cites nothing, is dropped. Nothing is written by
+the copilot: pinning an event and recording a conclusion are the analyst's
+buttons, and a pin can be taken back.
+
+**Detection drafting** (Detection Rules → Draft a rule; `POST /v1/ai/rule-draft`).
+"AI drafts, the gate verifies." From a description, the technique, attack
+events and one known-good event, a Sigma rule with fixtures is drafted. It
+passes only when the Phase 1 fixture gate accepts it, it fires on every
+attack sample and not on the known-good one; two attempts, the second told
+why the first failed. Without AI the rule comes from what the samples share
+(fields with one value; tokens and word pairs every sample has and the
+known-good one doesn't; a common domain suffix). Enabling
+(`/rule-draft/enable`) checks everything again and backtests the rule over
+the tenant's stored logs against a ceiling of alerts per day; a rule that
+fails is refused and nothing is written, so no draft is enabled without
+passing.
+
+**Case reports** (case detail → Report; `POST /v1/ai/case-report`): a
+summary for management (summary, impact, status) or a post-incident review
+(detection, response times, findings, actions), every sentence citing the
+case, an alert or a timeline entry, downloadable as Markdown.
+
+**Grounded RCA** (`/v1/ai/analyze-incident`, `/v1/ai/investigate`): the
+statistical engine's result stays the input; its findings become citations
+and one search corroborates the root cause (the service's errors in the 30
+minutes around it). The response's `analysis` is the cited statistical
+reading without AI, or the model's with a provider, whose root cause and
+recommendations then replace the heuristic text (the originals stay under
+`statistical`).
+
+### Evaluation numbers (Phase 10)
+
+Measured on 2026-11-20 ([details](https://github.com/miteshpant/Logforge/blob/main/tests/eval/ai/README.md)).
+No model's answers are recorded yet; each has a recorder and a CI test.
+
+| Feature | Set | Target | AI off | Model |
+|---|---|---|---|---|
+| Investigation copilot | 20 seeded scenarios, live ClickHouse | root cause found in >= 80%, no fabricated evidence | found 90%, first 80%, 0 fabricated | not recorded (0 fabricated by construction) |
+| Detection drafting | 20 behaviours, 17 techniques | >= 70% pass the gate within 2 attempts; 0% enabled without passing | 90% pass (all first attempt); held-out recall 88.9%, quiet 100%; enabling re-checks and refuses failing drafts | not recorded |
+
+The scenarios and behaviours were written alongside the copilot's signals
+and the drafter, so they show the methods work, not how they do on attacks
+nobody anticipated.
 
 ## Security review
 
