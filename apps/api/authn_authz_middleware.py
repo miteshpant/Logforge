@@ -460,7 +460,7 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in WRITE_METHODS:
             return "settings:write:tenant"
         return "settings:read:tenant"
-    elif path in ("/v1/ai/status", "/v1/ai/usage", "/v1/ai/ask"):
+    elif path in ("/v1/ai/status", "/v1/ai/usage", "/v1/ai/ask", "/v1/ai/nl2query"):
         # Asking is read-only: the model's tools only read, as the person asking.
         return "ai:read:tenant"
     elif path.startswith("/v1/ai"):

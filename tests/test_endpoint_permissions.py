@@ -28,6 +28,7 @@ def test_mutating_methods_need_write(path, read, write):
     ("GET", "/v1/ai/status", "ai:read:tenant"),
     ("GET", "/v1/ai/usage", "ai:read:tenant"),
     ("POST", "/v1/ai/ask", "ai:read:tenant"),          # read-only: the tools only read
+    ("POST", "/v1/ai/nl2query", "ai:read:tenant"),     # drafts a query; reads only the field catalogue
     ("GET", "/v1/ai/settings", "settings:read:tenant"),  # tenant admin
     ("PUT", "/v1/ai/settings", "settings:write:tenant"),
     ("GET", "/v1/ai/audit", "settings:read:tenant"),

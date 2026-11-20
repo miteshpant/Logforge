@@ -18,6 +18,8 @@ import json
 import time
 import uuid
 from collections import defaultdict, deque
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -202,25 +204,47 @@ async def usage(tenant_id: str) -> dict[str, Any]:
 
 # -- answering --------------------------------------------------------------------------
 
-async def answer(question: str, *, tenant_id: str, user_id: str, roles: list[dict[str, Any]],
-                 feature: str = "ask") -> dict[str, Any]:
+@dataclass
+class AISession:
+    """One AI request: the provider, redaction, audit and limits. Features call
+    `chat` (one audited model call) or pass `audit` / `before_call` to the
+    orchestrator."""
+
+    request_id: str
+    tenant_id: str
+    user_id: str
+    roles: list[dict[str, Any]]
+    feature: str
+    provider: Any
+    provider_settings: ProviderSettings
+    redactor: Redactor
+    limits: dict[str, Any]
+    config: AIConfig
+    audit: Any
+    before_call: Any
+
+    def provider_info(self) -> dict[str, Any]:
+        return {"name": self.provider_settings.name, "model": getattr(self.provider, "model", self.provider_settings.model),
+                "external": bool(self.provider_settings.external),
+                "label": self.provider_settings.label or self.provider_settings.name}
+
+    async def chat(self, messages: list, tools: list | None = None, max_tokens: int | None = None):
+        """One model call: content must already be redacted. Audits the prompt and the response."""
+        await self.audit("prompt", {"messages": [{"role": m.role, "content": m.content} for m in messages]})
+        await self.before_call()
+        result = await self.provider.chat(messages, tools or [], max_tokens=max_tokens or self.config.max_tokens)
+        await self.audit("response", {"text": result.text, "stop_reason": result.stop_reason}, result.usage)
+        return result
+
+
+@asynccontextmanager
+async def ai_session(*, tenant_id: str, user_id: str, roles: list[dict[str, Any]], feature: str):
+    """Raises AIUnavailable when AI is off for this tenant (callers fall back),
+    LimitExceeded over a budget or rate limit, ProviderError when the provider
+    can't be built. Audit rows are written as the request goes and on exit."""
     config = load_config()
     settings = await get_settings(tenant_id)
-    try:
-        provider_settings = resolve(settings, config)
-    except AIUnavailable as e:
-        # The rule-based NLQ checks no per-intent permissions (it reads logs,
-        # alerts and security events directly), so only those allowed to use
-        # it through /v1/ai/query get its answer.
-        from authn_authz_middleware import check_permission
-
-        if not check_permission(roles, "ai:write:tenant", tenant_id):
-            return {"mode": "off", "reason_code": e.code, "reason": str(e), "text": "", "citations": [],
-                    "grounded": False, "flags": [], "provider": None}
-        fallback = await _rule_based(question, tenant_id)
-        return {"mode": "rule_based", "reason_code": e.code, "reason": str(e), "citations": [], "grounded": False,
-                "flags": ["rule_based"], "provider": None, **fallback}
-
+    provider_settings = resolve(settings, config)
     limits = effective(settings, config)
     audit_store = _audit_store()
     now = datetime.now(timezone.utc)
@@ -235,21 +259,21 @@ async def answer(question: str, *, tenant_id: str, user_id: str, roles: list[dic
         raise ProviderError(f"{provider_settings.name}: the provider is not configured correctly") from None
 
     request_id = str(uuid.uuid4())
-    rows: list[dict[str, Any]] = []
-    spent = {"tokens": 0}
+    pending: list[dict[str, Any]] = []
+    spent = {"tokens": 0, "seq": 0}
 
     async def audit(kind: str, content: Any, usage_=None) -> None:
         tokens_in = usage_.input_tokens if usage_ else 0
         tokens_out = usage_.output_tokens if usage_ else 0
         spent["tokens"] += tokens_in + tokens_out
-        rows.append({"tenant_id": tenant_id, "request_id": request_id, "seq": len(rows),
-                     "ts": datetime.now(timezone.utc), "user_id": user_id, "feature": feature, "kind": kind,
-                     "provider": provider_settings.name, "model": getattr(provider, "model", provider_settings.model),
-                     "external": int(provider_settings.external),
-                     "content": content if isinstance(content, str) else json.dumps(content, default=str),
-                     "input_tokens": tokens_in, "output_tokens": tokens_out})
-
-    pending: list[dict[str, Any]] = rows  # rows not yet written
+        pending.append({"tenant_id": tenant_id, "request_id": request_id, "seq": spent["seq"],
+                        "ts": datetime.now(timezone.utc), "user_id": user_id, "feature": feature, "kind": kind,
+                        "provider": provider_settings.name,
+                        "model": getattr(provider, "model", provider_settings.model),
+                        "external": int(provider_settings.external),
+                        "content": content if isinstance(content, str) else json.dumps(content, default=str),
+                        "input_tokens": tokens_in, "output_tokens": tokens_out})
+        spent["seq"] += 1
 
     async def flush() -> None:
         if pending:
@@ -268,11 +292,12 @@ async def answer(question: str, *, tenant_id: str, user_id: str, roles: list[dic
         if max(month, used + spent["tokens"]) >= limits["monthly_token_budget"]:
             raise LimitExceeded("this tenant's monthly AI token budget ran out during the request")
 
-    ctx = ToolContext(tenant_id=tenant_id, user_id=user_id, roles=roles)
+    session = AISession(request_id=request_id, tenant_id=tenant_id, user_id=user_id, roles=roles, feature=feature,
+                        provider=provider, provider_settings=provider_settings,
+                        redactor=Redactor(limits["redact_fields"]), limits=limits, config=config,
+                        audit=audit, before_call=before_call)
     try:
-        result = await ask(question, provider=provider, ctx=ctx, redactor=Redactor(limits["redact_fields"]),
-                           audit=audit, max_tool_calls=limits["max_tool_calls"], max_tokens=config.max_tokens,
-                           before_call=before_call, label=provider_settings.label or provider_settings.name)
+        yield session
     except (ProviderError, LimitExceeded) as e:
         await audit("error", {"error": str(e)})
         raise
@@ -289,7 +314,30 @@ async def answer(question: str, *, tenant_id: str, user_id: str, roles: list[dic
                 await audit_store.apply_retention(config.audit_retention_days)
         except Exception as e:  # retention is maintenance
             logger.warning("Could not apply AI audit retention", error=str(e))
-    return {**result.to_public(), "request_id": request_id}
+
+
+async def answer(question: str, *, tenant_id: str, user_id: str, roles: list[dict[str, Any]],
+                 feature: str = "ask") -> dict[str, Any]:
+    try:
+        async with ai_session(tenant_id=tenant_id, user_id=user_id, roles=roles, feature=feature) as session:
+            ctx = ToolContext(tenant_id=tenant_id, user_id=user_id, roles=roles)
+            result = await ask(question, provider=session.provider, ctx=ctx, redactor=session.redactor,
+                               audit=session.audit, max_tool_calls=session.limits["max_tool_calls"],
+                               max_tokens=session.config.max_tokens, before_call=session.before_call,
+                               label=session.provider_info()["label"])
+            return {**result.to_public(), "request_id": session.request_id}
+    except AIUnavailable as e:
+        # The rule-based NLQ checks no per-intent permissions (it reads logs,
+        # alerts and security events directly), so only those allowed to use
+        # it through /v1/ai/query get its answer.
+        from authn_authz_middleware import check_permission
+
+        if not check_permission(roles, "ai:write:tenant", tenant_id):
+            return {"mode": "off", "reason_code": e.code, "reason": str(e), "text": "", "citations": [],
+                    "grounded": False, "flags": [], "provider": None}
+        fallback = await _rule_based(question, tenant_id)
+        return {"mode": "rule_based", "reason_code": e.code, "reason": str(e), "citations": [], "grounded": False,
+                "flags": ["rule_based"], "provider": None, **fallback}
 
 
 def public_audit(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

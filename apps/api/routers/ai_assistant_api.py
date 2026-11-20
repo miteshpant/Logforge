@@ -28,6 +28,10 @@ class AskBody(BaseModel):
     question: str = Field(..., min_length=1, max_length=4000)
 
 
+class QuestionBody(BaseModel):
+    question: str = Field(..., min_length=1, max_length=2000)
+
+
 class SettingsBody(BaseModel):
     enabled: bool = False
     provider: str | None = Field(None, max_length=100)
@@ -120,3 +124,42 @@ async def ai_audit(request: Request, request_id: str | None = Query(None, max_le
     except Exception as e:
         raise internal_error(e, "Failed to read the AI audit log", customer_id=customer_id)
     return {"entries": assistant.public_audit(rows)}
+
+
+async def _catalogue(tenant_id: str) -> dict[str, Any]:
+    """The tenant's field catalogue over the last 24 hours (Phase 5)."""
+    from routers.fields_api import field_catalogue
+
+    return await field_catalogue(window="24h", service=None, sample=2000, customer_id=tenant_id, user=None)
+
+
+@router.post("/nl2query")
+async def ai_nl2query(body: QuestionBody, request: Request, customer_id: str = MiddlewareTenant) -> dict[str, Any]:
+    """Draft a LogforgeQL query for a question, explained, for the user to run or edit. The model sees the
+    tenant's field names and redacted example values, never log data. With AI off, a rule-based draft."""
+    from ai.nl2query import rule_based, translate
+
+    _require(request, customer_id, "ai:read:tenant")
+    _require(request, customer_id, "logs:read:tenant")
+    roles = getattr(request.state, "roles", None) or []
+    try:
+        catalogue = await _catalogue(customer_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise internal_error(e, "Failed to read the field catalogue", customer_id=customer_id)
+    try:
+        async with assistant.ai_session(tenant_id=customer_id, user_id=_user_id(request), roles=roles,
+                                        feature="nl2query") as session:
+            draft = await translate(body.question, session.provider, catalogue=catalogue, redactor=session.redactor,
+                                    session=session)
+            return {**draft.to_public(), "provider": session.provider_info(), "request_id": session.request_id}
+    except assistant.AIUnavailable as e:
+        return {**rule_based(body.question, catalogue).to_public(), "reason_code": e.code, "reason": str(e),
+                "provider": None}
+    except assistant.LimitExceeded as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    except ProviderError as e:
+        raise HTTPException(status_code=502, detail=f"The AI provider failed: {e}")
+    except Exception as e:
+        raise internal_error(e, "AI query drafting failed", customer_id=customer_id)

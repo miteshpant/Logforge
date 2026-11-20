@@ -37,12 +37,14 @@ class Scripted:
 
     name, kind, model, external = "scripted", "scripted", "scripted-1", False
 
-    def __init__(self, answers):
-        self.answers = answers
+    def __init__(self, answers, as_json=False):
+        self.answers, self.as_json = answers, as_json
 
     async def chat(self, messages, tools, *, max_tokens=4096, model=None):
         question = messages[-1].content
         text = next(answer for key, answer in self.answers.items() if key in question)
+        if self.as_json:  # nl2query answers {query, explanation}
+            text = json.dumps({"query": text, "explanation": "reference"})
         return ChatResult(text=text, tool_calls=[], stop_reason="end", usage=Usage(1, 1), model=self.model)
 
 
@@ -55,7 +57,7 @@ def test_recording_and_replay_wiring(tmp_path, feature, field, key):
     else:
         answers = {item[key]: item[field] for item in items}
     path = tmp_path / f"{feature}.jsonl"
-    recorded = run_ai_eval.score(feature, RecordedProvider(path, inner=Scripted(answers), record=True))
+    recorded = run_ai_eval.score(feature, RecordedProvider(path, inner=Scripted(answers, as_json=feature == "nl2query"), record=True))
     replayed = run_ai_eval.score(feature, RecordedProvider(path))
     assert recorded["score"] == replayed["score"] == 1.0
     assert len(path.read_text().splitlines()) == len(items)

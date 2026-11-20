@@ -87,10 +87,13 @@ def _looks_like_query(text: str) -> bool:
     return len(text.split()) <= 2 and not re.search(r"[.!?,;]$", text)
 
 
-async def nl2query(question: str, provider, max_tokens: int = 1024) -> str | None:
-    result = await provider.chat([Message(role="system", content=NL2QUERY_PROMPT),
-                                  Message(role="user", content=question)], [], max_tokens=max_tokens)
-    return extract_query(result.text)
+async def nl2query(question: str, provider, max_tokens: int = 1024, catalogue=None) -> str | None:
+    """The product's natural-language-to-query feature (ai.nl2query.translate):
+    the drafted query if it compiled, else None."""
+    from .nl2query import translate
+
+    draft = await translate(question, provider, catalogue=catalogue, max_tokens=max_tokens)
+    return draft.query if draft.valid else None
 
 
 async def summarise(task: str, evidence: dict[str, str], provider, max_tokens: int = 1024) -> str:

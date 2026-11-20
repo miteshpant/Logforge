@@ -237,3 +237,47 @@ def test_usage_is_written_before_each_model_call_and_requests_are_capped(api, mo
 
 async def _fake_logql(body, customer_id):
     return {"logs": [{"service": "api", "n": 1}], "total_count": 1}
+
+
+# -- Phase 9: natural language -> LogforgeQL ----------------------------------------
+
+@pytest.fixture
+def catalogue(monkeypatch):
+    import routers.ai_assistant_api as module
+    from test_ai_nl2query import CATALOGUE
+
+    seen = []
+
+    async def fake(tenant_id):
+        seen.append(tenant_id)
+        return CATALOGUE
+
+    monkeypatch.setattr(module, "_catalogue", fake)
+    return seen
+
+
+def test_nl2query_falls_back_to_rules_when_ai_is_off(api, catalogue):
+    r = api.post("/v1/ai/nl2query", headers=ACME, json={"question": "How many errors did checkout log, per host?"})
+    body = r.json()
+    assert r.status_code == 200 and body["mode"] == "rule_based" and body["reason_code"] == "tenant_off"
+    assert body["query"] == '| where service = "checkout" and level = "error" | stats count() as count by host'
+    assert body["valid"] and body["explanation"] and catalogue == ["acme"]
+    assert api.audit.rows == []
+    # anyone who may ask may get a draft: it reads only the field catalogue
+    analyst = {**ACME, "X-Test-Role": "security_analyst"}
+    assert api.post("/v1/ai/nl2query", headers=analyst, json={"question": "errors per host"}).status_code == 200
+
+
+def test_nl2query_with_ai_is_audited_and_returns_the_models_query(api, catalogue):
+    import json as _json
+
+    opt_in(api)
+    api.state["provider"] = ScriptedProvider(answer(_json.dumps(
+        {"query": '| where level = "error" | stats count() as n by service', "explanation": "Errors per service."})))
+    api.state["provider"].name = "claude"
+    body = api.post("/v1/ai/nl2query", headers=ACME, json={"question": "errors per service"}).json()
+    assert body["mode"] == "ai" and body["valid"] and body["query"].endswith("by service")
+    assert body["provider"]["label"] == "Claude (Anthropic)" and body["request_id"]
+    kinds = [e["kind"] for e in api.get(f"/v1/ai/audit?request_id={body['request_id']}", headers=ACME).json()["entries"]]
+    assert kinds == ["prompt", "response"]
+    assert all(e["feature"] == "nl2query" for e in api.audit.rows)

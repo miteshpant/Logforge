@@ -22,7 +22,8 @@ attrs.password`); the text patterns still apply to it.
 from __future__ import annotations
 
 import re
-from typing import Any, Iterable, List, Tuple
+from collections.abc import Iterable
+from typing import Any
 
 MASK = "[redacted]"
 
@@ -32,7 +33,7 @@ _SECRET_KEYS = (r"(?:password|passwd|pwd|secret|client_secret|aws_secret_access_
 _PAIR = re.compile(r"(?i)(?<![A-Za-z0-9])(" + _SECRET_KEYS + r")(\"?\s*[=:]\s*\"?|\s+is\s+)"
                    r"(\"[^\"]*\"|'[^']*'|[^\s\",;&'}]+)")
 _PATTERNS = [
-    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)", re.S),
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)", re.DOTALL),
     re.compile(r"(?i)(?<=bearer )[A-Za-z0-9._~+/=-]{16,}"),
     re.compile(r"(?i)(?<=basic )[A-Za-z0-9+/=]{12,}"),
     re.compile(r"(?i)(?<=cookie: )[^\r\n]+"),
@@ -51,7 +52,7 @@ def _norm(name: str) -> str:
     return name.lower().replace("-", "_")
 
 
-def _segments(key: str) -> List[str]:
+def _segments(key: str) -> list[str]:
     """db_password -> [db, password]; PasswordHash -> [password, hash]; sessionid -> [sessionid]."""
     spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", key)
     return [p for p in re.split(r"[^a-z0-9]+", spaced.lower()) if p]
@@ -59,8 +60,8 @@ def _segments(key: str) -> List[str]:
 
 class Redactor:
     def __init__(self, fields: Iterable[str]):
-        self.names: List[str] = []
-        self.paths: List[str] = []
+        self.names: list[str] = []
+        self.paths: list[str] = []
         for f in fields:
             f = _norm(str(f).strip())
             if f:
@@ -77,7 +78,7 @@ class Redactor:
         p = _norm(path)
         return any(p == q or p.endswith("." + q) for q in self.paths)
 
-    def text(self, text: str) -> Tuple[str, int]:
+    def text(self, text: str) -> tuple[str, int]:
         count = 0
 
         def pair(m):
@@ -91,7 +92,7 @@ class Redactor:
             count += n
         return text, count
 
-    def redact(self, value: Any, path: str = "") -> Tuple[Any, int]:
+    def redact(self, value: Any, path: str = "") -> tuple[Any, int]:
         if isinstance(value, dict):
             out, total = {}, 0
             for k, v in value.items():

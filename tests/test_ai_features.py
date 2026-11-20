@@ -36,12 +36,12 @@ def run(coro):
 
 
 def test_nl2query_returns_a_compiling_query():
-    provider = Canned('```\n| where service = "auth" | stats count() by level\n```')
-    assert run(nl2query("Break down auth logs by level", provider)) == '| where service = "auth" | stats count() by level'
+    """The evaluated feature is the product's (ai.nl2query.translate)."""
+    q = '| where service = "auth" | stats count() by level'
+    provider = Canned(json.dumps({"query": q, "explanation": "Auth logs by level."}))
+    assert run(nl2query("Break down auth logs by level", provider)) == q
     assert provider.last[0].role == "system" and "LogforgeQL" in provider.last[0].content
-    assert run(nl2query("q", Canned("Sure! Here you go: | where level = \"error\""))) == '| where level = "error"'
     assert run(nl2query("q", Canned("I am not sure what you mean."))) is None
-    assert run(nl2query("q", Canned("| stats nonsense((("))) is None
 
 
 def test_summarise_passes_the_evidence_and_returns_the_text():
