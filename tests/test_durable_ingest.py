@@ -164,3 +164,47 @@ def test_durable_ingest_can_be_turned_off(monkeypatch):
     asyncio.run(ingestion.ingest_logs_batch(background_tasks=tasks, batch=_entries(1), customer_id="t1",
                                             pipeline=None))
     tasks.add_task.assert_called_once()
+
+
+# Even awaited, the publish could still be a buffer: the kafka_main publisher
+# batches 100 events and returned True once an event was buffered, flushing
+# on a timer. A replica killed before the flush lost batches it had already
+# acknowledged (run 2 of the chaos test: 100 events, absent from Kafka).
+
+def test_a_durable_publish_skips_the_batch_buffer():
+    from events.base import BaseEvent, EventMetadata
+    from events.publisher_manager import KafkaEventPublisher, PublisherConfig
+
+    publisher = KafkaEventPublisher.__new__(KafkaEventPublisher)
+    publisher.config = PublisherConfig(name="kafka_main", max_batch_size=100)
+    publisher.is_started = True
+    publisher._pending_events = {}
+    sent = []
+
+    async def single(event, topic):
+        sent.append(topic)
+        return True
+
+    publisher._publish_single = single
+    publisher._get_topic_for_event = lambda event: "log-events"
+    event = BaseEvent(event_type="logs.batch.ingested", customer_id="t1", data={}, metadata=EventMetadata(
+        source_service="test"))
+    assert asyncio.run(publisher.publish(event)) is True
+    assert sent == [] and len(publisher._pending_events["log-events"]) == 1  # buffered
+    assert asyncio.run(publisher.publish(event, durable=True)) is True
+    assert sent == ["log-events"]  # sent and acknowledged now
+
+
+def test_the_durable_ingest_path_asks_for_a_durable_publish(monkeypatch):
+    import dependencies
+
+    calls = []
+
+    class Publisher:
+        async def publish_batch_ingested(self, **kwargs):
+            calls.append(kwargs)
+            return True
+
+    monkeypatch.setattr(dependencies, "log_event_publisher", Publisher())
+    assert asyncio.run(dependencies.publish_logs_durably(_entries(2), "t1", "/logs/batch", "json", 10, 1)) is True
+    assert calls[0]["durable"] is True

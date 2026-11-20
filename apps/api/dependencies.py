@@ -163,7 +163,7 @@ async def publish_logs_durably(logs: List[LogEntry], customer_id: str, endpoint:
     try:
         return bool(await log_event_publisher.publish_batch_ingested(
             customer_id=customer_id, batch_info=batch_info, source_format=format_type,
-            processing_time_ms=float(processing_time_ms)))
+            processing_time_ms=float(processing_time_ms), durable=True))
     except Exception as e:
         logger.error(f"Durable publish failed: {e}")
         return False
