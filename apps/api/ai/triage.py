@@ -126,8 +126,17 @@ def _note_techniques(bundle: Bundle, techniques: list[str], cid: str) -> None:
             bundle.techniques.append({**_technique(tid), "cite": cid})
 
 
-def related_query(value: str) -> str:
-    return f"{json.dumps(value)} | stats count() as events by service, level | sort -events | head 10"
+_RELATED_FIELDS = {"src_ip": ("src_ip", "attrs.src_ip", "attrs.dst_ip"),
+                   "dst_ip": ("src_ip", "attrs.src_ip", "attrs.dst_ip"),
+                   "user": ("user_id", "attrs.user"), "hostname": ("host", "attrs.hostname")}
+
+
+def related_query(value: str, entity: str = "") -> str:
+    """Events involving the value: in the fields that hold that kind of
+    entity, or anywhere in the message."""
+    quoted = json.dumps(value)
+    clauses = [f"{f} = {quoted}" for f in _RELATED_FIELDS.get(entity, ())] + [f"msg contains {quoted}"]
+    return f"| where {' or '.join(clauses)} | stats count() as events by service, level | sort -events | head 10"
 
 
 def _strip_refs(value: Any) -> Any:
@@ -179,7 +188,7 @@ def build_bundle(kind: str, subject_id: str, *, alert: dict[str, Any] | None = N
     for name, values in bundle.entities.items():
         for value in values:
             if value in activity:
-                query = related_query(value)
+                query = related_query(value, name)
                 rows = _strip_refs(activity[value])
                 bundle.add("query", f"activity of {value}, last {RELATED_SINCE}",
                            tool_module._logs_link(query, since=RELATED_SINCE),
@@ -214,9 +223,9 @@ async def gather(kind: str, subject_id: str, ctx: ToolContext) -> Bundle:
     intel: dict[str, list[dict[str, Any]]] = {}
     flags: list[str] = []
     values = [(n, v) for n, vs in first.entities.items() for v in vs][:MAX_RELATED]
-    for _, value in values:
+    for name, value in values:
         try:
-            result = await tool_module.execute("run_query", {"query": related_query(value),
+            result = await tool_module.execute("run_query", {"query": related_query(value, name),
                                                              "since": RELATED_SINCE}, ctx)
             activity[value] = result.data.get("rows") or []
         except ToolError as e:
@@ -296,7 +305,7 @@ def template(bundle: Bundle) -> dict[str, Any]:
                 out["related"].append(f"{value} appears in {item.data['events']} event(s) in the last "
                                       f"{RELATED_SINCE}{where} [{item.cid}].")
             else:
-                out["related"].append(f"No other events mention {value} in the last {RELATED_SINCE} [{item.cid}].")
+                out["related"].append(f"No events involve {value} in the last {RELATED_SINCE} [{item.cid}].")
         elif item.kind == "indicator":
             d = item.data
             intel_by_value.setdefault(str(d.get("value")), item)

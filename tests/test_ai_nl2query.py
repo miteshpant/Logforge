@@ -57,6 +57,7 @@ def run(coro):
     # a dotted name is not the service it starts with
     ("Lookups of api-gateway.example.org", None),
     ("Requests by web-1", '| where host = "web-1"'),  # "by" followed by a value, not a field
+    ("How many events did each service log in the last 24 hours?", '| last 24h | stats count() as count by service'),
 ])
 def test_rule_based_translations(question, query):
     draft = rule_based(question, CATALOGUE)

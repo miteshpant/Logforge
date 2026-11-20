@@ -146,8 +146,8 @@ def test_windows_and_sysmon_ids_are_told_apart_by_channel_not_by_mention():
 
     security = {"service": "windows", "msg": "", "attrs": {"event_id": 1102, "channel": "Security", "sysmon": "no"}}
     sysmon = {"service": "windows", "msg": "", "attrs": {"event_id": 1, "channel": "Microsoft-Windows-Sysmon/Operational"}}
-    assert "audit log was cleared" in _kinds(security)[0][0]
-    assert _kinds(sysmon)[0][0].startswith("Sysmon: a process was created")
+    assert "clearing of the Security audit log" in _kinds(security)[0][0]
+    assert _kinds(sysmon)[0][0].startswith("a Sysmon process creation")
 
 
 def test_auditd_records():

@@ -282,7 +282,8 @@ def rule_based(question: str, catalogue: dict[str, Any] | None = None) -> QueryD
     if g:
         words = g.group(1).strip()
         if words:
-            group = _resolve(words, catalogue) or _resolve(words.split()[-1], catalogue)
+            group = _resolve(words, catalogue) or next(
+                (found for word in words.split() if (found := _resolve(word, catalogue))), None)
     top = re.search(r"\btop\s+(\d{1,3})\s+([a-z_ ]+?)(?=\s+(?:by|in|over|from|last|past)\b|[?.,!]|$)", rest)
     most = re.search(r"\bwhich\s+([a-z_ ]+?)\s+(?:\w+\s+){0,3}(?:the\s+)?most\b|\bmost common\s+([a-z_ ]+)", rest)
     trend = re.search(r"\bover time\b|\btrend\b|\bper (?:minute|hour|day)\b|\btimeline\b", rest)

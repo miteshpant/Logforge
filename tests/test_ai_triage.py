@@ -15,6 +15,7 @@ Alert and case triage summaries (Phase 9).
 
 import asyncio
 import json
+import re
 
 import pytest
 from ai import tools as tool_module
@@ -54,7 +55,7 @@ def data(monkeypatch):
 
     async def logql(body, tenant):
         queries.append(body)
-        value = json.loads(body["query"].split(" | ")[0])
+        value = json.loads(re.search(r'"(?:[^"\\]|\\.)*"', body["query"]).group(0))
         return {"logs": ACTIVITY.get(value, []), "total_count": len(ACTIVITY.get(value, []))}
 
     async def indicators(value, tenant):
@@ -89,6 +90,10 @@ def test_gathering_an_alert_collects_cited_evidence(data):
         [("T1110.001", "Brute Force", "credential-access")]
     # related activity is looked up over the day before the alert, per entity
     assert all(q["since"] == "24h" for q in data) and len(data) == 3
+    # by the fields that hold that kind of entity, and in the message
+    assert data[0]["query"].startswith('| where src_ip = "45.155.205.233" or attrs.src_ip = ')
+    assert 'msg contains "45.155.205.233"' in data[0]["query"]
+    assert data[1]["query"].startswith('| where user_id = "root" or attrs.user = "root"')
     assert bundle.subject == {"kind": "alert", "id": "a-1", "title": "SSH brute force then success"}
 
 
