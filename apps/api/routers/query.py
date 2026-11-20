@@ -557,11 +557,9 @@ async def run_archive_query(query_text: str, request_body: Dict[str, Any], custo
 
     import data_scope
 
-    # Archives are read with ClickHouse's s3() table function, which the data scope's
-    # logs_raw_mt filter doesn't reach: refuse rather than show out-of-scope services.
-    if data_scope.current() is not None:
-        raise HTTPException(status_code=403, detail="Archive search isn't available with a data scope; "
-                                                    "ask an administrator to rehydrate the days instead")
+    # Archives are read with ClickHouse's s3() table function, which the scope's table
+    # filters don't reach: compile_archive wraps the read in the scope's own filter.
+    scope = data_scope.current()
 
     import archive_query
     import pattern_query
@@ -584,7 +582,7 @@ async def run_archive_query(query_text: str, request_body: Dict[str, Any], custo
                 "time_range": _time_range_payload(start, end)}
     lookups = await _lookup_metas(customer_id, query_text)
     try:
-        compiled = archive_query.compile_archive(query_text, customer_id, days, start, end, variables, lookups)
+        compiled = archive_query.compile_archive(query_text, customer_id, days, start, end, variables, lookups, scope=scope)
     except (PipelineError, QueryFieldError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     settings = {"readonly": 2, "max_execution_time": PIPELINE_QUERY_TIMEOUT_SECONDS}

@@ -99,10 +99,18 @@ How the scope is enforced:
 
 - **In ClickHouse.** The middleware puts the scope on the request. Every
   ClickHouse query the request makes carries the `additional_table_filters`
-  setting for `logs_raw_mt`, so ClickHouse adds the filter to every read of
-  the table, in subqueries and joins too. That covers everything that reads
-  logs: search, LogforgeQL, dashboards, the field catalogue, entities, and the
-  AI tools.
+  setting, so ClickHouse adds the filter to every read of these tables, in
+  subqueries and joins too:
+  - logs (`logs_raw_mt`, `logs_normalized_mt`, the hourly rollup), so search,
+    LogforgeQL, dashboards, the field catalogue, entities and the AI tools;
+  - traces and metrics (`traces_mt`, `metrics_mt`, the service topology), on
+    their service name;
+  - security events, on the service of the log that matched;
+  - alert instances: none are shown, because an alert can summarise several
+    services and doesn't record which.
+- **Archive search** reads Parquet with the `s3()` table function, which
+  table filters don't reach, so the read is wrapped in a subquery with the
+  same service filter.
 - **Escaping.** Service names are escaped literals; this is tested against
   ClickHouse with injection attempts.
 - **Caches.** Cached query results are keyed by scope.
@@ -111,11 +119,11 @@ How the scope is enforced:
 
 What a scope doesn't cover yet:
 
-- **Archive search** reads Parquet with the `s3()` table function, which the
-  filter doesn't reach. It is refused under a scope (403).
-- **Traces, metrics and alerts** aren't scoped. An alert's raw event can show
-  a service outside the scope.
-- **Fields:** there is no field-level masking.
+- **Alerts** are hidden rather than filtered: alert rules would need to
+  record the services behind each alert.
+- **Security events** whose matched log has no service are hidden too.
+- **Plain-English answers without AI** are refused under a scope (the
+  rule-based fallback reads tables a scope can't fully cover).
 
 ## Two-step sign-in (TOTP)
 

@@ -87,10 +87,15 @@ markers).
     apply.
   - **SAML** sign-in. (MFA is done: TOTP with backup codes, enforced at
     sign-in; see [enterprise.md](./enterprise.md#two-step-sign-in-totp).)
-  - **Data scopes for traces, metrics and alerts**, archive search under a
-    scope (filtering the Parquet read), and **field-level masking**.
-  - **API key scopes**: a key acts with its creator's roles today.
-  - **Authentication on `/metrics`**, or a separate metrics port.
+  - ~~**Data scopes for traces, metrics and alerts**, archive search under a
+    scope~~: done. Traces, metrics, the topology and security events are
+    filtered by service; alert instances are hidden under a scope (they don't
+    record their services); archive reads carry the filter. Still open:
+    **field-level masking**, and alerts filtered rather than hidden.
+  - ~~**API key scopes**~~: done; a key's permissions are checked on every
+    route ([security](./security.md)).
+  - ~~**Authentication on `/metrics`**~~: done; set `LOGFORGE_METRICS_TOKEN`
+    ([self-monitoring](./deployment.md#self-monitoring)).
   - **Run the release workflow** on the first tag, and check `cosign verify`.
   - **Admin UI** billing, features and support pages.
   - **Retire the Enterprise RBAC and OIDC-config routes**

@@ -146,8 +146,9 @@ export default function RolesPage() {
                   onChange={e => setDraft({ ...draft, services: e.target.value })} />
               )}
               <p className="text-xs text-slate-500">
-                Names, or prefixes ending in *. Applies to every search, dashboard, field list and AI answer they get.
-                Archive search is unavailable to them. Several scoped roles add up.
+                Names, or prefixes ending in *. Applies to their logs, traces, metrics, security events and archive
+                searches, and to every dashboard, field list and AI answer they get; alerts are hidden from them.
+                Several scoped roles add up.
               </p>
             </div>
             <div className="flex gap-2">

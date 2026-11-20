@@ -32,22 +32,50 @@ def _quote(value: str) -> str:
     return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
 
-def filter_sql(services: Iterable[str]) -> str:
+def filter_sql(services: Iterable[str], column: str = "service") -> str:
     exact = [s for s in services if not s.endswith("*")]
     prefixes = [s[:-1] for s in services if s.endswith("*")]
     parts = []
     if exact:
-        parts.append(f"service IN ({', '.join(_quote(s) for s in exact)})")
+        parts.append(f"{column} IN ({', '.join(_quote(s) for s in exact)})")
     for p in prefixes:
         pattern = p.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-        parts.append(f"service LIKE {_quote(pattern)}")
+        parts.append(f"{column} LIKE {_quote(pattern)}")
     return " OR ".join(parts) or "0"
+
+
+# Every table holding a service's data, and where the service is. Plain views
+# (recent_errors, service_health_summary) read these tables, so they're covered. Alert
+# instances name no service (a rule can summarise several), so a scoped user
+# sees none; security events record it in the matched log.
+SCOPED_TABLES: Dict[str, Optional[str]] = {
+    TABLE: "service",
+    "logs_normalized_mt": "service",
+    "logs_hourly_stats": "service",
+    "traces_mt": "service_name",
+    "metrics_mt": "service_name",
+    "service_topology_mt": "service_name",
+    "security_events_mt": "JSONExtractString(raw_log_data, 'normalized_log', 'service')",
+    # Older tables some services still read (observability_engine reads traces).
+    "logs_raw": "service",
+    "logs_normalized": "service",
+    "logs_view": "service",
+    "traces": "service_name",
+    "metrics": "service_name",
+    "alert_instances_mt": None,
+}
+
+
+def table_filters(scope: DataScope) -> Dict[str, str]:
+    return {table: (filter_sql(scope.services, column) if column else "0")
+            for table, column in SCOPED_TABLES.items()}
 
 
 def settings_for(scope: Optional[DataScope]) -> Dict[str, str]:
     if scope is None:
         return {}
-    return {"additional_table_filters": "{" + _quote(TABLE) + ": " + _quote(filter_sql(scope.services)) + "}"}
+    pairs = ", ".join(f"{_quote(table)}: {_quote(sql)}" for table, sql in table_filters(scope).items())
+    return {"additional_table_filters": "{" + pairs + "}"}
 
 
 def current() -> Optional[DataScope]:
