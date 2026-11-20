@@ -16,7 +16,7 @@ Target Performance:
 
 import structlog
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 from dao.ai_dao import AIDAO
 import re
@@ -24,6 +24,20 @@ import uuid
 
 logger = structlog.get_logger(__name__)
 
+
+def _utc_naive(dt: datetime) -> datetime:
+    """ClickHouse DateTime parameters are UTC wall-clock times."""
+    return dt.astimezone(timezone.utc).replace(tzinfo=None) if dt.tzinfo else dt
+
+
+INTENT_PERMISSIONS = {
+    "alerts": ("alerts:read:tenant", "alerts"),
+    "security": ("security:read:tenant", "security events"),
+    "errors": ("logs:read:tenant", "logs"),
+    "performance": ("observability:read:tenant", "traces"),
+    "traffic": ("logs:read:tenant", "logs"),
+    "general": ("logs:read:tenant", "logs"),
+}
 
 _SAFE_SERVICE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,127}$")
 
@@ -86,7 +100,8 @@ class NLQProcessor:
         return dt.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]  # Trim microseconds to milliseconds
 
     async def process_question(self, question: str, customer_id: str,
-                              user_context: Dict = None, max_results: int = 100) -> NLQResult:
+                              user_context: Dict = None, max_results: int = 100,
+                              allowed: Optional[Callable[[str], bool]] = None) -> NLQResult:
         """
         Process natural language question with full context awareness
 
@@ -103,11 +118,21 @@ class NLQProcessor:
         # Step 1: Classify intent and extract entities
         intent = await self._classify_intent(question, customer_id)
 
-        # Step 2: Generate SQL query
-        sql = await self._generate_sql(intent, customer_id, max_results)
+        # Each intent reads a different table: check the asker may read it. The
+        # tables aren't covered by data scopes (those filter logs_raw_mt), so a
+        # scoped user gets no answer here rather than every service's data.
+        refusal = self._refusal(intent, allowed)
+        if refusal:
+            return NLQResult(query_id=query_id, original_question=question, generated_sql="",
+                             answer=refusal, results={"data": [], "count": 0}, suggestions=[],
+                             confidence=intent.confidence, execution_time_ms=int((time.time() - start_time) * 1000),
+                             intent=intent)
+
+        # Step 2: Generate SQL query (every value bound as a parameter)
+        sql, params = await self._generate_sql(intent, customer_id, max_results)
 
         # Step 3: Execute query
-        results = await self._execute_query(sql, customer_id, intent)
+        results = await self._execute_query(sql, params, intent)
 
         # Step 4: Interpret results as plain English answer (KEY DIFFERENTIATOR)
         answer = await self._interpret_results(question, results, intent)
@@ -130,6 +155,18 @@ class NLQProcessor:
             execution_time_ms=execution_time,
             intent=intent
         )
+
+    @staticmethod
+    def _refusal(intent: QueryIntent, allowed: Optional[Callable[[str], bool]]) -> Optional[str]:
+        import data_scope
+
+        if data_scope.current() is not None:
+            return ("Plain-English answers without AI aren't available with a data scope on your role; "
+                    "use the Log Explorer, which applies it.")
+        permission, what = INTENT_PERMISSIONS.get(intent.type, INTENT_PERMISSIONS["general"])
+        if allowed is not None and not allowed(permission):
+            return f"You don't have permission to read {what} ({permission})."
+        return None
 
     async def _classify_intent(self, question: str, customer_id: str) -> QueryIntent:
         """
@@ -384,8 +421,8 @@ class NLQProcessor:
         else:
             return "auto"  # Auto-select based on metric
 
-    async def _generate_sql(self, intent: QueryIntent, customer_id: str, max_results: int) -> str:
-        """Generate SQL based on intent and entities"""
+    async def _generate_sql(self, intent: QueryIntent, customer_id: str, max_results: int) -> Tuple[str, Dict[str, Any]]:
+        """SQL for the intent, with every value (tenant, times, services, limit) bound as a parameter."""
 
         time_range = intent.entities.get("time_range")
         services = intent.entities.get("services", [])
@@ -398,8 +435,15 @@ class NLQProcessor:
         # drop the tenant filter; found by the Phase 8 security review).
         services = [s for s in services if isinstance(s, str) and _SAFE_SERVICE.match(s)]
         if services:
-            services_str = "', '".join(services)
-            service_filter = f"AND service IN ('{services_str}')"
+            service_filter = "AND service IN %(services)s"
+        params: Dict[str, Any] = {
+            "customer_id": customer_id,
+            "start": _utc_naive(time_range.start),
+            "end": _utc_naive(time_range.end),
+            "limit": int(max_results),
+            "services": tuple(services),
+            "hours": max((time_range.end - time_range.start).total_seconds() / 3600, 1e-9),
+        }
 
         if intent.type == "alerts":
             # Extract alert status filter (active, resolved, etc.)
@@ -420,12 +464,12 @@ class NLQProcessor:
                 ai.trigger_data
             FROM alert_instances_mt ai
             JOIN alert_rules_mt ar ON ai.rule_id = ar.id
-            WHERE ai.customer_id = '{customer_id}'
-              AND ai.triggered_at >= '{self._format_clickhouse_datetime(time_range.start)}'
-              AND ai.triggered_at <= '{self._format_clickhouse_datetime(time_range.end)}'
+            WHERE ai.customer_id = %(customer_id)s
+              AND ai.triggered_at >= %(start)s
+              AND ai.triggered_at <= %(end)s
               {status_filter}
             ORDER BY ai.triggered_at DESC
-            LIMIT {max_results}
+            LIMIT %(limit)s
             """
 
         elif intent.type == "errors":
@@ -437,35 +481,37 @@ class NLQProcessor:
                 COUNT(DISTINCT user_id) as affected_users,
                 groupUniqArray(5)(msg) as sample_messages
             FROM logs_normalized_mt
-            WHERE customer_id = '{customer_id}'
+            WHERE customer_id = %(customer_id)s
               AND lower(level) = 'error'
-              AND ts >= '{self._format_clickhouse_datetime(time_range.start)}'
-              AND ts <= '{self._format_clickhouse_datetime(time_range.end)}'
+              AND ts >= %(start)s
+              AND ts <= %(end)s
               {service_filter}
             GROUP BY service, level
             ORDER BY error_count DESC
-            LIMIT {max_results}
+            LIMIT %(limit)s
             """
 
         elif intent.type == "performance":
+            # Latency comes from trace spans: the normalized logs table has no
+            # response-time column (this query used to fail and answer "no data").
+            span_filter = "AND service_name IN %(services)s" if services else ""
             sql = f"""
             SELECT
-                service,
+                service_name AS service,
                 COUNT(*) as total_requests,
-                AVG(http_response_time_ms) as avg_response_time,
-                QUANTILE(0.50)(http_response_time_ms) as median_response_time,
-                QUANTILE(0.95)(http_response_time_ms) as p95_response_time,
-                QUANTILE(0.99)(http_response_time_ms) as p99_response_time,
-                MAX(http_response_time_ms) as max_response_time
-            FROM logs_normalized_mt
-            WHERE customer_id = '{customer_id}'
-              AND ts >= '{self._format_clickhouse_datetime(time_range.start)}'
-              AND ts <= '{self._format_clickhouse_datetime(time_range.end)}'
-              AND http_response_time_ms > 0
-              {service_filter}
-            GROUP BY service
+                AVG(duration_ms) as avg_response_time,
+                quantile(0.50)(duration_ms) as median_response_time,
+                quantile(0.95)(duration_ms) as p95_response_time,
+                quantile(0.99)(duration_ms) as p99_response_time,
+                MAX(duration_ms) as max_response_time
+            FROM traces_mt
+            WHERE customer_id = %(customer_id)s
+              AND start_time >= %(start)s
+              AND start_time <= %(end)s
+              {span_filter}
+            GROUP BY service_name
             ORDER BY avg_response_time DESC
-            LIMIT {max_results}
+            LIMIT %(limit)s
             """
 
         elif intent.type == "traffic":
@@ -474,15 +520,15 @@ class NLQProcessor:
                 service,
                 COUNT(*) as total_requests,
                 COUNT(DISTINCT user_id) as unique_users,
-                COUNT(*) / {(time_range.end - time_range.start).total_seconds() / 3600} as requests_per_hour
+                COUNT(*) / %(hours)s as requests_per_hour
             FROM logs_normalized_mt
-            WHERE customer_id = '{customer_id}'
-              AND ts >= '{self._format_clickhouse_datetime(time_range.start)}'
-              AND ts <= '{self._format_clickhouse_datetime(time_range.end)}'
+            WHERE customer_id = %(customer_id)s
+              AND ts >= %(start)s
+              AND ts <= %(end)s
               {service_filter}
             GROUP BY service
             ORDER BY total_requests DESC
-            LIMIT {max_results}
+            LIMIT %(limit)s
             """
 
         elif intent.type == "security":
@@ -494,12 +540,12 @@ class NLQProcessor:
                 COUNT(*) as event_count,
                 created_at
             FROM security_events_mt
-            WHERE customer_id = '{customer_id}'
-              AND created_at >= '{self._format_clickhouse_datetime(time_range.start)}'
-              AND created_at <= '{self._format_clickhouse_datetime(time_range.end)}'
+            WHERE customer_id = %(customer_id)s
+              AND created_at >= %(start)s
+              AND created_at <= %(end)s
             GROUP BY event_type, severity, title, created_at
             ORDER BY severity DESC, event_count DESC
-            LIMIT {max_results}
+            LIMIT %(limit)s
             """
 
         else:  # general
@@ -509,22 +555,22 @@ class NLQProcessor:
                 level,
                 COUNT(*) as log_count
             FROM logs_normalized_mt
-            WHERE customer_id = '{customer_id}'
-              AND ts >= '{self._format_clickhouse_datetime(time_range.start)}'
-              AND ts <= '{self._format_clickhouse_datetime(time_range.end)}'
+            WHERE customer_id = %(customer_id)s
+              AND ts >= %(start)s
+              AND ts <= %(end)s
               {service_filter}
             GROUP BY service, level
             ORDER BY log_count DESC
-            LIMIT {max_results}
+            LIMIT %(limit)s
             """
 
-        return sql
+        return sql, params
 
-    async def _execute_query(self, sql: str, customer_id: str, intent: QueryIntent) -> List[Dict]:
+    async def _execute_query(self, sql: str, params: Dict[str, Any], intent: QueryIntent) -> List[Dict]:
         """Execute SQL query"""
 
         try:
-            results = await self.dao.execute_query(sql, {"customer_id": customer_id})
+            results = await self.dao.execute_query(sql, params)
             return results
         except Exception as e:
             logger.error("Query execution failed", error=str(e))

@@ -84,10 +84,23 @@ def _build_provider(settings: ProviderSettings):
     return build_provider(settings)
 
 
-async def _rule_based(question: str, tenant_id: str) -> dict[str, Any]:
+def permission_check(roles: list[dict[str, Any]], tenant_id: str):
+    from authn_authz_middleware import check_permission
+
+    def allowed(permission: str) -> bool:
+        try:
+            return check_permission(roles, permission, tenant_id)
+        except ValueError:
+            return False
+
+    return allowed
+
+
+async def _rule_based(question: str, tenant_id: str, roles: list[dict[str, Any]]) -> dict[str, Any]:
     from services.nlq_processor import get_nlq_processor
 
-    result = await get_nlq_processor().process_question(question, tenant_id)
+    result = await get_nlq_processor().process_question(question, tenant_id,
+                                                        allowed=permission_check(roles, tenant_id))
     return {"text": result.answer, "generated_sql": result.generated_sql, "suggestions": result.suggestions,
             "results": result.results, "confidence": result.confidence}
 
@@ -375,15 +388,9 @@ async def answer(question: str, *, tenant_id: str, user_id: str, roles: list[dic
                                label=session.provider_info()["label"])
             return {**result.to_public(), "request_id": session.request_id}
     except AIUnavailable as e:
-        # The rule-based NLQ checks no per-intent permissions (it reads logs,
-        # alerts and security events directly), so only those allowed to use
-        # it through /v1/ai/query get its answer.
-        from authn_authz_middleware import check_permission
-
-        if not check_permission(roles, "ai:write:tenant", tenant_id):
-            return {"mode": "off", "reason_code": e.code, "reason": str(e), "text": "", "citations": [],
-                    "grounded": False, "flags": [], "provider": None}
-        fallback = await _rule_based(question, tenant_id)
+        # The rule-based NLQ checks the permission each kind of question needs
+        # (logs, alerts, security events) and refuses under a data scope.
+        fallback = await _rule_based(question, tenant_id, roles)
         return {"mode": "rule_based", "reason_code": e.code, "reason": str(e), "citations": [], "grounded": False,
                 "flags": ["rule_based"], "provider": None, **fallback}
 

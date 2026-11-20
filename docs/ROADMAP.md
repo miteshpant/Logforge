@@ -180,8 +180,10 @@ markers).
     renamed in a query (`| eval v = attrs.password`) are still covered.
   - **Enforce API key scopes:** they are set at login but never checked
     (pre-existing, every route).
-  - **Fix the rule-based NLQ:** give it per-intent permission checks and
-    parameterised SQL, then open the fallback to `ai:read` again.
+  - ~~**Fix the rule-based NLQ.**~~ Done: per-intent permission checks,
+    every value bound as a parameter, refused under a data scope, and open
+    to `ai:read` again. Its latency question read a column that doesn't
+    exist and now reads trace spans.
   - **Get a human sign-off** of the security review before enabling AI in
     production.
 - **Content pack follow-ups from Phase 7** ([guide](./packs.md)): packs

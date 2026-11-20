@@ -4,8 +4,10 @@ Logforge can answer questions about a tenant's own logs, alerts, cases and
 threat intelligence with a language model, and **cites every source**.
 AI is **off by default**: a deployment has to enable it and offer a
 provider, and each tenant has to opt in. With AI off, questions get the
-existing rule-based answer, as before, for those allowed to use it
-(`/v1/ai/query`, tenant admins); others are told AI is off.
+rule-based answer. It checks the permission each kind of question needs
+(`logs:read`, `alerts:read`, `security:read`, `observability:read` for
+latency), binds every value as a query parameter, and isn't available to
+users whose role carries a data scope (the tables it reads aren't scoped).
 
 ![AI answer with citations](images/ai-answer.png)
 

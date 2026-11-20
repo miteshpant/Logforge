@@ -10,6 +10,7 @@ import structlog
 
 from services.ai_service import AIService
 from services.rca_engine import get_rca_engine
+from ai.assistant import permission_check
 from services.anomaly_detector import get_anomaly_detector
 from services.nlq_processor import get_nlq_processor
 from authn_authz_middleware import get_current_user
@@ -116,6 +117,7 @@ class QueryFeedbackRequest(BaseModel):
 @router.post("/query")
 async def process_natural_language_query(
     request: NLQueryRequest,
+    http_request: Request,
     customer_id: str = Header(..., alias="X-Customer-ID"),
     current_user = Depends(get_current_user)
 ):
@@ -141,7 +143,9 @@ async def process_natural_language_query(
             question=request.question,
             customer_id=customer_id,
             user_context=request.context,
-            max_results=request.max_results
+            max_results=request.max_results,
+            # Each kind of question checks the caller's own read permission.
+            allowed=permission_check(getattr(http_request.state, "roles", []) or [], customer_id),
         )
 
         # Save query to history (don't block on failure)
