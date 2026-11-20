@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import SsoProviders from '@/components/settings/SsoProviders'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { apiClient } from '@/lib/api'
 import {
@@ -668,88 +669,7 @@ export default function AuthenticationPage() {
             )}
 
             {/* SSO Tab */}
-            {activeTab === 'sso' && (
-              <div className="space-y-4">
-                <div className="flex justify-end">
-                  <button
-                    onClick={() => setShowConfigureSSO(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Configure SSO Provider
-                  </button>
-                </div>
-
-                {authProviders.length === 0 ? (
-                  <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-12 text-center">
-                    <Shield className="w-12 h-12 mx-auto mb-4 text-slate-600" />
-                    <h3 className="text-lg font-semibold text-white mb-2">No SSO Providers Configured</h3>
-                    <p className="text-slate-400 text-sm max-w-md mx-auto">
-                      Configure Single Sign-On with your identity provider (Okta, Azure AD, Google, or any OIDC provider).
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid gap-4">
-                    {authProviders.map((provider) => {
-                      const typeInfo = PROVIDER_TYPE_INFO[provider.provider_type] || PROVIDER_TYPE_INFO.oidc
-                      return (
-                        <div
-                          key={provider.id}
-                          className={`rounded-xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border p-4 ${
-                            provider.enabled ? 'border-white/5' : 'border-white/5 opacity-60'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                              <div className={`p-3 rounded-lg ${typeInfo.color}`}>
-                                {typeInfo.icon}
-                              </div>
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <h3 className="text-white font-semibold">{provider.provider_name}</h3>
-                                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                    provider.enabled
-                                      ? 'bg-green-500/20 text-green-400'
-                                      : 'bg-slate-500/20 text-slate-400'
-                                  }`}>
-                                    {provider.enabled ? 'Active' : 'Disabled'}
-                                  </span>
-                                </div>
-                                <p className="text-slate-400 text-sm mt-1">
-                                  {typeInfo.label} - {provider.domain}
-                                </p>
-                                <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
-                                  <span>{provider.user_count} users</span>
-                                  <span>Created {formatDate(provider.created_at)}</span>
-                                  {provider.last_sync && (
-                                    <span>Last sync {formatTimeAgo(provider.last_sync)}</span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                disabled
-                                title={PROVIDER_TOGGLE_UNAVAILABLE}
-                                className="px-3 py-1.5 rounded-lg text-sm bg-slate-800 text-slate-500 cursor-not-allowed"
-                              >
-                                {provider.enabled ? 'Enabled' : 'Disabled'}
-                              </button>
-                              <button
-                                className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
-                                title="Configure"
-                              >
-                                <Settings className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
+            {activeTab === 'sso' && <SsoProviders />}
 
             {/* MFA Tab */}
             {activeTab === 'mfa' && (

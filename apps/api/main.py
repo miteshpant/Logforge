@@ -35,6 +35,7 @@ from routers.storage_tiers_api import router as storage_tiers_router
 from routers.integrations_api import router as integrations_router, hooks_router
 from routers.playbooks_api import router as playbooks_router
 from routers.reports_api import router as reports_router
+from routers.sso_api import login_router as sso_login_router, router as sso_router
 from routers.enterprise_api import router as enterprise_router
 from routers.tenant_api import router as tenant_router
 from routers.subscription_api import router as subscription_router
@@ -144,6 +145,8 @@ app.include_router(integrations_router)
 app.include_router(hooks_router)
 app.include_router(playbooks_router)
 app.include_router(reports_router)
+app.include_router(sso_login_router)
+app.include_router(sso_router)
 app.include_router(enterprise_router)
 app.include_router(tenant_router)
 app.include_router(subscription_router)

@@ -428,6 +428,10 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in WRITE_METHODS and not path.endswith("/validate"):
             return "settings:write:tenant"
         return "security:read:tenant"
+    elif path.startswith("/v1/sso/"):
+        if method in WRITE_METHODS:
+            return "settings:write:tenant"
+        return "settings:read:tenant"
     elif path.startswith("/v1/reports/schedules"):
         if method in WRITE_METHODS:
             return "settings:write:tenant"
@@ -936,7 +940,9 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         clean_path = path.split('?')[0]
         # Phase 13: ticket webhooks authenticate themselves (an HMAC or token
         # from the integration's webhook_secret), see routers/integrations_api.
-        return clean_path in self.public_endpoints or clean_path.startswith("/v1/hooks/")
+        # Phase 14: SSO sign-in (discover, start, callback) happens before there is a session.
+        return (clean_path in self.public_endpoints or clean_path.startswith("/v1/hooks/")
+                or clean_path.startswith("/v1/auth/sso/"))
 
     def _is_admin_endpoint(self, path: str) -> bool:
         """Check if endpoint is admin (bypasses feature validation)"""

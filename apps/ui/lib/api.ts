@@ -6,7 +6,7 @@
  */
 
 // API Configuration
-const API_CONFIG = {
+export const API_CONFIG = {
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7080',
   timeout: 30000, // 30 seconds default timeout
   headers: {
