@@ -58,9 +58,9 @@ def _status(result: Any) -> str:
 
 
 def _counts(client, database: str) -> Dict[str, int]:
-    """Rows per table. Engines that collapse rows as they merge (Replacing,
-    Summing, Aggregating, Collapsing) are counted with FINAL: their raw rows
-    shrink after a restore with nothing lost."""
+    """Rows per table, as queries see them. Engines that collapse rows as they
+    merge (Replacing, Summing, Aggregating, Collapsing) are counted with
+    FINAL: their raw rows shrink after a restore with nothing lost."""
     rows = client.query("SELECT name, engine, total_rows FROM system.tables WHERE database = {db:String} "
                         "AND NOT is_temporary AND name NOT LIKE '.inner%' AND name NOT LIKE '\\_rehydrate\\_%'",
                         parameters={"db": database}).result_rows
@@ -68,8 +68,10 @@ def _counts(client, database: str) -> Dict[str, int]:
     for name, engine, n in rows:
         if engine in _VIEWS:
             continue
-        if any(k in engine for k in _COLLAPSING):
-            n = client.query(f"SELECT count() FROM {database}.{name} FINAL").result_rows[0][0]
+        # count(), not system.tables.total_rows: deleted rows (DELETE, ALTER
+        # DELETE) stay in total_rows until merged away
+        final = " FINAL" if any(k in engine for k in _COLLAPSING) else ""
+        n = client.query(f"SELECT count() FROM {database}.`{name}`{final}").result_rows[0][0]
         out[name] = int(n or 0)
     return out
 

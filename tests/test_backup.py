@@ -21,8 +21,9 @@ class Result:
 
 
 class FakeClient:
-    def __init__(self, tables=None, counts=None, final=None):
+    def __init__(self, tables=None, counts=None, final=None, visible=None):
         self.final = final or {}
+        self.visible = visible or {}
         self.tables = tables or [("logs_raw_mt", "MergeTree"), ("entities_mv", "MaterializedView"),
                                  ("saved_searches_mt", "ReplacingMergeTree")]
         self.counts = counts or {"logs_raw_mt": 10, "saved_searches_mt": 2}
@@ -32,9 +33,11 @@ class FakeClient:
         self.statements.append((sql, parameters))
         if "system.tables" in sql:
             return Result([(n, e, self.counts.get(n, 0)) for n, e in self.tables])
-        if "FINAL" in sql:
-            table = sql.split("FROM ")[1].split()[0].split(".")[-1]
-            return Result([(self.final.get(table, self.counts.get(table, 0)),)])
+        if sql.startswith("SELECT count() FROM"):
+            table = sql.split("FROM ")[1].split()[0].split(".")[-1].strip("`")
+            if "FINAL" in sql:
+                return Result([(self.final.get(table, self.counts.get(table, 0)),)])
+            return Result([(self.visible.get(table, self.counts.get(table, 0)),)])
         if "system.databases" in sql:
             return Result([(0,)])
         if "system.backups" in sql:
@@ -124,4 +127,11 @@ def test_collapsing_engines_are_counted_as_queries_see_them():
     counts = backup._counts(client, "logforge")
     assert counts == {"logs_raw_mt": 10, "saved_searches_mt": 2}
     finals = [s for s, _ in client.statements if "FINAL" in s]
-    assert finals == ["SELECT count() FROM logforge.saved_searches_mt FINAL"]
+    assert finals == ["SELECT count() FROM logforge.`saved_searches_mt` FINAL"]
+
+
+def test_rows_are_counted_as_queries_see_them_not_from_table_metadata():
+    """Deleted rows stay in system.tables.total_rows until merged away, so the
+    manifest overstated tables with deletions (users' sessions and roles)."""
+    client = FakeClient(counts={"logs_raw_mt": 10, "saved_searches_mt": 2}, visible={"logs_raw_mt": 8})
+    assert backup._counts(client, "logforge")["logs_raw_mt"] == 8
