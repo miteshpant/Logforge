@@ -153,6 +153,36 @@ not held out from the reference's author. Rule recall comes from matching
 the event against the shipped library with the detection engine's matcher.
 Record a model with `record_explain.py --provider ...`.
 
+## Investigation copilot (Phase 10)
+
+`datasets/copilot_scenarios.jsonl` (written by `copilot_scenarios.py`) has 20
+scenarios, ten kinds in two variants: SSH brute force then an account,
+then persistence; a web shell; credential dumping; RDP brute force then
+shadow copies deleted; starting from an attacker's address; starting from
+an account the attacker created (the root cause is found only by
+pivoting); log clearing; a reverse shell from a web request; a phishing
+download. Each has background activity (cron, routine logins, a mistyped
+password, sudo, web traffic, Windows logons) and its root-cause event
+marked. Variant 1 of two kinds adds a benign admin action with the same
+signal as the attack inside the window before it.
+
+`tests/test_copilot_eval_live.py` seeds them into ClickHouse (one tenant
+each) and runs the copilot as an analyst who approves what it proposes
+once: plan, run, then run again with its next steps (`copilot_eval.py`).
+
+| System | Scenarios | Root cause found (in candidates) | Found first | Fabricated evidence |
+|---|---|---|---|---|
+| Template (AI off) | 20 | 90% | 80% | 0 |
+| Model (`ai.copilot.write`) | 20 | not recorded | not recorded | 0 by construction |
+
+The target is >= 80% found with no fabricated evidence. The misses: both
+phishing downloads (the download carries no signal the copilot knows; it
+names the payload running instead). The benign admin action ranks first in
+both distractor variants, with the real root cause second. The scenarios
+were written alongside the copilot's signals, so they test the method, not
+how it does on unseen attacks. Record a model with
+`record_copilot.py --provider ... --update-baseline`.
+
 ## Status
 
 This is the Phase 0 skeleton: scorers, small seed datasets (8 / 5 / 5 items)

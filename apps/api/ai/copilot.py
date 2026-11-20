@@ -217,7 +217,7 @@ def validate_steps(raw: list[dict[str, Any]]) -> list[Step]:
 _FAILED = re.compile(r"(?i)\bfailed password\b|\bauthentication failure\b|\binvalid user\b|\blogin failed\b|"
                      r"\bfailed login\b|\baccount failed to log on\b")
 _SUCCESS = re.compile(r"(?i)\baccepted (?:password|publickey|keyboard-interactive)\b|\bsuccessful(?:ly)? log(?:ged )?in\b|"
-                      r"\blogin succeeded\b|\bsession opened\b")
+                      r"\bsuccessfully logged on\b|\blogin succeeded\b|\bsession opened\b")
 _PATTERNS = [
     (re.compile(r"(?i)\bnew user\b|\buseradd\b|\bnet user \S+ \S+ /add\b|\badduser\b|\buser account was created\b"),
      3, "an account was created"),
