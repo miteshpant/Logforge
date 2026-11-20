@@ -170,22 +170,70 @@ async def status(tenant_id: str) -> dict[str, Any]:
 
 # -- limits ----------------------------------------------------------------------------
 
-_requests: dict[str, deque[float]] = defaultdict(deque)
+class LocalRateCounter:
+    """Sliding one-minute window in this process only."""
+
+    def __init__(self) -> None:
+        self._requests: dict[str, deque[float]] = defaultdict(deque)
+
+    async def hit(self, tenant_id: str, per_minute: int, now: float) -> bool:
+        window = self._requests[tenant_id]
+        while window and now - window[0] > 60:
+            window.popleft()
+        if len(window) >= per_minute:
+            return False
+        window.append(now)
+        return True
+
+
+class RedisRateCounter:
+    """One counter per tenant and minute in Redis, shared by every API replica.
+    If Redis fails, this process counts on its own until it's back (a warning is
+    logged), so AI keeps working with a per-replica limit instead of none."""
+
+    def __init__(self, client) -> None:
+        self.client = client
+        self.local = LocalRateCounter()
+
+    async def hit(self, tenant_id: str, per_minute: int, now: float) -> bool:
+        key = f"ai:rate:{tenant_id}:{int(now // 60)}"
+        try:
+            count = int(await self.client.incr(key))
+            if count == 1:
+                await self.client.expire(key, 120)
+            return count <= per_minute
+        except Exception as e:
+            logger.warning("AI rate limit store unavailable; counting in this process", error=str(e))
+            return await self.local.hit(tenant_id, per_minute, now)
+
+
+_rate_counter: Any = None
 
 
 def reset_rate_limits() -> None:
-    _requests.clear()
+    """Tests: count in this process, from zero."""
+    global _rate_counter
+    _rate_counter = LocalRateCounter()
 
 
-def _rate_limit(tenant_id: str, per_minute: int, now: float | None = None) -> None:
-    """Per-process sliding window (each API replica counts on its own)."""
-    now = now or time.monotonic()
-    window = _requests[tenant_id]
-    while window and now - window[0] > 60:
-        window.popleft()
-    if len(window) >= per_minute:
+async def _get_rate_counter():
+    global _rate_counter
+    if _rate_counter is None:
+        try:
+            from events.management.cache.redis_manager import get_redis_manager
+
+            redis = await get_redis_manager()
+            _rate_counter = RedisRateCounter(getattr(redis, "client", None) or redis)
+        except Exception as e:
+            logger.warning("Redis unavailable; AI rate limits are per process", error=str(e))
+            _rate_counter = LocalRateCounter()
+    return _rate_counter
+
+
+async def check_rate(counter, tenant_id: str, per_minute: int, now: float | None = None) -> None:
+    """Fixed one-minute windows when shared (a burst can straddle two), sliding when local."""
+    if not await counter.hit(tenant_id, per_minute, time.time() if now is None else now):
         raise LimitExceeded(f"AI rate limit reached ({per_minute} requests per minute); try again shortly")
-    window.append(now)
 
 
 def _month_start(now: datetime) -> datetime:
@@ -251,7 +299,7 @@ async def ai_session(*, tenant_id: str, user_id: str, roles: list[dict[str, Any]
     used = (await audit_store.usage(tenant_id, _month_start(now)))["tokens"]
     if used >= limits["monthly_token_budget"]:
         raise LimitExceeded(f"this tenant's monthly AI token budget ({limits['monthly_token_budget']:,}) is used up")
-    _rate_limit(tenant_id, max(limits["requests_per_minute"], 0))
+    await check_rate(await _get_rate_counter(), tenant_id, max(limits["requests_per_minute"], 0))
     try:
         provider = _build_provider(provider_settings)
     except ProviderConfigError as e:

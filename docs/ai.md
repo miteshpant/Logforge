@@ -130,8 +130,10 @@ every step ──▶ audit log (what was actually sent, after redaction)
     are capped at 50 rows and 30,000 characters.
   * **Concurrency:** before every model call the request's usage is written
     and the month's usage re-read, so parallel requests can overshoot the
-    budget by at most one model call each. The rate limit is counted per
-    API process.
+    budget by at most one model call each. The rate limit is one counter
+    per tenant and minute in Redis, shared by every API replica (fixed
+    one-minute windows, so a burst can straddle two). If Redis can't be
+    reached, each process counts on its own and logs a warning.
 
 ## Evaluation
 

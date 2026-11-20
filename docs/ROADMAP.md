@@ -172,9 +172,10 @@ markers).
   - **Record the evaluations:** record a real model's answers for `nl2query`
     and `summaries` (`tests/eval/ai/run_ai_eval.py --record`, needs an API
     key) and commit the baseline, so the CI gate starts enforcing.
-  - **Share the limits:** the rate limit and the in-request budget check are
-    per API process. Move both to a shared counter (Redis or ClickHouse) so
-    replicas and parallel requests can't overshoot.
+  - ~~**Share the limits.**~~ Done: the rate limit is a Redis counter per
+    tenant and minute shared by all replicas (per process only while Redis
+    is down). The budget check already re-reads the month's usage from the
+    audit log before every model call.
   - **Redact renamed values:** redact at the query layer too, so values
     renamed in a query (`| eval v = attrs.password`) are still covered.
   - **Enforce API key scopes:** they are set at login but never checked
