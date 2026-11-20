@@ -225,10 +225,11 @@ markers).
   request, and concurrent requests no longer lose increments (10 concurrent
   calls counted 10). Not re-measured: whether this removes the run-to-run
   swings in the end-to-end ingest benchmarks.
-- **OpenTelemetry metric aliases ignore units.** `cpu.utilization` is a 0–1
-  ratio while the canonical `cpu_usage` is a percentage. Mapping one to the
-  other needs a unit conversion in `metric_name_mappings.yml` and the
-  normalizer, not just a rename.
+- ~~**OpenTelemetry metric aliases ignore units.**~~ Done: values are
+  converted to the canonical unit, from the unit they were sent with (`1` to
+  `%`, `s`/`us`/`ns` to `ms`) or a per-alias factor in
+  `metric_name_mappings.yml` (`system.cpu.utilization` x100). The original
+  value and unit are kept on the record.
 
 ## Remove demo / fake data from the UI
 
