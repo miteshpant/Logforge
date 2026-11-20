@@ -272,15 +272,37 @@ class CaseService:
 
     async def metrics(self, tenant_id: str, days: int) -> Dict[str, Any]:
         """SLA metrics and SOC overview (case_metrics) for cases created in
-        the last `days` plus every case still open."""
+        the last `days` plus every case still open, against the tenant's targets."""
         from datetime import timedelta
 
-        from case_metrics import case_metrics
+        from case_metrics import case_metrics, sla_targets
 
         now = self.clock()
-        report = case_metrics(await self.dao.for_metrics(tenant_id, now - timedelta(days=days)), now)
+        targets = sla_targets(await self.sla_overrides(tenant_id))
+        report = case_metrics(await self.dao.for_metrics(tenant_id, now - timedelta(days=days)), now, targets)
         report["window_days"] = days
         return report
+
+    # -- SLA targets (per tenant) ------------------------------------------------------
+
+    async def sla_overrides(self, tenant_id: str) -> Dict[str, Dict[str, int]]:
+        import json
+
+        if not hasattr(self.dao, "sla_overrides"):  # a DAO without SLA storage: the defaults
+            return {}
+        return json.loads(await self.dao.sla_overrides(tenant_id) or "{}")
+
+    async def set_sla_overrides(self, tenant_id: str, overrides: Dict[str, Dict[str, int]], actor: str):
+        import json
+
+        from case_metrics import validate_sla_overrides
+
+        try:
+            clean = validate_sla_overrides(overrides or {})
+        except ValueError as e:
+            raise CaseError(str(e))
+        await self.dao.save_sla_overrides(tenant_id, json.dumps(clean), actor)
+        return clean
 
     async def audit(self, tenant_id: str, start: datetime, end: datetime, limit: int) -> List[Dict[str, Any]]:
         """Every case change in [start, end): the audit trail."""

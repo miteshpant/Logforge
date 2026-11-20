@@ -72,6 +72,24 @@ class CaseDAO:
         await self.db.execute_update(
             f"INSERT INTO case_events_mt ({', '.join(_EVENT_COLUMNS)}) VALUES " + ", ".join(tuples), params)
 
+    # -- SLA targets (per tenant) ---------------------------------------------
+    async def sla_overrides(self, tenant_id: str) -> str:
+        """The tenant's SLA overrides as JSON ('{}' for the defaults)."""
+        try:
+            rows = await self.db.fetch_all(
+                "SELECT argMax(overrides, updated_at) AS overrides FROM case_sla_mt WHERE customer_id = %(t)s",
+                {"t": tenant_id})
+        except Exception as e:
+            if "UNKNOWN_TABLE" in str(e) or "doesn't exist" in str(e):
+                return "{}"  # migration 039 not applied: the defaults
+            raise
+        return (rows[0].get("overrides") if rows else None) or "{}"
+
+    async def save_sla_overrides(self, tenant_id: str, overrides_json: str, actor: str) -> None:
+        await self.db.execute_update(
+            "INSERT INTO case_sla_mt (customer_id, overrides, updated_by) VALUES (%(t)s, %(o)s, %(a)s)",
+            {"t": tenant_id, "o": overrides_json, "a": actor})
+
     # -- reads -------------------------------------------------------------
     async def get(self, tenant_id: str, case_id: str) -> Optional[Case]:
         rows = await self.db.fetch_all(

@@ -90,6 +90,13 @@ export const getCase = (id: string) => read<CaseDetail>(`${BASE}/${encodeURIComp
 
 export const caseMetrics = (days = 30) => read<CaseMetrics>(`${BASE}/metrics`, { days })
 
+export type SlaMinutes = Record<'acknowledge' | 'resolve', Record<Severity, number>>
+export interface SlaTargets { targets_minutes: SlaMinutes; defaults_minutes: SlaMinutes; overrides: Partial<SlaMinutes> }
+export const slaTargets = () => read<SlaTargets>(`${BASE}/sla`)
+export async function saveSlaTargets(overrides: Partial<Record<'acknowledge' | 'resolve', Partial<Record<Severity, number>>>>): Promise<SlaTargets> {
+  return (await apiClient.put<SlaTargets>(`${BASE}/sla`, overrides)).data as SlaTargets
+}
+
 export async function createCase(body: { title: string; severity?: Severity; description?: string;
   alert_ids?: string[]; evidence?: Evidence[]; tags?: string[] }): Promise<Case> {
   return (await apiClient.post<Case>(BASE, body)).data as Case

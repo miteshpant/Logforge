@@ -10253,6 +10253,73 @@ paths:
       summary: Case Metrics
       tags:
       - cases
+  /v1/security/cases/sla:
+    get:
+      description: This tenant's SLA targets (minutes to acknowledge and resolve per severity).
+      operationId: get_sla_targets_v1_security_cases_sla_get
+      parameters:
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Get Sla Targets V1 Security Cases Sla Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Get Sla Targets
+      tags:
+      - cases
+    put:
+      description: Override the default targets; severities left out keep the default. {} resets.
+      operationId: put_sla_targets_v1_security_cases_sla_put
+      parameters:
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SlaBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Put Sla Targets V1 Security Cases Sla Put
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Put Sla Targets
+      tags:
+      - cases
   /v1/security/cases/{case_id}:
     get:
       description: 'The case, its alerts and its timeline (alerts, notes, status changes,
@@ -19103,6 +19170,20 @@ components:
       required:
       - docs
       title: SimulateBody
+      type: object
+    SlaBody:
+      properties:
+        acknowledge:
+          additionalProperties:
+            type: integer
+          title: Acknowledge
+          type: object
+        resolve:
+          additionalProperties:
+            type: integer
+          title: Resolve
+          type: object
+      title: SlaBody
       type: object
     SolutionRequest:
       description: Add solution request

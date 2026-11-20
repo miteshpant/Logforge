@@ -66,7 +66,11 @@ GET /v1/security/cases/audit/export?start=2026-11-01T00:00:00Z&end=2026-12-01T00
 `GET /v1/security/cases/metrics?days=30` (the strip at the top of the Cases
 page) reports, per severity, mean and median time to acknowledge and to
 resolve, SLA breaches, open cases by status and age, open cases per
-analyst, and alerts per case. Targets:
+analyst, and alerts per case. The default targets are below; a tenant can
+change any of them under **SLA targets** on the Cases page
+(`PUT /v1/security/cases/sla` with `{"acknowledge": {"critical": 10}, ...}`,
+minutes, `security:write`; `{}` resets). Acknowledging can't be set longer
+than resolving, and a target is 1 minute to a year.
 
 | Severity | Acknowledge | Resolve |
 |---|---|---|
@@ -86,6 +90,7 @@ analyst, and alerts per case. Targets:
 | `POST /v1/security/cases/{id}/assign` · `/comments` · `/status` · `/tags` · `/evidence` · `/alerts` · `/merge` · `/split` | analyst actions |
 | `POST /v1/security/cases/bulk` | assign, status or tags for many cases |
 | `GET /v1/security/cases/metrics` | SLA and overview |
+| `GET /v1/security/cases/sla` · `PUT` | this tenant's SLA targets (minutes), and the defaults |
 | `GET /v1/security/cases/audit/export` | audit trail, JSON or CSV |
 
 Full schemas are in the [API reference](https://miteshpant.github.io/Logforge/api/).
