@@ -19,17 +19,18 @@ class Result:
 
 
 class FakeClient:
-    """Rows of integrations_mt, newest version wins (as ReplacingMergeTree FINAL)."""
+    """Rows of response_integrations_mt, newest version wins (as ReplacingMergeTree FINAL)."""
 
     def __init__(self):
         self.rows = []
 
-    def command(self, sql, parameters=None):
-        assert sql.startswith("INSERT INTO integrations_mt")
-        self.rows.append(dict(parameters))
+    def insert(self, table, rows, column_names):
+        assert table == "response_integrations_mt"
+        names = {"customer_id": "tenant", "updated_by": "user"}
+        self.rows += [{names.get(c, c): v for c, v in zip(column_names, row)} for row in rows]
 
     def query(self, sql, parameters=None):
-        assert "FROM integrations_mt" in sql
+        assert "FROM response_integrations_mt" in sql
         latest = {}
         for r in self.rows:
             latest[(r["tenant"], r["id"])] = r

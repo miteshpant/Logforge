@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from .engine import Run
@@ -38,24 +39,19 @@ class PlaybookStore:
     def save(self, tenant_id: str, name: str, definition: str, enabled: bool, user_id: str,
              playbook_id: Optional[str] = None, deleted: bool = False) -> Dict[str, Any]:
         pid = playbook_id or uuid.uuid4().hex
-        self.client.command(
-            "INSERT INTO playbooks_mt (customer_id, id, name, definition, enabled, deleted, updated_by) "
-            "SELECT {tenant:String}, {id:String}, {name:String}, {definition:String}, {enabled:UInt8}, "
-            "{deleted:UInt8}, {user:String}",
-            parameters={"tenant": tenant_id, "id": pid, "name": name, "definition": definition,
-                        "enabled": int(enabled), "deleted": int(deleted), "user": user_id or ""})
+        # client.insert, not a bound INSERT ... SELECT: bound String parameters can't carry newlines (YAML)
+        self.client.insert("playbooks_mt", [[tenant_id, pid, name, definition, int(enabled), int(deleted), user_id or ""]],
+                           column_names=["customer_id", "id", "name", "definition", "enabled", "deleted", "updated_by"])
         return {"id": pid, "name": name, "definition": definition, "enabled": enabled, "updated_by": user_id}
 
     # -- runs ---------------------------------------------------------------------
 
     def save_run(self, run: Run) -> None:
-        self.client.command(
-            "INSERT INTO playbook_runs_mt (customer_id, id, playbook_id, trigger, trigger_ref, status, state, "
-            "created_at) SELECT {tenant:String}, {id:String}, {playbook:String}, {trigger:String}, {ref:String}, "
-            "{status:String}, {state:String}, parseDateTime64BestEffort({created:String}, 3)",
-            parameters={"tenant": run.tenant_id, "id": run.id, "playbook": run.playbook_id, "trigger": run.trigger,
-                        "ref": run.trigger_ref, "status": run.status, "state": json.dumps(run.to_dict(), default=str),
-                        "created": run.created_at})
+        created = datetime.fromisoformat(str(run.created_at).replace("Z", "+00:00"))
+        self.client.insert("playbook_runs_mt", [[
+            run.tenant_id, run.id, run.playbook_id, run.trigger, run.trigger_ref, run.status,
+            json.dumps(run.to_dict(), default=str), created]],
+            column_names=["customer_id", "id", "playbook_id", "trigger", "trigger_ref", "status", "state", "created_at"])
 
     def _runs(self, tenant_id: str, where: str, params: Dict[str, Any], limit: int) -> List[Run]:
         rows = self.client.query(

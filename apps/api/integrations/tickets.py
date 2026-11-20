@@ -12,15 +12,11 @@ class TicketStore:
 
     def link(self, tenant_id: str, case_id: str, ticket: Dict[str, Any], ticket_status: str = "open",
              case_status: str = "") -> None:
-        self.client.command(
-            "INSERT INTO case_tickets_mt (customer_id, case_id, integration_id, system, ticket, url, ticket_status, "
-            "case_status, synced_at) SELECT {tenant:String}, {case:String}, {integration:String}, {system:String}, "
-            "{ticket:String}, {url:String}, {ticket_status:String}, {case_status:String}, "
-            "parseDateTime64BestEffort({at:String}, 3)",
-            parameters={"tenant": tenant_id, "case": case_id, "integration": ticket.get("integration", ""),
-                        "system": ticket.get("system", ""), "ticket": ticket["ticket"], "url": ticket.get("url", ""),
-                        "ticket_status": ticket_status, "case_status": case_status,
-                        "at": datetime.now(timezone.utc).isoformat()})
+        self.client.insert("case_tickets_mt", [[
+            tenant_id, case_id, ticket.get("integration", ""), ticket.get("system", ""), ticket["ticket"],
+            ticket.get("url", ""), ticket_status, case_status, datetime.now(timezone.utc)]],
+            column_names=["customer_id", "case_id", "integration_id", "system", "ticket", "url", "ticket_status",
+                          "case_status", "synced_at"])
 
     def _rows(self, where: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
         rows = self.client.query(

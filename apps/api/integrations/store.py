@@ -1,4 +1,4 @@
-"""Integration storage (Phase 13): integrations_mt, secrets sealed."""
+"""Integration storage (Phase 13): response_integrations_mt, secrets sealed."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ class IntegrationStore:
         rows = self.client.query(
             "SELECT id, argMax(name, updated_at), argMax(kind, updated_at), argMax(config, updated_at), "
             "argMax(secrets, updated_at), argMax(enabled, updated_at), argMax(updated_by, updated_at), "
-            "max(updated_at) FROM integrations_mt WHERE customer_id = {tenant:String}"
+            "max(updated_at) FROM response_integrations_mt WHERE customer_id = {tenant:String}"
             f"{where} GROUP BY id HAVING argMax(deleted, updated_at) = 0 ORDER BY id",
             parameters=params).result_rows
         return [{"id": r[0], "name": r[1], "kind": r[2], "config": json.loads(r[3] or "{}"), "_secrets": r[4],
@@ -47,13 +47,11 @@ class IntegrationStore:
         return out
 
     def _write(self, tenant_id: str, row: Dict[str, Any], sealed: str, user_id: str, deleted: bool = False) -> None:
-        self.client.command(
-            "INSERT INTO integrations_mt (customer_id, id, name, kind, config, secrets, enabled, deleted, updated_by) "
-            "SELECT {tenant:String}, {id:String}, {name:String}, {kind:String}, {config:String}, {secrets:String}, "
-            "{enabled:UInt8}, {deleted:UInt8}, {user:String}",
-            parameters={"tenant": tenant_id, "id": row["id"], "name": row["name"], "kind": row["kind"],
-                        "config": json.dumps(row.get("config") or {}), "secrets": sealed,
-                        "enabled": int(row.get("enabled", True)), "deleted": int(deleted), "user": user_id or ""})
+        # client.insert, not a bound INSERT ... SELECT: bound String parameters can't carry newlines or tabs
+        self.client.insert("response_integrations_mt", [[
+            tenant_id, row["id"], row["name"], row["kind"], json.dumps(row.get("config") or {}), sealed,
+            int(row.get("enabled", True)), int(deleted), user_id or ""]],
+            column_names=["customer_id", "id", "name", "kind", "config", "secrets", "enabled", "deleted", "updated_by"])
 
     def save(self, tenant_id: str, row: Dict[str, Any], secrets: Optional[Dict[str, str]], user_id: str
              ) -> Dict[str, Any]:

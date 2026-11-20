@@ -134,15 +134,13 @@ def _schedules(tenant_id: Optional[str] = None) -> List[Dict[str, Any]]:
 
 
 def _save(tenant_id: str, s: Dict[str, Any], user: str, deleted: bool = False) -> None:
-    _client().command(
-        "INSERT INTO report_schedules_mt (customer_id, id, name, every, hour, format, integration_id, recipients, "
-        "enabled, deleted, last_sent, last_error, updated_by) SELECT {tenant:String}, {id:String}, {name:String}, "
-        "{every:String}, {hour:UInt8}, {format:String}, {integration:String}, {recipients:Array(String)}, "
-        "{enabled:UInt8}, {deleted:UInt8}, {last_sent:Nullable(DateTime64(3))}, {error:String}, {user:String}",
-        parameters={"tenant": tenant_id, "id": s["id"], "name": s["name"], "every": s["every"], "hour": s["hour"],
-                    "format": s["format"], "integration": s["integration_id"], "recipients": s["recipients"],
-                    "enabled": int(s.get("enabled", True)), "deleted": int(deleted), "last_sent": s.get("last_sent"),
-                    "error": s.get("last_error", ""), "user": user})
+    # client.insert, not a bound INSERT ... SELECT: bound String parameters can't carry newlines (error text)
+    _client().insert("report_schedules_mt", [[
+        tenant_id, s["id"], s["name"], s["every"], int(s["hour"]), s["format"], s["integration_id"],
+        list(s["recipients"]), int(s.get("enabled", True)), int(deleted), s.get("last_sent"),
+        s.get("last_error") or "", user]],
+        column_names=["customer_id", "id", "name", "every", "hour", "format", "integration_id", "recipients",
+                      "enabled", "deleted", "last_sent", "last_error", "updated_by"])
 
 
 def _public(s: Dict[str, Any]) -> Dict[str, Any]:

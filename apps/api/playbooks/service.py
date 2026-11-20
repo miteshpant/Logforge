@@ -126,7 +126,10 @@ def events(client, tenant_id: str, since: datetime) -> List[Tuple[str, str, Dict
             ctx["case"] = _case_context(case_of_alert[row["id"]])
         out.append(("alert", f"alert:{row['id']}", ctx))
     for c in cases:
-        created = c["created_at"] >= since if isinstance(c["created_at"], datetime) else False
+        at = c["created_at"]
+        if isinstance(at, datetime) and at.tzinfo is None:  # ClickHouse returns naive UTC
+            at = at.replace(tzinfo=timezone.utc)
+        created = isinstance(at, datetime) and at >= since
         ctx = {"case": _case_context(c), "tenant": {"id": tenant_id}}
         if created:
             out.append(("case_created", f"case:{c['id']}", ctx))

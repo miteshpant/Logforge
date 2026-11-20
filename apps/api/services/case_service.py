@@ -170,6 +170,9 @@ class CaseService:
         await self._store([case], events)
         return case
 
+    async def get(self, tenant_id: str, case_id: str) -> Optional[Case]:
+        return await self.dao.get(tenant_id, case_id)
+
     async def act(self, tenant_id: str, case_id: str, action: str, actor: str, **kwargs: Any) -> Case:
         before = await self._load(tenant_id, case_id)
         after, events = apply_action(before, action, actor, self.clock(), **kwargs)

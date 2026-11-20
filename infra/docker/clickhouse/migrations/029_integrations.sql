@@ -2,9 +2,10 @@
 -- Teams, PagerDuty, Opsgenie, Jira, GitHub, webhooks and containment
 -- automations. `secrets` holds the integration's tokens sealed with Fernet
 -- under LOGFORGE_SECRETS_KEY; the API never returns them. Latest version per
--- (tenant, id) wins; `deleted` marks removal.
+-- (tenant, id) wins; `deleted` marks removal. Not integrations_mt: init_simple.sql
+-- creates an older, unused table by that name, and IF NOT EXISTS would keep it.
 
-CREATE TABLE IF NOT EXISTS integrations_mt
+CREATE TABLE IF NOT EXISTS response_integrations_mt
 (
     customer_id String,
     id String,
