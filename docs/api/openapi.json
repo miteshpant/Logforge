@@ -3884,6 +3884,21 @@
         "title": "QueryResponse",
         "type": "object"
       },
+      "QuestionBody": {
+        "properties": {
+          "question": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "QuestionBody",
+        "type": "object"
+      },
       "RefreshRequest": {
         "description": "Token refresh request (LF-015).\n\nCarries the opaque refresh token; deliberately does NOT require a valid\naccess token, since its whole purpose is renewing an expired session.",
         "properties": {
@@ -6991,6 +7006,30 @@
           "peak_count"
         ],
         "title": "TrendSummary",
+        "type": "object"
+      },
+      "TriageBody": {
+        "properties": {
+          "id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "alert",
+              "case"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "TriageBody",
         "type": "object"
       },
       "TuningRecordRequest": {
@@ -10516,6 +10555,50 @@
         ]
       }
     },
+    "/v1/ai/nl2query": {
+      "post": {
+        "description": "Draft a LogforgeQL query for a question, explained, for the user to run or edit. The model sees the\ntenant's field names and redacted example values, never log data. With AI off, a rule-based draft.",
+        "operationId": "ai_nl2query_v1_ai_nl2query_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Ai Nl2Query V1 Ai Nl2Query Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ai Nl2Query",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
     "/v1/ai/optimize": {
       "post": {
         "description": "Generate performance optimization recommendations",
@@ -11213,6 +11296,50 @@
           }
         },
         "summary": "Ai Status",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
+    "/v1/ai/triage": {
+      "post": {
+        "description": "A triage summary of an alert or case: what happened, ATT&CK context, entities, related activity and\nnext steps, each sentence citing its evidence. The evidence is read as the caller; with AI off, or if the\nmodel's answer has nothing cited, the summary is built from the evidence by template.",
+        "operationId": "ai_triage_v1_ai_triage_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TriageBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Ai Triage V1 Ai Triage Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ai Triage",
         "tags": [
           "ai-assistant"
         ]

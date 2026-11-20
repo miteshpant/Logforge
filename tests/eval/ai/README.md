@@ -82,6 +82,29 @@ then held as regression floors (`baseline_nl2query_exec.json`).
 
 Limitation: templated questions are more regular than an analyst's.
 
+## Alert and case triage summaries (Phase 9)
+
+`datasets/triage.jsonl` (written by `triage_dataset.py`) has 20 items: 16
+alerts across ATT&CK tactics (and one with no technique), and 4 cases of two
+alerts each. Each carries the evidence a summary is built from: the alert or
+case, the related activity of its entities and threat intelligence matches,
+plus the facts a summary must state (title, entities, techniques, intel
+sources). `tests/test_ai_triage_eval.py` scores, per `triage_eval.py`:
+
+| System | Items | Uncited sentences | Raw uncited rate | Fact coverage |
+|---|---|---|---|---|
+| Template (AI off) | 20 | 0 | 0% | 100% |
+| Model (`ai.triage.write`) | 20 | 0 by construction | not recorded | not recorded |
+
+The target is zero uncited claims. The product drops any sentence a model
+writes without a valid citation (`dropped`), so a summary never shows one;
+the raw uncited rate measures how often a model needed that. The template
+cites every sentence by construction. Its full fact coverage is expected:
+the required facts are the ones the evidence holds, and the template states
+all of them. It says less than a model could (nothing about why the events
+matter beyond the tactic). Record a model with
+`record_triage.py --provider ... --update-baseline`.
+
 ## Status
 
 This is the Phase 0 skeleton: scorers, small seed datasets (8 / 5 / 5 items)

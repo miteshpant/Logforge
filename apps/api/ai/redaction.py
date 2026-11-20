@@ -92,6 +92,28 @@ class Redactor:
             count += n
         return text, count
 
+    def secrets(self, value: Any, path: str = "") -> set[str]:
+        """The values held under redacted fields, so they can be masked where
+        they turn up again under other names (a message, a label)."""
+        found: set[str] = set()
+        if isinstance(value, dict):
+            for k, v in value.items():
+                child = f"{path}.{k}" if path else str(k)
+                if self._field(str(k), child):
+                    found |= {str(x) for x in (v if isinstance(v, list) else [v])
+                              if isinstance(x, (str, int, float)) and len(str(x)) >= 3}
+                else:
+                    found |= self.secrets(v, child)
+        elif isinstance(value, list):
+            for v in value:
+                found |= self.secrets(v, path)
+        return found
+
+    def scrub(self, text: str, values: Iterable[str]) -> str:
+        for v in sorted(set(values), key=len, reverse=True):
+            text = text.replace(v, MASK)
+        return text
+
     def redact(self, value: Any, path: str = "") -> tuple[Any, int]:
         if isinstance(value, dict):
             out, total = {}, 0

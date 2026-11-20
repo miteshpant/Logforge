@@ -281,3 +281,39 @@ def test_nl2query_with_ai_is_audited_and_returns_the_models_query(api, catalogue
     kinds = [e["kind"] for e in api.get(f"/v1/ai/audit?request_id={body['request_id']}", headers=ACME).json()["entries"]]
     assert kinds == ["prompt", "response"]
     assert all(e["feature"] == "nl2query" for e in api.audit.rows)
+
+
+# -- Phase 9: alert and case triage -------------------------------------------------
+
+from test_ai_triage import data  # noqa: E402,F401  (fixture: the alert, case, activity and intel)
+
+
+def test_triage_without_ai_is_the_cited_template(api, data):
+    r = api.post("/v1/ai/triage", headers=ACME, json={"kind": "alert", "id": "a-1"})
+    body = r.json()
+    assert r.status_code == 200, r.text
+    assert body["mode"] == "template" and body["reason_code"] == "tenant_off" and body["provider"] is None
+    assert [s["key"] for s in body["sections"]][0] == "what_happened" and body["citations"][0]["id"] == "C1"
+    assert api.audit.rows == []
+    analyst = {**ACME, "X-Test-Role": "security_analyst"}
+    assert api.post("/v1/ai/triage", headers=analyst, json={"kind": "case", "id": "c-9"}).status_code == 200
+
+
+def test_triage_with_ai_is_audited_and_drops_uncited_sentences(api, data):
+    import json as _json
+
+    opt_in(api)
+    api.state["provider"] = ScriptedProvider(answer(_json.dumps(
+        {"what_happened": ["Root logged in after 15 failures [C1].", "Probably a nation state."]})))
+    api.state["provider"].name = "claude"
+    body = api.post("/v1/ai/triage", headers=ACME, json={"kind": "alert", "id": "a-1"}).json()
+    assert body["mode"] == "ai" and body["dropped"] == ["Probably a nation state."]
+    assert body["sections"][0]["sentences"] == ["Root logged in after 15 failures [C1]."]
+    assert body["request_id"] and all(e["feature"] == "triage" for e in api.audit.rows)
+
+
+def test_triage_errors(api, data):
+    assert api.post("/v1/ai/triage", headers=ACME, json={"kind": "alert", "id": "nope"}).status_code == 404
+    assert api.post("/v1/ai/triage", headers=ACME, json={"kind": "rule", "id": "a-1"}).status_code == 422
+    viewer = {**ACME, "X-Test-Role": "viewer"}
+    assert api.post("/v1/ai/triage", headers=viewer, json={"kind": "alert", "id": "a-1"}).status_code == 403

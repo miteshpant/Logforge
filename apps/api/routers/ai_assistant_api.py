@@ -5,13 +5,16 @@ used; with AI off, /ask returns the rule-based answer.
 
 Permissions (checked here with the caller's roles, and by the middleware):
   GET /status, GET /usage, POST /ask    ai:read
+  POST /nl2query                        ai:read and logs:read
+  POST /triage                          ai:read; the evidence is read with
+                                        the caller's own permissions
   GET /settings, GET /audit             settings:read   (tenant admin)
   PUT /settings                         settings:write  (tenant admin)
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from ai import assistant
 from ai.providers import ProviderError
@@ -30,6 +33,11 @@ class AskBody(BaseModel):
 
 class QuestionBody(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000)
+
+
+class TriageBody(BaseModel):
+    kind: Literal["alert", "case"]
+    id: str = Field(..., min_length=1, max_length=128)
 
 
 class SettingsBody(BaseModel):
@@ -163,3 +171,37 @@ async def ai_nl2query(body: QuestionBody, request: Request, customer_id: str = M
         raise HTTPException(status_code=502, detail=f"The AI provider failed: {e}")
     except Exception as e:
         raise internal_error(e, "AI query drafting failed", customer_id=customer_id)
+
+
+@router.post("/triage")
+async def ai_triage(body: TriageBody, request: Request, customer_id: str = MiddlewareTenant) -> dict[str, Any]:
+    """A triage summary of an alert or case: what happened, ATT&CK context, entities, related activity and
+    next steps, each sentence citing its evidence. The evidence is read as the caller; with AI off, or if the
+    model's answer has nothing cited, the summary is built from the evidence by template."""
+    from ai.tools import ToolContext
+    from ai.triage import gather, template, write
+
+    _require(request, customer_id, "ai:read:tenant")
+    roles = getattr(request.state, "roles", None) or []
+    ctx = ToolContext(tenant_id=customer_id, user_id=_user_id(request), roles=roles)
+    try:
+        bundle = await gather(body.kind, body.id, ctx)
+    except LookupError:
+        raise HTTPException(status_code=404, detail=f"{body.kind} {body.id} not found")
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        raise internal_error(e, "Failed to gather the triage evidence", customer_id=customer_id)
+    try:
+        async with assistant.ai_session(tenant_id=customer_id, user_id=_user_id(request), roles=roles,
+                                        feature="triage") as session:
+            summary = await write(bundle, session.provider, redactor=session.redactor, session=session)
+            return {**summary, "provider": session.provider_info(), "request_id": session.request_id}
+    except assistant.AIUnavailable as e:
+        return {**template(bundle), "reason_code": e.code, "reason": str(e), "provider": None}
+    except assistant.LimitExceeded as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    except ProviderError as e:
+        raise HTTPException(status_code=502, detail=f"The AI provider failed: {e}")
+    except Exception as e:
+        raise internal_error(e, "AI triage failed", customer_id=customer_id)

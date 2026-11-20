@@ -112,8 +112,9 @@ def catalogue_prompt(catalogue: dict[str, Any] | None, redactor: Redactor) -> st
     return "Fields in this tenant's logs, with example values:\n" + ("\n".join(lines) or "- (none sampled)")
 
 
-def _parse(text: str) -> tuple[str | None, str]:
-    body = text.strip()
+def json_object(text: str) -> dict[str, Any] | None:
+    """The JSON object in a model's answer: fenced, bare, or among prose."""
+    body = (text or "").strip()
     fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", body, re.DOTALL)
     if fenced:
         body = fenced.group(1)
@@ -124,9 +125,13 @@ def _parse(text: str) -> tuple[str | None, str]:
     try:
         data = json.loads(body)
     except ValueError:
-        return None, ""
-    query = data.get("query") if isinstance(data, dict) else None
-    explanation = data.get("explanation", "") if isinstance(data, dict) else ""
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _parse(text: str) -> tuple[str | None, str]:
+    data = json_object(text) or {}
+    query, explanation = data.get("query"), data.get("explanation", "")
     return (query.strip() if isinstance(query, str) and query.strip() else None), str(explanation or "")
 
 
