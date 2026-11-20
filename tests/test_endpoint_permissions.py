@@ -33,6 +33,8 @@ def test_mutating_methods_need_write(path, read, write):
     ("POST", "/v1/ai/explain", "ai:read:tenant"),       # and logs:read, checked in the route
     ("POST", "/v1/ai/copilot/plan", "ai:read:tenant"),  # searches run as the caller
     ("POST", "/v1/ai/copilot/run", "ai:read:tenant"),
+    ("POST", "/v1/ai/rule-draft", "ai:read:tenant"),         # and security:write, checked in the route
+    ("POST", "/v1/ai/rule-draft/enable", "ai:read:tenant"),
     ("DELETE", "/v1/security/cases/c1/evidence/e1", "security:write:tenant"),  # unpin
     ("POST", "/v1/ai/triage", "ai:read:tenant"),       # evidence is read with the caller's own permissions
     ("GET", "/v1/ai/settings", "settings:read:tenant"),  # tenant admin

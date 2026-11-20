@@ -449,3 +449,90 @@ def test_copilot_refuses_bad_steps_and_subjects(api, copilot_data):
                     json={"subject": {"kind": "case", "id": "c-1"}}).status_code == 200
     viewer = {**ACME, "X-Test-Role": "viewer"}
     assert api.post("/v1/ai/copilot/plan", headers=viewer, json={"subject": HOST}).status_code == 403
+
+
+# -- Phase 10: detection drafting -------------------------------------------------------------
+
+class FakeRuleStore:
+    def __init__(self, alerts_total=3, reserved=()):
+        self.alerts_total, self.reserved, self.applied, self.backtests = alerts_total, list(reserved), [], []
+
+    async def reserved_ids(self, tenant_id):
+        return self.reserved
+
+    async def backtest(self, tenant_id, rule_id, rules, days):
+        self.backtests.append((tenant_id, rule_id, days))
+        return {"alerts_total": self.alerts_total, "events_scanned": 1000}
+
+    async def apply(self, tenant_id, plan):
+        self.applied.append((tenant_id, plan))
+        return {"created": len(plan["create"]), "updated": 0, "retired": 0}
+
+
+@pytest.fixture
+def rule_store(monkeypatch):
+    import routers.ai_assistant_api as module
+
+    store = FakeRuleStore()
+    monkeypatch.setattr(module, "_rule_store", lambda: store)
+    return store
+
+
+def _behaviour(bid="shadow-delete"):
+    import json as _json
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parent / "eval" / "ai" / "datasets" / "rule_behaviours.jsonl"
+    return next(_json.loads(line) for line in path.read_text().splitlines() if _json.loads(line)["id"] == bid)
+
+
+def test_rule_draft_without_ai_then_enable(api, rule_store):
+    item = _behaviour()
+    r = api.post("/v1/ai/rule-draft", headers=ACME, json={"description": item["description"], "samples": item["attack"],
+                                                           "technique": item["technique"],
+                                                           "known_good": item["known_good"]})
+    body = r.json()
+    assert r.status_code == 200, r.text
+    assert body["mode"] == "heuristic" and body["passed"] and body["reason_code"] == "tenant_off"
+    enabled = api.post("/v1/ai/rule-draft/enable", headers=ACME,
+                       json={"yaml": body["yaml"], "samples": item["attack"], "known_good": item["known_good"]})
+    assert enabled.status_code == 200, enabled.text
+    out = enabled.json()
+    assert out["enabled"] and out["rule_id"].startswith("ai_") and out["backtest"][out["rule_id"]]["alerts_total"] == 3
+    (tenant, plan), = rule_store.applied
+    assert tenant == "acme" and plan["create"][0]["created_by"] == "ai-draft" and plan["create"][0]["is_enabled"]
+    assert rule_store.backtests == [("acme", out["rule_id"], 7)]
+
+
+def test_nothing_is_enabled_without_passing(api, rule_store):
+    import yaml as _yaml
+
+    item = _behaviour()
+    draft = api.post("/v1/ai/rule-draft", headers=ACME, json={
+        "description": item["description"], "samples": item["attack"], "technique": item["technique"]}).json()
+    rule = _yaml.safe_load(draft["yaml"])
+    # a tampered draft: the gate runs again on enable, whatever the client says
+    broken = dict(rule, fixtures={"true_positive": {"command_line": "notepad.exe"},
+                                  "true_negative": rule["fixtures"]["true_negative"]})
+    r = api.post("/v1/ai/rule-draft/enable", headers=ACME, json={"yaml": _yaml.safe_dump(broken)})
+    assert r.status_code == 409 and "fixture gate" in r.json()["detail"]
+    # it doesn't fire on the analyst's samples
+    r = api.post("/v1/ai/rule-draft/enable", headers=ACME,
+                 json={"yaml": draft["yaml"], "samples": [{"command_line": "calc.exe"}]})
+    assert r.status_code == 409 and "attack samples" in r.json()["detail"]
+    # too noisy in the backtest
+    rule_store.alerts_total = 7 * 500
+    r = api.post("/v1/ai/rule-draft/enable", headers=ACME, json={"yaml": draft["yaml"], "max_alerts_per_day": 50})
+    assert r.status_code == 409 and "backtest" in r.json()["detail"]
+    # not a draft
+    r = api.post("/v1/ai/rule-draft/enable", headers=ACME, json={"yaml": _yaml.safe_dump(dict(rule, id="mine"))})
+    assert r.status_code == 422
+    assert rule_store.applied == []
+
+
+def test_rule_drafting_needs_rule_authors(api, rule_store):
+    item = _behaviour()
+    viewer = {**ACME, "X-Test-Role": "viewer"}
+    payload = {"description": item["description"], "samples": item["attack"], "technique": item["technique"]}
+    assert api.post("/v1/ai/rule-draft", headers=viewer, json=payload).status_code == 403
+    assert api.post("/v1/ai/rule-draft", headers=ACME, json={**payload, "samples": []}).status_code == 422

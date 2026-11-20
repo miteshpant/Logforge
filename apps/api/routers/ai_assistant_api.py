@@ -7,6 +7,7 @@ Permissions (checked here with the caller's roles, and by the middleware):
   GET /status, GET /usage, POST /ask    ai:read
   POST /nl2query                        ai:read and logs:read
   POST /copilot/plan, /copilot/run     ai:read; searches run with the caller's own permissions
+  POST /rule-draft, /rule-draft/enable ai:read and security:write; enabling re-runs the gate and a backtest
   POST /explain                         ai:read and logs:read
   POST /pipeline-draft                  ai:read and logs:write (who may edit pipelines)
   POST /triage                          ai:read; the evidence is read with
@@ -66,6 +67,22 @@ class CopilotBody(BaseModel):
                                                      '"value": ..., "at": "<ISO time>"}')
     steps: list[dict[str, Any]] = Field(default_factory=list, max_length=8,
                                         description="The steps to run, as planned or edited by the analyst")
+
+
+class RuleDraftBody(BaseModel):
+    description: str = Field(..., min_length=3, max_length=2000)
+    samples: list[Any] = Field(..., min_length=1, max_length=20, description="Attack events: JSON objects or raw lines")
+    technique: str | None = Field(None, max_length=20, description="ATT&CK technique, e.g. T1003.001")
+    known_good: Any = Field(None, description="One event the rule must not fire on")
+    level: str = Field("medium", pattern="^(low|medium|high|critical)$")
+
+
+class RuleEnableBody(BaseModel):
+    yaml: str = Field(..., min_length=10, max_length=50_000)
+    samples: list[Any] = Field(default_factory=list, max_length=20)
+    known_good: Any = None
+    backtest_days: int = Field(7, ge=1, le=30)
+    max_alerts_per_day: float = Field(50, ge=0)
 
 
 class SettingsBody(BaseModel):
@@ -351,3 +368,108 @@ async def ai_copilot_run(body: CopilotBody, request: Request, customer_id: str =
         raise HTTPException(status_code=502, detail=f"The AI provider failed: {e}")
     except Exception as e:
         raise internal_error(e, "The copilot failed", customer_id=customer_id)
+
+
+@router.post("/rule-draft")
+async def ai_rule_draft(body: RuleDraftBody, request: Request, customer_id: str = MiddlewareTenant) -> dict[str, Any]:
+    """Draft a Sigma rule and its fixtures for a behaviour. The draft passes only if the fixture gate accepts
+    it, it fires on every attack sample and not on the known-good one (two attempts at most). Nothing is
+    saved: enable a passing draft with /rule-draft/enable."""
+    from ai.rule_draft import draft, heuristic
+
+    _require(request, customer_id, "ai:read:tenant")
+    _require(request, customer_id, "security:write:tenant")
+    roles = getattr(request.state, "roles", None) or []
+    kwargs = {"technique": body.technique, "known_good": body.known_good, "level": body.level}
+    try:
+        async with assistant.ai_session(tenant_id=customer_id, user_id=_user_id(request), roles=roles,
+                                        feature="rule_draft") as session:
+            out = await draft(body.description, body.samples, session.provider, redactor=session.redactor,
+                              session=session, **kwargs)
+            return {**out.to_public(), "provider": session.provider_info(), "request_id": session.request_id}
+    except assistant.AIUnavailable as e:
+        return {**heuristic(body.description, body.samples, **kwargs).to_public(), "reason_code": e.code,
+                "reason": str(e), "provider": None}
+    except assistant.LimitExceeded as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    except ProviderError as e:
+        raise HTTPException(status_code=502, detail=f"The AI provider failed: {e}")
+    except Exception as e:
+        raise internal_error(e, "Rule drafting failed", customer_id=customer_id)
+
+
+class _RuleStore:
+    """Where enabled drafts go: the tenant's rules (sigma_rules_mt), with a backtest over its stored logs."""
+
+    async def reserved_ids(self, tenant_id: str) -> list[str]:
+        from routers.security_api import _dac_rows
+
+        managed, others = await _dac_rows(tenant_id)
+        return [r["id"] for r in managed + others]
+
+    async def backtest(self, tenant_id: str, rule_id: str, rules: list[dict[str, Any]], days: int) -> dict[str, Any]:
+        from datetime import datetime, timedelta, timezone
+
+        from backtest import run_backtest
+        from routers.security_api import _backtest_db
+
+        end = datetime.now(timezone.utc)
+        return await run_backtest(_backtest_db(), rules, rule_id, tenant_id, end - timedelta(days=days), end,
+                                  max_events=500_000, sample_limit=5)
+
+    async def apply(self, tenant_id: str, plan: dict[str, Any]) -> dict[str, int]:
+        from detection_as_code import apply_sync
+        from routers.security_api import _invalidate_rules, _rules_db
+
+        counts = await apply_sync(_rules_db(), tenant_id, plan)
+        await _invalidate_rules(tenant_id)
+        return counts
+
+
+def _rule_store() -> _RuleStore:
+    return _RuleStore()
+
+
+@router.post("/rule-draft/enable")
+async def ai_rule_draft_enable(body: RuleEnableBody, request: Request,
+                               customer_id: str = MiddlewareTenant) -> dict[str, Any]:
+    """Enable a drafted rule. Everything is checked again here, whatever the client says: the fixture gate,
+    the samples (if given), and a backtest over the tenant's stored logs (at most max_alerts_per_day). A rule
+    that fails any of them is refused (409) and nothing is written."""
+    import yaml as _yaml
+
+    from ai.rule_draft import verify
+    from detection_as_code import DetectionAsCodeError, plan_sync
+
+    _require(request, customer_id, "ai:read:tenant")
+    _require(request, customer_id, "security:write:tenant")
+    try:
+        rule = _yaml.safe_load(body.yaml)
+    except _yaml.YAMLError as e:
+        raise HTTPException(status_code=422, detail=f"invalid YAML: {e}")
+    if not isinstance(rule, dict) or not str(rule.get("id") or "").startswith("ai_"):
+        raise HTTPException(status_code=422, detail="not a drafted rule (drafted rule ids start with ai_)")
+    reason = verify(rule, body.samples, body.known_good) if body.samples else verify(rule, [], None)
+    if reason:
+        raise HTTPException(status_code=409, detail=f"not enabled: {reason}")
+    store = _rule_store()
+
+    async def backtest(rule_id, rules):
+        return await store.backtest(customer_id, rule_id, rules, body.backtest_days)
+
+    try:
+        plan = await plan_sync(customer_id, _yaml.safe_dump(rule, sort_keys=False), [],
+                               backtest=backtest, backtest_days=body.backtest_days,
+                               max_alerts_per_day=body.max_alerts_per_day,
+                               reserved_ids=await store.reserved_ids(customer_id))
+    except DetectionAsCodeError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise internal_error(e, "The rule's backtest failed", customer_id=customer_id)
+    summary = {rid: {k: v for k, v in result.items() if k not in ("alerts",)} for rid, result in plan["backtest"].items()}
+    if plan["status"] != "ok":
+        raise HTTPException(status_code=409, detail="not enabled: " + "; ".join(r["reason"] for r in plan["rejected"]))
+    for row in plan["create"]:
+        row["created_by"] = "ai-draft"
+    counts = await store.apply(customer_id, plan)
+    return {"enabled": True, "rule_id": rule["id"], "created": counts.get("created", 0), "backtest": summary}

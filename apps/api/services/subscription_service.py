@@ -168,6 +168,8 @@ class SubscriptionService:
             "/v1/ai/explain": "ai_assistant.query",
             "/v1/ai/copilot/plan": "ai_assistant.query",
             "/v1/ai/copilot/run": "ai_assistant.query",
+            "/v1/ai/rule-draft": "ai_assistant.query",
+            "/v1/ai/rule-draft/enable": "ai_assistant.query",
             "/v1/ai/analysis": "ai_assistant.analysis",
             "/v1/ai/rca": "ai_assistant.rca",
             "/v1/ai/anomaly": "ai_assistant.anomaly",

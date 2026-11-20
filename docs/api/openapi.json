@@ -4117,6 +4117,90 @@
         "title": "RootAlertDetail",
         "type": "object"
       },
+      "RuleDraftBody": {
+        "properties": {
+          "description": {
+            "maxLength": 2000,
+            "minLength": 3,
+            "title": "Description",
+            "type": "string"
+          },
+          "known_good": {
+            "description": "One event the rule must not fire on",
+            "title": "Known Good"
+          },
+          "level": {
+            "default": "medium",
+            "pattern": "^(low|medium|high|critical)$",
+            "title": "Level",
+            "type": "string"
+          },
+          "samples": {
+            "description": "Attack events: JSON objects or raw lines",
+            "items": {},
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Samples",
+            "type": "array"
+          },
+          "technique": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ATT&CK technique, e.g. T1003.001",
+            "title": "Technique"
+          }
+        },
+        "required": [
+          "description",
+          "samples"
+        ],
+        "title": "RuleDraftBody",
+        "type": "object"
+      },
+      "RuleEnableBody": {
+        "properties": {
+          "backtest_days": {
+            "default": 7,
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Backtest Days",
+            "type": "integer"
+          },
+          "known_good": {
+            "title": "Known Good"
+          },
+          "max_alerts_per_day": {
+            "default": 50,
+            "minimum": 0.0,
+            "title": "Max Alerts Per Day",
+            "type": "number"
+          },
+          "samples": {
+            "items": {},
+            "maxItems": 20,
+            "title": "Samples",
+            "type": "array"
+          },
+          "yaml": {
+            "maxLength": 50000,
+            "minLength": 10,
+            "title": "Yaml",
+            "type": "string"
+          }
+        },
+        "required": [
+          "yaml"
+        ],
+        "title": "RuleEnableBody",
+        "type": "object"
+      },
       "RuleSyncRequest": {
         "properties": {
           "backtest_days": {
@@ -11450,6 +11534,94 @@
         "summary": "Get Query History",
         "tags": [
           "ai"
+        ]
+      }
+    },
+    "/v1/ai/rule-draft": {
+      "post": {
+        "description": "Draft a Sigma rule and its fixtures for a behaviour. The draft passes only if the fixture gate accepts\nit, it fires on every attack sample and not on the known-good one (two attempts at most). Nothing is\nsaved: enable a passing draft with /rule-draft/enable.",
+        "operationId": "ai_rule_draft_v1_ai_rule_draft_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleDraftBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Ai Rule Draft V1 Ai Rule Draft Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ai Rule Draft",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
+    "/v1/ai/rule-draft/enable": {
+      "post": {
+        "description": "Enable a drafted rule. Everything is checked again here, whatever the client says: the fixture gate,\nthe samples (if given), and a backtest over the tenant's stored logs (at most max_alerts_per_day). A rule\nthat fails any of them is refused (409) and nothing is written.",
+        "operationId": "ai_rule_draft_enable_v1_ai_rule_draft_enable_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleEnableBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Ai Rule Draft Enable V1 Ai Rule Draft Enable Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ai Rule Draft Enable",
+        "tags": [
+          "ai-assistant"
         ]
       }
     },

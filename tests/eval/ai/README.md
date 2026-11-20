@@ -183,6 +183,34 @@ were written alongside the copilot's signals, so they test the method, not
 how it does on unseen attacks. Record a model with
 `record_copilot.py --provider ... --update-baseline`.
 
+## Detection drafting (Phase 10)
+
+`datasets/rule_behaviours.jsonl` (written by `rule_behaviours.py`) has 20
+behaviours across 17 ATT&CK techniques: shadow copies deleted, LSASS dumps
+(ProcDump, comsvcs, Mimikatz), log clearing, encoded PowerShell, local admin
+added, Linux accounts, reverse shells, downloads to /tmp, SSH keys added,
+cron and scheduled-task persistence, certutil downloads, dynamic-DNS
+lookups, web shells, SQL injection, Defender switched off, Kerberoasting,
+privilege discovery. The drafter gets the description, the technique, the
+attack samples and one known-good event; held-out attack and benign events
+check that the rule generalises and stays quiet (`rule_draft_eval.py`).
+
+| Drafter | Behaviours | Passed within 2 attempts | First attempt | Held-out recall | Held-out quiet |
+|---|---|---|---|---|---|
+| Heuristic (AI off) | 20 | 90% | 90% | 88.9% | 100% |
+| Model (`ai.rule_draft.draft`) | 20 | not recorded | not recorded | — | — |
+
+"Passed" means the Phase 1 fixture gate accepted the draft (its own
+fixtures, the benign corpus, a technique tag), it fires on every attack
+sample and not on the known-good event. The target is >= 70%; nothing is
+enabled without passing, because enabling (`/v1/ai/rule-draft/enable`) runs
+the gate, the samples and a backtest again (`tests/test_ai_api.py`). The
+heuristic fails encoded PowerShell and `whoami /priv`: what the attack
+samples share is in the known-good event too. Of the drafts that pass, two
+miss their held-out variant (a different MiniDump invocation, `UNION ALL`).
+The behaviours were written alongside the drafter. Record a model with
+`record_rule_draft.py --provider ... --update-baseline`.
+
 ## Status
 
 This is the Phase 0 skeleton: scorers, small seed datasets (8 / 5 / 5 items)
