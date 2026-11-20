@@ -934,6 +934,51 @@ and measurable.
 
 **Goal:** the first AI features, each useful on day one and each measured.
 
+> **Status: built (2026-11-20); the model's evaluation targets are not yet
+> measured.** Guide: [AI](./ai.md#features-phase-9).
+>
+> | Acceptance criterion | Result |
+> |---|---|
+> | Each feature meets its evaluation target and has its numbers in the docs | **Not met yet.** Every evaluation set, scorer, recorder and CI test exists, and the AI-off numbers are in the docs. A model's numbers need its answers recorded, which needs a model API key; none is available to this work. Until then, the targets that are about the model (≥ 85% execution accuracy; analyst-rated triage) are unmeasured. |
+> | Every feature works (with reduced capability) when AI is disabled | **Met.** Each has a fallback, covered by unit and API tests and by Playwright spec 17 on the stack as it ships (AI off). |
+>
+> - **Done: natural language → LogforgeQL** (`ai/nl2query.py`,
+>   `POST /v1/ai/nl2query`, the Log Explorer's ask box). The model gets the
+>   field catalogue (names, types, redacted examples), answers with a query
+>   and an explanation, must compile (one repair round), and unseen fields
+>   are flagged. Fallback: a rule-based translator.
+>   - Eval: 661 question/query pairs over three schemas (auth 242, http 214,
+>     dns 205), scored by execution against ClickHouse in CI. Fallback: 0.4%,
+>     9.8%, 11.2%. Model: not recorded. Target ≥ 85%.
+> - **Done: triage summaries** (`ai/triage.py`, `POST /v1/ai/triage`, panels
+>   on security events and case detail). Evidence through the read-only
+>   tools as the caller; five sections; uncited model sentences are removed.
+>   Fallback: a template, cited by construction.
+>   - Eval: 20 alerts and cases, 0 uncited sentences, 100% of required facts
+>     (template). No analyst-rated set yet.
+> - **Done: pipeline drafts** (`ai/pipeline_draft.py`,
+>   `POST /v1/ai/pipeline-draft`, the pipeline editor). Every draft is
+>   simulated before it is offered; the model gets one repair round with
+>   the failures; the heuristic draft wins when it parses more. Fallback: a
+>   heuristic drafter over candidate parsers.
+>   - Eval: the 14 content-pack sample files as held-out formats (85
+>     lines): 100% of lines parsed and 91.4% of recoverable values extracted
+>     (heuristic).
+> - **Done: explain this event** (`ai/explain.py`, `POST /v1/ai/explain`,
+>   Explain on every Log Explorer row): reference entries, matching shipped
+>   rules, intel, field meanings, follow-up queries; all cited.
+>   - Eval: 83 pack sample events, 0 uncited, 90.4% identified, 100% of the
+>     28 expected rules named (template).
+> - **Gaps:**
+>   - No model answers recorded for any of the four (needs an API key).
+>   - Triage has no analyst-rated helpfulness or accuracy set.
+>   - The NL2Query sets are generated from templates, more regular than
+>     analysts' questions.
+>   - The pipeline and explain sets were in view while the heuristics and
+>     reference were written.
+>   - `services/nlq_processor.py` and `services/ai_service.py` are not
+>     replaced; the new features sit beside them.
+
 ### Deliverables
 
 1. **Natural language → LogforgeQL.** The user asks a question; the AI

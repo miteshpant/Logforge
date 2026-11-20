@@ -151,8 +151,73 @@ key), so the gate currently reports both features as skipped.
 | `GET /v1/ai/usage` | `ai:read` | tokens and requests this month, the limits |
 | `GET /v1/ai/settings` / `PUT` | `settings:read` / `settings:write` (tenant admin) | opt in or out, provider, redacted fields, lower limits |
 | `GET /v1/ai/audit` | `settings:read` (tenant admin) | the audit log, optionally for one `request_id` |
+| `POST /v1/ai/nl2query` | `ai:read` and `logs:read` | a LogforgeQL draft for a question, explained (`mode: ai` or `rule_based`) |
+| `POST /v1/ai/triage` | `ai:read`; evidence read with the caller's own permissions | a cited triage summary of an alert or case (`mode: ai` or `template`) |
+| `POST /v1/ai/explain` | `ai:read` and `logs:read` | a cited explanation of one event (`mode: ai` or `template`) |
+| `POST /v1/ai/pipeline-draft` | `ai:read` and `logs:write` | a pipeline for sample lines, with its simulation report (`mode: ai` or `heuristic`) |
 
 Tenant admins, security analysts and DevOps engineers have `ai:read`.
+
+## Features (Phase 9)
+
+Each feature works with AI off, with less capability, and says which way an
+answer was made: the model (and whether it is external), or the fallback
+and why. Every model call is audited, budgeted and redacted as above.
+
+| Feature | Where | With AI | With AI off |
+|---|---|---|---|
+| Ask in plain English | Log Explorer | the model drafts LogforgeQL from the question and the tenant's field catalogue (names, types, redacted example values; never log data); it must compile, with one repair round, and fields the catalogue hasn't seen are flagged | a rule-based translator for common shapes: time windows, levels, services, seen values, IPs, status classes, counts by a field, top values, trends, latest lines |
+| Triage summary | Security events, case detail | the model writes the five sections from the evidence | each sentence built from one evidence item |
+| Explain this event | Log Explorer, Explain on any row | the model writes what it is, why it matters and what to look at next, and suggests queries | reference entries, matching rules and intel, by template |
+| Draft pipeline from samples | Pipeline editor | the model writes the pipeline, simulated on the samples, one repair round with the failures | candidate parsers simulated, the best kept |
+
+The query a draft produces, not the model, produces the answer: the user
+sees it and runs or edits it. Pipeline drafts are never saved by the
+feature; they fill the editor.
+
+**Triage** gathers its evidence through the assistant's tools, as the person
+asking: the alert (or the case and its alerts), each entity's activity over
+the last 24 hours (source and destination IP, user, host: by the fields
+that hold them and in the message), and threat intelligence for its
+addresses. Sections: what happened, ATT&CK context, entities, related
+activity, next steps. A related lookup the caller may not make is skipped
+and flagged.
+
+**Explain** cites the event, reference entries (Windows and Sysmon event
+IDs, auditd record types, sshd, sudo, cron, systemd and nginx messages,
+HTTP statuses, OCSF classes), the shipped detection rules the event matches
+(`packages/rules` and the content packs, evaluated with the detection
+engine's matcher) and threat intelligence. Field meanings come from the
+reference and are shown as a table.
+
+**Citations, without exceptions:** in triage and explanations, a sentence
+the model writes without a citation, or citing an id that wasn't issued,
+is removed (and counted in `dropped`); if nothing cited is left, the
+template is used. So no uncited claim reaches the analyst.
+
+**Pipeline drafts** keep events they can't parse: the pipeline's
+`on_failure` records the error in `attrs.parse_error` instead of
+dead-lettering the event.
+
+### Evaluation numbers
+
+Measured on 2026-11-20 ([details](https://github.com/miteshpant/Logforge/blob/main/tests/eval/ai/README.md)).
+The model column is empty because no model's answers are recorded yet
+(recording needs an API key); each has a recorder script and a CI test that
+scores the recording once it is committed.
+
+| Feature | Set | Target | AI off (fallback) | Model |
+|---|---|---|---|---|
+| Ask in plain English | execution accuracy on 242 / 214 / 205 question-query pairs (auth, http, dns) | ≥ 85% | 0.4% / 9.8% / 11.2% | not recorded |
+| Triage summary | 20 alerts and cases | 0 uncited claims | 0 uncited, 100% of required facts | not recorded (0 uncited by construction) |
+| Pipeline draft | 14 held-out pack sample files, 85 lines | fields correctly extracted | 100% of lines parsed, 91.4% of recoverable values | not recorded |
+| Explain this event | 83 pack sample events | (none set) | 0 uncited, 90.4% identified, 100% of expected rules named | not recorded |
+
+The plain-English fallback is far below the target: without a model it
+can't know which field holds what in a schema (that a sign-in is
+`attrs.outcome` in the auth services). The target is for the model. The
+triage set has no analyst ratings yet; the roadmap asks for analyst-rated
+helpfulness and accuracy, which needs people.
 
 ## Security review
 

@@ -80,6 +80,22 @@ markers).
   persistent per-tenant index with type history. LogforgeQL extraction
   uses RE2, so no lookaround or backreferences, and allows at most 32
   extracted fields per query.
+- **AI follow-ups from Phase 9** ([guide](./ai.md#features-phase-9)):
+  - **Record the models:** run `tests/eval/ai/record_nl2query_exec.py`,
+    `record_triage.py`, `record_pipeline_draft.py` and `record_explain.py`
+    with a provider (needs an API key and, for the first, ClickHouse) and
+    commit the recordings and baselines. Then check plain-English queries
+    against the ≥ 85% target.
+  - **Rate triage:** build an analyst-rated set (helpfulness and factual
+    accuracy) for triage summaries.
+  - **Real questions:** add analysts' own questions to the NL2Query sets
+    beside the templated ones.
+  - **Held-out formats:** add sample files the drafter and the explain
+    reference were not developed against.
+  - **Replace the old services:** move `/v1/ai/query` and the AI service's
+    template answers onto the Phase 9 features.
+  - **Explain gaps:** epoch timestamps aren't recognised by the pipeline
+    drafter; ATT&CK techniques with several tactics show one.
 - **AI follow-ups from Phase 8** ([guide](./ai.md)):
   - **Record the evaluations:** record a real model's answers for `nl2query`
     and `summaries` (`tests/eval/ai/run_ai_eval.py --record`, needs an API
