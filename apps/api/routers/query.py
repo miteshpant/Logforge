@@ -122,20 +122,23 @@ def _parse_since(value: str) -> timedelta:
     return int(match.group(1)) * _RELATIVE_UNITS[match.group(2)]
 
 
-def logql_window(payload: Dict[str, Any], request_body: Dict[str, Any]) -> Tuple[datetime, datetime]:
+def logql_window(payload: Dict[str, Any], request_body: Dict[str, Any],
+                 max_window: Optional[timedelta] = None) -> Tuple[datetime, datetime]:
     """The window a LogforgeQL query scans. An explicit range in the request
     body wins; otherwise the query's own `| last <duration>`; otherwise the
     last hour (LF-022). Every path goes through the max-window guard."""
     if any(request_body.get(k) is not None for k in ("start_time", "end_time", "since")):
         return resolve_time_window(start_time=request_body.get("start_time"), end_time=request_body.get("end_time"),
-                                   since=request_body.get("since"))
-    return resolve_time_window(start_time=payload.get("start_time"), end_time=payload.get("end_time"))
+                                   since=request_body.get("since"), max_window=max_window)
+    return resolve_time_window(start_time=payload.get("start_time"), end_time=payload.get("end_time"),
+                               max_window=max_window)
 
 
 def resolve_time_window(
     start_time: Any = None,
     end_time: Any = None,
     since: Optional[str] = None,
+    max_window: Optional[timedelta] = None,
 ) -> Tuple[datetime, datetime]:
     """
     Resolve the effective [start, end] query window.
@@ -158,14 +161,15 @@ def resolve_time_window(
             status_code=400, detail="start_time must be before end_time"
         )
 
-    max_window = _max_query_window()
+    limit_name = "LOGFORGE_MAX_ARCHIVE_WINDOW_DAYS" if max_window else "LOGFORGE_MAX_QUERY_WINDOW_DAYS"
+    max_window = max_window or _max_query_window()
     if end - start > max_window:
         raise HTTPException(
             status_code=400,
             detail=(
                 f"Requested time range of {(end - start).days} days exceeds the "
                 f"maximum of {max_window.days} days "
-                "(LOGFORGE_MAX_QUERY_WINDOW_DAYS). Narrow the range."
+                f"({limit_name}). Narrow the range."
             ),
         )
     return start, end
@@ -350,6 +354,11 @@ async def logql_query(
     if not query_text or not isinstance(query_text, str):
         raise HTTPException(status_code=400, detail="A 'query' string is required")
 
+    source = request_body.get("source", "events")
+    if source == "archive":
+        return await run_archive_query(query_text, request_body, customer_id)
+    if source != "events":
+        raise HTTPException(status_code=400, detail="source must be 'events' or 'archive'")
     if uses_pipeline(query_text):
         return await run_pipeline_query(query_text, request_body, customer_id)
 
@@ -539,6 +548,52 @@ async def run_pipeline_query(query_text: str, request_body: Dict[str, Any], cust
         "customer_id": customer_id,
         "time_range": _time_range_payload(start, end),
     }
+
+
+async def run_archive_query(query_text: str, request_body: Dict[str, Any], customer_id: str) -> Dict[str, Any]:
+    """Phase 12: a pipeline query over the tenant's Parquet archives for the window."""
+    import asyncio
+    import time
+
+    import archive_query
+    import pattern_query
+    from logql_pipeline import PipelineError, execute
+
+    if pattern_query.split(query_text):
+        raise HTTPException(status_code=400, detail="| patterns doesn't run on archives; rehydrate the days first")
+    start, end = logql_window({}, request_body, max_window=timedelta(days=archive_query.MAX_WINDOW_DAYS))
+    variables = _check_variables(request_body.get("variables"))
+    from routers.storage_tiers_api import _manager
+
+    mgr = _manager()
+    archived = (await asyncio.to_thread(mgr.archived, "logs", customer_id)).get(customer_id, {})
+    days = archive_query.days_in(archived, start, end)
+    info = {"engine": "archive", "archived_days": len(days),
+            "first_day": days[0].isoformat() if days else None, "last_day": days[-1].isoformat() if days else None}
+    if not days:
+        return {"logs": [], "columns": [], "result_type": "events", "total_count": 0, "truncated": False,
+                "aggregations": {}, "execution_time_ms": 0.0, "query_info": info, "customer_id": customer_id,
+                "time_range": _time_range_payload(start, end)}
+    lookups = await _lookup_metas(customer_id, query_text)
+    try:
+        compiled = archive_query.compile_archive(query_text, customer_id, days, start, end, variables, lookups)
+    except (PipelineError, QueryFieldError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    settings = {"readonly": 2, "max_execution_time": PIPELINE_QUERY_TIMEOUT_SECONDS}
+    began = time.time()
+    try:
+        result = await asyncio.to_thread(execute, mgr.client, compiled, settings)
+    except Exception as e:
+        if "TIMEOUT_EXCEEDED" in str(e) or "Code: 159." in str(e):
+            raise HTTPException(status_code=504, detail=(
+                f"The archive query did not finish within {PIPELINE_QUERY_TIMEOUT_SECONDS} s. Narrow the time "
+                "range, or rehydrate the days and query them in ClickHouse."))
+        raise internal_error(e, "Archive query failed")
+    info["rows_returned"] = len(result["rows"])
+    return {"logs": result["rows"], "columns": result["columns"], "result_type": result["result_type"],
+            "total_count": len(result["rows"]), "truncated": result["truncated"], "aggregations": {},
+            "execution_time_ms": round((time.time() - began) * 1000, 2), "query_info": info,
+            "customer_id": customer_id, "time_range": _time_range_payload(start, end)}
 
 
 @router.post("/query/estimate")

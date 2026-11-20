@@ -11995,6 +11995,33 @@ paths:
       summary: Set Policy
       tags:
       - storage tiers
+  /v1/storage/tiers/rehydrate:
+    post:
+      operationId: rehydrate_v1_storage_tiers_rehydrate_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RehydrateBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Rehydrate V1 Storage Tiers Rehydrate Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Rehydrate
+      tags:
+      - storage tiers
   /v1/storage/tiers/run:
     post:
       operationId: run_now_v1_storage_tiers_run_post
@@ -17152,6 +17179,30 @@ components:
       required:
       - refresh_token
       title: RefreshRequest
+      type: object
+    RehydrateBody:
+      properties:
+        data_type:
+          default: logs
+          title: Data Type
+          type: string
+        first_day:
+          format: date
+          title: First Day
+          type: string
+        keep_days:
+          default: 7
+          minimum: 1.0
+          title: Keep Days
+          type: integer
+        last_day:
+          format: date
+          title: Last Day
+          type: string
+      required:
+      - first_day
+      - last_day
+      title: RehydrateBody
       type: object
     RetentionPolicyRequest:
       properties:

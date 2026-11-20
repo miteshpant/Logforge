@@ -5,6 +5,10 @@ need storage:write, which tenant admins have).
   GET  /v1/storage/tiers                       the tiers, the tenant's retention per data type, its archives
   PUT  /v1/storage/tiers/policies/{data_type}  {searchable_days, archive_days}: the tenant's retention
   POST /v1/storage/tiers/run                   run retention now for the tenant (what the hourly job does)
+  POST /v1/storage/tiers/rehydrate             {data_type, first_day, last_day, keep_days}: archived days back
+                                               into ClickHouse for keep_days
+
+Searching the archives in place is POST /v1/query/logql with "source": "archive".
 
 At startup the API creates the buckets, puts the tiered tables on the
 `tiered` storage policy with their TTL, and (LOGFORGE_RETENTION_JOB, on by
@@ -18,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from datetime import date
 from typing import Any, Dict, Optional
 
 from error_handling import internal_error
@@ -31,6 +36,13 @@ router = APIRouter(prefix="/v1/storage/tiers", tags=["storage tiers"])
 logger = logging.getLogger(__name__)
 JOB_INTERVAL = int(os.getenv("LOGFORGE_RETENTION_INTERVAL", "3600"))
 _status: Dict[str, Any] = {}
+
+
+class RehydrateBody(BaseModel):
+    data_type: str = "logs"
+    first_day: date
+    last_day: date
+    keep_days: int = Field(7, ge=1)
 
 
 class PolicyBody(BaseModel):
@@ -51,19 +63,25 @@ def _user(request: Request) -> str:
 
 
 def _summary(mgr, tenant_id: str) -> Dict[str, Any]:
+    from datetime import datetime, timezone
+
     cfg = mgr.cfg
+    today = datetime.now(timezone.utc).date()
     policies = mgr.policies(tenant_id)
     custom = {p.data_type for p in mgr._stored(tenant_id).get(tenant_id, [])}
     types = []
     for name, dtype in cfg.data_types.items():
         archived = mgr.archived(name, tenant_id).get(tenant_id, {})
+        held = sorted(mgr.holds(name, today, tenant_id).get(tenant_id, set()))
         policy = policies[name]
         types.append({"data_type": name, "table": dtype.table, "searchable_days": policy.searchable_days,
                       "archive_days": policy.archive_days, "custom": name in custom,
                       "default": {"searchable_days": cfg.defaults[name].searchable_days,
                                   "archive_days": cfg.defaults[name].archive_days},
                       "archived_days": len(archived), "archived_rows": sum(n for n, _ in archived.values()),
-                      "oldest_archive": min(archived).isoformat() if archived else None})
+                      "oldest_archive": min(archived).isoformat() if archived else None,
+                      "newest_archive": max(archived).isoformat() if archived else None,
+                      "rehydrated_days": [d.isoformat() for d in held]})
     return {"tiers": {"hot": {"where": "ClickHouse, local disk", "days": cfg.hot_days},
                       "warm": {"where": "ClickHouse, object storage", "enabled": _status.get("warm"),
                                "until_days": "searchable_days"},
@@ -102,6 +120,18 @@ async def run_now(customer_id: str = MiddlewareTenant) -> Dict[str, Any]:
         return await asyncio.to_thread(_manager().run, None, [customer_id])
     except Exception as e:
         raise internal_error(e, "Retention run failed", customer_id=customer_id)
+
+
+@router.post("/rehydrate")
+async def rehydrate(body: RehydrateBody, request: Request, customer_id: str = MiddlewareTenant) -> Dict[str, Any]:
+    mgr = _manager()
+    try:
+        return await asyncio.to_thread(mgr.rehydrate, customer_id, body.data_type, body.first_day, body.last_day,
+                                       body.keep_days, _user(request))
+    except st.PolicyError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise internal_error(e, "Rehydration failed", customer_id=customer_id)
 
 
 def ensure() -> Optional[Dict[str, Any]]:

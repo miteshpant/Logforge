@@ -130,3 +130,53 @@ def test_retention_archives_verifies_deletes_and_expires(stack):
         mgr.objects.delete(st.archive_key(tenant, "logs", day))
     client.command("ALTER TABLE logs_raw_mt DELETE WHERE customer_id = {t:String} SETTINGS mutations_sync = 2",
                    parameters={"t": tenant})
+
+
+def test_archive_search_and_rehydration(stack):
+    client, mgr, st, tm = stack
+    import archive_query
+    from logql_pipeline import execute
+
+    mgr.ensure_tables()
+    tenant = f"tiers-rh-{uuid.uuid4().hex[:8]}"
+    today = date.today()
+    old = today - timedelta(days=40)
+    client.insert("logs_raw_mt", _rows(tenant, old, 6), column_names=COLUMNS)
+    mgr.set_policy(tenant, st.Policy("logs", 30, 365), "test")
+    assert mgr.run(today, tenants=[tenant])["deleted_days"] == 1
+
+    # searched in place: the same language, over the Parquet file
+    start = datetime.combine(old, time(0), tzinfo=timezone.utc)
+    end = start + timedelta(days=2)
+    days = archive_query.days_in(mgr.archived("logs", tenant)[tenant], start, end)
+    assert days == [old]
+    compiled = archive_query.compile_archive('| where service = "api" | stats count() AS n, dc(msg) AS m',
+                                             tenant, days, start, end)
+    result = execute(client, compiled, {"readonly": 2})
+    assert result["rows"][0]["n"] == 6 and result["rows"][0]["m"] == 6
+    other = archive_query.compile_archive("*", "someone-else", days, start, end)
+    assert "'someone-else/logs/" in other.sql and tenant not in other.sql  # only its own prefix is read
+
+    # rehydrated: back in ClickHouse, without touching the entity counts
+    def entity_events():
+        return client.query("SELECT sum(events) FROM entities_mt WHERE customer_id = {t:String}",
+                            parameters={"t": tenant}).result_rows[0][0]
+
+    before = entity_events()
+    out = mgr.rehydrate(tenant, "logs", old, old, keep_days=3, user_id="test", today=today)
+    assert out["errors"] == [] and out["rehydrated_days"] == 1 and out["rows"] == 6
+    n = client.query("SELECT count() FROM logs_raw_mt WHERE customer_id = {t:String}",
+                     parameters={"t": tenant}).result_rows[0][0]
+    assert n == 6
+    assert entity_events() == before
+    assert mgr.rehydrate(tenant, "logs", old, old, keep_days=3, user_id="test",
+                         today=today)["skipped"][0]["reason"] == "still in ClickHouse"
+
+    # the job keeps it while held, deletes it again after
+    assert mgr.run(today, tenants=[tenant])["deleted_days"] == 0
+    assert mgr.run(today + timedelta(days=4), tenants=[tenant])["deleted_days"] == 1
+
+    for day in mgr.archived("logs", tenant).get(tenant, {}):
+        mgr.objects.delete(st.archive_key(tenant, "logs", day))
+    client.command("ALTER TABLE logs_raw_mt DELETE WHERE customer_id = {t:String} SETTINGS mutations_sync = 2",
+                   parameters={"t": tenant})

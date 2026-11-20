@@ -26,7 +26,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Set
 
 import yaml
 
@@ -109,17 +109,19 @@ def effective(stored: Iterable[Policy], cfg: Config) -> Dict[str, Policy]:
     return out
 
 
-def plan(policy: Policy, today: date, days: Dict[date, int], archived: Dict[date, int]) -> List[Action]:
+def plan(policy: Policy, today: date, days: Dict[date, int], archived: Dict[date, int],
+         held: Optional[Set[date]] = None) -> List[Action]:
     """
     The actions for one tenant and data type.
 
-    days: rows per day still in ClickHouse; archived: rows per archived day.
+    days: rows per day still in ClickHouse; archived: rows per archived day;
+    held: days rehydrated from the archive and kept until their hold ends.
     """
     actions: List[Action] = []
     age = lambda day: today.toordinal() - day.toordinal()  # noqa: E731
     deleted = set()
     for day, rows in days.items():
-        if age(day) < policy.searchable_days:
+        if age(day) < policy.searchable_days or day in (held or ()):
             continue
         if not policy.archive_days:
             actions.append(Action("delete", policy.data_type, day, rows))

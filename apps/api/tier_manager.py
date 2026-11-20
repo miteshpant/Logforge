@@ -28,6 +28,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import storage_tiers as st
 
 ARCHIVE_COLLECTION = "logforge_archive"
+MAX_REHYDRATE_DAYS = 31
+MAX_REHYDRATE_KEEP_DAYS = 30
 
 
 def _start(day: date) -> datetime:
@@ -162,6 +164,88 @@ class TierManager:
             self._manifest(tenant_id, dtype.name, day, key, rows, self.objects.size(key), "archived")
         return rows
 
+    # -- rehydration --------------------------------------------------------
+
+    def holds(self, data_type: str, today: date, tenant_id: Optional[str] = None) -> Dict[str, set]:
+        """Rehydrated days the retention job leaves alone until their hold ends."""
+        where = " AND customer_id = {tenant:String}" if tenant_id else ""
+        rows = self.client.query(
+            "SELECT customer_id, day FROM rehydrations_mt WHERE data_type = {type:String} "
+            f"AND until > {{today:Date}}{where} GROUP BY customer_id, day",
+            parameters={"type": data_type, "today": today.isoformat(),
+                        **({"tenant": tenant_id} if tenant_id else {})}).result_rows
+        out: Dict[str, set] = defaultdict(set)
+        for tenant, day in rows:
+            out[tenant].add(day)
+        return out
+
+    def rehydrate(self, tenant_id: str, data_type: str, first: date, last: date, keep_days: int, user_id: str,
+                  today: Optional[date] = None) -> Dict[str, Any]:
+        """
+        Copy archived days back into ClickHouse and keep them `keep_days`.
+
+        Days are loaded into a staging copy of the table and attached from
+        it: attaching doesn't fire the table's materialized views, so the
+        entity counts (migration 026) aren't inflated. Days still in
+        ClickHouse are skipped, so nothing is duplicated.
+        """
+        import uuid
+
+        today = today or datetime.now(timezone.utc).date()
+        if data_type not in self.cfg.data_types:
+            raise st.PolicyError(f"unknown data type {data_type!r}")
+        if not 1 <= keep_days <= MAX_REHYDRATE_KEEP_DAYS:
+            raise st.PolicyError(f"keep_days must be 1 to {MAX_REHYDRATE_KEEP_DAYS}")
+        if first > last:
+            raise st.PolicyError("the first day must be on or before the last")
+        if (last - first).days + 1 > MAX_REHYDRATE_DAYS:
+            raise st.PolicyError(f"rehydrate at most {MAX_REHYDRATE_DAYS} days at a time")
+        dtype = self.cfg.data_types[data_type]
+        archived = {day: v for day, v in self.archived(data_type, tenant_id).get(tenant_id, {}).items()
+                    if first <= day <= last}
+        report: Dict[str, Any] = {"rehydrated_days": 0, "rows": 0, "skipped": [], "errors": [],
+                                  "until": (today + timedelta(days=keep_days)).isoformat()}
+        if not archived:
+            return report
+        present = {r[0] for r in self.client.query(
+            f"SELECT toDate({dtype.ts}) AS day, count() FROM {dtype.table} WHERE customer_id = {{tenant:String}} "
+            f"AND toDate({dtype.ts}) IN {{days:Array(Date)}} GROUP BY day",
+            parameters={"tenant": tenant_id, "days": [d.isoformat() for d in archived]}).result_rows}
+        cols = ", ".join(f"`{c}`" for c in self._columns(dtype.table))
+        for day in sorted(archived):
+            if day in present:
+                report["skipped"].append({"day": day.isoformat(), "reason": "still in ClickHouse"})
+                continue
+            expected, key = archived[day]
+            stage = f"_rehydrate_{uuid.uuid4().hex[:12]}"
+            try:
+                self.client.command(f"CREATE TABLE {stage} AS {dtype.table}")
+                self.client.command(f"INSERT INTO {stage} ({cols}) SELECT {cols} FROM s3({ARCHIVE_COLLECTION}, "
+                                    f"filename = '{key}', format = 'Parquet') "
+                                    "WHERE customer_id = {tenant:String}", parameters={"tenant": tenant_id})
+                for (partition,) in self.client.query(
+                        "SELECT DISTINCT partition_id FROM system.parts WHERE database = currentDatabase() "
+                        "AND table = {stage:String} AND active", parameters={"stage": stage}).result_rows:
+                    self.client.command(f"ALTER TABLE {dtype.table} ATTACH PARTITION ID '{partition}' FROM {stage}")
+                got = int(self.client.query(
+                    f"SELECT count() FROM {dtype.table} WHERE customer_id = {{tenant:String}} "
+                    f"AND toDate({dtype.ts}) = {{day:Date}}",
+                    parameters={"tenant": tenant_id, "day": day.isoformat()}).result_rows[0][0])
+                self.client.command(
+                    "INSERT INTO rehydrations_mt (customer_id, data_type, day, until, rows, requested_by) "
+                    "SELECT {tenant:String}, {type:String}, {day:Date}, {until:Date}, {rows:UInt64}, {user:String}",
+                    parameters={"tenant": tenant_id, "type": data_type, "day": day.isoformat(),
+                                "until": report["until"], "rows": got, "user": user_id or ""})
+                report["rehydrated_days"] += 1
+                report["rows"] += got
+                if got != expected:
+                    report["errors"].append(f"{day}: {got} rows in ClickHouse, the archive holds {expected}")
+            except Exception as e:
+                report["errors"].append(f"{day}: {e}")
+            finally:
+                self.client.command(f"DROP TABLE IF EXISTS {stage}")
+        return report
+
     # -- the job ------------------------------------------------------------
 
     def _old_days(self, dtype: st.DataType, today: date, searchable: int) -> Dict[str, Dict[date, int]]:
@@ -187,13 +271,14 @@ class TierManager:
                            [p.searchable_days for p in per_tenant.values()])
             days = self._old_days(dtype, today, shortest)
             archived = self.archived(name)
+            held = self.holds(name, today)
             for tenant in sorted(set(days) | set(archived)):
                 if tenants is not None and tenant not in tenants:
                     continue
                 policy = per_tenant.get(tenant, self.cfg.defaults[name])
                 tenant_days = days.get(tenant, {})
                 counts = {day: n for day, (n, _) in archived.get(tenant, {}).items()}
-                for action in st.plan(policy, today, tenant_days, counts):
+                for action in st.plan(policy, today, tenant_days, counts, held.get(tenant)):
                     if action.kind != "archive":
                         continue
                     try:
@@ -209,7 +294,7 @@ class TierManager:
                         report["errors"].append(f"{tenant} {name} {action.day}: the archive read back "
                                                 f"{got} of {action.rows} rows; kept in ClickHouse")
                 # second pass: what the archives now allow
-                actions = st.plan(policy, today, tenant_days, counts)
+                actions = st.plan(policy, today, tenant_days, counts, held.get(tenant))
                 drop = [a for a in actions if a.kind == "delete"]
                 if drop:
                     try:

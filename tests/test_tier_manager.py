@@ -30,13 +30,14 @@ class FakeClient:
     """Answers the few queries TierManager makes; records every statement."""
 
     def __init__(self, policies=("default", "tiered"), table_policy="default", days=None, file_rows=None,
-                 manifest=None, stored=None):
+                 manifest=None, stored=None, held=None):
         self.policies = policies
         self.table_policy = table_policy
         self.days = days or {}          # (tenant, type) -> {day: rows}
         self.file_rows = file_rows or {}  # object key -> rows read back
         self.manifest = manifest or {}  # (tenant, type) -> {day: rows}
         self.stored = stored or []      # (tenant, type, searchable, archive)
+        self.held = held or {}          # (tenant, type) -> {rehydrated days}
         self.statements = []
 
     def query(self, sql, parameters=None):
@@ -49,6 +50,9 @@ class FakeClient:
             return FakeResult([("ts",), ("customer_id",), ("msg",)])
         if "FROM tenant_retention_mt" in sql:
             return FakeResult(list(self.stored))
+        if "FROM rehydrations_mt" in sql:
+            return FakeResult([(t, day) for (t, dtype), days in self.held.items() if dtype == parameters["type"]
+                               for day in days])
         if "FROM archive_manifest_mt" in sql:
             rows = []
             for (tenant, dtype), days in self.manifest.items():
@@ -175,3 +179,11 @@ def test_run_can_be_limited_to_some_tenants():
     tm.TierManager(client, FakeObjects(), CFG).run(TODAY, tenants=["t2"])
     deleted = [p["tenant"] for s, p in client.statements if s.startswith("ALTER TABLE logs_raw_mt DELETE")]
     assert deleted == ["t2"]
+
+
+def test_run_leaves_rehydrated_days_alone():
+    client = FakeClient(days={("t1", "logs"): {d(100): 5}}, manifest={("t1", "logs"): {d(100): 5}},
+                        held={("t1", "logs"): {d(100)}})
+    report = tm.TierManager(client, FakeObjects(), CFG).run(TODAY)
+    assert client.commands("ALTER TABLE logs_raw_mt DELETE") == []
+    assert report["deleted_days"] == 0
