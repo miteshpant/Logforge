@@ -1,0 +1,81 @@
+title: AWS root account console sign-in
+id: aws-root-console-login
+status: stable
+description: Someone signed in to the AWS console as the root user, which should only happen for the few tasks that need it.
+author: Logforge
+tags: [attack.privilege_escalation, attack.t1078.004]
+logsource: {product: aws, service: cloudtrail}
+detection:
+  selection: {event_name: ConsoleLogin, identity_type: Root}
+  condition: selection
+fixtures:
+  true_positive: {service: cloudtrail, event_name: ConsoleLogin, identity_type: Root, login_result: Success}
+  true_negative: {service: cloudtrail, event_name: ConsoleLogin, identity_type: IAMUser, login_result: Success}
+level: high
+---
+title: CloudTrail logging stopped or deleted
+id: aws-cloudtrail-tampering
+status: stable
+description: A trail was stopped, deleted or changed, which blinds the audit log.
+author: Logforge
+tags: [attack.defense_evasion, attack.t1562.008]
+logsource: {product: aws, service: cloudtrail}
+detection:
+  selection:
+    event_source: cloudtrail.amazonaws.com
+    event_name: [StopLogging, DeleteTrail, UpdateTrail, PutEventSelectors]
+  condition: selection
+fixtures:
+  true_positive: {service: cloudtrail, event_source: cloudtrail.amazonaws.com, event_name: StopLogging}
+  true_negative: {service: cloudtrail, event_source: cloudtrail.amazonaws.com, event_name: LookupEvents}
+level: high
+---
+title: IAM access key created
+id: aws-access-key-created
+status: stable
+description: A new long-lived IAM access key was created, a common way to keep access to an account.
+author: Logforge
+tags: [attack.persistence, attack.t1098.001]
+logsource: {product: aws, service: cloudtrail}
+detection:
+  selection: {event_source: iam.amazonaws.com, event_name: CreateAccessKey}
+  filter: {error_code|re: '.+'}
+  condition: selection and not filter
+fixtures:
+  true_positive: {service: cloudtrail, event_source: iam.amazonaws.com, event_name: CreateAccessKey}
+  true_negative: {service: cloudtrail, event_source: iam.amazonaws.com, event_name: ListAccessKeys}
+level: medium
+---
+title: S3 bucket ACL made public
+id: aws-s3-bucket-made-public
+status: stable
+description: A bucket ACL was changed to grant access to everyone (AllUsers or public-read).
+author: Logforge
+tags: [attack.exfiltration, attack.t1537]
+logsource: {product: aws, service: cloudtrail}
+detection:
+  selection: {event_source: s3.amazonaws.com, event_name: PutBucketAcl, acl_public: "yes"}
+  condition: selection
+fixtures:
+  true_positive: {service: cloudtrail, event_source: s3.amazonaws.com, event_name: PutBucketAcl, acl_public: "yes", bucket_name: backups}
+  true_negative: {service: cloudtrail, event_source: s3.amazonaws.com, event_name: PutBucketAcl, acl_public: "no", bucket_name: backups}
+level: high
+---
+title: Internet traffic accepted on an admin port
+id: aws-vpc-admin-port-from-internet
+status: stable
+description: A VPC flow from a public address was accepted on SSH, RDP or a database port, so the security group exposes it.
+author: Logforge
+tags: [attack.initial_access, attack.t1133]
+logsource: {product: aws, service: vpcflowlogs}
+detection:
+  selection:
+    service: vpcflow
+    action: ACCEPT
+    src_private: "no"
+    dst_port: [22, 3389, 3306, 5432, 6379, 9200, 27017]
+  condition: selection
+fixtures:
+  true_positive: {service: vpcflow, action: ACCEPT, src_private: "no", dst_port: 22, src_ip: 203.0.113.14}
+  true_negative: {service: vpcflow, action: ACCEPT, src_private: "yes", dst_port: 22, src_ip: 10.0.1.8}
+level: medium

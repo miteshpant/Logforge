@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createCase } from '@/lib/api/cases'
 import { threatBadge, ThreatSummary } from '@/lib/intelFormat'
 import DashboardLayout from '@/components/layout/DashboardLayout'
+import TriagePanel from '@/components/ai/TriagePanel'
 import { apiClient } from '@/lib/api'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
 import {
@@ -93,6 +94,15 @@ export default function SecurityEventsPage() {
   useEffect(() => {
     loadEvents()
   }, [severityFilter, statusFilter, refreshTrigger])
+
+  // Deep link (AI answer citations): ?alert=<id> opens that alert.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('alert')
+    if (!id || selectedEvent) return
+    const match = events.find(e => e.id === id)
+    if (match) setSelectedEvent(match)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events])
 
   // Run an event action and reflect it only once the API confirms it.
   const runEventAction = async (
@@ -538,6 +548,9 @@ export default function SecurityEventsPage() {
                   </div>
                 </div>
               )}
+
+              {/* Triage summary (Phase 9) */}
+              <TriagePanel key={selectedEvent.id} kind="alert" id={selectedEvent.id} />
 
               {/* Investigation Results */}
               {investigationData[selectedEvent.id] && (

@@ -4,6 +4,8 @@ Handles query management, caching, and validation
 """
 
 import hashlib
+
+import data_scope
 import json
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
@@ -222,6 +224,8 @@ class QueryService:
             "customer_id": customer_id,
             "query": query_data,
             "engine": ENGINE_FINGERPRINT,
+            # Phase 14: a data-scoped user's results differ; never share them across scopes
+            "scope": list(data_scope.current().services) if data_scope.current() else None,
         }
         cache_string = json.dumps(cache_content, sort_keys=True)
         return hashlib.md5(cache_string.encode()).hexdigest()

@@ -53,6 +53,11 @@ export interface LogQLResult {
   totalCount: number
   hasMore: boolean
   executionTimeMs: number | null
+  /** Pipeline queries (Phase 6): events | table | timechart, with their columns and raw rows. */
+  resultType: 'events' | 'table' | 'timechart' | null
+  columns: string[]
+  rows: Record<string, any>[]
+  truncated: boolean
 }
 
 export type LiveTailStatus = 'idle' | 'connecting' | 'live' | 'reconnecting' | 'unavailable'
@@ -191,6 +196,13 @@ export async function runLogQL(
     hasMore: Boolean(data?.has_more),
     executionTimeMs:
       typeof data?.execution_time_ms === 'number' ? data.execution_time_ms : null,
+    resultType:
+      data?.result_type === 'events' || data?.result_type === 'table' || data?.result_type === 'timechart'
+        ? data.result_type
+        : null,
+    columns: Array.isArray(data?.columns) ? data.columns : [],
+    rows: Array.isArray(data?.logs) ? data.logs : [],
+    truncated: Boolean(data?.truncated),
   }
 }
 

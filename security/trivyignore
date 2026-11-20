@@ -1,0 +1,11 @@
+# Trivy findings accepted for now (image-scan job in .github/workflows/ci.yml).
+# The same Next.js 14 advisories as security/audit-allowlist.json, with the same
+# expiry and reasons (see there): fixed only in Next.js 15.5+, an upgrade on the
+# roadmap. After the date Trivy reports them again and CI fails.
+
+# Image Optimization API RCE: the optimizer is disabled (images.unoptimized; /_next/image answers 404)
+GHSA-2464-fhr4-w9xw exp:2027-01-31
+GHSA-2xp9-vwfh-vxw4 exp:2027-01-31
+# Remote code execution on Windows-hosted servers (GHSA-p293-qw3h-jr36): the images run on Linux
+CVE-2026-75604 exp:2027-01-31
+GHSA-p293-qw3h-jr36 exp:2027-01-31

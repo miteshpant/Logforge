@@ -68,6 +68,12 @@ class DatabaseLayer:
         'ThreatIntelDAO': os.getenv('THREAT_INTEL_SERVICE_KEY', 'threat-intel-dao-service-key'),
         'PipelineDAO': os.getenv('PIPELINE_SERVICE_KEY', 'pipeline-dao-service-key'),
         'FieldCatalogue': os.getenv('FIELD_CATALOGUE_SERVICE_KEY', 'field-catalogue-service-key'),
+        'EntityService': os.getenv('ENTITY_SERVICE_KEY', 'entity-service-key'),
+        'EntityRiskService': os.getenv('ENTITY_SERVICE_KEY', 'entity-service-key'),
+        'LookupDAO': os.getenv('LOOKUP_SERVICE_KEY', 'lookup-dao-service-key'),
+        'SavedSearchDAO': os.getenv('SAVED_SEARCH_SERVICE_KEY', 'saved-search-service-key'),
+        'PackStore': os.getenv('PACK_STORE_SERVICE_KEY', 'pack-store-service-key'),
+        'AIStore': os.getenv('AI_STORE_SERVICE_KEY', 'ai-store-service-key'),
         # Streaming Configuration Service
         'StreamingConfigDAO': os.getenv('STREAMING_CONFIG_SERVICE_KEY', 'streaming-config-service-key'),
         # Migration Service
@@ -134,6 +140,12 @@ class DatabaseLayer:
         'ThreatIntelDAO': ['threat_feeds_mt', 'threat_indicators_mt', 'logs_raw_mt'],  # Feeds, IOCs, retro-hunts
         'PipelineDAO': ['ingest_pipelines_mt', 'pipeline_dlq_mt'],  # Ingest pipelines and their dead letters
         'FieldCatalogue': ['logs_raw_mt'],  # Field catalogue and top values (read only)
+        'EntityService': ['entities_mt', 'entity_edges_mt', 'logs_raw_mt'],  # Entities and baselines (read only)
+        'EntityRiskService': ['security_events_mt'],  # Alerts per entity for risk scoring (read only)
+        'LookupDAO': ['lookup_tables_mt', 'lookup_rows_mt'],  # LogforgeQL lookup tables and managed lists
+        'SavedSearchDAO': ['saved_searches_mt', 'saved_search_runs_mt'],  # Saved / scheduled searches and runs
+        'PackStore': ['pack_installs_mt'],  # Source pack installs (manifests)
+        'AIStore': ['ai_settings_mt', 'ai_audit_mt'],  # AI settings and the AI audit log
         # Streaming Configuration Service
         'StreamingConfigDAO': ['tenant_configs_mt'],  # Needs to manage streaming configurations in tenant configs table
         # Migration Service
@@ -596,6 +608,18 @@ class DatabaseLayer:
                         error=str(e))
             raise DatabaseError(f"Insert failed: {str(e)}")
     
+    async def insert_rows(self, table: str, rows: List[List[Any]], column_names: List[str]) -> int:
+        """Bulk insert positional rows into an allowed table (values are sent as data, never SQL)."""
+        self._validate_table_access(table)
+        if not rows:
+            return 0
+        try:
+            self.client.insert(table, rows, column_names=column_names)
+            return len(rows)
+        except Exception as e:
+            logger.error("Bulk insert failed", service=self.service_name, table=table, error=str(e))
+            raise DatabaseError(f"Insert failed: {str(e)}")
+
     async def execute_update(self, query: str, params: Dict = None) -> int:
         """Execute UPDATE/ALTER query and return number of affected records
         

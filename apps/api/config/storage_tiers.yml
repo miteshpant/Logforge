@@ -1,0 +1,38 @@
+# Storage tiers and retention (Phase 12). See docs/storage.md.
+#
+# hot:  ClickHouse local disk, the newest hot_days (deployment-wide: parts mix tenants)
+# warm: ClickHouse S3-backed volume of the `tiered` storage policy, still searchable
+# cold: Parquet archives, one file per tenant, data type and day, in archive_bucket
+
+hot_days: 7
+# Table TTL backstop: nothing stays in ClickHouse longer, whatever a tenant
+# chooses. The retention job deletes each tenant's data sooner, per its policy.
+max_searchable_days: 400
+max_archive_days: 3650
+
+warm_policy: tiered
+warm_bucket: logforge-warm
+archive_bucket: logforge-archive
+backup_bucket: logforge-backups
+
+data_types:
+  logs:     {table: logs_raw_mt,        ts: ts}
+  security: {table: security_events_mt, ts: created_at}
+  traces:   {table: traces_mt,          ts: start_time}
+  metrics:  {table: metrics_mt,         ts: timestamp}
+
+# Per tenant, until it chooses otherwise: days searchable in ClickHouse, and
+# days each day's Parquet archive is kept (0: no archive).
+defaults:
+  logs:     {searchable_days: 30, archive_days: 365}
+  security: {searchable_days: 90, archive_days: 730}
+  traces:   {searchable_days: 30, archive_days: 0}
+  metrics:  {searchable_days: 90, archive_days: 0}
+
+# Price per GB-month of each tier, for the cost projections on Settings ->
+# Storage. These are public list prices (US East, late 2026: EBS gp3, S3
+# Standard, S3 Standard-IA): replace them with yours.
+prices:
+  hot: 0.08
+  warm: 0.023
+  cold: 0.0125

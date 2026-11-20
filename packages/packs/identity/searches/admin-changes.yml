@@ -1,0 +1,3 @@
+name: Identity admin and MFA changes
+description: Role grants and MFA factor changes in Okta and Workspace, newest first.
+query: '| where service in ["okta", "gworkspace"] and (attrs.event_type contains "privilege" or attrs.event_type contains "ROLE" or attrs.event_type contains "mfa.factor") | fields ts, service, user_id, attrs.event_type, attrs.target_user, attrs.admin_role, src_ip | sort -ts | head 200'

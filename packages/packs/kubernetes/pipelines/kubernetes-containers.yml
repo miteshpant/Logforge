@@ -1,0 +1,37 @@
+# Container logs in the CRI format kubelet writes (partial lines, tag P, are
+# kept as they are; Vector's kubernetes_logs source joins them before sending):
+#   <RFC3339Nano time> <stdout|stderr> <F|P> <line>
+# A line that is a JSON object is parsed into attrs.app, and its level/msg
+# fields are used. Shippers that add pod metadata (Vector's kubernetes_logs,
+# Fluent Bit's kubernetes filter) put it in attrs.kubernetes; the namespace,
+# pod and container are copied to flat fields.
+name: kubernetes-containers
+description: Kubernetes container logs (CRI format)
+routing: {services: [k8s-containers, kubernetes-containers, kube-containers]}
+processors:
+  - regex:
+      field: msg
+      target: attrs._cri
+      pattern: '^(?P<time>\d{4}-\d\d-\d\dT\S+) (?P<stream>stdout|stderr) (?P<tag>[FP]) (?P<line>.*)$'
+  - date: {field: attrs._cri.time, formats: [ISO8601]}
+    ignore_failure: true
+  - script:
+      source: |
+        attrs.stream = attrs._cri.stream
+        attrs.partial = 'yes' if attrs._cri.tag == 'P' else 'no'
+        msg = attrs._cri.line
+        level = 'error' if attrs._cri.stream == 'stderr' else 'info'
+        attrs.namespace = field('attrs.kubernetes.pod_namespace')
+        attrs.pod = field('attrs.kubernetes.pod_name')
+        attrs.container = field('attrs.kubernetes.container_name')
+        service = field('attrs.kubernetes.container_name') if exists('attrs.kubernetes.container_name') else 'k8s-containers'
+  - json: {field: msg, target: attrs.app}
+    if: "startswith(msg, '{')"
+    ignore_failure: true
+  - script:
+      source: |
+        level = lower(attrs.app.level) if exists('attrs.app.level') else level
+        msg = attrs.app.msg if exists('attrs.app.msg') else (attrs.app.message if exists('attrs.app.message') else msg)
+    if: "exists('attrs.app')"
+  - remove: {field: attrs._cri}
+  - compact: {field: attrs}

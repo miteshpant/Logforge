@@ -1,0 +1,148 @@
+{
+  "note": "Every chaos run after the first durability fix, in order. Before it, runs lost 40 and 20 acknowledged events (API replica killed). Run 2 lost 100: the producer's batch buffer, fixed next. Published result: 2026-11-20-chaos.json (run 13).",
+  "runs": [
+    {
+      "run": 1,
+      "code": "consumer commit fixed",
+      "acknowledged_events": 4920,
+      "missing": 0,
+      "duplicates": 60,
+      "longest_write_gap_seconds": 6.6,
+      "longest_read_gap_seconds": 4.1,
+      "no_data_loss": true,
+      "no_downtime": true
+    },
+    {
+      "run": 2,
+      "code": "consumer commit fixed",
+      "acknowledged_events": 4680,
+      "missing": 100,
+      "duplicates": 180,
+      "longest_write_gap_seconds": 6.6,
+      "longest_read_gap_seconds": 4.4,
+      "no_data_loss": false,
+      "no_downtime": true
+    },
+    {
+      "run": 3,
+      "code": "consumer commit fixed",
+      "acknowledged_events": 4660,
+      "missing": 0,
+      "duplicates": 120,
+      "longest_write_gap_seconds": 4.3,
+      "longest_read_gap_seconds": 4.0,
+      "no_data_loss": true,
+      "no_downtime": true
+    },
+    {
+      "run": 4,
+      "code": "+ publish unbuffered (host busy with another test)",
+      "acknowledged_events": 2640,
+      "missing": 0,
+      "duplicates": 100,
+      "longest_write_gap_seconds": 52.4,
+      "longest_read_gap_seconds": 53.1,
+      "no_data_loss": true,
+      "no_downtime": false
+    },
+    {
+      "run": 5,
+      "code": "+ publish unbuffered",
+      "acknowledged_events": 5320,
+      "missing": 0,
+      "duplicates": 0,
+      "longest_write_gap_seconds": 4.5,
+      "longest_read_gap_seconds": 7.3,
+      "no_data_loss": true,
+      "no_downtime": true
+    },
+    {
+      "run": 6,
+      "code": "+ publish unbuffered",
+      "acknowledged_events": 5360,
+      "missing": 0,
+      "duplicates": 60,
+      "longest_write_gap_seconds": 4.5,
+      "longest_read_gap_seconds": 5.2,
+      "no_data_loss": true,
+      "no_downtime": true
+    },
+    {
+      "run": 7,
+      "code": "+ publish unbuffered",
+      "acknowledged_events": 5260,
+      "missing": 0,
+      "duplicates": 100,
+      "longest_write_gap_seconds": 6.4,
+      "longest_read_gap_seconds": 4.5,
+      "no_data_loss": true,
+      "no_downtime": true
+    },
+    {
+      "run": 8,
+      "code": "+ publish unbuffered",
+      "acknowledged_events": 5220,
+      "missing": 0,
+      "duplicates": 0,
+      "longest_write_gap_seconds": 4.6,
+      "longest_read_gap_seconds": 4.1,
+      "no_data_loss": true,
+      "no_downtime": true
+    },
+    {
+      "run": 9,
+      "code": "+ slower API health checks",
+      "acknowledged_events": 3940,
+      "missing": 0,
+      "duplicates": 60,
+      "longest_write_gap_seconds": 10.6,
+      "longest_read_gap_seconds": 11.3,
+      "no_data_loss": true,
+      "no_downtime": false
+    },
+    {
+      "run": 10,
+      "code": "+ slower API health checks",
+      "acknowledged_events": 4260,
+      "missing": 0,
+      "duplicates": 40,
+      "longest_write_gap_seconds": 4.7,
+      "longest_read_gap_seconds": 7.1,
+      "no_data_loss": true,
+      "no_downtime": true
+    },
+    {
+      "run": 11,
+      "code": "final load balancer settings",
+      "acknowledged_events": 4400,
+      "missing": 0,
+      "duplicates": 80,
+      "longest_write_gap_seconds": 8.9,
+      "longest_read_gap_seconds": 9.9,
+      "no_data_loss": true,
+      "no_downtime": true
+    },
+    {
+      "run": 12,
+      "code": "final load balancer settings",
+      "acknowledged_events": 5020,
+      "missing": 0,
+      "duplicates": 20,
+      "longest_write_gap_seconds": 4.4,
+      "longest_read_gap_seconds": 4.6,
+      "no_data_loss": true,
+      "no_downtime": true
+    },
+    {
+      "run": 13,
+      "code": "final load balancer settings",
+      "acknowledged_events": 4780,
+      "missing": 0,
+      "duplicates": 60,
+      "longest_write_gap_seconds": 4.4,
+      "longest_read_gap_seconds": 5.0,
+      "no_data_loss": true,
+      "no_downtime": true
+    }
+  ]
+}

@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from models import QueryResponse
 from query_engine import (
+    AdvancedQueryEngine,
     AdvancedQueryRequest,
     AggregationType,
     QueryAggregation,
@@ -121,20 +122,23 @@ def _parse_since(value: str) -> timedelta:
     return int(match.group(1)) * _RELATIVE_UNITS[match.group(2)]
 
 
-def logql_window(payload: Dict[str, Any], request_body: Dict[str, Any]) -> Tuple[datetime, datetime]:
+def logql_window(payload: Dict[str, Any], request_body: Dict[str, Any],
+                 max_window: Optional[timedelta] = None) -> Tuple[datetime, datetime]:
     """The window a LogforgeQL query scans. An explicit range in the request
     body wins; otherwise the query's own `| last <duration>`; otherwise the
     last hour (LF-022). Every path goes through the max-window guard."""
     if any(request_body.get(k) is not None for k in ("start_time", "end_time", "since")):
         return resolve_time_window(start_time=request_body.get("start_time"), end_time=request_body.get("end_time"),
-                                   since=request_body.get("since"))
-    return resolve_time_window(start_time=payload.get("start_time"), end_time=payload.get("end_time"))
+                                   since=request_body.get("since"), max_window=max_window)
+    return resolve_time_window(start_time=payload.get("start_time"), end_time=payload.get("end_time"),
+                               max_window=max_window)
 
 
 def resolve_time_window(
     start_time: Any = None,
     end_time: Any = None,
     since: Optional[str] = None,
+    max_window: Optional[timedelta] = None,
 ) -> Tuple[datetime, datetime]:
     """
     Resolve the effective [start, end] query window.
@@ -157,14 +161,15 @@ def resolve_time_window(
             status_code=400, detail="start_time must be before end_time"
         )
 
-    max_window = _max_query_window()
+    limit_name = "LOGFORGE_MAX_ARCHIVE_WINDOW_DAYS" if max_window else "LOGFORGE_MAX_QUERY_WINDOW_DAYS"
+    max_window = max_window or _max_query_window()
     if end - start > max_window:
         raise HTTPException(
             status_code=400,
             detail=(
                 f"Requested time range of {(end - start).days} days exceeds the "
                 f"maximum of {max_window.days} days "
-                "(LOGFORGE_MAX_QUERY_WINDOW_DAYS). Narrow the range."
+                f"({limit_name}). Narrow the range."
             ),
         )
     return start, end
@@ -343,10 +348,19 @@ async def logql_query(
     endpoint.
     """
     from logql import LogQLSyntaxError, compile_to_request_payload
+    from logql_pipeline import uses_pipeline
 
     query_text = request_body.get("query")
     if not query_text or not isinstance(query_text, str):
         raise HTTPException(status_code=400, detail="A 'query' string is required")
+
+    source = request_body.get("source", "events")
+    if source == "archive":
+        return await run_archive_query(query_text, request_body, customer_id)
+    if source != "events":
+        raise HTTPException(status_code=400, detail="source must be 'events' or 'archive'")
+    if uses_pipeline(query_text):
+        return await run_pipeline_query(query_text, request_body, customer_id)
 
     try:
         payload = compile_to_request_payload(query_text)
@@ -378,6 +392,253 @@ async def logql_query(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise internal_error(e, "LogQL query failed")
+
+
+PIPELINE_QUERY_TIMEOUT_SECONDS = int(os.getenv("LOGFORGE_PIPELINE_QUERY_TIMEOUT_SECONDS", "30"))
+
+
+def _check_variables(variables: Any) -> Dict[str, Any]:
+    """Dashboard / caller variables: name -> string, number, bool or a list of them."""
+    if variables is None:
+        return {}
+    if not isinstance(variables, dict) or len(variables) > 50:
+        raise HTTPException(status_code=400, detail="'variables' must be an object (at most 50 entries)")
+    scalar = (str, int, float, bool)
+    for name, value in variables.items():
+        if not isinstance(name, str) or not re.match(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$", name):
+            raise HTTPException(status_code=400, detail=f"invalid variable name: {name!r}")
+        ok = value is None or isinstance(value, scalar) or (
+            isinstance(value, list) and len(value) <= 1000 and all(isinstance(v, scalar) for v in value))
+        if not ok:
+            raise HTTPException(status_code=400, detail=f"variable ${name} must be a value or a list of values")
+    return variables
+
+
+async def _lookup_metas(customer_id: str, query_text: str) -> Dict[str, Any]:
+    """The tenant's lookup tables, loaded only when the query uses one."""
+    if not re.search(r"\b(lookup|inlookup)\b", query_text, re.IGNORECASE):
+        return {}
+    import lookup_tables
+    from logql_pipeline import LookupMeta
+
+    try:
+        tables = await lookup_tables.LookupDAO().list(customer_id)
+    except Exception as e:
+        raise internal_error(e, "Failed to load lookup tables")
+    return {t.name: LookupMeta(name=t.name, version=t.version, columns=t.columns, key=t.key) for t in tables}
+
+
+async def execute_pipeline_text(query_text: str, customer_id: str, start: datetime, end: datetime,
+                                variables: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Compile a pipeline query and run it: {"rows", "columns", "result_type", "truncated"}.
+
+    The tenant is bound into the innermost SELECT by the compiler, so no stage
+    can widen it. The statement runs read-only, with a time limit. Compile
+    errors are 400s; database errors propagate (callers decide how to report).
+    """
+    import asyncio
+
+    from logql_pipeline import PipelineError, compile_pipeline, execute
+
+    import pattern_query
+
+    try:
+        patterns = pattern_query.split(query_text)
+    except pattern_query.PatternQueryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if patterns:
+        base, mode = patterns
+        lookups = await _lookup_metas(customer_id, base)
+        try:
+            compile_pipeline(pattern_query.lines_query(base, 1), customer_id=customer_id, start=start, end=end,
+                             lookups=lookups)
+        except (PipelineError, QueryFieldError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        if not query_engine:
+            raise HTTPException(status_code=500, detail="Query engine not initialized")
+        settings = {"readonly": 2, "max_execution_time": PIPELINE_QUERY_TIMEOUT_SECONDS,
+                    "max_bytes_to_read": AdvancedQueryEngine.DEFAULT_MAX_BYTES_TO_READ}
+        result = await asyncio.to_thread(pattern_query.run, query_engine.client, base, mode, customer_id, start, end,
+                                         settings, lookups)
+        return {**result, "estimated_rows": None, "rollup": False}
+
+    lookups = await _lookup_metas(customer_id, query_text)
+    try:
+        compiled = compile_pipeline(query_text, customer_id=customer_id, start=start, end=end,
+                                    variables=variables or {}, lookups=lookups)
+    except (PipelineError, QueryFieldError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not query_engine:
+        raise HTTPException(status_code=500, detail="Query engine not initialized")
+    import query_cost
+
+    estimated = await asyncio.to_thread(query_cost.estimate_rows, query_engine.client, compiled.sql, compiled.params)
+    try:
+        query_cost.check(estimated, await query_cost.tier_for(customer_id))
+    except query_cost.QueryTooExpensive as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    settings = {
+        "readonly": 2,
+        "max_execution_time": PIPELINE_QUERY_TIMEOUT_SECONDS,
+        "max_bytes_to_read": AdvancedQueryEngine.DEFAULT_MAX_BYTES_TO_READ,
+    }
+    result = await asyncio.to_thread(execute, query_engine.client, compiled, settings)
+    return {**result, "estimated_rows": estimated, "rollup": compiled.rollup}
+
+
+async def validate_pipeline_text(query_text: str, customer_id: str,
+                                 variables: Optional[Dict[str, Any]] = None) -> None:
+    """Raise ValueError (the message is for the user) if the query does not compile."""
+    from logql_pipeline import PipelineError, compile_pipeline
+
+    import pattern_query
+
+    try:
+        patterns = pattern_query.split(query_text)
+    except pattern_query.PatternQueryError as exc:
+        raise ValueError(str(exc)) from None
+    if patterns:
+        query_text = pattern_query.lines_query(patterns[0], 1)
+    lookups = await _lookup_metas(customer_id, query_text)
+    end = datetime.now(timezone.utc)
+    try:
+        compile_pipeline(query_text, customer_id=customer_id, start=end - timedelta(hours=1), end=end,
+                         lookups=lookups, variables=variables)
+    except (PipelineError, QueryFieldError) as exc:
+        raise ValueError(str(exc)) from None
+
+
+async def run_pipeline_query(query_text: str, request_body: Dict[str, Any], customer_id: str,
+                             variables: Any = None) -> Dict[str, Any]:
+    """Phase 6: run a pipeline query for the /query/logql endpoint."""
+    import time
+
+    from logql_pipeline import requested_seconds
+
+    seconds = requested_seconds(query_text)
+    payload: Dict[str, Any] = {}
+    if seconds:
+        end = datetime.now(timezone.utc)
+        payload = {"start_time": (end - timedelta(seconds=seconds)).isoformat(), "end_time": end.isoformat()}
+    start, end = logql_window(payload, request_body)
+    variables = _check_variables(request_body.get("variables") if variables is None else variables)
+
+    began = time.time()
+    try:
+        result = await execute_pipeline_text(query_text, customer_id, start, end, variables)
+    except HTTPException:
+        raise
+    except Exception as e:
+        if "TIMEOUT_EXCEEDED" in str(e) or "Code: 159." in str(e):
+            raise HTTPException(status_code=504, detail=(
+                f"The query did not finish within {PIPELINE_QUERY_TIMEOUT_SECONDS} s. Narrow the time range, "
+                "filter on service or level first, or count with stats count() by service / level / status "
+                "(those read the hourly counts)."))
+        raise internal_error(e, "LogQL query failed")
+    return {
+        "logs": result["rows"],
+        "columns": result["columns"],
+        "result_type": result["result_type"],
+        "total_count": len(result["rows"]),
+        "truncated": result["truncated"],
+        "aggregations": {},
+        "execution_time_ms": round((time.time() - began) * 1000, 2),
+        "query_info": {"engine": "pipeline", "rows_returned": len(result["rows"]),
+                       "estimated_rows": result.get("estimated_rows"), "hourly_counts": result.get("rollup", False)},
+        "customer_id": customer_id,
+        "time_range": _time_range_payload(start, end),
+    }
+
+
+async def run_archive_query(query_text: str, request_body: Dict[str, Any], customer_id: str) -> Dict[str, Any]:
+    """Phase 12: a pipeline query over the tenant's Parquet archives for the window."""
+    import asyncio
+    import time
+
+    import data_scope
+
+    # Archives are read with ClickHouse's s3() table function, which the data scope's
+    # logs_raw_mt filter doesn't reach: refuse rather than show out-of-scope services.
+    if data_scope.current() is not None:
+        raise HTTPException(status_code=403, detail="Archive search isn't available with a data scope; "
+                                                    "ask an administrator to rehydrate the days instead")
+
+    import archive_query
+    import pattern_query
+    from logql_pipeline import PipelineError, execute
+
+    if pattern_query.split(query_text):
+        raise HTTPException(status_code=400, detail="| patterns doesn't run on archives; rehydrate the days first")
+    start, end = logql_window({}, request_body, max_window=timedelta(days=archive_query.MAX_WINDOW_DAYS))
+    variables = _check_variables(request_body.get("variables"))
+    from routers.storage_tiers_api import _manager
+
+    mgr = _manager()
+    archived = (await asyncio.to_thread(mgr.archived, "logs", customer_id)).get(customer_id, {})
+    days = archive_query.days_in(archived, start, end)
+    info = {"engine": "archive", "archived_days": len(days),
+            "first_day": days[0].isoformat() if days else None, "last_day": days[-1].isoformat() if days else None}
+    if not days:
+        return {"logs": [], "columns": [], "result_type": "events", "total_count": 0, "truncated": False,
+                "aggregations": {}, "execution_time_ms": 0.0, "query_info": info, "customer_id": customer_id,
+                "time_range": _time_range_payload(start, end)}
+    lookups = await _lookup_metas(customer_id, query_text)
+    try:
+        compiled = archive_query.compile_archive(query_text, customer_id, days, start, end, variables, lookups)
+    except (PipelineError, QueryFieldError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    settings = {"readonly": 2, "max_execution_time": PIPELINE_QUERY_TIMEOUT_SECONDS}
+    began = time.time()
+    try:
+        result = await asyncio.to_thread(execute, mgr.client, compiled, settings)
+    except Exception as e:
+        if "TIMEOUT_EXCEEDED" in str(e) or "Code: 159." in str(e):
+            raise HTTPException(status_code=504, detail=(
+                f"The archive query did not finish within {PIPELINE_QUERY_TIMEOUT_SECONDS} s. Narrow the time "
+                "range, or rehydrate the days and query them in ClickHouse."))
+        raise internal_error(e, "Archive query failed")
+    info["rows_returned"] = len(result["rows"])
+    return {"logs": result["rows"], "columns": result["columns"], "result_type": result["result_type"],
+            "total_count": len(result["rows"]), "truncated": result["truncated"], "aggregations": {},
+            "execution_time_ms": round((time.time() - began) * 1000, 2), "query_info": info,
+            "customer_id": customer_id, "time_range": _time_range_payload(start, end)}
+
+
+@router.post("/query/estimate")
+async def estimate_query(request_body: Dict[str, Any], customer_id: str = MiddlewareTenant):
+    """Estimate what a LogforgeQL query would read, without running it.
+
+    Same body as /query/logql. Returns the estimated rows, the tenant's plan
+    limit, and whether the query reads the hourly counts.
+    """
+    import asyncio
+
+    import query_cost
+    from logql_pipeline import PipelineError, compile_pipeline, requested_seconds
+
+    query_text = request_body.get("query")
+    if not query_text or not isinstance(query_text, str):
+        raise HTTPException(status_code=400, detail="A 'query' string is required")
+    seconds = requested_seconds(query_text)
+    payload: Dict[str, Any] = {}
+    if seconds:
+        end = datetime.now(timezone.utc)
+        payload = {"start_time": (end - timedelta(seconds=seconds)).isoformat(), "end_time": end.isoformat()}
+    start, end = logql_window(payload, request_body)
+    variables = _check_variables(request_body.get("variables"))
+    try:
+        compiled = compile_pipeline(query_text, customer_id=customer_id, start=start, end=end, variables=variables,
+                                    lookups=await _lookup_metas(customer_id, query_text))
+    except (PipelineError, QueryFieldError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not query_engine:
+        raise HTTPException(status_code=500, detail="Query engine not initialized")
+    rows = await asyncio.to_thread(query_cost.estimate_rows, query_engine.client, compiled.sql, compiled.params)
+    tier = await query_cost.tier_for(customer_id)
+    limit = query_cost.load_limits().max_rows(tier)
+    return {"estimated_rows": rows, "limit_rows": limit, "plan": tier or "default",
+            "within_limit": rows is None or rows <= limit, "rollup": compiled.rollup,
+            "time_range": _time_range_payload(start, end)}
 
 
 @router.post("/query/aggregate")

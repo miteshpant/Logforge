@@ -80,6 +80,134 @@ markers).
   persistent per-tenant index with type history. LogforgeQL extraction
   uses RE2, so no lookaround or backreferences, and allows at most 32
   extracted fields per query.
+- **Enterprise follow-ups from Phase 14** ([enterprise access](./enterprise.md), [security](./security.md)):
+  - **Next.js 15.5+ for both UIs** (React 19, async request APIs). Next 14 has
+    advisories fixed only there; they're allowlisted until 2027-01-31
+    (`security/audit-allowlist.json`), and three Server Components DoS ones
+    apply.
+  - **SAML** sign-in, and **MFA enforced** at sign-in (enrollment exists but
+    nothing checks a code).
+  - **Data scopes for traces, metrics and alerts**, archive search under a
+    scope (filtering the Parquet read), and **field-level masking**.
+  - **API key scopes**: a key acts with its creator's roles today.
+  - **Authentication on `/metrics`**, or a separate metrics port.
+  - **Run the release workflow** on the first tag, and check `cosign verify`.
+  - **Admin UI** billing, features and support pages.
+  - **Retire the Enterprise RBAC and OIDC-config routes**
+    (`/v1/enterprise/rbac/*`, `/v1/enterprise/auth/oidc/configure`) in favour
+    of `/v1/roles/custom` and `/v1/sso/providers`.
+- **Response follow-ups from Phase 13** ([response automation](./response.md)):
+  - **Compliance reports** (the Phase 13 deliverable not done): evidence
+    for SOC 2 and ISO 27001 controls from the audit log, retention and
+    access reviews.
+  - **More ticket systems with sync:** ServiceNow and Linear. Today they
+    can only be reached by a webhook action.
+  - **Approve from Slack or Teams** (interactive messages), with the same
+    role check as in Logforge.
+  - **Built-in containment connectors** (Okta and Entra ID user disable,
+    AWS security groups), each behind an approval.
+  - **Branches and parallel steps in playbooks**, and a run history kept
+    longer than 180 days for audits.
+  - **A Unicode font in the PDF report** (today Latin-1 only).
+  - **Retire the older `/v1/enterprise/integrations` API** and its tables
+    (`integrations_mt` in `init_simple.sql`, `enterprise_integrations_mt`).
+    The Settings → Integrations page no longer uses them.
+- **Storage and scale follow-ups from Phase 12** ([storage](./storage.md), [deployment](./deployment.md)):
+  - **Ingest throughput, for the cost target:**
+    - measure per-replica throughput on dedicated nodes;
+    - run several uvicorn workers per pod;
+    - move the log consumer out of the API process.
+
+    The reference architecture needs 18 API replicas at today's 343 events/s.
+  - **Exactly-once ingest:** deduplicate redelivered batches (a batch id,
+    ClickHouse insert deduplication tokens). Today a failure stores a batch
+    twice.
+  - **ClickHouse 24.x:** a production-ready Replicated database that
+    converts MergeTree tables itself, so `REPLICATED_ENGINES` can go.
+  - **Bind mutation timestamps as parameters** (about 16 `now64()`
+    mutations), so `allow_nondeterministic_mutations` can go.
+  - **Three Keepers and three Redpanda brokers in the HA compose**, and the
+    chaos test killing them too.
+  - **Install the Helm chart on a real cluster in CI** (kind), and publish
+    the images it names.
+  - **Exact per-tenant hot/warm sizes:** tenants share parts, so they're
+    estimated from rows by age.
+- **Entity analytics follow-ups from Phase 11** ([guide](./entities.md)):
+  - **Stored risk:** keep each entity's daily risk, so pages show how it
+    moved and ranking doesn't recompute 14 days of alerts.
+  - **Learned peer groups:** cluster by role (hosts used, services) instead
+    of comparing with every entity of a type.
+  - **Baselines for every entity in the ranking**, not just the top 30.
+  - **Patterns at scale:** cluster in a background job per service and keep
+    templates, so `| patterns` covers more than 1 M lines.
+  - **Independent scenarios:** risk scenarios written by someone other than
+    the author of the scoring.
+- **AI follow-ups from Phase 10** ([guide](./ai.md#investigation-and-authoring-phase-10)):
+  - **Record the models:** `record_copilot.py` (needs ClickHouse) and
+    `record_rule_draft.py`, then commit the recordings and baselines.
+  - **Unseen attacks:** add copilot scenarios and drafting behaviours written
+    by someone other than the author of the signals and the drafter.
+  - **Signals beyond keywords:** use rarity (first time a process, domain or
+    address is seen for a host or user) so roots with no known signal, like
+    a payload download, are found.
+  - **Case report evaluation:** a labelled set with required facts.
+  - **Drafting:** count and correlation rules are out of scope for drafts.
+- **AI follow-ups from Phase 9** ([guide](./ai.md#features-phase-9)):
+  - **Record the models:** run `tests/eval/ai/record_nl2query_exec.py`,
+    `record_triage.py`, `record_pipeline_draft.py` and `record_explain.py`
+    with a provider (needs an API key and, for the first, ClickHouse) and
+    commit the recordings and baselines. Then check plain-English queries
+    against the ≥ 85% target.
+  - **Rate triage:** build an analyst-rated set (helpfulness and factual
+    accuracy) for triage summaries.
+  - **Real questions:** add analysts' own questions to the NL2Query sets
+    beside the templated ones.
+  - **Held-out formats:** add sample files the drafter and the explain
+    reference were not developed against.
+  - **Replace the old services:** move `/v1/ai/query` and the AI service's
+    template answers onto the Phase 9 features.
+  - **Explain gaps:** epoch timestamps aren't recognised by the pipeline
+    drafter; ATT&CK techniques with several tactics show one.
+- **AI follow-ups from Phase 8** ([guide](./ai.md)):
+  - **Record the evaluations:** record a real model's answers for `nl2query`
+    and `summaries` (`tests/eval/ai/run_ai_eval.py --record`, needs an API
+    key) and commit the baseline, so the CI gate starts enforcing.
+  - **Share the limits:** the rate limit and the in-request budget check are
+    per API process. Move both to a shared counter (Redis or ClickHouse) so
+    replicas and parallel requests can't overshoot.
+  - **Redact renamed values:** redact at the query layer too, so values
+    renamed in a query (`| eval v = attrs.password`) are still covered.
+  - **Enforce API key scopes:** they are set at login but never checked
+    (pre-existing, every route).
+  - **Fix the rule-based NLQ:** give it per-intent permission checks and
+    parameterised SQL, then open the fallback to `ai:read` again.
+  - **Get a human sign-off** of the security review before enabling AI in
+    production.
+- **Content pack follow-ups from Phase 7** ([guide](./packs.md)): packs
+  come only from the catalogue shipped with the deployment; add a registry
+  (or git source) with signed packs, and per-tenant uploads. An install that
+  fails part-way is not rolled back: objects written so far stay and no
+  manifest is saved, so the next plan reports them as conflicts. Let the
+  installer choose which rules to enable. An object kept when a pack is
+  removed shows as a conflict on reinstall; offer to adopt it. Windows
+  events must arrive as JSON (NXLog or Winlogbeat), not XML or WEF; the
+  Workspace pipeline reads only the first event of an activity; CRI partial
+  lines are not joined. Good first issues: more packs (PostgreSQL, MySQL,
+  Cisco ASA, Palo Alto, Fortinet, Microsoft 365, Azure activity, GCP audit,
+  GitHub audit, Cloudflare), each from `packages/packs/_template`.
+- **Query language follow-ups from Phase 6** ([reference](./query-language.md)):
+  questions that read `attrs` over 100 M events take 6–16 s on 4 vCPUs,
+  because every event's JSON is decompressed and scanned
+  ([benchmarks](./benchmarks/README.md)). Frequently queried attributes
+  need typed columns materialized from `attrs` (or ClickHouse's JSON type),
+  which the compiler would then read instead. The hourly counts cover only
+  service, level and status (not host or attributes). `join` reads at most
+  50,000 subsearch rows and keeps one row per key. The saved-search
+  scheduler runs inside each API process, so with several replicas each
+  would run every search (needs a lease or a separate worker). Dashboard
+  panels have one query each and no per-panel time range. The query builder
+  writes `where`, `stats`, `timechart`, `sort` and `head` only. Queries the
+  first LogforgeQL accepted still run on the original engine.
 - **Per-request quota mutations.** Every ingest request runs
   `ALTER TABLE tenant_quotas_mt UPDATE ...`. ClickHouse mutations are
   heavyweight and queue up under load; this is the likely cause of the
@@ -93,13 +221,10 @@ markers).
 ## Remove demo / fake data from the UI
 
 - The admin UI `billing`, `features` and `support` pages are "Coming soon"
-  placeholders.
+  placeholders (still so after Phase 14).
 
 ## Features
 
-- **Auth flows**: sending password-reset and invite emails, email
-  verification, and session revocation are TODOs in
-  `apps/api/routers/auth_api.py`.
 - **Threat-intel feed clients** (for example MISP, OTX, abuse.ch) for
   `apps/api/threat_intel.py`.
 - **Pluggable LLM backend** for the natural-language query in
@@ -107,8 +232,8 @@ markers).
   Define a small provider interface selected by configuration, with **no
   provider enabled by default**: without one, the keyword templates stay the
   behaviour, and no data leaves the deployment unless an operator opts in.
-- A dead-letter queue for the event bus; Grafana dashboards for Logforge's own
-  metrics; OpenTelemetry self-tracing.
+- A dead-letter queue for the event bus; OpenTelemetry self-tracing (Grafana
+  dashboards for Logforge's own metrics came in Phase 14).
 
 ## Recently completed
 

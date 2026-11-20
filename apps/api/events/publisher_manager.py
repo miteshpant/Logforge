@@ -236,8 +236,10 @@ class KafkaEventPublisher(EventPublisher):
         self.producer = AIOKafkaProducer(**producer_config_dict)
         await self.producer.start()
 
-    async def publish(self, event: BaseEvent) -> bool:
-        """Publish a single event"""
+    async def publish(self, event: BaseEvent, durable: bool = False) -> bool:
+        """Publish a single event. durable=True (Phase 12) sends it now and
+        waits for the broker, whatever the batch size: True then means the
+        broker has it, not that it is buffered here."""
         if not self.is_started:
             raise EventPublishError("Publisher not started")
 
@@ -257,7 +259,7 @@ class KafkaEventPublisher(EventPublisher):
             # if the process dies before the flush. Publishers that need a
             # delivery guarantee must be configured with max_batch_size=1 (as
             # `kafka_realtime` is, for alert and system events).
-            if self.config.max_batch_size > 1:
+            if self.config.max_batch_size > 1 and not durable:
                 if topic not in self._pending_events:
                     self._pending_events[topic] = []
 
@@ -617,7 +619,8 @@ class EventPublisherManager:
         self.is_started = True
         logger.info("EventPublisherManager started")
 
-    async def publish(self, event: BaseEvent, publisher_names: Optional[List[str]] = None) -> Dict[str, bool]:
+    async def publish(self, event: BaseEvent, publisher_names: Optional[List[str]] = None,
+                      durable: bool = False) -> Dict[str, bool]:
         """Publish event to specified publishers or all enabled ones"""
         if not self.is_started:
             raise EventPublishError("PublisherManager not started")
@@ -648,7 +651,7 @@ class EventPublisherManager:
                            publisher_enabled=getattr(publisher_config, 'enabled', 'unknown'),
                            publisher_type=type(publisher).__name__)
                 
-                success = await publisher.publish(event)
+                success = await publisher.publish(event, durable=True) if durable else await publisher.publish(event)
                 results[name] = success
             except Exception as e:
                 publisher = self.publishers[name]

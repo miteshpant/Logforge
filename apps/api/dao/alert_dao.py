@@ -440,7 +440,9 @@ class AlertDAO:
                 params["status"] = status
 
             if severity:
-                where_clauses.append("ar.severity = %(severity)s")
+                # Alerts without a rule (saved searches) carry their own severity.
+                where_clauses.append("(ar.severity = %(severity)s AND ar.name != '' OR ar.name = '' "
+                                     "AND JSONExtractString(ai.trigger_data, 'severity') = %(severity)s)")
                 params["severity"] = severity
 
             if start_time:
@@ -492,6 +494,12 @@ class AlertDAO:
                 alert["message"] = trigger_data.get("message", "")
                 # Get severity from alert rule, not from trigger_data
                 alert["severity"] = alert.get("rule_severity", "medium")
+                if not alert.get("rule_name"):
+                    # No rule matched (a saved-search alert, or the rule was
+                    # deleted): the LEFT JOIN filled rule_severity with the
+                    # Enum's first value, `low`. Use the alert's own.
+                    alert["severity"] = trigger_data.get("severity") or "medium"
+                    alert["rule_name"] = trigger_data.get("search_name") or trigger_data.get("rule_name") or ""
                 alert["details"] = trigger_data.get("details", {})
                 alert["resolution_notes"] = alert.get("resolution_data")
 

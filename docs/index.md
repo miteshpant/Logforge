@@ -29,6 +29,14 @@ observability, self-hosted with one command. Apache 2.0.
   routing, testing against samples, dead-letter queue.
 - **[Common schema](schema.md)**: OCSF fields in rules and queries, source
   mappings, search-time `rex` / `parse` / `json`, and the field explorer.
+- **[Query language](query-language.md)**: the LogforgeQL reference:
+  commands, functions, lookups, joins, saved and scheduled searches,
+  dashboard panels, and a cookbook of analyst questions.
+- **[Content packs](packs.md)**: one-step installs for Linux, web servers,
+  AWS, Okta and Google Workspace, Windows and Kubernetes (pipelines, rules,
+  searches, dashboards), and how to write a pack.
+- **[AI](ai.md)**: grounded answers with citations from your own data, off by
+  default; providers, data controls, audit, budgets and evaluation.
 
 ## Where it's going
 

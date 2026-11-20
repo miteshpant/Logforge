@@ -89,7 +89,7 @@ class CaseDAO:
 
     async def list(self, tenant_id: str, status: Optional[Sequence[str]] = None, assignee: Optional[str] = None,
                    severity: Optional[str] = None, q: Optional[str] = None, limit: int = 50,
-                   offset: int = 0) -> Tuple[List[Case], int]:
+                   offset: int = 0, entity: Optional[str] = None) -> Tuple[List[Case], int]:
         where = ["tenant_id = %(tenant_id)s"]
         params: Dict[str, Any] = {"tenant_id": tenant_id}
         if status:
@@ -104,6 +104,12 @@ class CaseDAO:
         if q:
             where.append("positionCaseInsensitiveUTF8(title, %(q)s) > 0")
             params["q"] = q
+        if entity:
+            # an exact value in the entities JSON ({"src_ip": ["1.2.3.4"], ...}), quoted as JSON writes it
+            import json as _json
+
+            where.append("positionUTF8(entities, %(entity)s) > 0")
+            params["entity"] = _json.dumps(str(entity))
         clause = " AND ".join(where)
         rows = await self.db.fetch_all(
             f"SELECT * FROM cases_mt FINAL WHERE {clause} ORDER BY updated_at DESC "

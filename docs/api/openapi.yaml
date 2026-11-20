@@ -90,6 +90,191 @@ paths:
       summary: Resilience Status
       tags:
       - Health
+  /scim/v2/ResourceTypes:
+    get:
+      operationId: resource_types_scim_v2_ResourceTypes_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      summary: Resource Types
+      tags:
+      - scim
+  /scim/v2/Schemas:
+    get:
+      operationId: schemas_scim_v2_Schemas_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      summary: Schemas
+      tags:
+      - scim
+  /scim/v2/ServiceProviderConfig:
+    get:
+      operationId: service_provider_config_scim_v2_ServiceProviderConfig_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      summary: Service Provider Config
+      tags:
+      - scim
+  /scim/v2/Users:
+    get:
+      operationId: list_users_scim_v2_Users_get
+      parameters:
+      - in: query
+        name: filter
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Filter
+      - in: query
+        name: startIndex
+        required: false
+        schema:
+          default: 1
+          title: Startindex
+          type: integer
+      - in: query
+        name: count
+        required: false
+        schema:
+          default: 100
+          title: Count
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List Users
+      tags:
+      - scim
+    post:
+      operationId: create_user_scim_v2_Users_post
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      summary: Create User
+      tags:
+      - scim
+  /scim/v2/Users/{user_id}:
+    delete:
+      operationId: delete_user_scim_v2_Users__user_id__delete
+      parameters:
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          title: User Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Delete User
+      tags:
+      - scim
+    get:
+      operationId: get_user_scim_v2_Users__user_id__get
+      parameters:
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          title: User Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get User
+      tags:
+      - scim
+    patch:
+      operationId: patch_user_scim_v2_Users__user_id__patch
+      parameters:
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          title: User Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Patch User
+      tags:
+      - scim
+    put:
+      operationId: replace_user_scim_v2_Users__user_id__put
+      parameters:
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          title: User Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Replace User
+      tags:
+      - scim
   /v1/admin/audit/bulk-insert:
     post:
       description: Bulk insert audit records (for testing/migration)
@@ -1282,6 +1467,78 @@ paths:
       summary: Dismiss Anomaly
       tags:
       - ai
+  /v1/ai/ask:
+    post:
+      description: 'A grounded answer: the model looks things up with read-only tools (as you), and cites
+        what it used.
+
+        With AI off for this tenant or deployment, the rule-based answer (`mode: rule_based`) and why.'
+      operationId: ai_ask_v1_ai_ask_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AskBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Ai Ask V1 Ai Ask Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Ai Ask
+      tags:
+      - ai-assistant
+  /v1/ai/audit:
+    get:
+      description: Every prompt, tool call, tool result and response, as sent to the provider (after redaction).
+      operationId: ai_audit_v1_ai_audit_get
+      parameters:
+      - in: query
+        name: request_id
+        required: false
+        schema:
+          anyOf:
+          - maxLength: 64
+            type: string
+          - type: 'null'
+          title: Request Id
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 200
+          maximum: 1000
+          minimum: 1
+          title: Limit
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Ai Audit V1 Ai Audit Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Ai Audit
+      tags:
+      - ai-assistant
   /v1/ai/baselines:
     get:
       description: List ML model baselines
@@ -1372,6 +1629,100 @@ paths:
       summary: Save Baseline
       tags:
       - ai
+  /v1/ai/case-report:
+    post:
+      description: 'An incident summary for management, or a post-incident review, from the case and its
+        timeline. Every
+
+        sentence cites the case, an alert or a timeline entry; `markdown` is the report for sharing.'
+      operationId: ai_case_report_v1_ai_case_report_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CaseReportBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Ai Case Report V1 Ai Case Report Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Ai Case Report
+      tags:
+      - ai-assistant
+  /v1/ai/copilot/plan:
+    post:
+      description: 'The read-only searches the copilot proposes for a case, alert or entity. Nothing runs:
+        the analyst
+
+        reviews, edits or drops steps, then calls /copilot/run.'
+      operationId: ai_copilot_plan_v1_ai_copilot_plan_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CopilotBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Ai Copilot Plan V1 Ai Copilot Plan Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Ai Copilot Plan
+      tags:
+      - ai-assistant
+  /v1/ai/copilot/run:
+    post:
+      description: 'Run the approved steps as the caller: a cited timeline, root-cause candidates, hypotheses
+        and proposed
+
+        next steps. With AI on, the model writes the hypotheses; nothing it cites is outside what was
+        fetched.'
+      operationId: ai_copilot_run_v1_ai_copilot_run_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CopilotBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Ai Copilot Run V1 Ai Copilot Run Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Ai Copilot Run
+      tags:
+      - ai-assistant
   /v1/ai/correlate:
     post:
       description: Find correlations between events and metrics
@@ -1406,6 +1757,40 @@ paths:
       summary: Correlate Events
       tags:
       - ai
+  /v1/ai/explain:
+    post:
+      description: 'Explain one event: what it is, what its fields mean, why it matters (the shipped detection
+        rules it
+
+        matches, threat intelligence for its addresses) and follow-up queries, every sentence cited. With
+        AI off,
+
+        or if the model''s answer has nothing cited, the explanation is built from the reference by template.'
+      operationId: ai_explain_v1_ai_explain_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExplainBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Ai Explain V1 Ai Explain Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Ai Explain
+      tags:
+      - ai-assistant
   /v1/ai/health:
     get:
       description: Health check for AI service
@@ -1838,6 +2223,37 @@ paths:
       summary: Update Anomaly Thresholds
       tags:
       - ai
+  /v1/ai/nl2query:
+    post:
+      description: 'Draft a LogforgeQL query for a question, explained, for the user to run or edit. The
+        model sees the
+
+        tenant''s field names and redacted example values, never log data. With AI off, a rule-based draft.'
+      operationId: ai_nl2query_v1_ai_nl2query_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Ai Nl2Query V1 Ai Nl2Query Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Ai Nl2Query
+      tags:
+      - ai-assistant
   /v1/ai/optimize:
     post:
       description: Generate performance optimization recommendations
@@ -1879,6 +2295,40 @@ paths:
       summary: Optimize Performance
       tags:
       - ai
+  /v1/ai/pipeline-draft:
+    post:
+      description: 'Draft an ingest pipeline that parses the sample lines, checked by simulation (how
+        many lines parsed,
+
+        the fields extracted, the failures). Nothing is saved. The model sees the samples, redacted; with
+        AI off,
+
+        or if it parses fewer lines, the heuristic draft.'
+      operationId: ai_pipeline_draft_v1_ai_pipeline_draft_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PipelineDraftBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Ai Pipeline Draft V1 Ai Pipeline Draft Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Ai Pipeline Draft
+      tags:
+      - ai-assistant
   /v1/ai/predict:
     post:
       description: Predict potential incidents using ML models
@@ -2297,6 +2747,181 @@ paths:
       summary: Get Query History
       tags:
       - ai
+  /v1/ai/rule-draft:
+    post:
+      description: 'Draft a Sigma rule and its fixtures for a behaviour. The draft passes only if the
+        fixture gate accepts
+
+        it, it fires on every attack sample and not on the known-good one (two attempts at most). Nothing
+        is
+
+        saved: enable a passing draft with /rule-draft/enable.'
+      operationId: ai_rule_draft_v1_ai_rule_draft_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuleDraftBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Ai Rule Draft V1 Ai Rule Draft Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Ai Rule Draft
+      tags:
+      - ai-assistant
+  /v1/ai/rule-draft/enable:
+    post:
+      description: 'Enable a drafted rule. Everything is checked again here, whatever the client says:
+        the fixture gate,
+
+        the samples (if given), and a backtest over the tenant''s stored logs (at most max_alerts_per_day).
+        A rule
+
+        that fails any of them is refused (409) and nothing is written.'
+      operationId: ai_rule_draft_enable_v1_ai_rule_draft_enable_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuleEnableBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Ai Rule Draft Enable V1 Ai Rule Draft Enable Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Ai Rule Draft Enable
+      tags:
+      - ai-assistant
+  /v1/ai/settings:
+    get:
+      operationId: get_ai_settings_v1_ai_settings_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Get Ai Settings V1 Ai Settings Get
+                type: object
+          description: Successful Response
+      summary: Get Ai Settings
+      tags:
+      - ai-assistant
+    put:
+      description: Opt in or out, choose a provider, add redacted fields, lower budgets.
+      operationId: put_ai_settings_v1_ai_settings_put
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettingsBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Put Ai Settings V1 Ai Settings Put
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Put Ai Settings
+      tags:
+      - ai-assistant
+  /v1/ai/status:
+    get:
+      description: Whether AI answers are on for this tenant, the provider, and whether it is external.
+      operationId: ai_status_v1_ai_status_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Ai Status V1 Ai Status Get
+                type: object
+          description: Successful Response
+      summary: Ai Status
+      tags:
+      - ai-assistant
+  /v1/ai/triage:
+    post:
+      description: 'A triage summary of an alert or case: what happened, ATT&CK context, entities, related
+        activity and
+
+        next steps, each sentence citing its evidence. The evidence is read as the caller; with AI off,
+        or if the
+
+        model''s answer has nothing cited, the summary is built from the evidence by template.'
+      operationId: ai_triage_v1_ai_triage_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriageBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Ai Triage V1 Ai Triage Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Ai Triage
+      tags:
+      - ai-assistant
+  /v1/ai/usage:
+    get:
+      operationId: ai_usage_v1_ai_usage_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Ai Usage V1 Ai Usage Get
+                type: object
+          description: Successful Response
+      summary: Ai Usage
+      tags:
+      - ai-assistant
   /v1/alerts:
     get:
       description: List alerts for the customer, optionally filtered by time range
@@ -3344,6 +3969,21 @@ paths:
       summary: Accept Invitation
       tags:
       - Authentication
+  /v1/auth/access:
+    get:
+      operationId: my_access_v1_auth_access_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response My Access V1 Auth Access Get
+                type: object
+          description: Successful Response
+      summary: My Access
+      tags:
+      - roles
   /v1/auth/deactivate:
     post:
       description: Deactivate current user account
@@ -3527,21 +4167,14 @@ paths:
       - Authentication
   /v1/auth/password/reset-confirm:
     post:
-      description: Confirm password reset with token
+      description: Confirm password reset with token. Every session of the account ends.
       operationId: confirm_password_reset_v1_auth_password_reset_confirm_post
-      parameters:
-      - in: query
-        name: token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetConfirmBody'
         required: true
-        schema:
-          title: Token
-          type: string
-      - in: query
-        name: new_password
-        required: true
-        schema:
-          title: New Password
-          type: string
       responses:
         '200':
           content:
@@ -3720,6 +4353,108 @@ paths:
       summary: Initialize Platform Setup
       tags:
       - Authentication
+  /v1/auth/sso/callback:
+    get:
+      operationId: callback_v1_auth_sso_callback_get
+      parameters:
+      - in: query
+        name: code
+        required: false
+        schema:
+          default: ''
+          title: Code
+          type: string
+      - in: query
+        name: state
+        required: false
+        schema:
+          default: ''
+          title: State
+          type: string
+      - in: query
+        name: error
+        required: false
+        schema:
+          default: ''
+          title: Error
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Callback
+      tags:
+      - sso
+  /v1/auth/sso/discover:
+    get:
+      operationId: discover_providers_v1_auth_sso_discover_get
+      parameters:
+      - in: query
+        name: email
+        required: true
+        schema:
+          maxLength: 320
+          title: Email
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Discover Providers V1 Auth Sso Discover Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Discover Providers
+      tags:
+      - sso
+  /v1/auth/sso/{provider_id}/start:
+    get:
+      operationId: start_v1_auth_sso__provider_id__start_get
+      parameters:
+      - in: path
+        name: provider_id
+        required: true
+        schema:
+          title: Provider Id
+          type: string
+      - in: query
+        name: next
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Start
+      tags:
+      - sso
   /v1/auth/tenant-onboard:
     post:
       description: Platform admin creates tenant and invites admin (simplified endpoint)
@@ -3779,15 +4514,14 @@ paths:
       - Authentication
   /v1/auth/verify-email-confirm:
     post:
-      description: Confirm email verification with token
+      description: Confirm email verification with the token that was emailed to this address
       operationId: confirm_email_verification_v1_auth_verify_email_confirm_post
-      parameters:
-      - in: query
-        name: token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailBody'
         required: true
-        schema:
-          title: Token
-          type: string
       responses:
         '200':
           content:
@@ -4144,7 +4878,12 @@ paths:
       - Dashboards
   /v1/dashboards/{dashboard_id}/data:
     get:
-      description: Get dashboard data with all widget results
+      description: 'Get dashboard data with all widget results.
+
+
+        Dashboard variables are passed as `var-<name>=<value>` (`*` is All);
+
+        query panels run with them bound as values.'
       operationId: get_dashboard_data_v1_dashboards__dashboard_id__data_get
       parameters:
       - in: path
@@ -4240,6 +4979,44 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
           description: Validation Error
       summary: Get Dashboard Shares
+      tags:
+      - Dashboards
+  /v1/dashboards/{dashboard_id}/variables:
+    get:
+      description: The dashboard's variables and the values each offers over the time range.
+      operationId: get_dashboard_variables_v1_dashboards__dashboard_id__variables_get
+      parameters:
+      - in: path
+        name: dashboard_id
+        required: true
+        schema:
+          title: Dashboard Id
+          type: string
+      - in: query
+        name: start_time
+        required: false
+        schema:
+          title: Start Time
+          type: string
+      - in: query
+        name: end_time
+        required: false
+        schema:
+          title: End Time
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Dashboard Variables
       tags:
       - Dashboards
   /v1/dashboards/{dashboard_id}/widgets:
@@ -5392,6 +6169,141 @@ paths:
       summary: Get Usage Billing
       tags:
       - enterprise
+  /v1/entities:
+    get:
+      operationId: list_entities_v1_entities_get
+      parameters:
+      - in: query
+        name: type
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Type
+      - in: query
+        name: q
+        required: false
+        schema:
+          default: ''
+          maxLength: 200
+          title: Q
+          type: string
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 50
+          maximum: 500
+          minimum: 1
+          title: Limit
+          type: integer
+      - in: query
+        name: offset
+        required: false
+        schema:
+          default: 0
+          minimum: 0
+          title: Offset
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response List Entities V1 Entities Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List Entities
+      tags:
+      - entities
+  /v1/entities/risk:
+    get:
+      description: 'Entities ranked by risk over the last 14 days: alert severity with decay (repeats
+        of one rule and rules
+
+        common across the tenant count less), ATT&CK tactic progression (shared with linked entities),
+        intel
+
+        hits. Each comes with the factors behind its score.'
+      operationId: entity_risk_v1_entities_risk_get
+      parameters:
+      - in: query
+        name: type
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Type
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 25
+          maximum: 500
+          minimum: 1
+          title: Limit
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Entity Risk V1 Entities Risk Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Entity Risk
+      tags:
+      - entities
+  /v1/entities/{entity_type}/{value}:
+    get:
+      operationId: get_entity_v1_entities__entity_type___value__get
+      parameters:
+      - in: path
+        name: entity_type
+        required: true
+        schema:
+          title: Entity Type
+          type: string
+      - in: path
+        name: value
+        required: true
+        schema:
+          title: Value
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Get Entity V1 Entities  Entity Type   Value  Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Entity
+      tags:
+      - entities
   /v1/export:
     post:
       description: Export query results in various formats (JSON, CSV, etc.)
@@ -5569,6 +6481,41 @@ paths:
       summary: Field Values
       tags:
       - fields
+  /v1/hooks/{tenant_id}/{integration_id}:
+    post:
+      description: 'A ticket changed in Jira or GitHub: bring the linked cases in step.'
+      operationId: webhook_v1_hooks__tenant_id___integration_id__post
+      parameters:
+      - in: path
+        name: tenant_id
+        required: true
+        schema:
+          title: Tenant Id
+          type: string
+      - in: path
+        name: integration_id
+        required: true
+        schema:
+          title: Integration Id
+          type: string
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Webhook V1 Hooks  Tenant Id   Integration Id  Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Webhook
+      tags:
+      - integrations
   /v1/ingest:
     post:
       description: Auto-detect format and ingest logs
@@ -5858,6 +6805,227 @@ paths:
       summary: Ingest Text Batch
       tags:
       - Ingestion
+  /v1/integrations:
+    get:
+      operationId: list_integrations_v1_integrations_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response List Integrations V1 Integrations Get
+                type: object
+          description: Successful Response
+      summary: List Integrations
+      tags:
+      - integrations
+    post:
+      operationId: create_v1_integrations_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntegrationBody'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Create V1 Integrations Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Create
+      tags:
+      - integrations
+  /v1/integrations/kinds:
+    get:
+      operationId: kinds_v1_integrations_kinds_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Kinds V1 Integrations Kinds Get
+                type: object
+          description: Successful Response
+      summary: Kinds
+      tags:
+      - integrations
+  /v1/integrations/tickets:
+    get:
+      operationId: case_tickets_v1_integrations_tickets_get
+      parameters:
+      - in: query
+        name: case_id
+        required: true
+        schema:
+          title: Case Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Case Tickets V1 Integrations Tickets Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Case Tickets
+      tags:
+      - integrations
+  /v1/integrations/tickets/sync:
+    post:
+      operationId: sync_now_v1_integrations_tickets_sync_post
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Sync Now V1 Integrations Tickets Sync Post
+                type: object
+          description: Successful Response
+      summary: Sync Now
+      tags:
+      - integrations
+  /v1/integrations/{integration_id}:
+    delete:
+      operationId: delete_v1_integrations__integration_id__delete
+      parameters:
+      - in: path
+        name: integration_id
+        required: true
+        schema:
+          title: Integration Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Delete V1 Integrations  Integration Id  Delete
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Delete
+      tags:
+      - integrations
+    get:
+      operationId: get_one_v1_integrations__integration_id__get
+      parameters:
+      - in: path
+        name: integration_id
+        required: true
+        schema:
+          title: Integration Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Get One V1 Integrations  Integration Id  Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get One
+      tags:
+      - integrations
+    put:
+      operationId: update_v1_integrations__integration_id__put
+      parameters:
+      - in: path
+        name: integration_id
+        required: true
+        schema:
+          title: Integration Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntegrationBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Update V1 Integrations  Integration Id  Put
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Update
+      tags:
+      - integrations
+  /v1/integrations/{integration_id}/test:
+    post:
+      operationId: test_v1_integrations__integration_id__test_post
+      parameters:
+      - in: path
+        name: integration_id
+        required: true
+        schema:
+          title: Integration Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Test V1 Integrations  Integration Id  Test Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Test
+      tags:
+      - integrations
   /v1/logs:
     get:
       description: 'Simple log retrieval endpoint for basic queries (M0 compatibility).
@@ -6880,6 +8048,174 @@ paths:
       summary: Get Performance Trends
       tags:
       - observability
+  /v1/packs:
+    get:
+      operationId: list_packs_v1_packs_get
+      parameters:
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List Packs
+      tags:
+      - packs
+  /v1/packs/{pack_id}:
+    delete:
+      operationId: remove_pack_v1_packs__pack_id__delete
+      parameters:
+      - in: path
+        name: pack_id
+        required: true
+        schema:
+          title: Pack Id
+          type: string
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Remove Pack
+      tags:
+      - packs
+    get:
+      operationId: get_pack_v1_packs__pack_id__get
+      parameters:
+      - in: path
+        name: pack_id
+        required: true
+        schema:
+          title: Pack Id
+          type: string
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Pack
+      tags:
+      - packs
+  /v1/packs/{pack_id}/install:
+    post:
+      operationId: install_pack_v1_packs__pack_id__install_post
+      parameters:
+      - in: path
+        name: pack_id
+        required: true
+        schema:
+          title: Pack Id
+          type: string
+      - description: Overwrite local changes
+        in: query
+        name: force
+        required: false
+        schema:
+          default: false
+          description: Overwrite local changes
+          title: Force
+          type: boolean
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Install Pack
+      tags:
+      - packs
+  /v1/packs/{pack_id}/plan:
+    post:
+      operationId: plan_pack_v1_packs__pack_id__plan_post
+      parameters:
+      - in: path
+        name: pack_id
+        required: true
+        schema:
+          title: Pack Id
+          type: string
+      - in: query
+        name: force
+        required: false
+        schema:
+          default: false
+          title: Force
+          type: boolean
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Plan Pack
+      tags:
+      - packs
   /v1/permissions/map:
     get:
       description: Get complete permission mapping for all roles
@@ -7312,6 +8648,297 @@ paths:
       summary: Pipeline Versions
       tags:
       - pipelines
+  /v1/playbooks:
+    get:
+      operationId: list_playbooks_v1_playbooks_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response List Playbooks V1 Playbooks Get
+                type: object
+          description: Successful Response
+      summary: List Playbooks
+      tags:
+      - playbooks
+    post:
+      operationId: create_v1_playbooks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlaybookBody'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Create V1 Playbooks Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Create
+      tags:
+      - playbooks
+  /v1/playbooks/runs:
+    get:
+      operationId: list_runs_v1_playbooks_runs_get
+      parameters:
+      - in: query
+        name: status
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 50
+          maximum: 500
+          minimum: 1
+          title: Limit
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response List Runs V1 Playbooks Runs Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List Runs
+      tags:
+      - playbooks
+  /v1/playbooks/runs/{run_id}:
+    get:
+      operationId: get_run_v1_playbooks_runs__run_id__get
+      parameters:
+      - in: path
+        name: run_id
+        required: true
+        schema:
+          title: Run Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Get Run V1 Playbooks Runs  Run Id  Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Run
+      tags:
+      - playbooks
+  /v1/playbooks/runs/{run_id}/decision:
+    post:
+      operationId: decide_v1_playbooks_runs__run_id__decision_post
+      parameters:
+      - in: path
+        name: run_id
+        required: true
+        schema:
+          title: Run Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Decide V1 Playbooks Runs  Run Id  Decision Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Decide
+      tags:
+      - playbooks
+  /v1/playbooks/validate:
+    post:
+      operationId: validate_v1_playbooks_validate_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlaybookBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Validate V1 Playbooks Validate Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Validate
+      tags:
+      - playbooks
+  /v1/playbooks/{playbook_id}:
+    delete:
+      operationId: delete_v1_playbooks__playbook_id__delete
+      parameters:
+      - in: path
+        name: playbook_id
+        required: true
+        schema:
+          title: Playbook Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Delete V1 Playbooks  Playbook Id  Delete
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Delete
+      tags:
+      - playbooks
+    get:
+      operationId: get_one_v1_playbooks__playbook_id__get
+      parameters:
+      - in: path
+        name: playbook_id
+        required: true
+        schema:
+          title: Playbook Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Get One V1 Playbooks  Playbook Id  Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get One
+      tags:
+      - playbooks
+    put:
+      operationId: update_v1_playbooks__playbook_id__put
+      parameters:
+      - in: path
+        name: playbook_id
+        required: true
+        schema:
+          title: Playbook Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlaybookBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Update V1 Playbooks  Playbook Id  Put
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Update
+      tags:
+      - playbooks
+  /v1/playbooks/{playbook_id}/run:
+    post:
+      operationId: run_now_v1_playbooks__playbook_id__run_post
+      parameters:
+      - in: path
+        name: playbook_id
+        required: true
+        schema:
+          title: Playbook Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Run Now V1 Playbooks  Playbook Id  Run Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Run Now
+      tags:
+      - playbooks
   /v1/query/advanced:
     post:
       description: Advanced log querying with filters, aggregations, and analysis
@@ -7365,6 +8992,38 @@ paths:
       summary: Aggregate Logs
       tags:
       - Query
+  /v1/query/estimate:
+    post:
+      description: 'Estimate what a LogforgeQL query would read, without running it.
+
+
+        Same body as /query/logql. Returns the estimated rows, the tenant''s plan
+
+        limit, and whether the query reads the hourly counts.'
+      operationId: estimate_query_v1_query_estimate_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              additionalProperties: true
+              title: Request Body
+              type: object
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Estimate Query
+      tags:
+      - Query
   /v1/query/logql:
     post:
       description: "Execute a LogforgeQL text query (ENH-028).\n\nExamples:\n    {\"query\": \"error |\
@@ -7400,6 +9059,177 @@ paths:
       summary: Logql Query
       tags:
       - Query
+  /v1/query/lookups:
+    get:
+      operationId: list_lookups_v1_query_lookups_get
+      parameters:
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List Lookups
+      tags:
+      - lookups
+  /v1/query/lookups/{name}:
+    delete:
+      operationId: delete_lookup_v1_query_lookups__name__delete
+      parameters:
+      - in: path
+        name: name
+        required: true
+        schema:
+          title: Name
+          type: string
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Delete Lookup
+      tags:
+      - lookups
+    get:
+      operationId: get_lookup_v1_query_lookups__name__get
+      parameters:
+      - in: path
+        name: name
+        required: true
+        schema:
+          title: Name
+          type: string
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 100
+          maximum: 1000
+          minimum: 1
+          title: Limit
+          type: integer
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Lookup
+      tags:
+      - lookups
+    put:
+      operationId: put_lookup_v1_query_lookups__name__put
+      parameters:
+      - in: path
+        name: name
+        required: true
+        schema:
+          title: Name
+          type: string
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LookupBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Put Lookup
+      tags:
+      - lookups
+  /v1/query/lookups/{name}/values:
+    post:
+      operationId: change_list_values_v1_query_lookups__name__values_post
+      parameters:
+      - in: path
+        name: name
+        required: true
+        schema:
+          title: Name
+          type: string
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValuesBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Change List Values
+      tags:
+      - lookups
   /v1/query/saved:
     get:
       description: List saved queries for the customer
@@ -7555,6 +9385,245 @@ paths:
       summary: Update Saved Query
       tags:
       - Query
+  /v1/query/searches:
+    get:
+      operationId: list_searches_v1_query_searches_get
+      parameters:
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List Searches
+      tags:
+      - saved searches
+    post:
+      operationId: create_search_v1_query_searches_post
+      parameters:
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              additionalProperties: true
+              title: Body
+              type: object
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Create Search
+      tags:
+      - saved searches
+  /v1/query/searches/{search_id}:
+    delete:
+      operationId: delete_search_v1_query_searches__search_id__delete
+      parameters:
+      - in: path
+        name: search_id
+        required: true
+        schema:
+          title: Search Id
+          type: string
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Delete Search
+      tags:
+      - saved searches
+    get:
+      operationId: get_search_v1_query_searches__search_id__get
+      parameters:
+      - in: path
+        name: search_id
+        required: true
+        schema:
+          title: Search Id
+          type: string
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Search
+      tags:
+      - saved searches
+    put:
+      operationId: update_search_v1_query_searches__search_id__put
+      parameters:
+      - in: path
+        name: search_id
+        required: true
+        schema:
+          title: Search Id
+          type: string
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              additionalProperties: true
+              title: Body
+              type: object
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Update Search
+      tags:
+      - saved searches
+  /v1/query/searches/{search_id}/run:
+    post:
+      operationId: run_search_v1_query_searches__search_id__run_post
+      parameters:
+      - in: path
+        name: search_id
+        required: true
+        schema:
+          title: Search Id
+          type: string
+      - description: 'Preview: no alert, report or record'
+        in: query
+        name: dry_run
+        required: false
+        schema:
+          default: true
+          description: 'Preview: no alert, report or record'
+          title: Dry Run
+          type: boolean
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Run Search
+      tags:
+      - saved searches
+  /v1/query/searches/{search_id}/runs:
+    get:
+      operationId: list_runs_v1_query_searches__search_id__runs_get
+      parameters:
+      - in: path
+        name: search_id
+        required: true
+        schema:
+          title: Search Id
+          type: string
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 50
+          maximum: 500
+          minimum: 1
+          title: Limit
+          type: integer
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List Runs
+      tags:
+      - saved searches
   /v1/query/timeseries:
     post:
       description: Time-series analysis endpoint for trends and patterns
@@ -7607,6 +9676,172 @@ paths:
       summary: Validate Query
       tags:
       - Query
+  /v1/reports/attack-navigator:
+    get:
+      operationId: attack_navigator_v1_reports_attack_navigator_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      summary: Attack Navigator
+      tags:
+      - reports
+  /v1/reports/schedules:
+    get:
+      operationId: list_schedules_v1_reports_schedules_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response List Schedules V1 Reports Schedules Get
+                type: object
+          description: Successful Response
+      summary: List Schedules
+      tags:
+      - reports
+    post:
+      operationId: create_schedule_v1_reports_schedules_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleBody'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Create Schedule
+      tags:
+      - reports
+  /v1/reports/schedules/{schedule_id}:
+    delete:
+      operationId: delete_schedule_v1_reports_schedules__schedule_id__delete
+      parameters:
+      - in: path
+        name: schedule_id
+        required: true
+        schema:
+          title: Schedule Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Delete Schedule
+      tags:
+      - reports
+    put:
+      operationId: update_schedule_v1_reports_schedules__schedule_id__put
+      parameters:
+      - in: path
+        name: schedule_id
+        required: true
+        schema:
+          title: Schedule Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Update Schedule
+      tags:
+      - reports
+  /v1/reports/schedules/{schedule_id}/send:
+    post:
+      operationId: send_now_v1_reports_schedules__schedule_id__send_post
+      parameters:
+      - in: path
+        name: schedule_id
+        required: true
+        schema:
+          title: Schedule Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Send Now
+      tags:
+      - reports
+  /v1/reports/soc:
+    get:
+      operationId: soc_report_v1_reports_soc_get
+      parameters:
+      - in: query
+        name: days
+        required: false
+        schema:
+          default: 30
+          maximum: 366
+          minimum: 1
+          title: Days
+          type: integer
+      - in: query
+        name: format
+        required: false
+        schema:
+          default: json
+          pattern: ^(json|csv|pdf)$
+          title: Format
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Soc Report
+      tags:
+      - reports
   /v1/roles:
     get:
       description: List available roles and their permissions
@@ -7652,6 +9887,163 @@ paths:
       summary: Get Role Analytics
       tags:
       - Role Management
+  /v1/roles/custom:
+    get:
+      operationId: list_roles_v1_roles_custom_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response List Roles V1 Roles Custom Get
+                type: object
+          description: Successful Response
+      summary: List Roles
+      tags:
+      - roles
+    post:
+      operationId: create_role_v1_roles_custom_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleBody'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Create Role V1 Roles Custom Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Create Role
+      tags:
+      - roles
+  /v1/roles/custom/{role_id}:
+    delete:
+      operationId: delete_role_v1_roles_custom__role_id__delete
+      parameters:
+      - in: path
+        name: role_id
+        required: true
+        schema:
+          title: Role Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Delete Role
+      tags:
+      - roles
+    put:
+      operationId: update_role_v1_roles_custom__role_id__put
+      parameters:
+      - in: path
+        name: role_id
+        required: true
+        schema:
+          title: Role Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Update Role
+      tags:
+      - roles
+  /v1/roles/custom/{role_id}/members/{user_id}:
+    delete:
+      operationId: remove_member_v1_roles_custom__role_id__members__user_id__delete
+      parameters:
+      - in: path
+        name: role_id
+        required: true
+        schema:
+          title: Role Id
+          type: string
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          title: User Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Remove Member
+      tags:
+      - roles
+    put:
+      operationId: add_member_v1_roles_custom__role_id__members__user_id__put
+      parameters:
+      - in: path
+        name: role_id
+        required: true
+        schema:
+          title: Role Id
+          type: string
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          title: User Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Add Member
+      tags:
+      - roles
   /v1/roles/{role}/permissions:
     get:
       description: Get permissions for specific role
@@ -7861,6 +10253,75 @@ paths:
       summary: Delete Schema
       tags:
       - schema-registry
+  /v1/scim/tokens:
+    get:
+      operationId: list_tokens_v1_scim_tokens_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response List Tokens V1 Scim Tokens Get
+                type: object
+          description: Successful Response
+      summary: List Tokens
+      tags:
+      - scim
+    post:
+      operationId: create_token_v1_scim_tokens_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenBody'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Create Token V1 Scim Tokens Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Create Token
+      tags:
+      - scim
+  /v1/scim/tokens/{token_id}:
+    delete:
+      operationId: revoke_token_v1_scim_tokens__token_id__delete
+      parameters:
+      - in: path
+        name: token_id
+        required: true
+        schema:
+          title: Token Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Revoke Token V1 Scim Tokens  Token Id  Delete
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Revoke Token
+      tags:
+      - scim
   /v1/security/cases:
     get:
       description: Cases, most recently updated first.
@@ -8374,6 +10835,49 @@ paths:
       security:
       - HTTPBearer: []
       summary: Pin Evidence
+      tags:
+      - cases
+  /v1/security/cases/{case_id}/evidence/{evidence_id}:
+    delete:
+      description: Take back a pin (the pin stays in the timeline, marked as taken back).
+      operationId: unpin_evidence_v1_security_cases__case_id__evidence__evidence_id__delete
+      parameters:
+      - in: path
+        name: case_id
+        required: true
+        schema:
+          title: Case Id
+          type: string
+      - in: path
+        name: evidence_id
+        required: true
+        schema:
+          title: Evidence Id
+          type: string
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Unpin Evidence V1 Security Cases  Case Id  Evidence  Evidence Id  Delete
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Unpin Evidence
       tags:
       - cases
   /v1/security/cases/{case_id}/merge:
@@ -10320,6 +12824,99 @@ paths:
       summary: Get Security Event Status
       tags:
       - security-analytics
+  /v1/sso/providers:
+    get:
+      operationId: list_providers_v1_sso_providers_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response List Providers V1 Sso Providers Get
+                type: object
+          description: Successful Response
+      summary: List Providers
+      tags:
+      - sso
+    post:
+      operationId: create_provider_v1_sso_providers_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderBody'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Create Provider
+      tags:
+      - sso
+  /v1/sso/providers/{provider_id}:
+    delete:
+      operationId: delete_provider_v1_sso_providers__provider_id__delete
+      parameters:
+      - in: path
+        name: provider_id
+        required: true
+        schema:
+          title: Provider Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Delete Provider
+      tags:
+      - sso
+    put:
+      operationId: update_provider_v1_sso_providers__provider_id__put
+      parameters:
+      - in: path
+        name: provider_id
+        required: true
+        schema:
+          title: Provider Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Update Provider
+      tags:
+      - sso
   /v1/storage/archive/{archive_key}:
     get:
       description: Get metadata for a specific archive
@@ -10675,6 +13272,112 @@ paths:
       summary: Update Retention Policy
       tags:
       - Storage
+  /v1/storage/tiers:
+    get:
+      operationId: get_tiers_v1_storage_tiers_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Get Tiers V1 Storage Tiers Get
+                type: object
+          description: Successful Response
+      summary: Get Tiers
+      tags:
+      - storage tiers
+  /v1/storage/tiers/costs:
+    get:
+      operationId: get_costs_v1_storage_tiers_costs_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Get Costs V1 Storage Tiers Costs Get
+                type: object
+          description: Successful Response
+      summary: Get Costs
+      tags:
+      - storage tiers
+  /v1/storage/tiers/policies/{data_type}:
+    put:
+      operationId: set_policy_v1_storage_tiers_policies__data_type__put
+      parameters:
+      - in: path
+        name: data_type
+        required: true
+        schema:
+          title: Data Type
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Set Policy V1 Storage Tiers Policies  Data Type  Put
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Set Policy
+      tags:
+      - storage tiers
+  /v1/storage/tiers/rehydrate:
+    post:
+      operationId: rehydrate_v1_storage_tiers_rehydrate_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RehydrateBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Rehydrate V1 Storage Tiers Rehydrate Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Rehydrate
+      tags:
+      - storage tiers
+  /v1/storage/tiers/run:
+    post:
+      operationId: run_now_v1_storage_tiers_run_post
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Run Now V1 Storage Tiers Run Post
+                type: object
+          description: Successful Response
+      summary: Run Now
+      tags:
+      - storage tiers
   /v1/stream/ai-insights:
     get:
       description: Stream real-time AI insights and anomaly detections
@@ -13552,6 +16255,17 @@ components:
           type: string
       title: AnomalyDetectionRequest
       type: object
+    AskBody:
+      properties:
+        question:
+          maxLength: 4000
+          minLength: 1
+          title: Question
+          type: string
+      required:
+      - question
+      title: AskBody
+      type: object
     Assign:
       properties:
         assignee:
@@ -13924,6 +16638,24 @@ components:
       - title
       title: CaseCreate
       type: object
+    CaseReportBody:
+      properties:
+        audience:
+          default: management
+          enum:
+          - management
+          - review
+          title: Audience
+          type: string
+        case_id:
+          maxLength: 128
+          minLength: 1
+          title: Case Id
+          type: string
+      required:
+      - case_id
+      title: CaseReportBody
+      type: object
     CaseUpdate:
       properties:
         description:
@@ -13955,6 +16687,26 @@ components:
       required:
       - text
       title: Comment
+      type: object
+    CopilotBody:
+      properties:
+        steps:
+          description: The steps to run, as planned or edited by the analyst
+          items:
+            additionalProperties: true
+            type: object
+          maxItems: 8
+          title: Steps
+          type: array
+        subject:
+          additionalProperties: true
+          description: '{"kind": "case"|"alert", "id": ...} or {"kind": "entity", "type": "src_ip"|"dst_ip"|"user"|"hostname",
+            "value": ..., "at": "<ISO time>"}'
+          title: Subject
+          type: object
+      required:
+      - subject
+      title: CopilotBody
       type: object
     CorrelatedGroupsResponse:
       properties:
@@ -14103,6 +16855,14 @@ components:
             type: string
           title: Tags
           type: array
+        variables:
+          anyOf:
+          - items:
+              additionalProperties: true
+              type: object
+            type: array
+          - type: 'null'
+          title: Variables
         widgets:
           default: []
           items:
@@ -14129,6 +16889,24 @@ components:
           description: All pending entries of this pipeline (up to 1000)
           title: Pipeline Id
       title: DeadLetterAction
+      type: object
+    DecisionBody:
+      properties:
+        decision:
+          title: Decision
+          type: string
+        note:
+          default: ''
+          maxLength: 2000
+          title: Note
+          type: string
+        step:
+          title: Step
+          type: string
+      required:
+      - step
+      - decision
+      title: DecisionBody
       type: object
     DeletionType:
       description: Tenant deletion types
@@ -14232,6 +17010,17 @@ components:
       - kind
       - ref
       title: Evidence
+      type: object
+    ExplainBody:
+      properties:
+        event:
+          additionalProperties: true
+          description: The event as the Log Explorer shows it
+          title: Event
+          type: object
+      required:
+      - event
+      title: ExplainBody
       type: object
     FatigueScoreResponse:
       properties:
@@ -14579,6 +17368,36 @@ components:
       - message
       title: IngestResponse
       type: object
+    IntegrationBody:
+      properties:
+        config:
+          additionalProperties: true
+          title: Config
+          type: object
+        enabled:
+          default: true
+          title: Enabled
+          type: boolean
+        kind:
+          title: Kind
+          type: string
+        name:
+          maxLength: 120
+          minLength: 1
+          title: Name
+          type: string
+        secrets:
+          anyOf:
+          - additionalProperties:
+              type: string
+            type: object
+          - type: 'null'
+          title: Secrets
+      required:
+      - name
+      - kind
+      title: IntegrationBody
+      type: object
     InvestigationRequest:
       description: Investigation request
       properties:
@@ -14857,6 +17676,38 @@ components:
           description: Refresh token to revoke
           title: Refresh Token
       title: LogoutRequest
+      type: object
+    LookupBody:
+      properties:
+        csv:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: CSV text; the first row is the header
+          title: Csv
+        description:
+          default: ''
+          maxLength: 500
+          title: Description
+          type: string
+        key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: 'Key column of a CSV (default: the first column)'
+          title: Key
+        values:
+          anyOf:
+          - items:
+              anyOf:
+              - type: string
+              - type: integer
+              - type: number
+            type: array
+          - type: 'null'
+          description: A managed list of values
+          title: Values
+      title: LookupBody
       type: object
     MFASetupRequest:
       properties:
@@ -15470,6 +18321,55 @@ components:
       - name
       title: PipelineBody
       type: object
+    PipelineDraftBody:
+      properties:
+        samples:
+          items:
+            type: string
+          maxItems: 50
+          minItems: 1
+          title: Samples
+          type: array
+        service:
+          default: sample
+          maxLength: 200
+          minLength: 1
+          title: Service
+          type: string
+      required:
+      - samples
+      title: PipelineDraftBody
+      type: object
+    PlaybookBody:
+      properties:
+        definition:
+          maxLength: 50000
+          minLength: 1
+          title: Definition
+          type: string
+        enabled:
+          default: true
+          title: Enabled
+          type: boolean
+      required:
+      - definition
+      title: PlaybookBody
+      type: object
+    PolicyBody:
+      properties:
+        archive_days:
+          default: 0
+          minimum: 0.0
+          title: Archive Days
+          type: integer
+        searchable_days:
+          minimum: 1.0
+          title: Searchable Days
+          type: integer
+      required:
+      - searchable_days
+      title: PolicyBody
+      type: object
     PricingModel:
       description: Pricing model types
       enum:
@@ -15478,6 +18378,61 @@ components:
       - tiered
       title: PricingModel
       type: string
+    ProviderBody:
+      properties:
+        allowed_domains:
+          items:
+            type: string
+          minItems: 1
+          title: Allowed Domains
+          type: array
+        client_id:
+          minLength: 1
+          title: Client Id
+          type: string
+        client_secret:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Client Secret
+        default_role:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Default Role
+        enabled:
+          default: true
+          title: Enabled
+          type: boolean
+        groups_claim:
+          default: groups
+          title: Groups Claim
+          type: string
+        issuer:
+          pattern: ^https://
+          title: Issuer
+          type: string
+        name:
+          maxLength: 120
+          minLength: 1
+          title: Name
+          type: string
+        role_mapping:
+          additionalProperties:
+            type: string
+          title: Role Mapping
+          type: object
+        scopes:
+          default: openid email profile
+          title: Scopes
+          type: string
+      required:
+      - name
+      - issuer
+      - client_id
+      - allowed_domains
+      title: ProviderBody
+      type: object
     QueryAggregation:
       description: Query aggregation specification
       properties:
@@ -15656,6 +18611,17 @@ components:
           type: integer
       title: QueryResponse
       type: object
+    QuestionBody:
+      properties:
+        question:
+          maxLength: 2000
+          minLength: 1
+          title: Question
+          type: string
+      required:
+      - question
+      title: QuestionBody
+      type: object
     RefreshRequest:
       description: 'Token refresh request (LF-015).
 
@@ -15672,6 +18638,47 @@ components:
       required:
       - refresh_token
       title: RefreshRequest
+      type: object
+    RehydrateBody:
+      properties:
+        data_type:
+          default: logs
+          title: Data Type
+          type: string
+        first_day:
+          format: date
+          title: First Day
+          type: string
+        keep_days:
+          default: 7
+          minimum: 1.0
+          title: Keep Days
+          type: integer
+        last_day:
+          format: date
+          title: Last Day
+          type: string
+      required:
+      - first_day
+      - last_day
+      title: RehydrateBody
+      type: object
+    ResetConfirmBody:
+      properties:
+        new_password:
+          maxLength: 200
+          minLength: 1
+          title: New Password
+          type: string
+        token:
+          maxLength: 200
+          minLength: 1
+          title: Token
+          type: string
+      required:
+      - token
+      - new_password
+      title: ResetConfirmBody
       type: object
     RetentionPolicyRequest:
       properties:
@@ -15753,6 +18760,36 @@ components:
       - status
       title: RoleAssignmentResponse
       type: object
+    RoleBody:
+      properties:
+        description:
+          default: ''
+          maxLength: 1000
+          title: Description
+          type: string
+        name:
+          maxLength: 120
+          minLength: 1
+          title: Name
+          type: string
+        permissions:
+          items:
+            type: string
+          maxItems: 100
+          title: Permissions
+          type: array
+        services:
+          anyOf:
+          - items:
+              type: string
+            maxItems: 200
+            type: array
+          - type: 'null'
+          title: Services
+      required:
+      - name
+      title: RoleBody
+      type: object
     RootAlertDetail:
       properties:
         alert_id:
@@ -15773,6 +18810,69 @@ components:
       - severity
       - triggered_at
       title: RootAlertDetail
+      type: object
+    RuleDraftBody:
+      properties:
+        description:
+          maxLength: 2000
+          minLength: 3
+          title: Description
+          type: string
+        known_good:
+          description: One event the rule must not fire on
+          title: Known Good
+        level:
+          default: medium
+          pattern: ^(low|medium|high|critical)$
+          title: Level
+          type: string
+        samples:
+          description: 'Attack events: JSON objects or raw lines'
+          items: {}
+          maxItems: 20
+          minItems: 1
+          title: Samples
+          type: array
+        technique:
+          anyOf:
+          - maxLength: 20
+            type: string
+          - type: 'null'
+          description: ATT&CK technique, e.g. T1003.001
+          title: Technique
+      required:
+      - description
+      - samples
+      title: RuleDraftBody
+      type: object
+    RuleEnableBody:
+      properties:
+        backtest_days:
+          default: 7
+          maximum: 30.0
+          minimum: 1.0
+          title: Backtest Days
+          type: integer
+        known_good:
+          title: Known Good
+        max_alerts_per_day:
+          default: 50
+          minimum: 0.0
+          title: Max Alerts Per Day
+          type: number
+        samples:
+          items: {}
+          maxItems: 20
+          title: Samples
+          type: array
+        yaml:
+          maxLength: 50000
+          minLength: 10
+          title: Yaml
+          type: string
+      required:
+      - yaml
+      title: RuleEnableBody
       type: object
     RuleSyncRequest:
       properties:
@@ -15808,6 +18908,61 @@ components:
       required:
       - yaml
       title: RuleSyncRequest
+      type: object
+    RunBody:
+      properties:
+        alert_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Alert Id
+        case_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Case Id
+      title: RunBody
+      type: object
+    ScheduleBody:
+      properties:
+        enabled:
+          default: true
+          title: Enabled
+          type: boolean
+        every:
+          default: weekly
+          pattern: ^(daily|weekly|monthly)$
+          title: Every
+          type: string
+        format:
+          default: pdf
+          pattern: ^(pdf|csv)$
+          title: Format
+          type: string
+        hour:
+          default: 7
+          maximum: 23.0
+          minimum: 0.0
+          title: Hour
+          type: integer
+        integration_id:
+          title: Integration Id
+          type: string
+        name:
+          maxLength: 120
+          minLength: 1
+          title: Name
+          type: string
+        recipients:
+          items:
+            type: string
+          maxItems: 50
+          title: Recipients
+          type: array
+      required:
+      - name
+      - integration_id
+      title: ScheduleBody
       type: object
     SchemaInfo:
       description: Information about a registered schema
@@ -16119,6 +19274,37 @@ components:
       - error_log_count
       - severities
       title: ServiceGroupDetail
+      type: object
+    SettingsBody:
+      properties:
+        enabled:
+          default: false
+          title: Enabled
+          type: boolean
+        monthly_token_budget:
+          anyOf:
+          - minimum: 0.0
+            type: integer
+          - type: 'null'
+          title: Monthly Token Budget
+        provider:
+          anyOf:
+          - maxLength: 100
+            type: string
+          - type: 'null'
+          title: Provider
+        redact_fields:
+          items:
+            type: string
+          title: Redact Fields
+          type: array
+        requests_per_minute:
+          anyOf:
+          - minimum: 0.0
+            type: integer
+          - type: 'null'
+          title: Requests Per Minute
+      title: SettingsBody
       type: object
     SetupTokenResponse:
       description: Initial setup token response
@@ -17337,6 +20523,16 @@ components:
       - tenant_id
       title: TenantUsageResponse
       type: object
+    TestBody:
+      properties:
+        inputs:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Inputs
+      title: TestBody
+      type: object
     ThreatHuntingRequest:
       properties:
         description:
@@ -17573,6 +20769,17 @@ components:
       - end_time
       title: TimeseriesQueryRequest
       type: object
+    TokenBody:
+      properties:
+        name:
+          maxLength: 120
+          minLength: 1
+          title: Name
+          type: string
+      required:
+      - name
+      title: TokenBody
+      type: object
     TraceQueryRequest:
       additionalProperties: true
       properties:
@@ -17735,6 +20942,24 @@ components:
       - total_buckets
       - peak_count
       title: TrendSummary
+      type: object
+    TriageBody:
+      properties:
+        id:
+          maxLength: 128
+          minLength: 1
+          title: Id
+          type: string
+        kind:
+          enum:
+          - alert
+          - case
+          title: Kind
+          type: string
+      required:
+      - kind
+      - id
+      title: TriageBody
       type: object
     TuningRecordRequest:
       properties:
@@ -18068,6 +21293,37 @@ components:
       - msg
       - type
       title: ValidationError
+      type: object
+    ValuesBody:
+      properties:
+        add:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+            - type: number
+          title: Add
+          type: array
+        remove:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+            - type: number
+          title: Remove
+          type: array
+      title: ValuesBody
+      type: object
+    VerifyEmailBody:
+      properties:
+        token:
+          maxLength: 200
+          minLength: 1
+          title: Token
+          type: string
+      required:
+      - token
+      title: VerifyEmailBody
       type: object
     WhatIfRequest:
       description: Request body for what-if scenario modeling.

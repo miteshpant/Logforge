@@ -1,0 +1,3 @@
+name: Rare processes (Sysmon)
+description: Executables seen on only one host, rarest first; a starting point for hunting.
+query: '| where service = "windows" and attrs.event_id = 1 | stats dc(host) as hosts, count() as runs by attrs.image | where hosts = 1 | sort runs | head 50'

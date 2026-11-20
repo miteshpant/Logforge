@@ -577,11 +577,17 @@ class NotificationService:
             f"Alert ID: {payload.get('alert_id', '')}",
             f"Rule ID: {payload.get('rule_id', '')}",
         ]
-        message = MIMEMultipart("alternative")
+        # A scheduled search report carries its rows as CSV: send it as a file.
+        report_csv = payload.get("csv")
+        message = MIMEMultipart("mixed" if report_csv else "alternative")
         message["Subject"] = subject
         message["From"] = from_address
         message["To"] = ", ".join(recipients)
         message.attach(MIMEText("\n".join(text_lines), "plain"))
+        if isinstance(report_csv, str) and report_csv:
+            attachment = MIMEText(report_csv, "csv", "utf-8")
+            attachment.add_header("Content-Disposition", "attachment", filename="report.csv")
+            message.attach(attachment)
 
         def _send_sync() -> None:
             with smtplib.SMTP(smtp_host, smtp_port, timeout=self.timeout_seconds) as server:

@@ -27,6 +27,7 @@ const ROUTES = [
   '/security/rules',
   '/security/threat-intel',
   '/security/threat-hunting',
+  '/security/entities',
   '/ai/alert-correlation',
   '/ai/predictive-analytics',
   '/ai/investigations',
@@ -36,6 +37,11 @@ const ROUTES = [
   '/settings/roles',
   '/settings/costs',
   '/settings/compliance',
+  '/settings/pipelines',
+  '/settings/packs',
+  '/settings/packs/linux',
+  '/settings/ai',
+  '/settings/storage',
 ]
 
 const SETTLE_MS = 3_000

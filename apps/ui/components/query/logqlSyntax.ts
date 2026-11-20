@@ -15,7 +15,19 @@
  * permission mapping is fixed this list can be replaced by that endpoint.
  */
 
-export const LOGQL_STAGES = ['where', 'stats', 'sort', 'limit', 'last', 'rex', 'parse', 'json'] as const
+export const LOGQL_STAGES = ['where', 'eval', 'stats', 'eventstats', 'timechart', 'top', 'rare', 'sort', 'head',
+  'limit', 'dedup', 'fields', 'table', 'rename', 'bin', 'rex', 'parse', 'json', 'lookup', 'join', 'last',
+  'patterns'] as const
+
+/** eval / where functions (apps/api/logql_pipeline.py FUNCTIONS). */
+export const LOGQL_FUNCTIONS = ['if()', 'case()', 'coalesce()', 'isnull()', 'isnotnull()', 'lower()', 'upper()',
+  'trim()', 'len()', 'substr()', 'replace()', 'match()', 'like()', 'concat()', 'tonumber()', 'tostring()', 'round()',
+  'floor()', 'ceil()', 'abs()', 'sqrt()', 'ln()', 'log10()', 'exp()', 'pow()', 'least()', 'greatest()', 'now()',
+  'hour()', 'minute()', 'dayofweek()', 'date()', 'strftime()', 'cidrmatch()', 'json_extract()', 'inlookup()'] as const
+
+const STAGE_OPTIONS: Record<string, string[]> = {
+  timechart: ['span=', 'limit='], top: ['limit='], rare: ['limit='], bin: ['span='], join: ['type=', 'max='],
+}
 
 export const LOGQL_OPERATORS = [
   '=',
@@ -32,13 +44,8 @@ export const LOGQL_OPERATORS = [
 ] as const
 
 export const LOGQL_AGGREGATIONS = [
-  'count()',
-  'sum()',
-  'avg()',
-  'min()',
-  'max()',
-  'unique()',
-  'cardinality()',
+  'count()', 'dc()', 'estdc()', 'sum()', 'avg()', 'min()', 'max()', 'median()', 'p50()', 'p90()', 'p95()', 'p99()',
+  'percentile()', 'stdev()', 'var()', 'values()', 'list()', 'earliest()', 'latest()',
 ] as const
 
 /** Mirrors `ALLOWED_QUERY_FIELDS` in `apps/api/query_engine.py`. */
@@ -182,11 +189,15 @@ export function getSuggestions(
     } else if (afterJoiner) {
       suggestions = matches(fields, 'field')
     }
-  } else if (stageName === 'stats') {
+  } else if (['stats', 'eventstats', 'timechart'].includes(stageName)) {
     const afterBy = /\bby\b/i.test(stageText)
     suggestions = afterBy
       ? matches(fields, 'field')
-      : matches(LOGQL_AGGREGATIONS, 'aggregation')
+      : [...matches(STAGE_OPTIONS[stageName] ?? [], 'stage'), ...matches(LOGQL_AGGREGATIONS, 'aggregation')]
+  } else if (stageName === 'eval') {
+    suggestions = [...matches(LOGQL_FUNCTIONS, 'aggregation'), ...matches(fields, 'field')]
+  } else if (['top', 'rare', 'dedup', 'fields', 'table', 'rename', 'bin', 'join', 'lookup'].includes(stageName)) {
+    suggestions = [...matches(STAGE_OPTIONS[stageName] ?? [], 'stage'), ...matches(fields, 'field')]
   } else if (stageName === 'sort') {
     suggestions = matches(fields, 'field')
   } else if (stageName === 'last') {

@@ -1,0 +1,40 @@
+id: identity
+name: Okta and Google Workspace
+version: 1.0.0
+description: >
+  Okta System Log events and Google Workspace audit activities (Admin SDK
+  Reports API, one JSON activity per line) mapped to OCSF Authentication and
+  Account Change, with the same flat fields for both: event_type, outcome,
+  target_user, login_failure. Rules for MFA factor resets, admin role grants,
+  Okta threat detections and Workspace suspicious sign-ins.
+sources:
+  - name: Okta System Log (API poller or event hook, one event per line)
+    service: okta
+  - name: Google Workspace Reports API activities (login, admin, token)
+    service: gworkspace
+samples:
+  - file: samples/okta.jsonl
+    service: okta
+    pipeline: identity-okta
+    expect:
+      - fields: {attrs.event_type: user.session.start, attrs.outcome: FAILURE, attrs.login_failure: "yes",
+                 user_id: dave@acme.example, src_ip: 203.0.113.50, attrs.ocsf.class_uid: 3002, level: warn}
+        min: 3
+      - contains: user.mfa.factor.reset_all
+        fields: {attrs.target_user: bob@acme.example, user_id: admin@acme.example, attrs.ocsf.class_uid: 3001}
+      - contains: user.account.privilege.grant
+        fields: {attrs.target_user: carol@acme.example, attrs.admin_role: SUPER_ADMIN}
+    rules: [identity-okta-mfa-reset, identity-okta-admin-granted, identity-okta-threat-detected]
+  - file: samples/gworkspace.jsonl
+    service: gworkspace
+    pipeline: identity-gworkspace
+    expect:
+      - contains: ASSIGN_ROLE
+        fields: {attrs.event_type: admin.ASSIGN_ROLE, attrs.target_user: carol@acme.example,
+                 attrs.admin_role: _SEED_ADMIN_ROLE, user_id: it-admin@acme.example, attrs.ocsf.class_uid: 3001}
+      - contains: login_failure
+        fields: {attrs.event_type: login.login_failure, attrs.login_failure: "yes", attrs.outcome: FAILURE,
+                 user_id: dave@acme.example, level: warn, attrs.ocsf.class_uid: 3002}
+      - contains: suspicious_login
+        fields: {attrs.target_user: erin@acme.example}
+    rules: [identity-gws-admin-granted, identity-gws-suspicious-login]

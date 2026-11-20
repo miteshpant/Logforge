@@ -1,0 +1,42 @@
+id: kubernetes
+name: Kubernetes audit and container logs
+version: 1.0.0
+description: >
+  The API server audit log (audit.k8s.io/v1 events, one per line) mapped to
+  OCSF API Activity, and container logs in the CRI format kubelet writes
+  under /var/log/containers (JSON application lines are parsed). Rules for
+  exec into pods, secrets read by people, cluster-admin bindings, anonymous
+  requests that succeed and privileged pods.
+sources:
+  - name: API server audit log (--audit-log-path, or a webhook backend)
+    service: k8s-audit
+    paths: [/var/log/kubernetes/audit/audit.log]
+  - name: Container logs (CRI format)
+    service: k8s-containers
+    paths: [/var/log/containers/*.log]
+samples:
+  - file: samples/audit.jsonl
+    service: k8s-audit
+    pipeline: kubernetes-audit
+    expect:
+      - contains: create pods/exec
+        fields: {attrs.verb: create, attrs.resource: pods, attrs.subresource: exec, attrs.namespace: payments,
+                 user_id: dev@acme.example, src_ip: 10.0.9.14, attrs.ocsf.class_uid: 6003}
+      - contains: get secrets in payments db-credentials
+        fields: {attrs.object_name: db-credentials, attrs.human: "yes", attrs.response_code: 200}
+      - contains: clusterrolebindings
+        fields: {attrs.role_ref: cluster-admin}
+      - contains: system:anonymous
+        fields: {attrs.anonymous: "yes", level: info}
+      - fields: {attrs.response_code: 403, level: warn}
+    rules: [kubernetes-exec-into-pod, kubernetes-secret-read-by-user, kubernetes-cluster-admin-binding, kubernetes-anonymous-request,
+            kubernetes-privileged-pod]
+  - file: samples/containers.log
+    service: k8s-containers
+    pipeline: kubernetes-containers
+    expect:
+      - fields: {attrs.stream: stderr, level: error, msg: "payment provider timeout after 30s"}
+      - fields: {attrs.stream: stdout, level: info, attrs.app.order_id: A-1009}
+      - contains: "GET /healthz"
+        fields: {attrs.stream: stdout}
+        min: 2

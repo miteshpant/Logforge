@@ -24,8 +24,20 @@ from routers.cases_api import router as cases_router
 from routers.threat_intel_api import router as threat_intel_router
 from routers.pipelines_api import router as pipelines_router
 from routers.fields_api import router as fields_router
+from routers.lookups_api import router as lookups_router
+from routers.searches_api import router as searches_router
+from routers.packs_api import router as packs_router
 from routers.observability_api import router as observability_router
 from routers.ai_api import router as ai_router
+from routers.ai_assistant_api import router as ai_assistant_router
+from routers.entities_api import router as entities_router
+from routers.storage_tiers_api import router as storage_tiers_router
+from routers.integrations_api import router as integrations_router, hooks_router
+from routers.playbooks_api import router as playbooks_router
+from routers.reports_api import router as reports_router
+from routers.sso_api import login_router as sso_login_router, router as sso_router
+from routers.scim_api import router as scim_router, settings_router as scim_settings_router
+from routers.custom_roles_api import access_router as access_router, router as custom_roles_router
 from routers.enterprise_api import router as enterprise_router
 from routers.tenant_api import router as tenant_router
 from routers.subscription_api import router as subscription_router
@@ -71,6 +83,11 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 from authn_authz_middleware import setup_unified_auth_middleware
 setup_unified_auth_middleware(app)
 
+# Phase 14: every ClickHouse query carries the request's data scope (data_scope.py)
+import data_scope  # noqa: E402
+
+data_scope.install()
+
 # ENH-012: request body size caps and per-tenant rate limiting.
 #
 # Registered AFTER the auth middleware deliberately. Starlette applies
@@ -103,6 +120,9 @@ app.add_middleware(
 # Include all routers
 app.include_router(health_router, tags=["Health"])
 app.include_router(ingestion_router, tags=["Ingestion"])
+app.include_router(lookups_router)
+app.include_router(searches_router)
+app.include_router(packs_router)
 app.include_router(query_router, tags=["Query"])
 app.include_router(dashboard_router, tags=["Dashboards"])
 app.include_router(storage_router, tags=["Storage"])
@@ -125,6 +145,19 @@ app.include_router(fields_router)
 app.include_router(security_router)
 app.include_router(observability_router)
 app.include_router(ai_router)
+app.include_router(ai_assistant_router)
+app.include_router(entities_router)
+app.include_router(storage_tiers_router)
+app.include_router(integrations_router)
+app.include_router(hooks_router)
+app.include_router(playbooks_router)
+app.include_router(reports_router)
+app.include_router(sso_login_router)
+app.include_router(sso_router)
+app.include_router(scim_router)
+app.include_router(scim_settings_router)
+app.include_router(custom_roles_router)
+app.include_router(access_router)
 app.include_router(enterprise_router)
 app.include_router(tenant_router)
 app.include_router(subscription_router)

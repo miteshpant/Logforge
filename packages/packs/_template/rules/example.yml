@@ -1,0 +1,17 @@
+# Sigma rules. Ids start with the pack id; each needs an ATT&CK technique tag
+# and fixtures (an event it must match and one it must not). Rule fields are
+# the flat names under attrs that the pipeline writes.
+title: Bulk export from the example app
+id: example-bulk-export
+status: experimental
+description: A single export of more than 10,000 records.
+author: Your name
+tags: [attack.collection, attack.t1530]
+logsource: {product: example, service: audit}
+detection:
+  selection: {service: example-app, action: export, records|gt: 10000}
+  condition: selection
+fixtures:
+  true_positive: {service: example-app, action: export, records: 25000}
+  true_negative: {service: example-app, action: export, records: 40}
+level: medium

@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 from datetime import datetime, timedelta
 from typing import Optional
 import structlog
+from pydantic import BaseModel, Field
 
 from models import (
     LoginRequest, LoginResponse, RefreshRequest, LogoutRequest,
@@ -41,6 +42,21 @@ router = APIRouter(prefix="/v1/auth", tags=["Authentication"])
 # Built on first use; the PEP 562 hook below preserves the bare
 # `user_service` name at every call site.
 _user_service_instance: Optional[UserService] = None
+
+
+class ResetConfirmBody(BaseModel):
+    token: str = Field(..., min_length=1, max_length=200)
+    new_password: str = Field(..., min_length=1, max_length=200)
+
+
+class VerifyEmailBody(BaseModel):
+    token: str = Field(..., min_length=1, max_length=200)
+
+
+def _role_service():
+    from routers.role_api import get_role_service
+
+    return get_role_service()
 
 
 def get_user_service() -> UserService:
@@ -503,7 +519,9 @@ async def request_password_reset(
             "updated_at": user.updated_at
         })
         
-        # TODO: Send reset email
+        import account_emails
+
+        await account_emails.send(account_emails.reset_message(user.email, reset_token))
         logger.info("Password reset requested",
                    user_id=user.id,
                    email=user.email,
@@ -517,11 +535,11 @@ async def request_password_reset(
 
 @router.post("/password/reset-confirm")
 async def confirm_password_reset(
-    token: str,
-    new_password: str,
+    body: ResetConfirmBody,
     request: Request
 ):
-    """Confirm password reset with token"""
+    """Confirm password reset with token. Every session of the account ends."""
+    token, new_password = body.token, body.new_password
     try:
         # Find user with valid reset token through user service
         user = await get_user_service().get_user_by_reset_token(token)
@@ -551,7 +569,9 @@ async def confirm_password_reset(
             "password_reset_expires": None,
             "updated_at": user.updated_at
         })
-        # TODO: Revoke all existing sessions for security
+        # whoever had the old password may have a session: end them all
+        revoked = await get_user_service().revoke_all_user_sessions_for_security(user.id)
+        logger.info("Sessions revoked after password reset", user_id=user.id, sessions=revoked)
         
         logger.info("Password reset completed",
                    user_id=user.id,
@@ -646,7 +666,12 @@ async def invite_user(
             invited_by=current_user.id
         )
         
-        # TODO: Send invitation email
+        import account_emails
+
+        await account_emails.send(account_emails.invite_message(
+            invitation_request.email, invitation_data["invitation_token"], tenant_id,
+            str(getattr(invitation_request.role, "value", invitation_request.role)),
+            current_user.name or current_user.email))
         
         logger.info("User invitation created",
                    invited_email=invitation_request.email,
@@ -700,8 +725,10 @@ async def accept_invitation(
         # Mark invitation as accepted
         await invitation_manager.accept_invitation(accept_request.invitation_token, invitation["id"])
         
-        # TODO: Assign role from invitation to user for tenant
-        # This would be handled by role management system
+        # the role the invitation was for, granted by whoever invited
+        await _role_service().assign_role(
+            user_id=new_user.id, tenant_id=invitation["tenant_id"], role=UserRole(invitation["role"]),
+            granted_by=invitation.get("invited_by") or "invitation")
         
         logger.info("Invitation accepted",
                    user_id=new_user.id,
@@ -739,11 +766,13 @@ async def send_email_verification(
         if current_user.email_verified_at:
             raise HTTPException(400, "Email already verified")
         
-        # Generate verification token
-        verification_token = generate_secure_token(32)
-        expires_at = datetime.utcnow() + timedelta(hours=24)
-        
-        # TODO: Store verification token and send email
+        # a signed token bound to this user and address, valid 24 hours (account_tokens.py)
+        import account_emails
+        import account_tokens
+
+        verification_token = account_tokens.issue(current_user.id, current_user.email, "verify_email",
+                                                  timedelta(hours=24))
+        await account_emails.send(account_emails.verify_message(current_user.email, verification_token))
         
         logger.info("Email verification sent",
                    user_id=current_user.id,
@@ -759,12 +788,15 @@ async def send_email_verification(
 
 @router.post("/verify-email-confirm")
 async def confirm_email_verification(
-    token: str,
+    body: VerifyEmailBody,
     current_user: User = Depends(get_current_user)
 ):
-    """Confirm email verification with token"""
+    """Confirm email verification with the token that was emailed to this address"""
+    import account_tokens
+
     try:
-        # TODO: Validate verification token
+        if not account_tokens.check(body.token, current_user.id, current_user.email, "verify_email"):
+            raise HTTPException(400, "Invalid or expired verification token")
         
         # Mark email as verified
         current_user.email_verified_at = datetime.utcnow()

@@ -1,0 +1,12 @@
+{
+  "lines": 1000000,
+  "baseline_lines": 200000,
+  "message_shapes": 80,
+  "templates": 20,
+  "new_templates": 0,
+  "seconds": 8.45,
+  "target_seconds": 30,
+  "met": true,
+  "seed_seconds": 9.8,
+  "machine": "x86_64, CPython 3.12.3"
+}

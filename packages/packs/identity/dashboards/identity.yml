@@ -1,0 +1,36 @@
+name: Identity
+description: Sign-ins and account changes from Okta and Google Workspace (identity pack)
+variables:
+  - name: provider
+    label: Provider
+    type: custom
+    values: [okta, gworkspace]
+    include_all: true
+    default: "*"
+panels:
+  - name: Sign-ins
+    type: metric
+    query: '| where service in ["okta", "gworkspace"] and service = $provider and attrs.ocsf.class_uid = 3002 | stats count() as signins'
+  - name: Failed sign-ins
+    type: metric
+    query: '| where service in ["okta", "gworkspace"] and service = $provider and attrs.login_failure = "yes" | stats count() as failed'
+  - name: Account changes
+    type: metric
+    query: '| where service in ["okta", "gworkspace"] and service = $provider and attrs.ocsf.class_uid = 3001 | stats count() as changes'
+  - name: Users signing in from several countries
+    type: metric
+    query: '| where service = "okta" and isnotnull(attrs.country) | stats dc(attrs.country) as countries by user_id | where countries > 1 | stats count() as users'
+  - name: Failed sign-ins over time
+    type: line_chart
+    query: '| where service in ["okta", "gworkspace"] and service = $provider and attrs.login_failure = "yes" | timechart count() by service'
+  - name: Top event types
+    type: bar_chart
+    query: '| where service in ["okta", "gworkspace"] and service = $provider | top limit=10 attrs.event_type'
+  - name: Users with the most failures
+    type: table
+    size: {w: 2, h: 2}
+    query: '| where service in ["okta", "gworkspace"] and service = $provider and attrs.login_failure = "yes" | stats count() as failures, dc(src_ip) as sources by user_id | sort -failures | head 10'
+  - name: Admin and MFA changes
+    type: table
+    size: {w: 2, h: 2}
+    query: '| where service in ["okta", "gworkspace"] and service = $provider and attrs.ocsf.class_uid = 3001 | fields ts, user_id, attrs.event_type, attrs.target_user | sort -ts | head 20'

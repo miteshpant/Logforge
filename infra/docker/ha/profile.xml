@@ -1,0 +1,17 @@
+<!-- HA compose: the Replicated database engine is marked experimental in
+     ClickHouse 23.8 (production-ready in later releases); see docs/deployment.md. -->
+<clickhouse>
+  <profiles>
+    <default>
+      <allow_experimental_database_replicated>1</allow_experimental_database_replicated>
+      <allow_experimental_object_type>1</allow_experimental_object_type>
+      <!-- About 16 API mutations set a time with now64() (updated_at, used_at, ...).
+           Replicated tables refuse non-deterministic mutations by default
+           because each replica runs them: here each replica stamps its own
+           clock, milliseconds apart, and applies mutations in the same
+           order, so the same row versions win everywhere. Binding those
+           times as parameters is a follow-up (docs/ROADMAP.md). -->
+      <allow_nondeterministic_mutations>1</allow_nondeterministic_mutations>
+    </default>
+  </profiles>
+</clickhouse>

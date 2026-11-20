@@ -1,0 +1,23 @@
+# nginx error log: "2026/11/19 10:00:00 [error] 1234#0: *5 message, client: ..., server: ..., request: "...""
+name: web-nginx-error
+description: nginx error log
+routing: {services: [nginx-error]}
+processors:
+  - regex:
+      field: msg
+      target: attrs._err
+      patterns:
+        - '^(?P<time>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \[(?P<level>\w+)\] (?P<pid>\d+)#(?P<tid>\d+): (?:\*(?P<cid>\d+) )?(?P<message>.*?)(?:, client: (?P<client>[^,]+))?(?:, server: (?P<server>[^,]+))?(?:, request: "(?P<request>[^"]*)")?(?:, .*)?$'
+  - date: {field: attrs._err.time, formats: ["%Y/%m/%d %H:%M:%S"]}
+    ignore_failure: true
+  - script:
+      source: |
+        level = 'error' if attrs._err.level in ['error', 'crit', 'alert', 'emerg'] else ('warn' if attrs._err.level == 'warn' else 'info')
+        src_ip = attrs._err.client if attrs._err.client else src_ip
+        attrs.server = attrs._err.server
+        attrs.request = attrs._err.request
+        attrs.nginx_level = attrs._err.level
+        msg = attrs._err.message
+        service = 'nginx'
+  - remove: {field: attrs._err}
+  - compact: {field: attrs, values: [""]}

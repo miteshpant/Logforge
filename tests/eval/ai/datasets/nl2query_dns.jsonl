@@ -1,0 +1,205 @@
+{"expected_query": "| where service = \"dns\" and host = \"h01\" | stats count() as count by attrs.query", "id": "dns-042", "question": "DNS lookups from h01 by domain", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"pool.ntp.org\" | stats count() as count", "id": "dns-014", "question": "Count DNS queries for pool.ntp.org", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"pool.ntp.org\" | timechart span=1d count()", "id": "dns-199", "question": "pool.ntp.org queries over time", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"api.github.com\" | top limit=10 host", "id": "dns-092", "question": "Which hosts queried api.github.com most?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"cdn.jsdelivr.net\" | stats count() as count by host", "id": "dns-030", "question": "Which hosts queried cdn.jsdelivr.net?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" | top limit=10 attrs.query", "id": "dns-005", "question": "Which domains were queried most?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"example.com\" | stats count() as count by host", "id": "dns-033", "question": "Hosts that looked up example.com", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h19\" | stats count() as count by attrs.query", "id": "dns-069", "question": "DNS lookups from h19 by domain", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"x7f3k.badcdn.net\" | timechart span=1d count()", "id": "dns-204", "question": "Daily lookups of x7f3k.badcdn.net", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h01\" | stats count() as count", "id": "dns-071", "question": "Lookups made by h01", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u095\" | stats count() as count by attrs.query", "id": "dns-129", "question": "What domains did u095 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h16\" | stats count() as count", "id": "dns-084", "question": "How many DNS queries came from h16?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u009\" | stats count() as count by attrs.query", "id": "dns-107", "question": "What domains did u009 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u084\" | stats count() as count by attrs.query", "id": "dns-124", "question": "DNS queries by user u084", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u025\" | stats count() as count by attrs.query", "id": "dns-111", "question": "What domains did u025 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"api.github.com\" | stats count() as count", "id": "dns-007", "question": "Lookups of api.github.com", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" | stats count() as count", "id": "dns-002", "question": "Count the DNS lookups", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"x7f3k.badcdn.net\" | stats count() as count by host", "id": "dns-034", "question": "Which hosts queried x7f3k.badcdn.net?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u091\" | stats count() as count", "id": "dns-157", "question": "Lookups by user u091", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"x7f3k.badcdn.net\" | stats count() as count by user_id", "id": "dns-193", "question": "Users querying x7f3k.badcdn.net", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"example.com\" | stats count() as count by user_id", "id": "dns-190", "question": "Which users looked up example.com?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"cdn.jsdelivr.net\" | top limit=10 host", "id": "dns-099", "question": "Top hosts looking up cdn.jsdelivr.net", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" | timechart span=1d count()", "id": "dns-091", "question": "Daily DNS lookups", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h12\" | stats dc(attrs.query) as domains", "id": "dns-172", "question": "How many distinct domains did h12 query?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u003\" | stats count() as count by attrs.query", "id": "dns-104", "question": "DNS queries by user u003", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"login.microsoftonline.com\" | stats count() as count by host", "id": "dns-026", "question": "Which hosts queried login.microsoftonline.com?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h19\" | stats count() as count by attrs.query", "id": "dns-068", "question": "Domains queried by h19", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u066\" | stats count() as count by attrs.query", "id": "dns-121", "question": "What domains did u066 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"pool.ntp.org\" | stats count() as count by user_id", "id": "dns-187", "question": "Users querying pool.ntp.org", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"pool.ntp.org\" | stats count() as count by host", "id": "dns-029", "question": "Hosts that looked up pool.ntp.org", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h19\" | stats count() as count by attrs.query", "id": "dns-067", "question": "What did host h19 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" | top limit=10 attrs.query", "id": "dns-004", "question": "Top 10 domains looked up", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u084\" | stats count() as count", "id": "dns-154", "question": "How many DNS queries did u084 make?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u009\" | stats count() as count", "id": "dns-136", "question": "How many DNS queries did u009 make?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"pool.ntp.org\" | stats count() as count by user_id", "id": "dns-186", "question": "Which users looked up pool.ntp.org?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"example.com\" | top limit=10 host", "id": "dns-100", "question": "Which hosts queried example.com most?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h09\" | stats dc(attrs.query) as domains", "id": "dns-171", "question": "Number of different domains looked up by h09", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u084\" | stats count() as count", "id": "dns-155", "question": "Lookups by user u084", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h16\" | stats count() as count", "id": "dns-085", "question": "Lookups made by h16", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"api.github.com\" | timechart span=1d count()", "id": "dns-194", "question": "Daily lookups of api.github.com", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u077\" | stats count() as count", "id": "dns-152", "question": "How many DNS queries did u077 make?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u091\" | stats count() as count by attrs.query", "id": "dns-126", "question": "DNS queries by user u091", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" | stats dc(attrs.query) as domains by host", "id": "dns-038", "question": "How many different domains did each host query?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h02\" | stats count() as count", "id": "dns-073", "question": "Lookups made by h02", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" | stats count() as count", "id": "dns-001", "question": "How many DNS queries were there?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h04\" | stats count() as count by attrs.query", "id": "dns-048", "question": "DNS lookups from h04 by domain", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h02\" | stats count() as count by attrs.query", "id": "dns-043", "question": "What did host h02 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u077\" | stats count() as count by attrs.query", "id": "dns-122", "question": "DNS queries by user u077", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h18\" | stats count() as count by attrs.query", "id": "dns-066", "question": "DNS lookups from h18 by domain", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"example.com\" | top limit=10 host", "id": "dns-101", "question": "Top hosts looking up example.com", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u077\" | stats count() as count by attrs.query", "id": "dns-123", "question": "What domains did u077 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u058\" | stats count() as count by attrs.query", "id": "dns-118", "question": "DNS queries by user u058", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h12\" | stats count() as count", "id": "dns-080", "question": "How many DNS queries came from h12?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u077\" | stats count() as count", "id": "dns-153", "question": "Lookups by user u077", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h14\" | stats dc(attrs.query) as domains", "id": "dns-174", "question": "How many distinct domains did h14 query?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"example.com\" | stats count() as count by user_id", "id": "dns-191", "question": "Users querying example.com", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u095\" | stats count() as count", "id": "dns-158", "question": "How many DNS queries did u095 make?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h14\" | stats count() as count", "id": "dns-082", "question": "How many DNS queries came from h14?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h01\" | stats count() as count", "id": "dns-070", "question": "How many DNS queries came from h01?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h18\" | stats count() as count by attrs.query", "id": "dns-065", "question": "Domains queried by h18", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h12\" | stats count() as count by attrs.query", "id": "dns-056", "question": "Domains queried by h12", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h07\" | stats count() as count", "id": "dns-076", "question": "How many DNS queries came from h07?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h14\" | stats dc(attrs.query) as domains", "id": "dns-175", "question": "Number of different domains looked up by h14", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"cdn.jsdelivr.net\" | stats count() as count by user_id", "id": "dns-188", "question": "Which users looked up cdn.jsdelivr.net?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" | stats count() as count by host", "id": "dns-036", "question": "DNS queries per host", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h09\" | stats count() as count by attrs.query", "id": "dns-052", "question": "What did host h09 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"login.microsoftonline.com\" | stats count() as count by user_id", "id": "dns-184", "question": "Which users looked up login.microsoftonline.com?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u099\" | stats count() as count", "id": "dns-160", "question": "How many DNS queries did u099 make?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"login.microsoftonline.com\" | stats count() as count", "id": "dns-011", "question": "Count DNS queries for login.microsoftonline.com", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h09\" | stats count() as count", "id": "dns-078", "question": "How many DNS queries came from h09?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u050\" | stats count() as count by attrs.query", "id": "dns-116", "question": "DNS queries by user u050", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h07\" | stats count() as count by attrs.query", "id": "dns-051", "question": "DNS lookups from h07 by domain", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h19\" | stats dc(attrs.query) as domains", "id": "dns-181", "question": "Number of different domains looked up by h19", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u066\" | stats count() as count", "id": "dns-151", "question": "Lookups by user u066", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h18\" | stats count() as count", "id": "dns-087", "question": "Lookups made by h18", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"pool.ntp.org\" | stats count() as count by host", "id": "dns-028", "question": "Which hosts queried pool.ntp.org?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"login.microsoftonline.com\" | top limit=10 host", "id": "dns-095", "question": "Top hosts looking up login.microsoftonline.com", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u009\" | stats count() as count by attrs.query", "id": "dns-106", "question": "DNS queries by user u009", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"api.github.com\" | timechart span=1d count()", "id": "dns-195", "question": "api.github.com queries over time", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h18\" | stats dc(attrs.query) as domains", "id": "dns-178", "question": "How many distinct domains did h18 query?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u003\" | stats count() as count", "id": "dns-134", "question": "How many DNS queries did u003 make?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h04\" | stats count() as count by attrs.query", "id": "dns-046", "question": "What did host h04 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h14\" | stats count() as count by attrs.query", "id": "dns-060", "question": "DNS lookups from h14 by domain", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" | top limit=10 attrs.query", "id": "dns-003", "question": "Most queried domains", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u091\" | stats count() as count", "id": "dns-156", "question": "How many DNS queries did u091 make?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h07\" | stats count() as count by attrs.query", "id": "dns-050", "question": "Domains queried by h07", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h02\" | stats dc(attrs.query) as domains", "id": "dns-165", "question": "Number of different domains looked up by h02", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h19\" | stats dc(attrs.query) as domains", "id": "dns-180", "question": "How many distinct domains did h19 query?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and level = \"warn\" | stats count() as count by host", "id": "dns-133", "question": "Hosts with DNS warnings", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and level = \"warn\" | stats count() as count by host", "id": "dns-132", "question": "DNS warnings per host", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"x7f3k.badcdn.net\" | timechart span=1d count()", "id": "dns-205", "question": "x7f3k.badcdn.net queries over time", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h01\" | stats count() as count by attrs.query", "id": "dns-040", "question": "What did host h01 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"login.microsoftonline.com\" | stats count() as count by user_id", "id": "dns-185", "question": "Users querying login.microsoftonline.com", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"login.microsoftonline.com\" | timechart span=1d count()", "id": "dns-197", "question": "login.microsoftonline.com queries over time", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"api.github.com\" | stats count() as count", "id": "dns-008", "question": "Count DNS queries for api.github.com", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u042\" | stats count() as count by attrs.query", "id": "dns-114", "question": "DNS queries by user u042", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u058\" | stats count() as count by attrs.query", "id": "dns-119", "question": "What domains did u058 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" | timechart span=1d count()", "id": "dns-090", "question": "DNS queries over time", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h16\" | stats count() as count by attrs.query", "id": "dns-061", "question": "What did host h16 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h07\" | stats dc(attrs.query) as domains", "id": "dns-168", "question": "How many distinct domains did h07 query?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h09\" | stats dc(attrs.query) as domains", "id": "dns-170", "question": "How many distinct domains did h09 query?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"login.microsoftonline.com\" | stats count() as count", "id": "dns-009", "question": "How many times was login.microsoftonline.com queried?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h14\" | stats count() as count by attrs.query", "id": "dns-059", "question": "Domains queried by h14", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"x7f3k.badcdn.net\" | top limit=10 host", "id": "dns-103", "question": "Top hosts looking up x7f3k.badcdn.net", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"example.com\" | timechart span=1d count()", "id": "dns-202", "question": "Daily lookups of example.com", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h02\" | stats dc(attrs.query) as domains", "id": "dns-164", "question": "How many distinct domains did h02 query?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u003\" | stats count() as count", "id": "dns-135", "question": "Lookups by user u003", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h02\" | stats count() as count by attrs.query", "id": "dns-045", "question": "DNS lookups from h02 by domain", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h19\" | stats count() as count", "id": "dns-089", "question": "Lookups made by h19", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u084\" | stats count() as count by attrs.query", "id": "dns-125", "question": "What domains did u084 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h01\" | stats count() as count by attrs.query", "id": "dns-041", "question": "Domains queried by h01", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u003\" | stats count() as count by attrs.query", "id": "dns-105", "question": "What domains did u003 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u033\" | stats count() as count by attrs.query", "id": "dns-113", "question": "What domains did u033 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h12\" | stats dc(attrs.query) as domains", "id": "dns-173", "question": "Number of different domains looked up by h12", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u099\" | stats count() as count by attrs.query", "id": "dns-131", "question": "What domains did u099 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h02\" | stats count() as count", "id": "dns-072", "question": "How many DNS queries came from h02?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"cdn.jsdelivr.net\" | top limit=10 host", "id": "dns-098", "question": "Which hosts queried cdn.jsdelivr.net most?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"x7f3k.badcdn.net\" | stats count() as count by user_id", "id": "dns-192", "question": "Which users looked up x7f3k.badcdn.net?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h18\" | stats count() as count", "id": "dns-086", "question": "How many DNS queries came from h18?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"api.github.com\" | stats count() as count", "id": "dns-006", "question": "How many times was api.github.com queried?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h09\" | stats count() as count by attrs.query", "id": "dns-054", "question": "DNS lookups from h09 by domain", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u050\" | stats count() as count", "id": "dns-146", "question": "How many DNS queries did u050 make?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h07\" | stats dc(attrs.query) as domains", "id": "dns-169", "question": "Number of different domains looked up by h07", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"example.com\" | stats count() as count", "id": "dns-020", "question": "Count DNS queries for example.com", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h02\" | stats count() as count by attrs.query", "id": "dns-044", "question": "Domains queried by h02", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"pool.ntp.org\" | top limit=10 host", "id": "dns-097", "question": "Top hosts looking up pool.ntp.org", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"x7f3k.badcdn.net\" | stats count() as count", "id": "dns-022", "question": "Lookups of x7f3k.badcdn.net", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h04\" | stats dc(attrs.query) as domains", "id": "dns-166", "question": "How many distinct domains did h04 query?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h01\" | stats dc(attrs.query) as domains", "id": "dns-163", "question": "Number of different domains looked up by h01", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"cdn.jsdelivr.net\" | timechart span=1d count()", "id": "dns-200", "question": "Daily lookups of cdn.jsdelivr.net", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h04\" | stats count() as count", "id": "dns-074", "question": "How many DNS queries came from h04?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u042\" | stats count() as count by attrs.query", "id": "dns-115", "question": "What domains did u042 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h19\" | stats count() as count", "id": "dns-088", "question": "How many DNS queries came from h19?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u091\" | stats count() as count by attrs.query", "id": "dns-127", "question": "What domains did u091 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u025\" | stats count() as count", "id": "dns-140", "question": "How many DNS queries did u025 make?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"x7f3k.badcdn.net\" | stats count() as count", "id": "dns-021", "question": "How many times was x7f3k.badcdn.net queried?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h16\" | stats count() as count by attrs.query", "id": "dns-063", "question": "DNS lookups from h16 by domain", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u095\" | stats count() as count", "id": "dns-159", "question": "Lookups by user u095", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h18\" | stats count() as count by attrs.query", "id": "dns-064", "question": "What did host h18 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h07\" | stats count() as count", "id": "dns-077", "question": "Lookups made by h07", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"api.github.com\" | top limit=10 host", "id": "dns-093", "question": "Top hosts looking up api.github.com", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u050\" | stats count() as count by attrs.query", "id": "dns-117", "question": "What domains did u050 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u066\" | stats count() as count by attrs.query", "id": "dns-120", "question": "DNS queries by user u066", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h12\" | stats count() as count", "id": "dns-081", "question": "Lookups made by h12", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u025\" | stats count() as count by attrs.query", "id": "dns-110", "question": "DNS queries by user u025", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u009\" | stats count() as count", "id": "dns-137", "question": "Lookups by user u009", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u095\" | stats count() as count by attrs.query", "id": "dns-128", "question": "DNS queries by user u095", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h09\" | stats count() as count by attrs.query", "id": "dns-053", "question": "Domains queried by h09", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h16\" | stats dc(attrs.query) as domains", "id": "dns-176", "question": "How many distinct domains did h16 query?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"api.github.com\" | stats count() as count by user_id", "id": "dns-182", "question": "Which users looked up api.github.com?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"cdn.jsdelivr.net\" | stats count() as count", "id": "dns-017", "question": "Count DNS queries for cdn.jsdelivr.net", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u025\" | stats count() as count", "id": "dns-141", "question": "Lookups by user u025", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"pool.ntp.org\" | timechart span=1d count()", "id": "dns-198", "question": "Daily lookups of pool.ntp.org", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"pool.ntp.org\" | top limit=10 host", "id": "dns-096", "question": "Which hosts queried pool.ntp.org most?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h07\" | stats count() as count by attrs.query", "id": "dns-049", "question": "What did host h07 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h18\" | stats dc(attrs.query) as domains", "id": "dns-179", "question": "Number of different domains looked up by h18", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u058\" | stats count() as count", "id": "dns-149", "question": "Lookups by user u058", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"login.microsoftonline.com\" | stats count() as count by host", "id": "dns-027", "question": "Hosts that looked up login.microsoftonline.com", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h04\" | stats count() as count by attrs.query", "id": "dns-047", "question": "Domains queried by h04", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u042\" | stats count() as count", "id": "dns-144", "question": "How many DNS queries did u042 make?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h09\" | stats count() as count", "id": "dns-079", "question": "Lookups made by h09", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u050\" | stats count() as count", "id": "dns-147", "question": "Lookups by user u050", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"cdn.jsdelivr.net\" | stats count() as count by host", "id": "dns-031", "question": "Hosts that looked up cdn.jsdelivr.net", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u017\" | stats count() as count", "id": "dns-139", "question": "Lookups by user u017", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" | stats count() as count by host", "id": "dns-037", "question": "How many lookups did each host make?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"cdn.jsdelivr.net\" | stats count() as count by user_id", "id": "dns-189", "question": "Users querying cdn.jsdelivr.net", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h04\" | stats count() as count", "id": "dns-075", "question": "Lookups made by h04", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"x7f3k.badcdn.net\" | stats count() as count by host", "id": "dns-035", "question": "Hosts that looked up x7f3k.badcdn.net", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u033\" | stats count() as count", "id": "dns-143", "question": "Lookups by user u033", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"pool.ntp.org\" | stats count() as count", "id": "dns-012", "question": "How many times was pool.ntp.org queried?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h12\" | stats count() as count by attrs.query", "id": "dns-057", "question": "DNS lookups from h12 by domain", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"cdn.jsdelivr.net\" | timechart span=1d count()", "id": "dns-201", "question": "cdn.jsdelivr.net queries over time", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"example.com\" | timechart span=1d count()", "id": "dns-203", "question": "example.com queries over time", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h16\" | stats dc(attrs.query) as domains", "id": "dns-177", "question": "Number of different domains looked up by h16", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u058\" | stats count() as count", "id": "dns-148", "question": "How many DNS queries did u058 make?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"api.github.com\" | stats count() as count by user_id", "id": "dns-183", "question": "Users querying api.github.com", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"login.microsoftonline.com\" | timechart span=1d count()", "id": "dns-196", "question": "Daily lookups of login.microsoftonline.com", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u099\" | stats count() as count", "id": "dns-161", "question": "Lookups by user u099", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h01\" | stats dc(attrs.query) as domains", "id": "dns-162", "question": "How many distinct domains did h01 query?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h14\" | stats count() as count by attrs.query", "id": "dns-058", "question": "What did host h14 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"example.com\" | stats count() as count by host", "id": "dns-032", "question": "Which hosts queried example.com?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u042\" | stats count() as count", "id": "dns-145", "question": "Lookups by user u042", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"cdn.jsdelivr.net\" | stats count() as count", "id": "dns-016", "question": "Lookups of cdn.jsdelivr.net", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u017\" | stats count() as count by attrs.query", "id": "dns-109", "question": "What domains did u017 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u033\" | stats count() as count", "id": "dns-142", "question": "How many DNS queries did u033 make?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"api.github.com\" | stats count() as count by host", "id": "dns-024", "question": "Which hosts queried api.github.com?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h16\" | stats count() as count by attrs.query", "id": "dns-062", "question": "Domains queried by h16", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"example.com\" | stats count() as count", "id": "dns-018", "question": "How many times was example.com queried?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u017\" | stats count() as count by attrs.query", "id": "dns-108", "question": "DNS queries by user u017", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u033\" | stats count() as count by attrs.query", "id": "dns-112", "question": "DNS queries by user u033", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"x7f3k.badcdn.net\" | stats count() as count", "id": "dns-023", "question": "Count DNS queries for x7f3k.badcdn.net", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"login.microsoftonline.com\" | stats count() as count", "id": "dns-010", "question": "Lookups of login.microsoftonline.com", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h12\" | stats count() as count by attrs.query", "id": "dns-055", "question": "What did host h12 look up?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u099\" | stats count() as count by attrs.query", "id": "dns-130", "question": "DNS queries by user u099", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"cdn.jsdelivr.net\" | stats count() as count", "id": "dns-015", "question": "How many times was cdn.jsdelivr.net queried?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u066\" | stats count() as count", "id": "dns-150", "question": "How many DNS queries did u066 make?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"login.microsoftonline.com\" | top limit=10 host", "id": "dns-094", "question": "Which hosts queried login.microsoftonline.com most?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"api.github.com\" | stats count() as count by host", "id": "dns-025", "question": "Hosts that looked up api.github.com", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and user_id = \"u017\" | stats count() as count", "id": "dns-138", "question": "How many DNS queries did u017 make?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"example.com\" | stats count() as count", "id": "dns-019", "question": "Lookups of example.com", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"pool.ntp.org\" | stats count() as count", "id": "dns-013", "question": "Lookups of pool.ntp.org", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h04\" | stats dc(attrs.query) as domains", "id": "dns-167", "question": "Number of different domains looked up by h04", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and attrs.query = \"x7f3k.badcdn.net\" | top limit=10 host", "id": "dns-102", "question": "Which hosts queried x7f3k.badcdn.net most?", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" | stats dc(attrs.query) as domains by host", "id": "dns-039", "question": "Distinct domains per host", "schema": "dns"}
+{"expected_query": "| where service = \"dns\" and host = \"h14\" | stats count() as count", "id": "dns-083", "question": "Lookups made by h14", "schema": "dns"}

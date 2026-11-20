@@ -170,6 +170,9 @@ class CaseService:
         await self._store([case], events)
         return case
 
+    async def get(self, tenant_id: str, case_id: str) -> Optional[Case]:
+        return await self.dao.get(tenant_id, case_id)
+
     async def act(self, tenant_id: str, case_id: str, action: str, actor: str, **kwargs: Any) -> Case:
         before = await self._load(tenant_id, case_id)
         after, events = apply_action(before, action, actor, self.clock(), **kwargs)
@@ -229,7 +232,11 @@ class CaseService:
             except Exception:
                 row = None
             alerts.append(alert_summary(row) if row else {"id": alert_id, "missing": True})
-        return {"case": case_to_dict(case), "alerts": alerts, "timeline": [_serialise_event(e) for e in events]}
+        from cases import pinned_evidence
+
+        timeline = [_serialise_event(e) for e in events]
+        return {"case": case_to_dict(case), "alerts": alerts, "timeline": timeline,
+                "evidence": pinned_evidence(timeline)}
 
     async def list(self, tenant_id: str, **filters: Any) -> Tuple[List[Case], int]:
         return await self.dao.list(tenant_id, **filters)

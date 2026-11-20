@@ -4,7 +4,7 @@ Handles dashboard management, validation, and integration with dashboard engine
 """
 
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import structlog
 import os
 
@@ -217,7 +217,8 @@ class DashboardService:
             raise e
     
     async def get_dashboard_data(self, dashboard_id: str, customer_id: str, 
-                                time_range: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+                                time_range: Optional[Dict[str, Any]] = None,
+                                variables: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         """Get dashboard data with widget results"""
         try:
             # First check if it's a custom dashboard in database
@@ -236,7 +237,7 @@ class DashboardService:
                 
                 # Generate data for each widget
                 for widget in dashboard["widgets"]:
-                    widget_data = await self._generate_widget_data(widget, customer_id, time_range)
+                    widget_data = await self._generate_widget_data(widget, customer_id, time_range, variables)
                     dashboard_data["widgets"].append({
                         "widget_id": widget["id"],
                         "name": widget["name"],
@@ -282,7 +283,8 @@ class DashboardService:
             return None
     
     async def _generate_widget_data(self, widget: Dict[str, Any], customer_id: str, 
-                                   time_range: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                                   time_range: Optional[Dict[str, Any]] = None,
+                                   variables: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Generate data for a widget based on its query definition using DAO"""
         try:
             widget_type = widget.get("type", "chart")
@@ -294,9 +296,24 @@ class DashboardService:
                 end_time = datetime.utcnow()
                 start_time = end_time - timedelta(hours=24)
             else:
-                start_time = datetime.fromisoformat(time_range["start_time"].replace("Z", "+00:00"))
-                end_time = datetime.fromisoformat(time_range["end_time"].replace("Z", "+00:00"))
+                # The router passes datetimes; older callers pass ISO strings.
+                # (Only strings were handled, so every custom widget failed
+                # whenever the UI sent a time range.)
+                start_time, end_time = time_range["start_time"], time_range["end_time"]
+                if isinstance(start_time, str):
+                    start_time = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+                if isinstance(end_time, str):
+                    end_time = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
             
+            # Phase 6: a query panel (query_definition = {"logql": "..."}).
+            if isinstance(query_definition, dict) and query_definition.get("logql"):
+                import dashboard_queries
+
+                if start_time.tzinfo is None:
+                    start_time, end_time = (start_time.replace(tzinfo=timezone.utc),
+                                            end_time.replace(tzinfo=timezone.utc))
+                return await dashboard_queries.panel_data(widget, customer_id, start_time, end_time, variables or {})
+
             # Execute query based on widget type using DAO
             if widget_type == "line_chart":
                 return await self._generate_line_chart_data(customer_id, query_definition, start_time, end_time)

@@ -1,0 +1,36 @@
+# nginx and Apache access logs in the combined format, optionally followed by
+# the request time (nginx $request_time). The service stays as shipped
+# (nginx or apache).
+name: web-access
+description: nginx and Apache access logs (combined format)
+routing: {services: [nginx, nginx-access, apache, httpd, apache-access]}
+processors:
+  - grok:
+      field: msg
+      target: attrs._web
+      patterns:
+        - '^%{NOTSPACE:remote_addr} %{NOTSPACE:ident} %{NOTSPACE:remote_user} \[%{DATA:time_local}\] "%{DATA:request}" %{INT:status} %{NOTSPACE:bytes}(?: "%{DATA:referer}" "%{DATA:user_agent}"(?: %{NUMBER:request_time})?)?$'
+  - grok: {field: attrs._web.request, target: attrs, patterns: ['^%{NOTSPACE:method} %{NOTSPACE:uri}(?: %{DATA:protocol})?$']}
+    ignore_failure: true
+  - urldecode: {field: attrs.uri, ignore_missing: true}
+  - date: {field: attrs._web.time_local, formats: [HTTPDATE, "%d/%b/%Y:%H:%M:%S %z"]}
+    ignore_failure: true
+  - script:
+      source: |
+        status = int(attrs._web.status)
+        src_ip = attrs._web.remote_addr
+        user_id = '' if attrs._web.remote_user in [None, '-'] else attrs._web.remote_user
+        attrs.bytes = 0 if attrs._web.bytes == '-' else int(attrs._web.bytes)
+        attrs.referer = attrs._web.referer
+        attrs.user_agent = attrs._web.user_agent
+        attrs.request_time_ms = float(attrs._web.request_time) * 1000 if exists('attrs._web.request_time') else None
+        attrs.status_class = str(int(status / 100)) + 'xx'
+        level = 'error' if status >= 500 else 'warn' if status >= 400 else 'info'
+        attrs.ocsf.class_uid = 4002
+        attrs.ocsf.class_name = 'HTTP Activity'
+        attrs.ocsf.http_request.http_method = attrs.method
+        attrs.ocsf.http_request.url.path = attrs.uri
+        attrs.ocsf.http_response.code = status
+        attrs.ocsf.src_endpoint.ip = attrs._web.remote_addr
+  - remove: {field: attrs._web}
+  - compact: {field: attrs, values: ["", "-"]}

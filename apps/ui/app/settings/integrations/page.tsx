@@ -1,620 +1,188 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { CheckCircle, Loader2, Plus, Puzzle, ShieldAlert, Trash2, XCircle, Zap } from 'lucide-react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
-import { apiClient } from '@/lib/api'
 import {
-  Puzzle,
-  Search,
-  CheckCircle,
-  XCircle,
-  Settings,
-  ExternalLink,
-  Plus,
-  RefreshCw,
-  AlertTriangle,
-  Zap,
-  MessageSquare,
-  Mail,
-  GitBranch,
-  Database,
-  Cloud,
-  Shield,
-  BarChart,
-  Bell,
-  X,
-  ChevronRight
-} from 'lucide-react'
+  deleteIntegration, listIntegrations, listKinds, saveIntegration, testIntegration,
+  type ActionResult, type Integration,
+} from '@/lib/api/response'
+import { fieldLabel, kindFields, type KindInfo } from '@/lib/responseFormat'
 
-interface Integration {
-  id: string
-  name: string
-  description: string
-  category: 'alerting' | 'ticketing' | 'communication' | 'cloud' | 'security' | 'data'
-  icon: string
-  status: 'connected' | 'disconnected' | 'error' | 'available'
-  config?: Record<string, any>
-  lastSync?: string
-  features: string[]
-  docsUrl: string
-}
+interface Draft { id?: string; name: string; kind: string; config: Record<string, string>; secrets: Record<string, string> }
 
-const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  alerting: <Bell className="w-5 h-5" />,
-  ticketing: <GitBranch className="w-5 h-5" />,
-  communication: <MessageSquare className="w-5 h-5" />,
-  cloud: <Cloud className="w-5 h-5" />,
-  security: <Shield className="w-5 h-5" />,
-  data: <Database className="w-5 h-5" />
-}
-
-const CATEGORY_COLORS: Record<string, string> = {
-  alerting: 'bg-red-500/20 text-red-400 border-red-500/30',
-  ticketing: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-  communication: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  cloud: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
-  security: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-  data: 'bg-green-500/20 text-green-400 border-green-500/30'
-}
-
+/**
+ * Settings → Integrations (Phase 13): the connections playbooks use to notify
+ * (Slack, Teams, PagerDuty, Opsgenie, email, webhooks), open tickets (Jira,
+ * GitHub) and contain (through the customer's own automation). Secrets are
+ * write-only: the page shows which are set, never their values.
+ */
 export default function IntegrationsPage() {
-  const [integrations, setIntegrations] = useState<Integration[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [filterCategory, setFilterCategory] = useState<string>('all')
-  const [filterStatus, setFilterStatus] = useState<string>('all')
-  const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null)
-  const [showConfigModal, setShowConfigModal] = useState(false)
-  const [configForm, setConfigForm] = useState<Record<string, string>>({})
-  const [isConnecting, setIsConnecting] = useState(false)
+  const [kinds, setKinds] = useState<KindInfo[]>([])
+  const [items, setItems] = useState<Integration[] | null>(null)
+  const [draft, setDraft] = useState<Draft | null>(null)
+  const [tests, setTests] = useState<Record<string, ActionResult>>({})
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadIntegrations()
+  const load = useCallback(async () => {
+    try {
+      const [k, i] = await Promise.all([listKinds(), listIntegrations()])
+      setKinds(k.kinds)
+      setItems(i.integrations)
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load integrations')
+    }
   }, [])
 
-  const loadIntegrations = async () => {
+  useEffect(() => { load() }, [load])
+
+  const kindOf = useMemo(() => Object.fromEntries(kinds.map(k => [k.kind, k])), [kinds])
+  const current = draft ? kindOf[draft.kind] : undefined
+
+  const startNew = (kind: string) => { setMessage(null); setError(null); setDraft({ name: '', kind, config: {}, secrets: {} }) }
+  const startEdit = (i: Integration) => {
+    setMessage(null); setError(null)
+    setDraft({ id: i.id, name: i.name, kind: i.kind, config: Object.fromEntries(Object.entries(i.config).map(([k, v]) => [k, String(v)])), secrets: {} })
+  }
+
+  const save = async () => {
+    if (!draft) return
+    setBusy('save'); setError(null); setMessage(null)
     try {
-      setIsLoading(true)
-      const response = await apiClient.get<{ configured_integrations: Integration[]; integrations: Integration[] }>('/v1/enterprise/integrations')
-      const data = response?.data || response
-      if (data?.configured_integrations) {
-        setIntegrations(data.configured_integrations)
-      } else if (data?.integrations) {
-        setIntegrations(data.integrations)
-      } else if (Array.isArray(data)) {
-        setIntegrations(data)
-      } else {
-        setIntegrations([])
-      }
-    } catch (error) {
-      console.error('Failed to load integrations:', error)
-      setIntegrations([])
+      const secrets = Object.fromEntries(Object.entries(draft.secrets).filter(([, v]) => v))
+      await saveIntegration({ name: draft.name, kind: draft.kind, config: draft.config, secrets }, draft.id)
+      setMessage(`Saved ${draft.name}.`)
+      setDraft(null)
+      await load()
+    } catch (e: any) {
+      setError(e?.message || 'Failed to save')
     } finally {
-      setIsLoading(false)
+      setBusy(null)
     }
   }
 
-  const testConnection = async (integrationId: string) => {
+  const test = async (i: Integration) => {
+    setBusy(`test-${i.id}`); setError(null)
     try {
-      await apiClient.post(`/v1/enterprise/integrations/${integrationId}/test`)
-      // Simulate success
-      setIntegrations(integrations.map(i =>
-        i.id === integrationId ? { ...i, status: 'connected' as const, lastSync: new Date().toISOString() } : i
-      ))
-    } catch (error) {
-      console.error('Failed to test connection:', error)
-    }
-  }
-
-  const disconnectIntegration = async (integrationId: string) => {
-    if (!confirm('Are you sure you want to disconnect this integration?')) return
-
-    try {
-      await apiClient.delete(`/v1/enterprise/integrations/${integrationId}`)
-      setIntegrations(integrations.map(i =>
-        i.id === integrationId ? { ...i, status: 'available' as const, config: undefined } : i
-      ))
-    } catch (error) {
-      console.error('Failed to disconnect:', error)
-      setIntegrations(integrations.map(i =>
-        i.id === integrationId ? { ...i, status: 'available' as const, config: undefined } : i
-      ))
-    }
-  }
-
-  const connectIntegration = async (integration: Integration) => {
-    if (!configForm || Object.keys(configForm).length === 0) {
-      alert('Please fill in the configuration fields')
-      return
-    }
-
-    setIsConnecting(true)
-    try {
-      await apiClient.post(`/v1/enterprise/integrations/${integration.id}/configure`, configForm)
-      setIntegrations(integrations.map(i =>
-        i.id === integration.id ? { ...i, status: 'connected' as const, config: configForm, lastSync: new Date().toISOString() } : i
-      ))
-      setShowConfigModal(false)
-      setConfigForm({})
-    } catch (error) {
-      console.error('Failed to connect integration:', error)
-      alert('Failed to connect integration. Please check your configuration.')
+      const { result } = await testIntegration(i.id)
+      setTests(t => ({ ...t, [i.id]: result }))
+    } catch (e: any) {
+      setTests(t => ({ ...t, [i.id]: { ok: false, status: null, output: {}, error: e?.message || 'failed' } }))
     } finally {
-      setIsConnecting(false)
+      setBusy(null)
     }
   }
 
-  const updateConfigField = (field: string, value: string) => {
-    setConfigForm(prev => ({ ...prev, [field]: value }))
-  }
-
-  const filteredIntegrations = integrations.filter(integration => {
-    if (searchQuery && !integration.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !integration.description.toLowerCase().includes(searchQuery.toLowerCase())) {
-      return false
+  const remove = async (i: Integration) => {
+    if (!window.confirm(`Delete ${i.name}? Playbooks that use it will fail at that step.`)) return
+    try {
+      await deleteIntegration(i.id)
+      setMessage(`Deleted ${i.name}.`)
+      await load()
+    } catch (e: any) {
+      setError(e?.message || 'Failed to delete')
     }
-    if (filterCategory !== 'all' && integration.category !== filterCategory) return false
-    if (filterStatus === 'connected' && integration.status !== 'connected') return false
-    if (filterStatus === 'available' && integration.status !== 'available' && integration.status !== 'disconnected') return false
-    if (filterStatus === 'error' && integration.status !== 'error') return false
-    return true
-  })
-
-  const stats = {
-    total: integrations.length,
-    connected: integrations.filter(i => i.status === 'connected').length,
-    available: integrations.filter(i => i.status === 'available' || i.status === 'disconnected').length,
-    errors: integrations.filter(i => i.status === 'error').length
-  }
-
-  const formatTimeAgo = (timestamp: string | undefined) => {
-    if (!timestamp) return 'Never'
-    const diff = Date.now() - new Date(timestamp).getTime()
-    const minutes = Math.floor(diff / 60000)
-    const hours = Math.floor(diff / 3600000)
-    if (hours > 0) return `${hours}h ago`
-    if (minutes > 0) return `${minutes}m ago`
-    return 'Just now'
-  }
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'connected': return <CheckCircle className="w-5 h-5 text-green-400" />
-      case 'error': return <AlertTriangle className="w-5 h-5 text-red-400" />
-      case 'available': return <Plus className="w-5 h-5 text-slate-400" />
-      default: return <XCircle className="w-5 h-5 text-slate-400" />
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'connected': return 'border-green-500/50 bg-green-500/5'
-      case 'error': return 'border-red-500/50 bg-red-500/5'
-      default: return 'border-white/5 hover:border-white/10'
-    }
-  }
-
-  // Get integration logo/icon placeholder
-  const getIntegrationIcon = (integration: Integration) => {
-    const iconMap: Record<string, React.ReactNode> = {
-      slack: <MessageSquare className="w-8 h-8" />,
-      pagerduty: <Bell className="w-8 h-8" />,
-      jira: <GitBranch className="w-8 h-8" />,
-      github: <GitBranch className="w-8 h-8" />,
-      aws: <Cloud className="w-8 h-8" />,
-      gcp: <Cloud className="w-8 h-8" />,
-      azure: <Cloud className="w-8 h-8" />,
-      teams: <MessageSquare className="w-8 h-8" />,
-      opsgenie: <Bell className="w-8 h-8" />,
-      datadog: <BarChart className="w-8 h-8" />,
-      splunk: <Database className="w-8 h-8" />,
-      crowdstrike: <Shield className="w-8 h-8" />,
-      okta: <Shield className="w-8 h-8" />,
-      servicenow: <GitBranch className="w-8 h-8" />,
-      webhook: <Zap className="w-8 h-8" />
-    }
-    return iconMap[integration.id] || <Puzzle className="w-8 h-8" />
   }
 
   return (
     <DashboardLayout>
       <div className="p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold text-white">Integrations</h1>
-            <p className="text-slate-400 mt-1">Connect Logforge with your favorite tools</p>
-          </div>
-          <button
-            onClick={loadIntegrations}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
-          </button>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-500/20 rounded-lg">
-                <Puzzle className="w-5 h-5 text-blue-400" />
-              </div>
-              <div>
-                <p className="text-slate-400 text-sm">Total Integrations</p>
-                <p className="text-2xl font-bold text-white">{stats.total}</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-500/20 rounded-lg">
-                <CheckCircle className="w-5 h-5 text-green-400" />
-              </div>
-              <div>
-                <p className="text-slate-400 text-sm">Connected</p>
-                <p className="text-2xl font-bold text-white">{stats.connected}</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-slate-500/20 rounded-lg">
-                <Plus className="w-5 h-5 text-slate-400" />
-              </div>
-              <div>
-                <p className="text-slate-400 text-sm">Available</p>
-                <p className="text-2xl font-bold text-white">{stats.available}</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-500/20 rounded-lg">
-                <AlertTriangle className="w-5 h-5 text-red-400" />
-              </div>
-              <div>
-                <p className="text-slate-400 text-sm">Errors</p>
-                <p className="text-2xl font-bold text-white">{stats.errors}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="flex flex-wrap gap-4 items-center">
-          <div className="relative flex-1 min-w-[200px] max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search integrations..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-            />
-          </div>
-
-          <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            className="px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-          >
-            <option value="all">All Categories</option>
-            <option value="alerting">Alerting</option>
-            <option value="ticketing">Ticketing</option>
-            <option value="communication">Communication</option>
-            <option value="cloud">Cloud</option>
-            <option value="security">Security</option>
-            <option value="data">Data</option>
-          </select>
-
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-          >
-            <option value="all">All Status</option>
-            <option value="connected">Connected</option>
-            <option value="available">Available</option>
-            <option value="error">Errors</option>
-          </select>
-        </div>
-
-        {/* Integration Grid */}
-        {isLoading ? (
-          <div className="flex items-center justify-center h-48">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-          </div>
-        ) : filteredIntegrations.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5">
-            <Puzzle className="w-12 h-12 text-slate-500 mb-4" />
-            <h3 className="text-lg font-medium text-white mb-2">
-              {integrations.length === 0 ? 'No integrations configured' : 'No matching integrations'}
-            </h3>
-            <p className="text-slate-400 text-sm text-center max-w-md">
-              {integrations.length === 0
-                ? 'Connect your favorite tools to Logforge to start receiving alerts and syncing data.'
-                : 'Try adjusting your search or filter criteria.'}
+            <h1 className="text-2xl font-bold text-white flex items-center gap-2"><Puzzle className="w-6 h-6" /> Integrations</h1>
+            <p className="text-slate-400 mt-1">
+              Where <Link href="/security/playbooks" className="text-blue-400 hover:underline">playbooks</Link> send
+              notifications, open tickets and ask for containment.
             </p>
-            {integrations.length === 0 && (
-              <button
-                onClick={loadIntegrations}
-                className="mt-4 flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Refresh
-              </button>
+          </div>
+          <select data-testid="add-integration" className="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-white"
+            value="" onChange={e => e.target.value && startNew(e.target.value)}>
+            <option value="">+ Add an integration…</option>
+            {kinds.map(k => <option key={k.kind} value={k.kind}>{k.label}</option>)}
+          </select>
+        </div>
+        {message && <p className="text-sm text-emerald-300" data-testid="integrations-message">{message}</p>}
+        {error && <p className="text-sm text-red-400" data-testid="integrations-error">{error}</p>}
+
+        {draft && current && (
+          <section className="bg-slate-900 border border-slate-700 rounded-lg p-5 space-y-4" data-testid="integration-form">
+            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+              <Plus className="w-4 h-4" /> {draft.id ? `Edit ${draft.name}` : `New ${current.label} integration`}
+            </h2>
+            {current.containment && (
+              <p className="text-sm text-amber-300 flex items-center gap-2"><ShieldAlert className="w-4 h-4" />
+                Containment: playbooks can only call this after a person approves the step.</p>
             )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredIntegrations.map((integration) => (
-              <div
-                key={integration.id}
-                className={`bg-slate-800/50 border rounded-lg p-4 cursor-pointer transition-all hover:bg-slate-800/70 ${getStatusColor(integration.status)}`}
-                onClick={() => {
-                  setSelectedIntegration(integration)
-                  setConfigForm({})
-                  setShowConfigModal(true)
-                }}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${CATEGORY_COLORS[integration.category]}`}>
-                      {getIntegrationIcon(integration)}
-                    </div>
-                    <div>
-                      <h3 className="text-white font-medium">{integration.name}</h3>
-                      <span className={`px-2 py-0.5 rounded text-xs ${CATEGORY_COLORS[integration.category]}`}>
-                        {integration.category}
-                      </span>
-                    </div>
-                  </div>
-                  {getStatusIcon(integration.status)}
-                </div>
-                <p className="text-slate-400 text-sm mt-3">{integration.description}</p>
-                <div className="flex flex-wrap gap-1 mt-3">
-                  {integration.features.slice(0, 3).map((feature, idx) => (
-                    <span key={idx} className="px-2 py-0.5 bg-slate-700 rounded text-xs text-slate-300">
-                      {feature}
-                    </span>
-                  ))}
-                  {integration.features.length > 3 && (
-                    <span className="px-2 py-0.5 bg-slate-700 rounded text-xs text-slate-400">
-                      +{integration.features.length - 3}
-                    </span>
-                  )}
-                </div>
-                {integration.status === 'connected' && integration.lastSync && (
-                  <p className="text-slate-500 text-xs mt-3">
-                    Last synced: {formatTimeAgo(integration.lastSync)}
-                  </p>
-                )}
-                {integration.status === 'error' && (
-                  <p className="text-red-400 text-xs mt-3 flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" />
-                    Connection error - click to fix
-                  </p>
-                )}
-              </div>
+            <label className="block text-sm text-slate-300">Name
+              <input data-testid="integration-name" className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white"
+                value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} placeholder="SOC Slack" />
+              <span className="text-xs text-slate-500">Playbooks refer to the integration by this name.</span>
+            </label>
+            {kindFields(current).map(f => (
+              <label key={f.name} className="block text-sm text-slate-300">
+                {f.label}{f.required ? '' : ' (optional)'}
+                <input data-testid={`field-${f.name}`} type={f.secret ? 'password' : 'text'} autoComplete="off"
+                  className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white"
+                  value={(f.secret ? draft.secrets[f.name] : draft.config[f.name]) ?? ''}
+                  placeholder={f.secret && draft.id && items?.find(i => i.id === draft.id)?.secrets_set.includes(f.name) ? 'set (leave empty to keep)' : ''}
+                  onChange={e => setDraft(f.secret ? { ...draft, secrets: { ...draft.secrets, [f.name]: e.target.value } }
+                    : { ...draft, config: { ...draft.config, [f.name]: e.target.value } })} />
+                {f.help && <span className="text-xs text-slate-500">{f.help}</span>}
+              </label>
             ))}
-          </div>
+            <p className="text-xs text-slate-500">Inputs playbook steps can set: {current.inputs.join(', ')}.</p>
+            <div className="flex gap-2">
+              <button data-testid="save-integration" onClick={save} disabled={busy === 'save' || !draft.name}
+                className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:opacity-50">
+                {busy === 'save' ? 'Saving…' : 'Save'}
+              </button>
+              <button onClick={() => setDraft(null)} className="px-4 py-2 rounded bg-slate-700 text-white text-sm">Cancel</button>
+            </div>
+          </section>
         )}
 
-        {/* Configuration Modal */}
-        {showConfigModal && selectedIntegration && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-            <div className="bg-slate-800 border border-white/5 rounded-lg w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between p-4 border-b border-white/5">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${CATEGORY_COLORS[selectedIntegration.category]}`}>
-                    {getIntegrationIcon(selectedIntegration)}
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-white">{selectedIntegration.name}</h3>
-                    <span className={`px-2 py-0.5 rounded text-xs ${CATEGORY_COLORS[selectedIntegration.category]}`}>
-                      {selectedIntegration.category}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowConfigModal(false)}
-                  className="text-slate-400 hover:text-white"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="p-4 space-y-4">
-                <p className="text-slate-300">{selectedIntegration.description}</p>
-
-                {/* Status */}
-                <div className={`flex items-center gap-2 p-3 rounded-lg ${
-                  selectedIntegration.status === 'connected' ? 'bg-green-500/10 border border-green-500/30' :
-                  selectedIntegration.status === 'error' ? 'bg-red-500/10 border border-red-500/30' :
-                  'bg-slate-700/50 border border-white/10'
-                }`}>
-                  {getStatusIcon(selectedIntegration.status)}
-                  <span className={`font-medium ${
-                    selectedIntegration.status === 'connected' ? 'text-green-400' :
-                    selectedIntegration.status === 'error' ? 'text-red-400' :
-                    'text-slate-300'
-                  }`}>
-                    {selectedIntegration.status === 'connected' ? 'Connected' :
-                     selectedIntegration.status === 'error' ? 'Connection Error' :
-                     'Not Connected'}
-                  </span>
-                  {selectedIntegration.lastSync && (
-                    <span className="text-slate-500 text-sm ml-auto">
-                      Last sync: {formatTimeAgo(selectedIntegration.lastSync)}
-                    </span>
-                  )}
-                </div>
-
-                {/* Features */}
-                <div>
-                  <h4 className="text-white font-medium mb-2">Features</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedIntegration.features.map((feature, idx) => (
-                      <span key={idx} className="px-3 py-1 bg-slate-700 rounded-full text-sm text-slate-300">
-                        {feature}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Configuration Form */}
-                {selectedIntegration.status === 'available' ? (
-                  <div className="border border-white/10 rounded-lg p-4">
-                    <h4 className="text-white font-medium mb-3">Connect {selectedIntegration.name}</h4>
-                    {selectedIntegration.id === 'slack' && (
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-sm text-slate-400 mb-1">Webhook URL</label>
-                          <input
-                            type="text"
-                            placeholder="https://hooks.slack.com/services/..."
-                            value={configForm.webhook_url || ''}
-                            onChange={(e) => updateConfigField('webhook_url', e.target.value)}
-                            className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm text-slate-400 mb-1">Default Channel</label>
-                          <input
-                            type="text"
-                            placeholder="#alerts"
-                            value={configForm.channel || ''}
-                            onChange={(e) => updateConfigField('channel', e.target.value)}
-                            className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm"
-                          />
-                        </div>
-                      </div>
-                    )}
-                    {selectedIntegration.id === 'pagerduty' && (
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-sm text-slate-400 mb-1">API Key</label>
-                          <input
-                            type="password"
-                            placeholder="Enter your PagerDuty API key"
-                            value={configForm.api_key || ''}
-                            onChange={(e) => updateConfigField('api_key', e.target.value)}
-                            className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm text-slate-400 mb-1">Service ID</label>
-                          <input
-                            type="text"
-                            placeholder="PXXXXXX"
-                            value={configForm.service_id || ''}
-                            onChange={(e) => updateConfigField('service_id', e.target.value)}
-                            className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm"
-                          />
-                        </div>
-                      </div>
-                    )}
-                    {!['slack', 'pagerduty'].includes(selectedIntegration.id) && (
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-sm text-slate-400 mb-1">API Key / Token</label>
-                          <input
-                            type="password"
-                            placeholder="Enter your API key"
-                            value={configForm.api_key || ''}
-                            onChange={(e) => updateConfigField('api_key', e.target.value)}
-                            className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm text-slate-400 mb-1">Endpoint URL (optional)</label>
-                          <input
-                            type="text"
-                            placeholder="https://api.example.com"
-                            value={configForm.endpoint_url || ''}
-                            onChange={(e) => updateConfigField('endpoint_url', e.target.value)}
-                            className="w-full px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : selectedIntegration.status === 'connected' && selectedIntegration.config && (
-                  <div className="border border-white/10 rounded-lg p-4">
-                    <h4 className="text-white font-medium mb-3">Configuration</h4>
-                    <div className="space-y-2">
-                      {Object.entries(selectedIntegration.config).map(([key, value]) => (
-                        <div key={key} className="flex justify-between">
-                          <span className="text-slate-400 capitalize">{key.replace(/_/g, ' ')}</span>
-                          <span className="text-white">
-                            {Array.isArray(value) ? value.join(', ') : String(value)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Documentation Link */}
-                <a
-                  href={selectedIntegration.docsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-blue-400 hover:text-blue-300 text-sm"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  View Documentation
-                </a>
-              </div>
-
-              <div className="flex justify-end gap-3 p-4 border-t border-white/5">
-                <button
-                  onClick={() => setShowConfigModal(false)}
-                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
-                >
-                  Close
-                </button>
-                {selectedIntegration.status === 'connected' && (
-                  <>
-                    <button
-                      onClick={() => testConnection(selectedIntegration.id)}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                    >
-                      Test Connection
-                    </button>
-                    <button
-                      onClick={() => {
-                        disconnectIntegration(selectedIntegration.id)
-                        setShowConfigModal(false)
-                      }}
-                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-                    >
-                      Disconnect
-                    </button>
-                  </>
-                )}
-                {selectedIntegration.status === 'available' && (
-                  <button
-                    onClick={() => connectIntegration(selectedIntegration)}
-                    disabled={isConnecting}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-800 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-                  >
-                    {isConnecting ? 'Connecting...' : 'Connect'}
-                  </button>
-                )}
-                {selectedIntegration.status === 'error' && (
-                  <button
-                    onClick={() => testConnection(selectedIntegration.id)}
-                    className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
-                  >
-                    Retry Connection
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
+        {!items && !error && <Loader2 className="w-5 h-5 animate-spin text-slate-400" />}
+        {items && items.length === 0 && (
+          <p className="text-slate-400" data-testid="integrations-empty">No integrations yet. Add one to let playbooks act.</p>
+        )}
+        {items && items.length > 0 && (
+          <table className="w-full text-sm" data-testid="integrations-table">
+            <thead className="text-left text-slate-400 border-b border-slate-700">
+              <tr><th className="py-2">Name</th><th>Kind</th><th>Settings</th><th>Secrets</th><th>Last test</th><th /></tr>
+            </thead>
+            <tbody>
+              {items.map(i => {
+                const result = tests[i.id]
+                return (
+                  <tr key={i.id} className="border-b border-slate-800 text-slate-200" data-testid={`integration-${i.name}`}>
+                    <td className="py-2 font-medium">{i.name}</td>
+                    <td>{kindOf[i.kind]?.label || i.kind}{kindOf[i.kind]?.containment && <span className="ml-2 text-xs text-amber-300">containment</span>}</td>
+                    <td className="text-slate-400">{Object.entries(i.config).map(([k, v]) => `${fieldLabel(k)}: ${v}`).join(' · ') || '—'}</td>
+                    <td className="text-slate-400">{i.secrets_set.length ? i.secrets_set.map(fieldLabel).join(', ') : 'none'}</td>
+                    <td data-testid={`test-result-${i.name}`}>
+                      {result && (result.ok
+                        ? <span className="text-emerald-300 flex items-center gap-1"><CheckCircle className="w-4 h-4" /> OK{result.status ? ` (${result.status})` : ''}</span>
+                        : <span className="text-red-300 flex items-center gap-1"><XCircle className="w-4 h-4" /> {result.error}</span>)}
+                    </td>
+                    <td className="text-right whitespace-nowrap">
+                      <button data-testid={`test-${i.name}`} onClick={() => test(i)} disabled={busy === `test-${i.id}`}
+                        title={kindOf[i.kind]?.containment ? 'Sends a dry-run request (dry_run: true)' : 'Sends a test message'}
+                        className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-white text-xs mr-2 inline-flex items-center gap-1">
+                        <Zap className="w-3 h-3" /> {busy === `test-${i.id}` ? 'Testing…' : 'Test'}
+                      </button>
+                      <button onClick={() => startEdit(i)} className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-white text-xs mr-2">Edit</button>
+                      <button aria-label={`Delete ${i.name}`} onClick={() => remove(i)} className="p-1 text-slate-400 hover:text-red-400">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         )}
       </div>
     </DashboardLayout>

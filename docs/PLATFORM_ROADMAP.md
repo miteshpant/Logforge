@@ -620,6 +620,90 @@ works no matter where the data came from.
 **Goal:** answer analytical questions, not just find lines. This is what
 analysts expect from SPL or ES|QL.
 
+> **Status: done (2026-11-19), with one acceptance criterion not met:**
+> latency at 100 M rows for questions that read `attrs` (see below). Guide:
+> [Query language](./query-language.md).
+>
+> | Acceptance criterion | Result |
+> |---|---|
+> | 30 published analyst questions, each answerable in one query | **Met.** [`tests/eval/analytics/questions.yml`](https://github.com/miteshpant/Logforge/blob/main/tests/eval/analytics/questions.yml): 30 questions, one query each. `tests/test_analyst_questions_live.py` checks every answer against Python on a seeded week of auth, HTTP and DNS events in ClickHouse (run in CI) |
+> | p95 for that set within the Phase 0 targets at 100 M rows | **Not met for 13 of 30.** Phase 0 set no number; its baseline was "well under a second". At 100 M events over 7 days, on a 4-vCPU single node: p95 < 1 s for 8 questions (counts answered from the hourly counts, and questions on stored columns), 1–2.5 s for 7, 3–4 s for 2, and 6–16 s for the 13 that read `attrs` JSON for every event ([benchmarks](./benchmarks/README.md)). Closing the gap needs frequently queried attributes stored as columns (Phase 12) |
+>
+> - **Done: pipeline commands.** LogforgeQL now has `where` (with `or`,
+>   `not`, parentheses), `eval` (35 functions), `stats` (count, dc, sum, avg,
+>   min, max, median, p1–p99, stdev, values, earliest, latest), `eventstats`,
+>   `timechart`, `top`, `rare`, `sort`, `head`, `dedup`, `fields`, `rename`
+>   and `bin`, plus `$variables`. Each stage works on the output of the one
+>   before. A query compiles to one parameterised ClickHouse statement: the
+>   tenant and the time window are applied innermost, and every value is
+>   bound. Queries the original language accepted keep their old behaviour.
+>   Answers are checked against Python on a seeded dataset in ClickHouse
+>   (`tests/test_logql_pipeline_live.py`, run in CI).
+> - **Done: lookups and joins.** Tenants upload CSV lookups (up to
+>   100,000 rows) or keep managed lists under `/v1/query/lookups`; an
+>   upload is a new version, so a replacement is atomic for queries.
+>   `| lookup users user_id output department` adds columns,
+>   `inlookup("blocklist", src_ip)` tests membership, and
+>   `| join [type=left] [max=N] user_id [ subsearch ]` joins a second
+>   search (same tenant and window, at most 50,000 rows, one row per key).
+> - **Done: saved and scheduled searches.** `/v1/query/searches` stores
+>   named queries; with `every` (5m–7d) they run on a schedule over the
+>   last `window`, and every run is recorded. A run can alert (row count or
+>   a field in any row against a threshold, throttled, delivered to
+>   notification channels) and send a report (rows plus `report.csv` by
+>   email, or the rows to a webhook or chat channel), on every run or only
+>   when it alerts. A failed run is recorded as an error, never as "no
+>   results". `POST /{id}/run` previews a run.
+> - **Done: dashboards from queries.** A dashboard panel can be any
+>   LogforgeQL query (`query_definition: {"logql": ...}`), shaped as a
+>   single value, table or chart (a `timechart ... by` becomes one series
+>   per value). Dashboards have variables (custom lists, values from a
+>   query, free text, with an All option); `$name` in a panel's query is
+>   bound as a value, and the time picker sets the window. The Log
+>   Explorer's **Add to dashboard** turns the current query into a panel.
+> - **Done: performance and cost limits.** An hourly-counts projection
+>   on the log table (migration 023) answers count queries over service,
+>   level and status: whole hours come from the projection, the partial
+>   hours at each end of the window from the events, so answers are exact
+>   (checked against counting the events). On 10 M rows those queries read
+>   2 M rows instead of 9.9 M and run 1.2–4× faster. Bloom-filter skip
+>   indexes on trace id, source IP and user id cut a trace lookup from 10 M
+>   rows read to 98 k. Before a query runs, ClickHouse estimates the rows it
+>   reads; a query over the plan's limit (`config/query_limits.yml`) is
+>   refused with advice. `POST /v1/query/estimate` returns the estimate.
+> - **Done: language reference and query builder.**
+>   [docs/query-language.md](./query-language.md) documents every command,
+>   function and aggregation, with 55 examples; a test fails if one is
+>   missing or an example stops compiling. The Log Explorer has a query
+>   builder (conditions, calculations, group by, over time, sort) that
+>   writes LogforgeQL into the query bar, shows `stats` / `top` /
+>   `timechart` results as a table (and a chart for timecharts) instead of
+>   log lines, and autocompletes the new commands and functions.
+> - **Bugs found and fixed:** a query starting with `| eval ...` (or any
+>   stage the original language didn't know) was silently run as a
+>   full-text search for that text; `stats ... | where n > 3` filtered the
+>   events instead of the stats rows, because the original compiler applies
+>   every filter before aggregating; alerts without a rule (or whose rule
+>   was deleted) were all listed as severity low, because ClickHouse fills
+>   an unmatched Enum in a LEFT JOIN with its first value; every custom
+>   dashboard widget failed whenever the UI sent a time range (the service
+>   called a string method on the datetimes the router passed); a quoted
+>   free-text search ("connection reset") searched for the quote marks.
+>   Found by the acceptance run: `not cidrmatch(...)` never matched
+>   (operator precedence in the generated SQL); `attrs` fields parsed each
+>   row's JSON twice; `eventstats` and `dedup` sorted every event (36 s and
+>   12 s at 100 M rows, now 15 s and 1.7 s); a query over the time limit
+>   returned a bare 500 (now a 504 saying how to narrow it); the Log
+>   Explorer's toolbar overflowed the page in LogQL mode.
+>
+> **Not done** (tracked in [ROADMAP.md](./ROADMAP.md)): typed columns for
+> hot `attrs` keys (the 100 M-row latency gap); the hourly counts cover only
+> service, level and status; joins are capped at 50,000 subsearch rows and
+> one row per key; scheduled searches run in the API process (one replica
+> runs them; several would each run them); dashboard panels support one
+> query each and no panel-level time override; the query builder writes
+> `where` / `stats` / `timechart` / `sort` / `head` only.
+
 ### Deliverables
 
 1. **Pipeline commands** in LogforgeQL: `stats` (count, sum, avg, percentiles,
@@ -654,6 +738,63 @@ analysts expect from SPL or ES|QL.
 and Elastic are sticky, and it's where an open-source community can
 contribute most.
 
+> **Status: done (2026-11-19), with the gaps listed below.** Guide:
+> [Content packs](./packs.md).
+>
+> | Acceptance criterion | Result |
+> |---|---|
+> | Install a pack, point a shipper at the source: parsed events, a working dashboard and enabled rules within 15 minutes | **Met for the system's part; the human part is estimated.** `scripts/pack_walkthrough.py` installs the Linux pack, creates an ingest key, runs Vector (in Docker, with the new `vector-linux-pack.toml` recipe) on a scratch `/var/log` and appends auth.log and audit.log lines. 10.6 s after the install all 16 events were parsed, 7 of 7 dashboard panels showed data, and all 4 rules were enabled and had raised alerts ([run](https://github.com/miteshpant/Logforge/blob/main/docs/benchmarks/2026-11-19-pack-walkthrough.json)). The time a person takes to read the plan, create the key and install Vector was not measured |
+>
+> - **Done: pack format.** `packages/packs/<id>/`: `pack.yml` (id,
+>   semver version, sources, samples with expectations), pipelines with
+>   routing, Sigma rules with fixtures, saved searches and alert templates,
+>   dashboards with variables, CSV lookups and samples. A pack is loaded and
+>   validated with the code that installs it, so a rule that fails its
+>   fixtures or a query that doesn't compile is a load error. Schema
+>   mappings are part of each pipeline (it sets `attrs.ocsf.*`), not a
+>   separate object.
+> - **Done: pack manager.** Per tenant: list, plan, install, upgrade and
+>   remove (`/v1/packs`, tenant admin). A plan shows every object as
+>   create / update / unchanged / keep_local / deleted / conflict / remove
+>   before anything changes. The install manifest (migration 024) keeps,
+>   per object, the hash of the pack's definition and of what was stored, so
+>   upgrades keep what the tenant changed or deleted (unless forced),
+>   objects with the same name that the pack didn't install are left alone,
+>   and removal deletes only unchanged objects.
+> - **Done: pack CI.** On every change, each pack's samples go through its
+>   own pipelines (routed as ingest routes them) and must meet their
+>   expectations, every rule listed for a sample must fire on it, and every
+>   search and dashboard query runs against the parsed samples in ClickHouse;
+>   a dashboard that shows nothing fails (`tests/test_pack_ci.py`,
+>   `tests/test_pack_ci_live.py`).
+> - **Done: the first six packs:** Linux (auth.log, auditd, syslog), Web
+>   servers (nginx, Apache), AWS (CloudTrail, VPC Flow Logs), identity (Okta,
+>   Google Workspace), Windows (Security log, Sysmon; NXLog or Winlogbeat
+>   JSON) and Kubernetes (audit log, CRI container logs): 12 pipelines, 27
+>   rules, 12 searches (6 alert templates, shipped disabled) and 6
+>   dashboards.
+> - **Done: Packs UI.** Settings → Content Packs: the catalogue with
+>   install state, a pack's contents and plan, install / upgrade (optionally
+>   overwriting local changes) and remove; a Playwright spec installs the
+>   Web servers pack, sends an nginx line and sees it parsed.
+> - **Done: contributor guide and template.** [docs/packs.md](./packs.md)
+>   and `packages/packs/_template` (a test keeps the template a working
+>   pack).
+> - **Changed along the way:** pipeline paths can index lists
+>   (`field("attrs.target.0.id")`), which the Okta, Workspace and Kubernetes
+>   formats need.
+>
+> **Not done** (tracked in [ROADMAP.md](./ROADMAP.md)): packs come from the
+> catalogue shipped with the deployment (no registry, signing or
+> per-tenant uploads); an install that fails part-way is not rolled back
+> (objects written so far stay, and no manifest is saved); a pack's rules
+> are all installed enabled (no choosing a subset); an object kept on
+> removal shows as a conflict if the pack is installed again; Windows
+> events must arrive as JSON (no native XML or Windows Event Forwarding);
+> the Workspace pipeline reads the first event of each activity; CRI
+> partial lines are not joined (Vector's `kubernetes_logs` source joins
+> them); no shipped pack uses a lookup table yet.
+
 ### Deliverables
 
 1. **Pack format:** a versioned directory containing pipelines (Phase 4),
@@ -684,6 +825,79 @@ contribute most.
 
 **Goal:** the plumbing that makes every AI feature safe, private, auditable
 and measurable.
+
+> **Status: done (2026-11-19), with one acceptance criterion awaiting a
+> human sign-off and the gaps listed below.** Guide: [AI](./ai.md).
+>
+> | Acceptance criterion | Result |
+> |---|---|
+> | A security review signs off on data flow and tenant isolation of AI calls | **Reviewed, not yet signed off.** An independent review (by an AI reviewer, of the code, not a penetration test) found one high, two medium and several low issues, listed below; all are fixed, each with a test. Signing off still needs a person on the project's security side. |
+> | AI can be disabled per tenant and globally, verified by route tests | **Met.** `tests/routes_tests/test_ai_assistant_router.py` runs on the live stack in CI. It checks that with the deployment's AI off a tenant can't switch it on, that `/v1/ai/ask` then sends nothing to a model and audits nothing, and that other tenants' AI routes are refused. The per-tenant switch with AI on is covered in `tests/test_ai_api.py` (a fake provider), and both were run by hand on the live stack against a scripted stand-in. |
+>
+> - **Done: provider interface** (`apps/api/ai/providers/`). One chat and
+>   tool-calling interface, with adapters for OpenAI-compatible endpoints,
+>   Anthropic (the official SDK) and Ollama. Providers are configured in
+>   `config/ai.yml`, with keys read from named environment variables. No
+>   provider is configured and AI is off by default;
+>   `LOGFORGE_AI_ENABLED=false` switches it off globally.
+> - **Done: grounding through tools.** The model sees data only through
+>   four read-only tools: run a LogforgeQL query, fetch an alert, fetch a
+>   case, look up an indicator. Each tool call is authorised as the HTTP
+>   request it stands for, with the asking person's roles in their tenant.
+> - **Done: citations.** Every item a tool returns gets an id. The answer's
+>   citations are checked: an uncited sentence, a citation no tool issued, or
+>   no citations at all is flagged. The UI shows each citation as a link to
+>   its event, alert, case, indicator or query.
+> - **Done: data controls.**
+>   - Configured fields and secret-looking values are redacted before
+>     anything is sent: the question, every tool result and every tool
+>     error.
+>   - AI needs a per-tenant opt-in as well as the global switch.
+>   - Every answer says whether an external model answered it.
+> - **Done: audit and cost controls.**
+>   - Every prompt, response, tool call, tool result and error is written to
+>     `ai_audit_mt` (migration 025) as sent, kept 90 days by default.
+>   - Monthly token budget, per-request cap and per-minute rate limit; a
+>     tenant can lower them, not raise them.
+> - **Done: evaluation wiring.** Two single-call features, `nl2query` and
+>   `summarise`, run against the Phase 0 datasets. A recorded provider
+>   replays a real model's answers in CI, and `tests/test_ai_eval_gate.py`
+>   fails any feature below its baseline.
+> - **Done: fallback.** With AI off, `/v1/ai/ask` gives the rule-based NLQ
+>   answer to those allowed `/v1/ai/query`; the existing `/v1/ai/*` routes
+>   are unchanged.
+> - **Found by the security review and fixed:**
+>   - **High:** the rule-based fallback reads logs, alerts and security
+>     events with no per-intent permission checks. It also put service names
+>     from the tenant's logs into SQL unescaped: a crafted service name
+>     dropped the tenant filter. This phase had made it reachable with
+>     `ai:read`. It now needs `ai:write`, and only plain service names reach
+>     the SQL.
+>   - **Medium:** redaction ran after long values were cut, so a private key
+>     cut past its end got through. Dotted field names never matched nested
+>     tool output. Common secret forms were missed: JSON-style pairs,
+>     `access_token=`, Basic credentials, cookies, credentials in URLs, AWS
+>     secret keys, GitLab tokens.
+>   - **Medium-low:** usage was written only when a request ended, so
+>     concurrent requests could overshoot the monthly budget.
+>   - **Low:** Log Explorer links from other sites ran their query on load;
+>     the audit TTL was altered in every new process; calls over the limit
+>     and cancelled requests weren't audited.
+>
+> **Not done** (tracked in [ROADMAP.md](./ROADMAP.md)):
+> - **No recorded model evaluations yet.** Recording needs a model API key;
+>   until then the gate reports both features as skipped.
+> - **Rate limits aren't shared:** the rate limit and the in-request budget
+>   check are per API process, and parallel requests can overshoot the
+>   budget by one model call each. A shared counter is needed.
+> - **Renamed values escape field-name redaction:** a value renamed by a
+>   query keeps only the text-pattern redaction.
+> - **API key scopes are not enforced** for any route (pre-existing): AI
+>   calls with an API key get the service account's roles.
+> - **Prompt injection is mitigated, not prevented:** injected log text can
+>   still distort an answer or spend budget.
+> - **The rule-based fallback still checks no per-intent permissions**, so
+>   it stays limited to `ai:write`.
 
 ### Deliverables
 
@@ -720,6 +934,51 @@ and measurable.
 
 **Goal:** the first AI features, each useful on day one and each measured.
 
+> **Status: built (2026-11-20); the model's evaluation targets are not yet
+> measured.** Guide: [AI](./ai.md#features-phase-9).
+>
+> | Acceptance criterion | Result |
+> |---|---|
+> | Each feature meets its evaluation target and has its numbers in the docs | **Not met yet.** Every evaluation set, scorer, recorder and CI test exists, and the AI-off numbers are in the docs. A model's numbers need its answers recorded, which needs a model API key; none is available to this work. Until then, the targets that are about the model (≥ 85% execution accuracy; analyst-rated triage) are unmeasured. |
+> | Every feature works (with reduced capability) when AI is disabled | **Met.** Each has a fallback, covered by unit and API tests and by Playwright spec 17 on the stack as it ships (AI off). |
+>
+> - **Done: natural language → LogforgeQL** (`ai/nl2query.py`,
+>   `POST /v1/ai/nl2query`, the Log Explorer's ask box). The model gets the
+>   field catalogue (names, types, redacted examples), answers with a query
+>   and an explanation, must compile (one repair round), and unseen fields
+>   are flagged. Fallback: a rule-based translator.
+>   - Eval: 661 question/query pairs over three schemas (auth 242, http 214,
+>     dns 205), scored by execution against ClickHouse in CI. Fallback: 0.4%,
+>     9.8%, 11.2%. Model: not recorded. Target ≥ 85%.
+> - **Done: triage summaries** (`ai/triage.py`, `POST /v1/ai/triage`, panels
+>   on security events and case detail). Evidence through the read-only
+>   tools as the caller; five sections; uncited model sentences are removed.
+>   Fallback: a template, cited by construction.
+>   - Eval: 20 alerts and cases, 0 uncited sentences, 100% of required facts
+>     (template). No analyst-rated set yet.
+> - **Done: pipeline drafts** (`ai/pipeline_draft.py`,
+>   `POST /v1/ai/pipeline-draft`, the pipeline editor). Every draft is
+>   simulated before it is offered; the model gets one repair round with
+>   the failures; the heuristic draft wins when it parses more. Fallback: a
+>   heuristic drafter over candidate parsers.
+>   - Eval: the 14 content-pack sample files as held-out formats (85
+>     lines): 100% of lines parsed and 91.4% of recoverable values extracted
+>     (heuristic).
+> - **Done: explain this event** (`ai/explain.py`, `POST /v1/ai/explain`,
+>   Explain on every Log Explorer row): reference entries, matching shipped
+>   rules, intel, field meanings, follow-up queries; all cited.
+>   - Eval: 83 pack sample events, 0 uncited, 90.4% identified, 100% of the
+>     28 expected rules named (template).
+> - **Gaps:**
+>   - No model answers recorded for any of the four (needs an API key).
+>   - Triage has no analyst-rated helpfulness or accuracy set.
+>   - The NL2Query sets are generated from templates, more regular than
+>     analysts' questions.
+>   - The pipeline and explain sets were in view while the heuristics and
+>     reference were written.
+>   - `services/nlq_processor.py` and `services/ai_service.py` are not
+>     replaced; the new features sit beside them.
+
 ### Deliverables
 
 1. **Natural language → LogforgeQL.** The user asks a question; the AI
@@ -755,6 +1014,35 @@ template answers are replaced by grounded ones).
 **Goal:** move from answering questions to doing investigative work, under
 human control.
 
+> **Status: done (2026-11-20) for the evaluation sets as built; model
+> answers not recorded.** Guide: [AI](./ai.md#investigation-and-authoring-phase-10).
+>
+> | Acceptance criterion | Result |
+> |---|---|
+> | On the evaluation scenarios, the copilot finds the root-cause events in >= 80% of cases with no fabricated evidence | **Met without AI**: 90% (root cause among its candidates), 80% first, 0 fabricated, on 20 scenarios seeded into ClickHouse (`tests/test_copilot_eval_live.py`, in CI). The model path isn't recorded; it can't fabricate evidence (root causes must be fetched events, sentences must cite). |
+> | >= 70% of AI-drafted rules for the evaluation behaviours pass the gate on the first or second attempt; 0% are enabled without passing | **Met without AI**: 90% of heuristic drafts pass (all on the first attempt) on 20 behaviours. Model drafts aren't recorded. **0% enabled without passing** holds by construction: enabling re-runs the gate, the samples and a backtest, and refuses anything that fails (tested). |
+>
+> - **Done: investigation copilot** (`ai/copilot.py`): plan, approved and
+>   editable read-only searches, cited timeline, signals, root-cause
+>   candidates, hypotheses, proposed pivots; pinning and conclusions are the
+>   analyst's, and pins can be taken back (new `unpin_evidence` case action).
+> - **Done: detection drafting gated by tests** (`ai/rule_draft.py`): fixture
+>   gate + samples + known-good event, two attempts; enable re-checks and
+>   backtests.
+> - **Done: case reports** (`ai/case_report.py`): management summary and
+>   post-incident review, cited, as Markdown.
+> - **Done: grounded RCA** (`ai/rca.py`): the statistical result as cited
+>   input, a corroborating search, the model's cited analysis replacing the
+>   heuristic text where a provider is configured.
+> - **Gaps:**
+>   - No model answers recorded (needs an API key), so the targets are met
+>     by the fallbacks, not shown for the model.
+>   - The scenarios and behaviours were written alongside the signals and
+>     the drafter.
+>   - Case reports have no evaluation set.
+>   - The copilot's signals are keyword and rule based; it misses a root
+>     cause with no known signal (the phishing download scenarios).
+
 ### Deliverables
 
 1. **Investigation copilot.** From a case or an entity, the copilot plans
@@ -785,6 +1073,35 @@ human control.
 
 **Goal:** see risk per user, host, IP and service, not just per alert.
 
+> **Status: done (2026-11-20).** Guide: [Entities](./entities.md).
+>
+> | Acceptance criterion | Result |
+> |---|---|
+> | On the evaluation corpus, the compromised entities rank in the top 5 by risk within the scenario window | **Met in 10 of 10 scenarios**, all within the top 4 (`tests/test_entity_risk_eval.py`, every change). 14 days and ~930 alerts per scenario, with daily churn, recurring admin activity, an internal scanner, failed-login bursts and weak intel hits. |
+> | Pattern clustering reduces 1 M log lines to a browsable set of templates in under 30 s | **Met**: 1 M lines (80 message shapes, plus a 200 k-line baseline) to 20 templates in 8.5 s on 4 vCPUs (`tests/bench/patterns_bench.py`, `docs/benchmarks/2026-11-20-patterns.json`). |
+>
+> - **Done: entity model** (migration 026): users, hosts, addresses, services
+>   and cloud accounts with first/last seen and event counts, and the
+>   entities seen together, kept by materialized views; `GET /v1/entities`.
+> - **Done: entity pages:** risk, why, anomalies, events, alerts, cases,
+>   related entities; the copilot starts from an entity.
+> - **Done: risk scoring** (`entity_risk.py`): severity with decay,
+>   diminishing repeats, rarity across the tenant, ATT&CK progression within
+>   24 hours shared by linked entities, intel and anomalies, with factors.
+> - **Done: behaviour baselines** (`entity_baselines.py`): hours, new
+>   countries, volume (the 3-sigma rule of `services/anomaly_detector.py`),
+>   peer-group spread.
+> - **Done: log pattern clustering** (`log_patterns.py`, `| patterns [new|rare]`),
+>   with new-pattern alerts through saved searches.
+> - **Gaps:**
+>   - The risk scenarios were written by the scoring's author.
+>   - Risk is computed per request from the last 14 days of alerts (up to
+>     20,000, cached a minute), not stored per entity with history.
+>   - Baselines feed risk only for the top 30 users, hosts and addresses.
+>   - Peer groups are all entities of a type, not learned groups.
+>   - `services/multi_metric_anomaly_detector.py` is not used.
+>   - `| patterns` reads up to 1 M lines of the window.
+
 ### Deliverables
 
 1. **Entity model:** entities extracted from events (user, host, IP, service,
@@ -813,6 +1130,40 @@ human control.
 ## Phase 12 — Storage tiers and scale
 
 **Goal:** make long retention cheap and the platform resilient.
+
+> **Status: done, one criterion not met (2026-11-20).** Guides: [Storage](./storage.md), [Deployment](./deployment.md).
+>
+> | Acceptance criterion | Result |
+> |---|---|
+> | One year of retention for a 50 GB/day tenant costs less than a published target (documented reference architecture) | **Not met.** Target $2,000/month, set before measuring; reference architecture $3,030/month (`scripts/reference_architecture.py`). Storage for the year is $65/month (measured: 29 B/event in ClickHouse, 33 B in Parquet). Compute is the rest, mostly API replicas: 343 events/s each, measured on a shared 4-vCPU host. |
+> | Losing one ClickHouse replica or API pod causes no data loss and no downtime in a chaos test | **Met** after three fixes the test found (`scripts/chaos_test.py`, HA compose). No acknowledged event lost in 10 runs with all fixes; every gap without a successful write or read under 10 s except two runs (a busy host; a reverted config). |
+>
+> - **Done: tiered storage:** hot (local disk), warm (S3 volume), cold
+>   (Parquet). Retention per tenant and data type; days are archived,
+>   verified, then deleted.
+> - **Done: archive search and rehydration:** LogforgeQL over Parquet for up
+>   to a year; rehydration without double-counting entities.
+> - **Done: cost visibility:** ingest by source and level, storage per
+>   tier, steady-state cost, noise to drop. Settings → Storage & Retention.
+> - **Done: scale-out:** HA compose with a Replicated database, Keeper, API
+>   replicas and HAProxy. Durable ingest: Kafka acknowledges before the API
+>   answers; the consumer commits only written batches.
+> - **Done: Helm chart:** API, UI, migrations hook, retention and backup
+>   CronJobs. Linted and rendered in CI; not installed on a cluster here.
+> - **Done: backup and restore:** BACKUP/RESTORE to S3 through a named
+>   collection, full and incremental, verified table by table in CI.
+> - **Fixed on the way:**
+>   - the saved-search scheduler failed every tick after a search's
+>     first run;
+>   - three ways an acknowledged batch could be lost;
+>   - HAProxy marking busy replicas down.
+> - **Gaps:**
+>   - the cost target;
+>   - the Replicated database engine is experimental in ClickHouse 23.8;
+>   - the HA compose runs one Keeper and one Redpanda broker (production:
+>     three each);
+>   - ingest delivery is at least once, so failures leave duplicates;
+>   - warm and hot sizes per tenant are estimates.
 
 ### Deliverables
 
@@ -845,6 +1196,46 @@ human control.
 
 **Goal:** act on findings, not only observe them (SOAR-lite).
 
+> **Status: done, compliance reports not yet (2026-11-20).** Guide: [Response automation](./response.md).
+>
+> | Acceptance criterion | Result |
+> |---|---|
+> | A playbook can take an alert to a Slack notification and a Jira ticket, and a resolved ticket closes the case, covered by an integration test with mocked services | **Met** (`tests/test_response_acceptance_live.py`, in CI's live job against ClickHouse). Slack and Jira are mocked. The stores, case service, dispatcher and webhook route are real. |
+>
+> - **Done: integrations:**
+>   - webhook, Slack, Teams, PagerDuty, Opsgenie, email, Jira and GitHub
+>     issues, and containment through the customer's own automation;
+>   - secrets sealed at rest and never returned;
+>   - templates that can't reach Python internals or be injected from logs;
+>   - private addresses refused unless allowed.
+>   Settings → Integrations.
+> - **Done: playbooks:**
+>   - YAML triggered by alerts and cases;
+>   - enrich, action, search and approval steps;
+>   - a containment step refused unless an approval comes before it;
+>   - run once per alert or case, with one dispatcher across replicas.
+>   Security → Playbooks, with approvals at the top.
+> - **Done: bi-directional ticket sync:** Jira and GitHub, by signed webhook
+>   or polling; the ticket wins when both moved. Tickets on the case page.
+> - **Done: exports and reports:**
+>   - ATT&CK Navigator layer;
+>   - a security operations report as JSON, CSV or PDF;
+>   - daily, weekly or monthly reports by email.
+>   Security → Reports.
+> - **Fixed on the way:**
+>   - five bugs the unit tests' fakes hid, found by running against
+>     ClickHouse (see the [guide](./response.md#how-it-was-tested));
+>   - case verdicts on alerts were written asynchronously, so a closed
+>     case's page could still show its alerts as new;
+>   - an integration's Test button now sends containment requests as a dry
+>     run.
+> - **Gaps:**
+>   - compliance reports;
+>   - ticket sync for systems other than Jira and GitHub;
+>   - no built-in containment connectors;
+>   - playbooks are linear (no branches or parallel steps);
+>   - approvals are decided in Logforge only.
+
 ### Deliverables
 
 1. **Actions:** webhook, Slack, Microsoft Teams, PagerDuty/Opsgenie, email,
@@ -868,6 +1259,49 @@ human control.
 ## Phase 14 — Enterprise readiness
 
 **Ongoing, pulled forward when users ask for it.**
+
+> **Status: first pass done (2026-11-20); SAML, field-level access, admin UI pages and self-tracing not yet.** Guides: [Enterprise access](./enterprise.md), [Security](./security.md), [Self-monitoring](./deployment.md#self-monitoring).
+>
+> - **Done: SSO.**
+>   - OIDC per tenant: authorization code with PKCE, ID tokens checked
+>     against the IdP's keys.
+>   - Groups map to tenant roles, and the IdP stays the source of the role.
+>   - Accounts are created on first sign-in. An account with access outside
+>     the tenant can't sign in through the tenant's IdP.
+> - **Done: SCIM 2.0.** Users, roles and deprovisioning, with tenant-scoped
+>   hashed tokens.
+> - **Done: fine-grained RBAC.**
+>   - Custom roles are stored and enforced.
+>   - Data scopes limit which services' logs a user reads. ClickHouse
+>     enforces them on every query of the request (`additional_table_filters`),
+>     tested with injection attempts.
+>   - Per-field access isn't done.
+> - **Done: auth flows.**
+>   - Password reset, invitation and verification emails.
+>   - A reset ends every session; an accepted invitation grants its role.
+>   - Session revocation already worked.
+> - **Done: security hardening.**
+>   - In CI: `npm audit` with a reviewed, expiring allowlist; Trivy image
+>     scans; SPDX SBOMs.
+>   - A cosign-signed release workflow (not run yet: it needs a tag).
+>   - A published threat model.
+> - **Done: self-monitoring.** Prometheus and a Grafana dashboard for the
+>   API and ingest. OpenTelemetry self-tracing isn't done.
+> - **Fixed on the way:**
+>   - email verification accepted any token;
+>   - `/v1/users` listed every user on the platform to any tenant admin;
+>   - custom roles were validated and then dropped;
+>   - the requests-in-flight metric was a counter;
+>   - Next.js 14.0.3 moved to 14.2.35, and the unused image optimizer was
+>     turned off;
+>   - SSO provider storage built its secret box without a key, caught by a
+>     live test.
+> - **Not done:**
+>   - SAML;
+>   - MFA enforcement;
+>   - field-level access, and scopes for traces, metrics and alerts;
+>   - the admin UI's billing, features and support pages;
+>   - Next.js 15.
 
 - SSO: OIDC first, then SAML; SCIM user provisioning.
 - Fine-grained RBAC: per-data-source and per-field access, roles per tenant.

@@ -1,0 +1,53 @@
+# sshd and sudo lines from /var/log/auth.log (or /var/log/secure).
+# Logins map to OCSF Authentication (3002) and keep the legacy fields
+# (event_type, result, user), so the library's brute-force rules work too.
+name: linux-auth
+description: sshd logins and sudo commands from auth.log
+routing: {services: [auth, authlog, secure]}
+processors:
+  - syslog: {field: msg}
+    ignore_failure: true
+  - regex:
+      field: msg
+      target: attrs._auth
+      patterns:
+        - '^(?P<result>Failed|Accepted) (?P<method>\S+) for (?:invalid user )?(?P<user>\S+) from (?P<ip>\S+) port (?P<port>\d+)'
+        - '^(?P<result>Invalid) user (?P<user>\S+) from (?P<ip>\S+)(?: port (?P<port>\d+))?'
+    if: "service == 'sshd'"
+    ignore_failure: true
+  - script:
+      source: |
+        attrs.ocsf.class_uid = 3002
+        attrs.ocsf.class_name = 'Authentication'
+        attrs.ocsf.category_uid = 3
+        attrs.ocsf.activity_id = 1
+        attrs.ocsf.status_id = 1 if attrs._auth.result == 'Accepted' else 2
+        attrs.ocsf.status = 'Success' if attrs._auth.result == 'Accepted' else 'Failure'
+        attrs.ocsf.actor.user.name = attrs._auth.user
+        attrs.ocsf.src_endpoint.ip = attrs._auth.ip
+        attrs.event_type = 'authentication'
+        attrs.result = 'success' if attrs._auth.result == 'Accepted' else 'failed'
+        attrs.auth_failure = 'invalid_user' if attrs._auth.result == 'Invalid' or contains(msg, 'invalid user') else ('wrong_' + lower(attrs._auth.method) if attrs._auth.result == 'Failed' else None)
+        attrs.user = attrs._auth.user
+        src_ip = attrs._auth.ip
+        user_id = attrs._auth.user
+        del attrs._auth
+    if: "exists('attrs._auth')"
+  - regex:
+      field: msg
+      target: attrs._sudo
+      patterns:
+        - '^\s*(?P<user>\S+) : (?:.*?; )?TTY=(?P<tty>\S+) ; PWD=(?P<pwd>.*?) ; USER=(?P<target>\S+) ; COMMAND=(?P<command>.*)$'
+    if: "service == 'sudo'"
+    ignore_failure: true
+  - script:
+      source: |
+        attrs.sudo_user = attrs._sudo.user
+        attrs.sudo_target = attrs._sudo.target
+        attrs.sudo_command = attrs._sudo.command
+        attrs.sudo_tty = attrs._sudo.tty
+        user_id = attrs._sudo.user
+        del attrs._sudo
+    if: "exists('attrs._sudo')"
+  - compact: {field: attrs.ocsf, values: [""]}
+    ignore_failure: true

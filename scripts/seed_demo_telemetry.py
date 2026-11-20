@@ -15,7 +15,9 @@ for screenshots and demos (see scripts/capture_screenshots.js).
   traffic to two of the C2 servers that ingest-time matching flags;
 * an ingest pipeline for a payments gateway's key=value lines (parse,
   convert, mask card numbers and emails), with traffic through it and two
-  malformed lines in its dead-letter queue.
+  malformed lines in its dead-letter queue;
+* a "Service health" dashboard built from LogforgeQL panels, with Service
+  and Level variables.
 
 Run after scripts/bootstrap_demo.py, against a running stack:
 
@@ -204,7 +206,7 @@ def work_a_case(source_ip: str):
         time.sleep(2)
     else:
         print("no case opened for the brute force (is detection running?)")
-        return
+        return None
     case_id = found["cases"][0]["id"]
     call("POST", f"/v1/security/cases/{case_id}/assign", {"assignee": ANALYST})
     call("POST", f"/v1/security/cases/{case_id}/status", {"status": "investigating"})
@@ -215,6 +217,139 @@ def work_a_case(source_ip: str):
         "kind": "search", "ref": source_ip, "title": "Everything from the source address"})
     call("POST", f"/v1/security/cases/{case_id}/tags", {"add": ["bastion", "credential-access"]})
     print(f"case worked: {case_id}")
+    return case_id
+
+
+# Response automation (Phase 13). Hosts are reserved .example names: nothing
+# outside the stack is called, and both playbooks are left disabled so the
+# dispatcher doesn't start them on new alerts.
+INTEGRATIONS = [
+    {"name": "SOC Slack", "kind": "slack", "config": {},
+     "secrets": {"webhook_url": "https://hooks.slack.example/services/T0DEMO/B0DEMO/demo"}},
+    {"name": "Security Jira", "kind": "jira_issue",
+     "config": {"base_url": "https://acme.atlassian.example", "email": "secops-bot@acme.example", "project": "SEC"},
+     "secrets": {"api_token": "demo-token", "webhook_secret": "demo-webhook-secret"}},
+    {"name": "Firewall", "kind": "containment_webhook", "config": {"url": "https://soar.acme.example/contain"},
+     "secrets": {"signing_secret": "demo-signing-secret"}},
+]
+RESPONSE_PLAYBOOK = """name: Brute force response
+trigger:
+  on: alert
+  when: alert.severity in ["high", "critical"] and alert.rule_id == "ssh_brute_force"
+steps:
+  - id: intel
+    enrich: {indicator: "{{ alert.entities.src_ip.0 }}"}
+  - id: notify
+    action: {integration: SOC Slack, inputs: {text: "{{ alert.title }} ({{ steps.intel.output.verdict }})"}}
+  - id: ticket
+    action: {integration: Security Jira, inputs: {summary: "{{ alert.title }}"}}
+    link_case: true
+  - id: approve
+    approval: {prompt: "Block {{ alert.entities.src_ip.0 }} at the firewall?", timeout: 4h}
+  - id: block
+    action: {integration: Firewall, inputs: {action: block_ip, target: "{{ alert.entities.src_ip.0 }}"}}
+"""
+CONTAIN_PLAYBOOK = """name: Contain a brute-force source
+trigger:
+  on: alert
+  when: alert.severity == "critical" and alert.rule_id == "ssh_brute_force"
+steps:
+  - id: intel
+    enrich: {indicator: "{{ alert.entities.src_ip.0 }}"}
+  - id: approve
+    approval: {prompt: "Block {{ alert.entities.src_ip.0 }} at the firewall for 24 hours?", timeout: 4h}
+  - id: block
+    action: {integration: Firewall, inputs: {action: block_ip, target: "{{ alert.entities.src_ip.0 }}"}}
+"""
+
+
+def seed_response(case_id):
+    """Integrations, two playbooks, and a containment waiting for approval on the case."""
+    existing = {i["name"]: i["id"] for i in call("GET", "/v1/integrations")["integrations"]}
+    for item in INTEGRATIONS:
+        if item["name"] in existing:
+            call("PUT", f"/v1/integrations/{existing[item['name']]}", item)
+        else:
+            call("POST", "/v1/integrations", item)
+    playbooks = {p["name"]: p["id"] for p in call("GET", "/v1/playbooks")["playbooks"]}
+    ids = {}
+    for definition in (RESPONSE_PLAYBOOK, CONTAIN_PLAYBOOK):
+        name = definition.split("\n", 1)[0].split(": ", 1)[1]
+        body = {"definition": definition, "enabled": False}
+        saved = call("PUT", f"/v1/playbooks/{playbooks[name]}", body) if name in playbooks else \
+            call("POST", "/v1/playbooks", body)
+        ids[name] = saved["playbook"]["id"]
+    if case_id and not call("GET", "/v1/playbooks/runs?status=waiting_approval")["runs"]:
+        alert_ids = call("GET", f"/v1/security/cases/{case_id}")["case"]["alert_ids"]
+        run = call("POST", f"/v1/playbooks/{ids['Contain a brute-force source']}/run",
+                   {"alert_id": alert_ids[0], "case_id": case_id})["run"]
+        print(f"playbook run {run['id']}: {run['status']}")
+    print(f"response: {len(INTEGRATIONS)} integrations, {len(ids)} playbooks")
+
+
+def seed_access():
+    """Phase 14: a scoped custom role (no members, so the demo user isn't limited), an SSO
+    provider on a reserved .example host, and a SCIM token for provisioning."""
+    roles = {r["name"]: r["id"] for r in call("GET", "/v1/roles/custom")["roles"]}
+    for name, body in {
+        "Payments team": {"description": "Payments engineers: their services' logs and dashboards",
+                          "permissions": ["dashboards:read,write:tenant"], "services": ["payments*", "checkout"]},
+        "Auditor": {"description": "Read-only reports and audit trail", "permissions": ["reports:read:tenant",
+                                                                                         "audit:read:tenant"]},
+    }.items():
+        body = {"name": name, **body}
+        call("PUT", f"/v1/roles/custom/{roles[name]}", body) if name in roles else call("POST", "/v1/roles/custom", body)
+    providers = {p["name"]: p["id"] for p in call("GET", "/v1/sso/providers")["providers"]}
+    sso = {"name": "Acme Okta", "issuer": "https://acme.okta.example", "client_id": "0oa1logforge",
+           "client_secret": "demo-client-secret", "groups_claim": "groups",
+           "role_mapping": {"secops": "security_analyst", "platform-admins": "tenant_admin", "sre": "devops_engineer"},
+           "default_role": "viewer", "allowed_domains": ["acme.example"], "enabled": True}
+    if "Acme Okta" in providers:
+        call("PUT", f"/v1/sso/providers/{providers['Acme Okta']}", sso)
+    else:
+        call("POST", "/v1/sso/providers", sso)
+    if not call("GET", "/v1/scim/tokens")["tokens"]:
+        call("POST", "/v1/scim/tokens", {"name": "Okta provisioning"})
+    print("access: 2 custom roles, 1 SSO provider, SCIM token")
+
+
+DASHBOARD = "Service health"
+PANELS = [
+    ("Events", "metric", {"w": 1, "h": 1}, '| where service = $service | stats count() as events'),
+    ("Errors", "metric", {"w": 1, "h": 1}, '| where service = $service and level = "error" | stats count() as errors'),
+    ("Distinct hosts", "metric", {"w": 1, "h": 1}, '| where service = $service | stats dc(host) as hosts'),
+    ("Error rate", "metric", {"w": 1, "h": 1},
+     '| where service = $service | stats count() as total, count(if(level = "error", 1, null)) as errors '
+     '| eval error_rate = round(100 * errors / total, 1) | fields error_rate'),
+    ("Events by service", "line_chart", {"w": 2, "h": 2},
+     '| where service = $service and level = $level | timechart span=5m count() by service'),
+    ("Top messages", "bar_chart", {"w": 2, "h": 2},
+     '| where service = $service and level = $level | top limit=6 msg'),
+    ("By host and level", "table", {"w": 4, "h": 2},
+     '| where service = $service | stats count() as events, count(if(level = "error", 1, null)) as errors '
+     'by host, level | sort -events | head 12'),
+]
+
+
+def seed_dashboard():
+    """A dashboard made of LogforgeQL panels, with variables (Phase 6)."""
+    existing = call("GET", "/v1/dashboards")
+    for d in existing.get("dashboards", existing) if isinstance(existing, dict) else existing:
+        if isinstance(d, dict) and d.get("name") == DASHBOARD:
+            call("DELETE", f"/v1/dashboards/{d.get('id') or d.get('dashboard_id')}")
+    created = call("POST", "/v1/dashboards", {
+        "name": DASHBOARD, "description": "Built from LogforgeQL queries",
+        "variables": [
+            {"name": "service", "label": "Service", "type": "query", "query": "| stats count() by service",
+             "include_all": True, "default": "*"},
+            {"name": "level", "label": "Level", "type": "custom", "values": ["error", "warn", "info", "debug"],
+             "include_all": True, "default": "*"}]})
+    dashboard_id = created["dashboard_id"]
+    for i, (name, kind, size, query) in enumerate(PANELS):
+        call("POST", f"/v1/dashboards/{dashboard_id}/widgets", {
+            "name": name, "type": kind, "query_definition": {"logql": query}, "size": size,
+            "position": {"x": i, "y": 0}, "refresh_interval": 300})
+    print(f"dashboard: {dashboard_id}")
 
 
 if __name__ == "__main__":
@@ -226,4 +361,7 @@ if __name__ == "__main__":
     brute_source = seed_attacks()
     seed_threat_intel()
     seed_pipeline()
-    work_a_case(brute_source)
+    case_id = work_a_case(brute_source)
+    seed_dashboard()
+    seed_response(case_id)
+    seed_access()

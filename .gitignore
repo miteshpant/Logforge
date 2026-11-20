@@ -70,6 +70,8 @@ Thumbs.db
 # Logs
 logs/
 *.log
+# Content pack samples are test data (pack CI reads them)
+!packages/packs/*/samples/*.log
 
 # Runtime data
 pids/
@@ -143,3 +145,6 @@ playwright-report/
 test-results/
 blob-report/
 site/
+
+# AI evaluation run output (per-item results)
+tests/eval/ai/results/

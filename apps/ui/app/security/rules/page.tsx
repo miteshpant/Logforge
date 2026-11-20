@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
+import RuleDraftPanel from '@/components/ai/RuleDraftPanel'
 import { apiClient } from '@/lib/api'
 import {
   Shield,
@@ -75,6 +76,8 @@ export default function SigmaRulesPage() {
     logsource: { category: '', product: '', service: '' },
     detection: {}
   })
+
+  const [showDraft, setShowDraft] = useState(false)
 
   const loadRules = async () => {
     try {
@@ -288,14 +291,25 @@ export default function SigmaRulesPage() {
               Manage Sigma rules for threat detection
             </p>
           </div>
-          <button
-            onClick={() => { setIsCreating(true); resetForm(); }}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Create Rule
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              data-testid="rule-draft-toggle"
+              onClick={() => setShowDraft(v => !v)}
+              className="flex items-center gap-2 px-4 py-2 border border-white/10 text-slate-200 hover:bg-white/5 rounded-lg font-medium transition-colors"
+            >
+              Draft a rule
+            </button>
+            <button
+              onClick={() => { setIsCreating(true); resetForm(); }}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Create Rule
+            </button>
+          </div>
         </div>
+
+        {showDraft && <RuleDraftPanel onEnabled={() => loadRules()} />}
 
         {/* Stats */}
         <div className="grid grid-cols-4 gap-4">

@@ -1,0 +1,13 @@
+<!--
+  Storage tiers (Phase 12): let the API's ClickHouse user use the
+  `logforge_archive` named collection (config.d/s3_storage.xml) in s3(),
+  which reads and writes the Parquet archives. Merged with the user the
+  image's entrypoint creates from CLICKHOUSE_USER.
+-->
+<clickhouse>
+  <users>
+    <logforge>
+      <named_collection_control>1</named_collection_control>
+    </logforge>
+  </users>
+</clickhouse>

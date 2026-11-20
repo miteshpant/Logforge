@@ -97,6 +97,14 @@ def test_list_filters_and_pages():
     assert "count() AS total" in d.db.calls[1][0]
 
 
+def test_list_by_entity_matches_the_quoted_value():
+    d = dao([])
+    d.db.rows = []
+    run(d.list("acme", entity='1.2.3.4'))
+    sql, params = d.db.calls[0]
+    assert "positionUTF8(entities, %(entity)s) > 0" in sql and params["entity"] == '"1.2.3.4"'
+
+
 def test_find_open_case_for_a_group_key():
     d = dao([])
     run(d.find_open_by_group_key("acme", "src_ip=203.0.113.9", T0 - timedelta(hours=24)))

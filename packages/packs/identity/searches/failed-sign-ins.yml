@@ -1,0 +1,10 @@
+name: Repeated failed sign-ins (Okta and Workspace)
+description: Alert template. Ten or more failed sign-ins for one user in an hour, across both identity providers. Enable it and add a channel.
+query: '| where service in ["okta", "gworkspace"] and attrs.login_failure = "yes" | stats count() as failures, dc(src_ip) as sources, values(service) as providers by user_id | where failures >= 10'
+every: 15m
+window: 1h
+enabled: false
+alert:
+  condition: {kind: rows, op: gt, value: 0}
+  severity: medium
+  throttle_minutes: 60

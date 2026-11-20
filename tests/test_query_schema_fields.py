@@ -31,7 +31,7 @@ def test_nested_attrs_paths_bind_each_key():
 
 def test_flat_attrs_keys_are_unchanged():
     sql, params = render("attrs.user")
-    assert "p_k0" not in params and sql.startswith("if(JSONHas(attrs, %(p_jsonkey)s)")
+    assert "p_k0" not in params and sql.startswith("if(JSONExtractString(attrs, %(p_jsonkey)s) != ''")
 
 
 def test_schema_fields_coalesce_explicit_and_mapped_sources():

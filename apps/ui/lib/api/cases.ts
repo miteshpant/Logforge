@@ -50,6 +50,8 @@ export interface CaseDetail {
   case: Case
   alerts: CaseAlert[]
   timeline: CaseEvent[]
+  /** Pins not taken back (Phase 10). */
+  evidence?: CaseEvent[]
 }
 
 export interface Evidence {
@@ -106,4 +108,9 @@ export async function updateCase(id: string, body: { title?: string; description
 export async function bulkCases(body: { case_ids: string[]; action: 'assign' | 'set_status' | 'tags';
   assignee?: string | null; status?: string; reason?: string; add?: string[]; remove?: string[] }) {
   return (await apiClient.post<{ updated: string[]; errors: Record<string, string> }>(`${BASE}/bulk`, body)).data
+}
+
+/** Take back a pin (Phase 10): it stays in the timeline, marked as taken back. */
+export async function unpinEvidence(id: string, evidenceId: string): Promise<Case> {
+  return (await apiClient.delete<Case>(`${BASE}/${encodeURIComponent(id)}/evidence/${encodeURIComponent(evidenceId)}`)).data as Case
 }

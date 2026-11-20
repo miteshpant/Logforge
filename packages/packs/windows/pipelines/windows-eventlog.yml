@@ -1,0 +1,73 @@
+# Windows event log records as JSON. NXLog's im_msvistalog + to_json puts the
+# event data at the top level (EventID, Channel, Hostname, TargetUserName, ...);
+# Winlogbeat nests it under winlog.event_data. Winlogbeat records are first
+# reshaped into the NXLog form, then both go through the same mapping.
+name: windows-eventlog
+description: Windows Security log and Sysmon (NXLog or Winlogbeat JSON)
+routing: {services: [windows, winlogbeat, nxlog, sysmon, wineventlog]}
+processors:
+  - json: {field: msg, target: attrs.win}
+  # Winlogbeat: winlog.event_data becomes the record, with the header fields copied in
+  - rename: {field: attrs.win, target_field: attrs.wlb}
+    if: "exists('attrs.win.winlog')"
+  - rename: {field: attrs.wlb.winlog.event_data, target_field: attrs.win}
+    if: "exists('attrs.wlb')"
+    ignore_failure: true
+  - script:
+      source: |
+        attrs.win.EventID = int(attrs.wlb.winlog.event_id)
+        attrs.win.Channel = attrs.wlb.winlog.channel
+        attrs.win.Hostname = attrs.wlb.winlog.computer_name if exists('attrs.wlb.winlog.computer_name') else attrs.wlb.host.name
+        attrs.win.EventTime = field('attrs.wlb.@timestamp')
+        attrs.win.Message = attrs.wlb.message
+    if: "exists('attrs.wlb')"
+  - remove: {field: attrs.wlb}
+    if: "exists('attrs.wlb')"
+  - date: {field: attrs.win.EventTime, formats: [ISO8601]}
+    ignore_failure: true
+  - regex: {field: attrs.win.Message, pattern: '^(?P<summary>[^\r\n.]+)'}
+    ignore_failure: true
+  - script:
+      source: |
+        attrs.event_id = int(attrs.win.EventID)
+        attrs.channel = attrs.win.Channel
+        attrs.sysmon = 'yes' if contains(str(attrs.win.Channel), 'Sysmon') else 'no'
+        host = attrs.win.Hostname
+        attrs.logon_type = int(attrs.win.LogonType) if exists('attrs.win.LogonType') else None
+        attrs.target_user = attrs.win.TargetUserName
+        attrs.target_domain = attrs.win.TargetDomainName
+        attrs.subject_user = attrs.win.SubjectUserName
+        attrs.logon_failure = 'yes' if attrs.event_id == 4625 else 'no'
+        attrs.failure_status = attrs.win.Status
+        attrs.group_name = attrs.win.TargetUserName if attrs.event_id in [4728, 4732, 4756] else None
+        attrs.member_name = attrs.win.MemberName
+        attrs.image = attrs.win.Image
+        attrs.parent_image = attrs.win.ParentImage
+        attrs.command_line = attrs.win.CommandLine
+        attrs.parent_command_line = attrs.win.ParentCommandLine
+        attrs.source_image = attrs.win.SourceImage
+        attrs.target_image = attrs.win.TargetImage
+        attrs.granted_access = attrs.win.GrantedAccess
+        attrs.dst_ip = attrs.win.DestinationIp
+        attrs.dst_port = int(attrs.win.DestinationPort) if exists('attrs.win.DestinationPort') else None
+        attrs.hashes = attrs.win.Hashes
+        user_id = attrs.win.TargetUserName if attrs.event_id in [4624, 4625, 4634, 4648, 4720, 4740] else (attrs.win.User if exists('attrs.win.User') else attrs.win.SubjectUserName)
+        src_ip = attrs.win.IpAddress if exists('attrs.win.IpAddress') and attrs.win.IpAddress != '-' else (attrs.win.SourceIp if exists('attrs.win.SourceIp') else None)
+        level = 'warn' if attrs.event_id in [4625, 4740, 1102, 104] else 'info'
+        msg = 'EventID ' + str(attrs.event_id) + ' on ' + str(attrs.win.Hostname) + ': ' + str(attrs.summary if exists('attrs.summary') else attrs.channel)
+        service = 'windows'
+  - script:
+      source: |
+        attrs.ocsf.class_uid = 3002 if attrs.event_id in [4624, 4625, 4634, 4648] else (3006 if attrs.event_id in [4728, 4729, 4732, 4733, 4756] else (3001 if attrs.event_id in [4720, 4722, 4724, 4725, 4726, 4738, 4740] else (1007 if attrs.sysmon == 'yes' and attrs.event_id in [1, 5, 10] else (4001 if attrs.sysmon == 'yes' and attrs.event_id == 3 else (1008 if attrs.event_id in [1102, 104] else 0)))))
+        attrs.ocsf.class_name = 'Authentication' if attrs.ocsf.class_uid == 3002 else ('Group Management' if attrs.ocsf.class_uid == 3006 else ('Account Change' if attrs.ocsf.class_uid == 3001 else ('Process Activity' if attrs.ocsf.class_uid == 1007 else ('Network Activity' if attrs.ocsf.class_uid == 4001 else ('Event Log Activity' if attrs.ocsf.class_uid == 1008 else None)))))
+        attrs.ocsf.device.hostname = host
+        attrs.ocsf.actor.user.name = user_id
+        attrs.ocsf.src_endpoint.ip = src_ip
+        attrs.ocsf.process.file.path = attrs.image
+        attrs.ocsf.process.cmd_line = attrs.command_line
+        attrs.ocsf.actor.process.file.path = attrs.parent_image if attrs.event_id == 1 else attrs.source_image
+        attrs.ocsf.status = 'Failure' if attrs.logon_failure == 'yes' else 'Success'
+  - remove: {field: attrs.win}
+  - remove: {field: attrs.summary}
+    ignore_failure: true
+  - compact: {field: attrs}

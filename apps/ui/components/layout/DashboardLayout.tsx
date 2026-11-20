@@ -36,6 +36,8 @@ import {
   ChevronRight,
   Home,
   GitBranch,
+  Package,
+  Bot,
   Clock,
   Gauge,
   Radio,
@@ -57,7 +59,7 @@ import {
   Link2,
   TrendingUp,
   MessageSquare,
-  Key, Briefcase } from 'lucide-react'
+  Key, Briefcase , HardDrive, Workflow, FileBarChart } from 'lucide-react'
 import { TenantSelector } from '@/components/TenantSelector'
 import PWASupport from '@/components/PWASupport'
 
@@ -109,9 +111,12 @@ const navSections: NavSection[] = [
       { name: 'SIEM Dashboard', href: '/security/siem', icon: ShieldAlert },
       { name: 'Cases', href: '/security/cases', icon: Briefcase },
       { name: 'Events', href: '/security/events', icon: Shield },
+      { name: 'Entities', href: '/security/entities', icon: Users },
       { name: 'Detection Rules', href: '/security/rules', icon: FileText },
       { name: 'Threat Intel', href: '/security/threat-intel', icon: Globe },
       { name: 'Threat Hunting', href: '/security/threat-hunting', icon: Crosshair },
+      { name: 'Playbooks', href: '/security/playbooks', icon: Workflow },
+      { name: 'Reports', href: '/security/reports', icon: FileBarChart },
     ],
   },
   {
@@ -133,7 +138,10 @@ const navSections: NavSection[] = [
       { name: 'Authentication', href: '/settings/authentication', icon: Key },
       { name: 'Integrations', href: '/settings/integrations', icon: Puzzle },
       { name: 'Ingest Pipelines', href: '/settings/pipelines', icon: GitBranch },
+      { name: 'Content Packs', href: '/settings/packs', icon: Package },
+      { name: 'AI', href: '/settings/ai', icon: Bot },
       { name: 'Roles & Access', href: '/settings/roles', icon: UserCog },
+      { name: 'Storage & Retention', href: '/settings/storage', icon: HardDrive },
       { name: 'Cost Analytics', href: '/settings/costs', icon: DollarSign },
       { name: 'Compliance', href: '/settings/compliance', icon: ClipboardCheck },
     ],

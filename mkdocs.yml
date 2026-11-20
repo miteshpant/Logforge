@@ -47,6 +47,15 @@ nav:
   - Threat intelligence: threat-intel.md
   - Ingest pipelines: pipelines.md
   - Common schema: schema.md
+  - Query language: query-language.md
+  - Content packs: packs.md
+  - AI: ai.md
+  - Entities and UEBA: entities.md
+  - Storage and retention: storage.md
+  - Deployment and backups: deployment.md
+  - Response automation: response.md
+  - Enterprise access: enterprise.md
+  - Security: security.md
   # Static Redoc page (docs/api/index.html); nav entries must be pages or URLs.
   - API reference: https://miteshpant.github.io/Logforge/api/
   - Roadmap:

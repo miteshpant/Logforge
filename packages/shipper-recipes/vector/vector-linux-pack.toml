@@ -1,0 +1,46 @@
+# Vector for the Linux content pack (packages/packs/linux, docs/packs.md).
+#
+# Ships /var/log/auth.log (or /var/log/secure), the auditd log and syslog
+# with the service names the pack's pipelines are routed on: auth, auditd and
+# syslog. Install the pack first (Settings -> Content Packs -> Linux), then
+# run Vector with LOGFORGE_URL and LOGFORGE_API_KEY set.
+
+[sources.linux_logs]
+type = "file"
+include = ["/var/log/auth.log", "/var/log/secure", "/var/log/audit/audit.log", "/var/log/syslog", "/var/log/messages"]
+read_from = "end"   # "beginning" to send what is already in the files
+fingerprint.strategy = "device_and_inode"   # also picks up files shorter than the checksum needs
+
+[transforms.to_logforge]
+type = "remap"
+inputs = ["linux_logs"]
+source = '''
+  file = string!(.file)
+  .service = "syslog"
+  if ends_with(file, "audit.log") {
+    .service = "auditd"
+  } else if ends_with(file, "auth.log") || ends_with(file, "secure") {
+    .service = "auth"
+  }
+  .msg = string!(.message)
+  .ts = .timestamp       # when Vector read the line; the pipelines replace it with the log's own time
+  .host = get_hostname() ?? .host
+  .level = "info"
+  del(.message)
+  del(.timestamp)
+  del(.file)
+  del(.source_type)
+'''
+
+[sinks.logforge]
+type = "http"
+inputs = ["to_logforge"]
+uri = "${LOGFORGE_URL:-http://localhost:7080}/v1/ingest/logs/batch"
+method = "post"
+auth.strategy = "bearer"
+auth.token = "${LOGFORGE_API_KEY}"   # an lf_... key; it selects the tenant
+compression = "gzip"
+encoding.codec = "json"
+batch.max_events = 1000              # /v1/ingest/logs/batch takes at most 1000
+batch.timeout_secs = 2
+request.retry_attempts = 5

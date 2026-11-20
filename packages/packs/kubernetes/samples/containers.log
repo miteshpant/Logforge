@@ -1,0 +1,6 @@
+2026-11-19T10:40:00.123456789Z stdout F {"level":"INFO","msg":"order placed","order_id":"A-1009","amount":42.5}
+2026-11-19T10:40:01.000000000Z stderr F payment provider timeout after 30s
+2026-11-19T10:40:02.000000000Z stdout F 10.0.3.1 - - [19/Nov/2026:10:40:02 +0000] "GET /healthz HTTP/1.1" 200 2
+2026-11-19T10:40:12.000000000Z stdout F 10.0.3.1 - - [19/Nov/2026:10:40:12 +0000] "GET /healthz HTTP/1.1" 200 2
+2026-11-19T10:40:13.000000000Z stdout P a long line that the runtime split
+2026-11-19T10:40:13.000000000Z stdout F  into two parts

@@ -1,0 +1,91 @@
+title: Kubernetes exec or attach into a pod
+id: kubernetes-exec-into-pod
+status: stable
+description: Someone opened a shell (exec) or attached to a running container, which bypasses the deployment process.
+author: Logforge
+tags: [attack.execution, attack.t1609]
+logsource: {product: kubernetes, service: audit}
+detection:
+  selection:
+    service: k8s-audit
+    verb: create
+    resource: pods
+    subresource: [exec, attach]
+  filter: {response_code|gte: 400}
+  condition: selection and not filter
+fixtures:
+  true_positive: {service: k8s-audit, verb: create, resource: pods, subresource: exec, response_code: 101}
+  true_negative: {service: k8s-audit, verb: get, resource: pods, subresource: log, response_code: 200}
+level: medium
+---
+title: Kubernetes secret read by a person
+id: kubernetes-secret-read-by-user
+status: stable
+description: A secret was read or listed by a user account rather than a service account or a system component.
+author: Logforge
+tags: [attack.credential_access, attack.t1552.007]
+logsource: {product: kubernetes, service: audit}
+detection:
+  selection:
+    service: k8s-audit
+    resource: secrets
+    verb: [get, list, watch]
+    human: "yes"
+  filter: {response_code|gte: 400}
+  condition: selection and not filter
+fixtures:
+  true_positive: {service: k8s-audit, resource: secrets, verb: get, human: "yes", response_code: 200}
+  true_negative: {service: k8s-audit, resource: secrets, verb: get, human: "no", response_code: 200}
+level: medium
+---
+title: Kubernetes cluster-admin binding created
+id: kubernetes-cluster-admin-binding
+status: stable
+description: A role binding to cluster-admin was created or changed, which gives full control of the cluster.
+author: Logforge
+tags: [attack.privilege_escalation, attack.t1098]
+logsource: {product: kubernetes, service: audit}
+detection:
+  selection:
+    service: k8s-audit
+    resource: [clusterrolebindings, rolebindings]
+    verb: [create, update, patch]
+    role_ref: cluster-admin
+  condition: selection
+fixtures:
+  true_positive: {service: k8s-audit, resource: clusterrolebindings, verb: create, role_ref: cluster-admin}
+  true_negative: {service: k8s-audit, resource: clusterrolebindings, verb: create, role_ref: view}
+level: high
+---
+title: Kubernetes anonymous request allowed
+id: kubernetes-anonymous-request
+status: stable
+description: The API server answered an unauthenticated request successfully, beyond the health and version endpoints.
+author: Logforge
+tags: [attack.initial_access, attack.t1078.001]
+logsource: {product: kubernetes, service: audit}
+detection:
+  selection: {service: k8s-audit, anonymous: "yes", response_code|lt: 400}
+  filter:
+    request_uri|startswith: [/healthz, /livez, /readyz, /version]
+  condition: selection and not filter
+fixtures:
+  true_positive: {service: k8s-audit, anonymous: "yes", response_code: 200, request_uri: /api/v1/namespaces/default/pods}
+  true_negative: {service: k8s-audit, anonymous: "yes", response_code: 200, request_uri: /healthz}
+level: high
+---
+title: Kubernetes privileged pod created
+id: kubernetes-privileged-pod
+status: stable
+description: A pod was created with a privileged container, which can take over the node.
+author: Logforge
+tags: [attack.privilege_escalation, attack.t1611]
+logsource: {product: kubernetes, service: audit}
+detection:
+  selection: {service: k8s-audit, resource: pods, verb: create, privileged: "yes"}
+  filter: {response_code|gte: 400}
+  condition: selection and not filter
+fixtures:
+  true_positive: {service: k8s-audit, resource: pods, verb: create, privileged: "yes", response_code: 201}
+  true_negative: {service: k8s-audit, resource: pods, verb: create, privileged: "no", response_code: 201}
+level: high

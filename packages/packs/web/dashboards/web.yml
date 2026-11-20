@@ -1,0 +1,36 @@
+name: Web servers
+description: Traffic, errors and slow paths for nginx and Apache (Web servers pack)
+variables:
+  - name: server
+    label: Server
+    type: custom
+    values: [nginx, apache]
+    include_all: true
+    default: "*"
+panels:
+  - name: Requests
+    type: metric
+    query: '| where service = $server and isnotnull(attrs.method) | stats count() as requests'
+  - name: Server error rate (%)
+    type: metric
+    query: '| where service = $server and isnotnull(attrs.method) | stats count() as total, count(if(status >= 500, 1, null)) as errors | eval error_rate = round(100 * errors / total, 2) | fields error_rate'
+  - name: Bytes sent
+    type: metric
+    query: '| where service = $server | stats sum(attrs.bytes) as bytes'
+  - name: Client IPs
+    type: metric
+    query: '| where service = $server and isnotnull(attrs.method) | stats dc(src_ip) as clients'
+  - name: Requests by status class
+    type: line_chart
+    query: '| where service = $server and isnotnull(attrs.status_class) | timechart count() by attrs.status_class'
+  - name: Top paths
+    type: bar_chart
+    query: '| where service = $server and isnotnull(attrs.uri) | top limit=10 attrs.uri'
+  - name: Slowest paths (p95 ms)
+    type: table
+    size: {w: 2, h: 2}
+    query: '| where service = $server and isnotnull(attrs.request_time_ms) | stats count() as requests, p95(attrs.request_time_ms) as p95_ms by attrs.uri | sort -p95_ms | head 10'
+  - name: Top clients
+    type: table
+    size: {w: 2, h: 2}
+    query: '| where service = $server and isnotnull(attrs.method) | stats count() as requests, count(if(status >= 400, 1, null)) as errors by src_ip | sort -requests | head 10'

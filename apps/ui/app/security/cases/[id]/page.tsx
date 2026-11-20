@@ -4,10 +4,14 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
+import TriagePanel from '@/components/ai/TriagePanel'
+import CopilotPanel from '@/components/ai/CopilotPanel'
+import CaseReportPanel from '@/components/ai/CaseReportPanel'
+import CaseTickets from '@/components/response/CaseTickets'
 import { ArrowLeft, Link2, Loader2, MessageSquare, Pin, ShieldAlert, Tag, User } from 'lucide-react'
-import { caseAction, CaseDetail, Evidence, getCase, Severity, updateCase } from '@/lib/api/cases'
+import { caseAction, CaseDetail, Evidence, getCase, Severity, unpinEvidence, updateCase } from '@/lib/api/cases'
 import { threatBadge } from '@/lib/intelFormat'
-import { CaseStatus, describeEvent, evidenceHref, nextStatuses, needsReason, statusLabel } from '@/lib/caseFormat'
+import { CaseStatus, currentEvidence, describeEvent, evidenceHref, nextStatuses, needsReason, statusLabel } from '@/lib/caseFormat'
 
 const SEVERITY_STYLE: Record<string, string> = {
   critical: 'bg-red-500/20 text-red-300 border-red-500/40',
@@ -80,7 +84,7 @@ export default function CaseDetailPage() {
   }
 
   const c = detail.case
-  const evidenceItems = detail.timeline.filter(e => e.kind === 'evidence_pinned')
+  const evidenceItems = currentEvidence(detail)
 
   return (
     <DashboardLayout>
@@ -145,6 +149,9 @@ export default function CaseDetailPage() {
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           {/* Timeline */}
           <section className="xl:col-span-2 space-y-4">
+            <TriagePanel kind="case" id={detail.case.id} />
+            <CopilotPanel subject={{ kind: 'case', id: detail.case.id }} caseId={detail.case.id} onChanged={load} />
+            <CaseReportPanel caseId={detail.case.id} />
             <h2 className="text-sm font-semibold text-white flex items-center gap-2"><MessageSquare className="w-4 h-4" /> Timeline</h2>
             <div className="space-y-2">
               <textarea data-testid="comment-input" value={comment} onChange={e => setComment(e.target.value)} rows={3}
@@ -228,6 +235,8 @@ export default function CaseDetailPage() {
               ))}
             </section>
 
+            <CaseTickets caseId={c.id} refreshKey={c.status} />
+
             {Object.keys(c.entities).length > 0 && (
               <section className="space-y-2">
                 <h2 className="text-sm font-semibold text-white">Entities</h2>
@@ -244,6 +253,23 @@ export default function CaseDetailPage() {
 
             <section className="space-y-2">
               <h2 className="text-sm font-semibold text-white flex items-center gap-2"><Pin className="w-4 h-4" /> Evidence ({evidenceItems.length})</h2>
+              {evidenceItems.length > 0 && (
+                <ul className="space-y-1" data-testid="evidence-list">
+                  {evidenceItems.map(item => {
+                    const href = evidenceHref(item.data as any)
+                    const label = String((item.data as any).title || (item.data as any).ref)
+                    return (
+                      <li key={item.id} data-testid="evidence-item" className="flex items-start gap-2 text-xs">
+                        {href ? <a href={href} className="flex-1 text-blue-300 hover:underline break-all">{label}</a>
+                          : <span className="flex-1 text-slate-300 break-all">{label}</span>}
+                        <button data-testid="evidence-unpin" disabled={busy} title="Take back this pin"
+                          onClick={() => run(() => unpinEvidence(id, item.id))}
+                          className="shrink-0 px-1.5 rounded text-slate-400 hover:bg-red-500/20 hover:text-red-300">Take back</button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
               <div className="space-y-2 p-3 rounded-lg border border-white/5 bg-slate-800/40">
                 <select data-testid="evidence-kind" value={evidence.kind}
                   onChange={e => setEvidence({ ...evidence, kind: e.target.value as Evidence['kind'] })}

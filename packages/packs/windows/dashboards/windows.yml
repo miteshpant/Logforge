@@ -1,0 +1,36 @@
+name: Windows
+description: Logons, account changes and process activity from Windows hosts (Windows pack)
+variables:
+  - name: host
+    label: Host
+    type: query
+    query: '| where service = "windows" | stats count() by host'
+    include_all: true
+    default: "*"
+panels:
+  - name: Successful logons
+    type: metric
+    query: '| where service = "windows" and host = $host and attrs.event_id = 4624 | stats count() as logons'
+  - name: Failed logons
+    type: metric
+    query: '| where service = "windows" and host = $host and attrs.event_id = 4625 | stats count() as failed'
+  - name: Account and group changes
+    type: metric
+    query: '| where service = "windows" and host = $host and attrs.ocsf.class_uid in [3001, 3006] | stats count() as changes'
+  - name: Processes started
+    type: metric
+    query: '| where service = "windows" and host = $host and attrs.event_id = 1 | stats count() as processes'
+  - name: Failed logons over time
+    type: line_chart
+    query: '| where service = "windows" and host = $host and attrs.event_id = 4625 | timechart count() by host'
+  - name: Logon types
+    type: bar_chart
+    query: '| where service = "windows" and host = $host and attrs.event_id in [4624, 4625] | top limit=10 attrs.logon_type'
+  - name: Accounts with the most failed logons
+    type: table
+    size: {w: 2, h: 2}
+    query: '| where service = "windows" and host = $host and attrs.event_id = 4625 | stats count() as failures, dc(src_ip) as sources by user_id | sort -failures | head 10'
+  - name: Parent and child processes
+    type: table
+    size: {w: 2, h: 2}
+    query: '| where service = "windows" and host = $host and attrs.event_id = 1 | stats count() as runs by attrs.parent_image, attrs.image | sort -runs | head 20'

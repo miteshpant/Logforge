@@ -94,6 +94,13 @@ class MetricsRegistry:
         with self._lock:
             self._gauges[name][key] = float(value)
 
+    def add_gauge(self, name: str, delta: float,
+                  labels: Optional[Dict[str, str]] = None) -> None:
+        key = _labels_to_key(labels)
+        with self._lock:
+            series = self._gauges[name]
+            series[key] = series.get(key, 0.0) + float(delta)
+
     def observe(self, name: str, value: float,
                 labels: Optional[Dict[str, str]] = None) -> None:
         key = _labels_to_key(labels)
@@ -247,7 +254,7 @@ class MetricsMiddleware:
         # run, so this is recomputed in the `finally` block below.
         path = self._route_template(scope)
 
-        registry.inc(
+        registry.add_gauge(
             "logforge_http_requests_in_flight", 1.0, {"method": method}
         )
         start = time.perf_counter()
@@ -278,7 +285,7 @@ class MetricsMiddleware:
                 duration,
                 {"method": method, "path": path},
             )
-            registry.inc(
+            registry.add_gauge(
                 "logforge_http_requests_in_flight", -1.0, {"method": method}
             )
 

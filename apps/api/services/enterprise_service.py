@@ -695,56 +695,52 @@ class EnterpriseService:
             'total_roles': len(platform_roles) + len(tenant_roles)
         }
     
+    # Custom roles used to be validated and then dropped ("For now, return success"); these
+    # now store them in custom_roles.py, the store /v1/roles/custom and the middleware use.
+    @staticmethod
+    def _custom_store():
+        from custom_roles import CustomRoleStore
+        from dependencies import get_clickhouse_client
+
+        return CustomRoleStore(get_clickhouse_client())
+
+    @staticmethod
+    def _custom_role(customer_id: str, role_data: Dict[str, Any], role_id: str = ""):
+        from custom_roles import CustomRole, normalise, validate_permissions
+
+        permissions = normalise([p for p in role_data.get("permissions") or [] if p != "*"])
+        validate_permissions(permissions)  # ValueError -> the route's 500 with the message, as before
+        return CustomRole(id=role_id, tenant_id=customer_id, name=role_data["name"],
+                          description=role_data.get("description") or "", permissions=permissions)
+
     async def create_custom_role(self, customer_id: str, role_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Create custom role with specific permissions"""
-        role_id = str(uuid.uuid4())
-        
-        # Validate permissions
-        valid_permissions = [
-            'logs:read', 'logs:write', 'dashboards:read', 'dashboards:write',
-            'alerts:read', 'alerts:write', 'users:read', 'users:write',
-            'security:read', 'security:write', 'observability:read',
-            'compliance:read', 'audit:read', 'reports:generate'
-        ]
-        
-        invalid_perms = [p for p in role_data['permissions'] if p not in valid_permissions and p != '*']
-        if invalid_perms:
-            raise ValueError(f"Invalid permissions: {invalid_perms}")
-        
-        # Custom roles are stored in a separate table/system
-        # For now, return success with role definition
-        custom_role = {
-            'role_id': role_id,
-            'name': role_data['name'],
-            'description': role_data['description'],
-            'permissions': role_data['permissions'],
-            'inherits_from': role_data.get('inherits_from'),
-            'scope': 'custom',
-            'created_at': datetime.utcnow().isoformat()
-        }
-        
-        return {
-            'role': custom_role,
-            'status': 'created',
-            'message': f'Custom role {role_data["name"]} created successfully'
-        }
-    
+        """Create a custom role (stored; enforced by the middleware). See /v1/roles/custom."""
+        import asyncio
+
+        role = await asyncio.to_thread(self._custom_store().save, self._custom_role(customer_id, role_data), "")
+        return {'role': {**role.to_dict(), 'role_id': role.id, 'scope': 'custom'}, 'status': 'created',
+                'message': f'Custom role {role.name} created'}
+
     async def update_custom_role(self, customer_id: str, role_id: str, role_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Update an existing custom role"""
-        return {
-            'role_id': role_id,
-            'status': 'updated',
-            'message': f'Role {role_id} updated successfully',
-            'updated_at': datetime.utcnow().isoformat()
-        }
+        """Update a custom role. See /v1/roles/custom."""
+        import asyncio
+
+        store = self._custom_store()
+        if not await asyncio.to_thread(store.get, customer_id, role_id):
+            raise ValueError(f"No custom role {role_id}")
+        await asyncio.to_thread(store.save, self._custom_role(customer_id, role_data, role_id), "")
+        return {'role_id': role_id, 'status': 'updated', 'updated_at': datetime.utcnow().isoformat()}
 
     async def delete_custom_role(self, customer_id: str, role_id: str) -> Dict[str, Any]:
-        """Delete a custom role"""
-        return {
-            'role_id': role_id,
-            'status': 'deleted',
-            'message': f'Role {role_id} deleted successfully'
-        }
+        """Delete a custom role. See /v1/roles/custom."""
+        import asyncio
+
+        store = self._custom_store()
+        role = await asyncio.to_thread(store.get, customer_id, role_id)
+        if not role:
+            raise ValueError(f"No custom role {role_id}")
+        await asyncio.to_thread(store.save, role, "", True)
+        return {'role_id': role_id, 'status': 'deleted'}
 
     async def assign_user_roles(self, customer_id: str, user_id: str, roles: List[str]) -> Dict[str, Any]:
         """Assign roles to user"""

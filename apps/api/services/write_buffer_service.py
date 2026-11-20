@@ -513,6 +513,27 @@ class WriteBufferService:
             logger.error(f"Default flush failed: {e}")
             return False
 
+    async def write_now(self, customer_id: str, raw_logs: List[Dict[str, Any]],
+                        normalized_logs: Optional[List[Dict[str, Any]]] = None) -> bool:
+        """
+        Write these logs now, outside the shared buffer, and say whether they
+        reached ClickHouse (Phase 12). For a caller that retries on False and
+        acknowledges its source only on True (the Kafka log consumer): a
+        failure is not dead-lettered, since the source still holds the logs.
+        """
+        if not raw_logs and not normalized_logs:
+            return True
+        started = time.time()
+        ok = await self._flush_with_retries(customer_id, raw_logs, normalized_logs or [])
+        if ok:
+            self.stats.total_logs_flushed += len(raw_logs) + len(normalized_logs or [])
+            self.stats.total_flushes += 1
+            self.stats.total_flush_time_ms += (time.time() - started) * 1000
+            self.stats.update_averages()
+        else:
+            self.stats.flush_errors += 1
+        return ok
+
     async def flush_all(self) -> Dict[str, bool]:
         """Flush all customer buffers"""
         results = {}

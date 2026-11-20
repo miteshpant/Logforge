@@ -367,12 +367,12 @@ ROLE_PERMISSIONS = {
         "costs:*:tenant", "analytics:read:tenant", "tenants:read,write:tenant"
     ],
     UserRole.SECURITY_ANALYST: [
-        "security:*:tenant", "logs:read,search:tenant",
+        "security:*:tenant", "logs:read,search:tenant", "ai:read:tenant",
         "alerts:read,investigate:tenant", "compliance:read:tenant",
         "threat_hunting:*:tenant"
     ],
     UserRole.DEVOPS_ENGINEER: [
-        "logs:read,search:tenant", "alerts:*:tenant",
+        "logs:read,search:tenant", "alerts:*:tenant", "ai:read:tenant",
         "dashboards:*:tenant", "observability:*:tenant",
         "integrations:*:tenant"
     ],
@@ -412,6 +412,43 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in WRITE_METHODS:
             return "queries:write:tenant"
         return "queries:read:tenant"
+    elif path.startswith("/v1/entities") or path.startswith("/v1/patterns"):
+        # Entity analytics (Phase 11): risk, alerts and cases per entity are security data.
+        if method in WRITE_METHODS:
+            return "security:write:tenant"
+        return "security:read:tenant"
+    elif path.startswith("/v1/playbooks/runs") or (path.startswith("/v1/playbooks/") and path.endswith("/run")):
+        # Running playbooks and deciding approvals is analyst work (Phase 13);
+        # the decision also needs one of the step's approver roles.
+        if method in WRITE_METHODS:
+            return "security:write:tenant"
+        return "security:read:tenant"
+    elif path.startswith("/v1/playbooks"):
+        # Playbook definitions act on outside systems: tenant admins write them.
+        if method in WRITE_METHODS and not path.endswith("/validate"):
+            return "settings:write:tenant"
+        return "security:read:tenant"
+    elif path.startswith("/v1/sso/") or path.startswith("/v1/scim/"):
+        if method in WRITE_METHODS:
+            return "settings:write:tenant"
+        return "settings:read:tenant"
+    elif path.startswith("/v1/reports/schedules"):
+        if method in WRITE_METHODS:
+            return "settings:write:tenant"
+        return "settings:read:tenant"
+    elif path.startswith("/v1/reports"):
+        return "security:read:tenant"
+    elif path.startswith("/v1/integrations"):
+        # Integrations hold the tenant's tokens for outside systems (Phase 13).
+        if method in WRITE_METHODS:
+            return "settings:write:tenant"
+        return "settings:read:tenant"
+    elif path.startswith("/v1/packs"):
+        # Installing a pack writes pipelines, rules, searches and dashboards
+        # at once, so it takes the tenant-admin settings permission.
+        if method in WRITE_METHODS:
+            return "settings:write:tenant"
+        return "logs:read:tenant"
     elif path.startswith("/v1/pipelines"):
         # Ingest pipelines shape stored logs: managing them is a logs write.
         if method in WRITE_METHODS:
@@ -449,6 +486,18 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in WRITE_METHODS:
             return "logs:write:tenant"  # Export is a read operation that generates output
         return "logs:read:tenant"
+    elif path in ("/v1/ai/settings", "/v1/ai/audit"):
+        # AI settings and the AI audit log are the tenant admin's.
+        if method in WRITE_METHODS:
+            return "settings:write:tenant"
+        return "settings:read:tenant"
+    elif path in ("/v1/ai/status", "/v1/ai/usage", "/v1/ai/ask", "/v1/ai/nl2query", "/v1/ai/triage",
+                  "/v1/ai/pipeline-draft", "/v1/ai/explain",
+                  "/v1/ai/copilot/plan", "/v1/ai/copilot/run",
+                  "/v1/ai/rule-draft", "/v1/ai/rule-draft/enable",
+                  "/v1/ai/case-report"):
+        # Asking is read-only: the model's tools only read, as the person asking.
+        return "ai:read:tenant"
     elif path.startswith("/v1/ai"):
         if method in WRITE_METHODS:
             return "ai:write:tenant"
@@ -488,6 +537,21 @@ def get_endpoint_permission(path: str, method: str) -> str:
         return "roles:read:tenant"
     else:
         return "platform:general:tenant"
+
+async def _custom_roles_of(tenant_id: str, user_id: str) -> list:
+    """The user's custom roles in the tenant (custom_roles.py, cached 30 s). A failure to read
+    them grants nothing extra, but would also drop a data scope, so it fails closed: 503."""
+    from custom_roles import CustomRoleStore
+    from dependencies import get_clickhouse_client
+
+    try:
+        return await asyncio.to_thread(CustomRoleStore(get_clickhouse_client()).roles_of, tenant_id, user_id)
+    except Exception as e:
+        if "UNKNOWN_TABLE" in str(e) or "doesn't exist" in str(e):
+            return []  # migration 034 not applied yet: no custom role, so no scope, can exist
+        logger.error("Couldn't read custom roles", tenant_id=tenant_id, user_id=user_id, error=str(e))
+        raise HTTPException(503, "Access control is temporarily unavailable")
+
 
 def check_permission(user_roles: List[Dict[str, Any]], required_permission: str, tenant_id: str) -> bool:
     """Check if user has required permission for tenant (supports tenant-less platform admins)"""
@@ -821,10 +885,15 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
             # Step 4: Permission Check - Verify endpoint permissions
             # Skip permission checks for auth endpoints (they are user-level operations)
+            # Phase 14: a tenant's custom roles add permissions and may carry a data scope.
+            custom = await _custom_roles_of(tenant_id, user.id) if tenant_id and tenant_id != "platform" else []
             if tenant_id and not request.url.path.startswith("/v1/auth/"):
                 required_permission = get_endpoint_permission(request.url.path, request.method)
                 if not check_permission(user_roles, required_permission, tenant_id):
-                    raise HTTPException(403, f"Insufficient permissions for {request.url.path}")
+                    from custom_roles import effective, grants
+
+                    if not grants(effective(custom)[0], required_permission):
+                        raise HTTPException(403, f"Insufficient permissions for {request.url.path}")
 
             # Step 5: Feature Access - Check subscription (skip for admin endpoints)
             if not is_admin_endpoint and tenant_id:
@@ -848,8 +917,18 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             request.state.tenant_id = tenant_id
             request.state.roles = user_roles
 
-            # Step 7: Process request
-            response = await call_next(request)
+            # Step 7: Process request, inside the user's data scope (data_scope.py): every
+            # ClickHouse query this request makes reads only the scope's services' logs.
+            import data_scope
+            from custom_roles import effective
+
+            scope = effective(custom)[1]
+            request.state.data_scope = scope
+            scope_token = data_scope.set_scope(scope)
+            try:
+                response = await call_next(request)
+            finally:
+                data_scope._SCOPE.reset(scope_token)
 
             # Step 8: Usage Tracking - Track API usage asynchronously
             if tenant_id and tenant_id != "platform":
@@ -889,7 +968,13 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         """Check if endpoint is public (no auth required)"""
         # Strip query parameters from path before matching
         clean_path = path.split('?')[0]
-        return clean_path in self.public_endpoints
+        # Phase 13: ticket webhooks authenticate themselves (an HMAC or token
+        # from the integration's webhook_secret), see routers/integrations_api.
+        # Phase 14: SSO sign-in (discover, start, callback) happens before there is a session.
+        return (clean_path in self.public_endpoints or clean_path.startswith("/v1/hooks/")
+                or clean_path.startswith("/v1/auth/sso/")
+                # SCIM authenticates with its own tenant-scoped bearer token (routers/scim_api.py)
+                or clean_path.startswith("/scim/v2/"))
 
     def _is_admin_endpoint(self, path: str) -> bool:
         """Check if endpoint is admin (bypasses feature validation)"""

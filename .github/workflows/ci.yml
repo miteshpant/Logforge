@@ -43,6 +43,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r apps/api/requirements.txt
 
+      - name: Install Helm
+        # tests/test_helm_chart.py lints and renders deploy/helm/logforge.
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
       - name: Check OpenAPI spec is up to date
         # docs/api/openapi.{json,yaml} are the published API reference. If this fails,
         # run `python scripts/export_openapi.py` and commit the result.
@@ -50,6 +56,8 @@ jobs:
 
       - name: Run tests
         # tests/routes_tests needs the full stack; the route-tests job runs it.
+        env:
+          LOGFORGE_REQUIRE_HELM: "1"
         run: |
           pytest tests/ \
             --ignore=tests/routes_tests \
@@ -108,6 +116,14 @@ jobs:
       - name: Run route tests
         working-directory: tests/routes_tests
         run: pytest . -v --junitxml=../../junit-routes.xml
+
+      - name: Query language and pack tests against ClickHouse
+        # LogforgeQL pipeline answers checked against Python on a seeded dataset.
+        env:
+          LOGFORGE_TEST_CLICKHOUSE: localhost:8124
+          LOGFORGE_REQUIRE_CLICKHOUSE: "1"
+          LOGFORGE_BACKUP_FULL: "1"
+        run: pytest tests/test_logql_pipeline_live.py tests/test_analyst_questions_live.py tests/test_pack_ci_live.py tests/test_nl2query_eval_live.py tests/test_copilot_eval_live.py tests/test_entities_live.py tests/test_log_patterns_live.py tests/test_storage_tiers_live.py tests/test_backup_live.py tests/test_response_acceptance_live.py tests/test_sso_store_live.py tests/test_scim_live.py tests/test_data_scope_live.py -v
 
       - name: API logs on failure
         if: failure()
@@ -277,6 +293,54 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: UI dependency vulnerabilities
+        # Blocking: a high or critical advisory fails CI unless it's in
+        # security/audit-allowlist.json with a reason and an expiry date
+        # (scripts/audit_gate.py, docs/security.md).
+        run: |
+          status=0
+          for app in ui admin-ui; do
+            echo "== apps/$app"
+            (cd apps/$app && npm audit --omit=dev --json > ../../audit-$app.json) || true
+            python scripts/audit_gate.py security/audit-allowlist.json < audit-$app.json || status=1
+          done
+          exit $status
+
+  image-scan:
+    name: Image scan and SBOM
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, ui, admin-ui]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t logforge-${{ matrix.app }}:ci apps/${{ matrix.app }}
+
+      - name: Vulnerabilities (fails on fixable critical findings)
+        # Trivy's own image at a pinned version, scanning through the Docker socket.
+        run: |
+          # security/trivyignore: reviewed exceptions, each with an expiry date
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD/security/trivyignore:/trivyignore:ro" \
+            aquasec/trivy:0.57.1 image --severity CRITICAL --ignore-unfixed --exit-code 1 \
+            --ignorefile /trivyignore --no-progress logforge-${{ matrix.app }}:ci
+
+      - name: SBOM (SPDX)
+        uses: anchore/sbom-action@v0
+        with:
+          image: logforge-${{ matrix.app }}:ci
+          format: spdx-json
+          output-file: sbom-${{ matrix.app }}.spdx.json
+          artifact-name: sbom-${{ matrix.app }}.spdx.json
 
   ui-build:
     name: UI build

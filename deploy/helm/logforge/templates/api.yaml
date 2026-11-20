@@ -1,0 +1,98 @@
+{{- $sel := dict "root" . "component" "api" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "logforge.fullname" . }}-api
+  labels: {{- include "logforge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  {{- if not .Values.api.autoscaling.enabled }}
+  replicas: {{ .Values.api.replicas }}
+  {{- end }}
+  selector:
+    matchLabels: {{- include "logforge.selector" $sel | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  template:
+    metadata:
+      labels: {{- include "logforge.selector" $sel | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # Kafka consumers commit only finished batches, so a killed pod's
+      # unfinished batches are redelivered to the others.
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: api
+          image: {{ include "logforge.image" (dict "image" .Values.image.api "root" .) }}
+          imagePullPolicy: {{ .Values.image.api.pullPolicy }}
+          command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+          ports: [{name: http, containerPort: 8080}]
+          envFrom: [{configMapRef: {name: {{ include "logforge.fullname" . }}-config}}]
+          env:
+            {{- include "logforge.apiEnv" . | nindent 12 }}
+            {{- with .Values.api.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 6
+          resources: {{- toYaml .Values.api.resources | nindent 12 }}
+      {{- if .Values.api.topologySpread }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: {{- include "logforge.selector" $sel | nindent 14 }}
+      {{- end }}
+      {{- with .Values.api.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "logforge.fullname" . }}-api
+  labels: {{- include "logforge.labels" . | nindent 4 }}
+spec:
+  selector: {{- include "logforge.selector" $sel | nindent 4 }}
+  ports: [{name: http, port: 8080, targetPort: http}]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "logforge.fullname" . }}-api
+  labels: {{- include "logforge.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.api.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels: {{- include "logforge.selector" $sel | nindent 6 }}
+{{- if .Values.api.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "logforge.fullname" . }}-api
+  labels: {{- include "logforge.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: {{ include "logforge.fullname" . }}-api}
+  minReplicas: {{ .Values.api.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.api.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: {{ .Values.api.autoscaling.targetCPUUtilizationPercentage }}}}
+{{- end }}

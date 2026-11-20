@@ -1,0 +1,45 @@
+# AI for this deployment (docs/ai.md). Nothing is enabled by default: set
+# `enabled: true`, list at least one provider, and each tenant still has to
+# opt in under Settings -> AI. LOGFORGE_AI_ENABLED=false switches AI off
+# whatever this file says.
+enabled: false
+
+# Providers tenants can choose from. Keys are never written here: name the
+# environment variable that holds each key. `external: true` (the default
+# for hosted kinds) shows users that data leaves the deployment.
+providers: {}
+#  claude:
+#    kind: anthropic
+#    model: claude-opus-5-5
+#    api_key_env: ANTHROPIC_API_KEY
+#    label: Claude (Anthropic)
+#    effort: medium          # optional: low | medium | high | xhigh | max
+#    fallbacks: true         # server-side refusal fallbacks (default on)
+#  gateway:
+#    kind: openai_compatible   # vLLM, LM Studio, LiteLLM, hosted gateways
+#    base_url: https://llm-gateway.internal/v1
+#    model: my-model
+#    api_key_env: LLM_GATEWAY_KEY
+#    external: false           # it runs inside your network
+#  local:
+#    kind: ollama
+#    base_url: http://ollama:11434
+#    model: llama3.1
+
+# Prompts, tool calls and responses are kept this many days.
+audit_retention_days: 90
+
+# Defaults for each tenant (a tenant admin can lower them).
+defaults:
+  monthly_token_budget: 2000000
+  requests_per_minute: 20
+  max_tool_calls: 8
+  max_tokens: 4096          # per model reply
+  max_request_tokens: 200000  # per question, all model calls together
+
+# Field names whose values are replaced with [redacted] before anything is
+# sent to a provider (matched case-insensitively at any depth; tenants add
+# their own). Secret-looking values (keys, tokens, passwords in text) are
+# redacted whatever the field.
+redact_fields: [password, passwd, secret, token, api_key, apikey, authorization, cookie, set-cookie,
+                session, private_key, credit_card, ssn]

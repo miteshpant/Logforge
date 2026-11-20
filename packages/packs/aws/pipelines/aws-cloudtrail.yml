@@ -1,0 +1,41 @@
+# CloudTrail records, one JSON object per line (as Vector's aws_s3 source or
+# CloudWatch Logs subscriptions deliver them), mapped to OCSF API Activity.
+name: aws-cloudtrail
+description: AWS CloudTrail management events
+routing: {services: [cloudtrail, aws-cloudtrail]}
+processors:
+  - json: {field: msg, target: attrs.ct}
+  - date: {field: attrs.ct.eventTime, formats: [ISO8601]}
+    ignore_failure: true
+  - script:
+      source: |
+        attrs.event_name = attrs.ct.eventName
+        attrs.event_source = attrs.ct.eventSource
+        attrs.aws_region = attrs.ct.awsRegion
+        attrs.account_id = attrs.ct.recipientAccountId
+        attrs.identity_type = attrs.ct.userIdentity.type
+        attrs.identity_arn = attrs.ct.userIdentity.arn
+        attrs.error_code = attrs.ct.errorCode
+        attrs.user_agent = attrs.ct.userAgent
+        attrs.login_result = attrs.ct.responseElements.ConsoleLogin if exists('attrs.ct.responseElements.ConsoleLogin') else None
+        user_id = attrs.ct.userIdentity.userName if exists('attrs.ct.userIdentity.userName') else ('root' if attrs.ct.userIdentity.type == 'Root' else attrs.ct.userIdentity.arn)
+        src_ip = attrs.ct.sourceIPAddress
+        level = 'warn' if exists('attrs.ct.errorCode') else 'info'
+        msg = str(attrs.ct.eventSource) + ' ' + str(attrs.ct.eventName) + ' by ' + str(user_id)
+        attrs.ocsf.class_uid = 6003
+        attrs.ocsf.class_name = 'API Activity'
+        attrs.ocsf.api.operation = attrs.ct.eventName
+        attrs.ocsf.api.service.name = attrs.ct.eventSource
+        attrs.ocsf.actor.user.name = user_id
+        attrs.ocsf.src_endpoint.ip = attrs.ct.sourceIPAddress
+        attrs.ocsf.cloud.region = attrs.ct.awsRegion
+        attrs.ocsf.status = 'Failure' if exists('attrs.ct.errorCode') else 'Success'
+        service = 'cloudtrail'
+  - script:
+      source: |
+        attrs.bucket_name = attrs.ct.requestParameters.bucketName
+        attrs.acl_public = 'yes' if contains(str(attrs.ct.requestParameters), 'AllUsers') or contains(str(attrs.ct.requestParameters), 'x-amz-acl') and contains(str(attrs.ct.requestParameters), 'public-read') else 'no'
+    if: "exists('attrs.ct.requestParameters.bucketName')"
+  - remove: {field: attrs.ct.responseElements}
+    ignore_failure: true
+  - compact: {field: attrs, values: [""]}

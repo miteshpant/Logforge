@@ -6,11 +6,12 @@ the shipper version listed.
 
 | Shipper | Files | Tested with |
 |---|---|---|
-| [Vector](https://vector.dev) | `vector/vector-basic.toml` (log files), `vector/vector-nginx.toml` (nginx access + error logs), `vector/vector-kubernetes.toml` (pod logs) | 0.41.1 |
+| [Vector](https://vector.dev) | `vector/vector-basic.toml` (log files), `vector/vector-nginx.toml` (nginx access + error logs), `vector/vector-kubernetes.toml` (pod logs), `vector/vector-linux-pack.toml` (auth, auditd and syslog for the Linux content pack) | 0.41.1 |
 | [Fluent Bit](https://fluentbit.io) | `fluent-bit/fluent-bit-basic.conf` (log files), `fluent-bit/fluent-bit-kubernetes.conf` (pod, nginx, syslog), plus the Lua transforms and `parsers.conf` they load | 3.1.9 |
 | [Fluentd](https://www.fluentd.org) | `fluentd/fluentd-basic.conf` (log files, built-in `out_http`) | 1.17.1 |
 
-`vector-basic`, `fluent-bit-basic` and `fluentd-basic` were run end to end;
+`vector-basic`, `vector-linux-pack` (by `scripts/pack_walkthrough.py`), `fluent-bit-basic`
+and `fluentd-basic` were run end to end;
 the Kubernetes and nginx recipes pass the shippers' own config validation
 (`vector validate`, `fluent-bit --dry-run`).
 

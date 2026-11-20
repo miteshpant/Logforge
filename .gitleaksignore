@@ -1,0 +1,8 @@
+# Made-up access key id in the AWS pack's CloudTrail sample (commit d3bbf1e); since replaced by AWS's documented example key.
+d3bbf1e448171c502d0005ced393cf696c17f82f:packages/packs/aws/samples/cloudtrail.jsonl:aws-access-token:3
+# Fake secrets in the AI redaction tests (they check these values never reach a provider).
+a93677d05f1225b239e625f30f413201d096f677:tests/test_ai_api.py:generic-api-key:148
+f24f9009de78f871b26d16b8f474dc756e09458c:tests/test_ai_orchestrator.py:generic-api-key:178
+acdf94b5acb1434a469faa6eb4e5bcffce586c71:tests/test_ai_orchestrator.py:generic-api-key:202
+acdf94b5acb1434a469faa6eb4e5bcffce586c71:tests/test_ai_orchestrator.py:gitlab-pat:208
+acdf94b5acb1434a469faa6eb4e5bcffce586c71:tests/test_ai_orchestrator.py:private-key:209

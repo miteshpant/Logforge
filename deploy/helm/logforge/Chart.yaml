@@ -1,0 +1,8 @@
+apiVersion: v2
+name: logforge
+description: Logforge observability and SIEM platform (API, UI, retention and backup jobs)
+type: application
+version: 0.1.0
+appVersion: "0.12.0"
+keywords: [logs, siem, observability, clickhouse]
+home: https://github.com/miteshpant/Logforge

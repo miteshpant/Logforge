@@ -214,10 +214,12 @@ def test_in_flight_returns_to_zero_after_requests_complete():
     app.add_middleware(MetricsMiddleware)
     TestClient(app).get("/thing")
 
-    gauge = get_registry().snapshot()["counters"][
+    gauge = get_registry().snapshot()["gauges"][
         "logforge_http_requests_in_flight"
     ]
-    assert sum(gauge.values()) == 0, "in-flight counter leaked"
+    assert sum(gauge.values()) == 0, "in-flight gauge leaked"
+    # it goes up and down: a gauge, so Prometheus doesn't read the decrements as resets
+    assert "# TYPE logforge_http_requests_in_flight gauge" in get_registry().render()
 
 
 # ---------------------------------------------------------------------------

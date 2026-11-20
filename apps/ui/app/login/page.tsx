@@ -1,5 +1,8 @@
 'use client'
 
+import Link from 'next/link'
+import SsoSignIn from '@/components/auth/SsoSignIn'
+
 import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
@@ -160,6 +163,11 @@ export default function LoginPage() {
                     disabled={isSubmitting}
                     data-testid="password-input"
                   />
+                  <div className="text-right">
+                    <Link href="/forgot-password" className="text-sm text-blue-700 hover:underline" data-testid="forgot-password">
+                      Forgot your password?
+                    </Link>
+                  </div>
                 </div>
 
                 <Button
@@ -188,28 +196,7 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-11 border-slate-200 hover:bg-slate-50"
-                    data-testid="sso-saml"
-                    onClick={() => alert('SAML SSO - Contact your administrator to configure')}
-                  >
-                    <Shield className="w-4 h-4 mr-2" />
-                    SAML
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-11 border-slate-200 hover:bg-slate-50"
-                    data-testid="sso-oidc"
-                    onClick={() => alert('OIDC SSO - Contact your administrator to configure')}
-                  >
-                    <Eye className="w-4 h-4 mr-2" />
-                    OIDC
-                  </Button>
-                </div>
+                <SsoSignIn email={email} />
 
                 <div className="text-center pt-4">
                   <p className="text-sm text-slate-500">

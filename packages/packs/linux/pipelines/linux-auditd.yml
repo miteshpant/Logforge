@@ -1,0 +1,26 @@
+# Linux audit records (type=SYSCALL / EXECVE / PATH ...). Process executions
+# (syscall 59, execve) map to OCSF Process Activity (1007).
+name: linux-auditd
+description: auditd records from /var/log/audit/audit.log
+routing: {services: [auditd, audit]}
+processors:
+  - kv: {field: msg, target: attrs.audit}
+  - script:
+      source: |
+        attrs.audit_type = attrs.audit.type
+        attrs.audit_key = attrs.audit.key if exists('attrs.audit.key') and attrs.audit.key != '(null)' else None
+        attrs.comm = attrs.audit.comm if exists('attrs.audit.comm') else None
+        attrs.exe = attrs.audit.exe if exists('attrs.audit.exe') else None
+        attrs.syscall = attrs.audit.syscall if exists('attrs.audit.syscall') else None
+        attrs.success = attrs.audit.success if exists('attrs.audit.success') else None
+        user_id = attrs.audit.auid if exists('attrs.audit.auid') and attrs.audit.auid != '4294967295' else user_id
+        service = 'auditd'
+  - script:
+      source: |
+        attrs.ocsf.class_uid = 1007
+        attrs.ocsf.class_name = 'Process Activity'
+        attrs.ocsf.activity_id = 1
+        attrs.ocsf.process.name = attrs.comm
+        attrs.ocsf.process.file.path = attrs.exe
+        attrs.ocsf.actor.user.uid = user_id
+    if: "attrs.audit_type == 'SYSCALL' and attrs.syscall == '59'"

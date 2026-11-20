@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
 import { apiClient } from '@/lib/api'
+import { ALL, dataParams, seriesFromPanel, type DashboardVariable } from '@/lib/dashboardPanels'
 import {
   Edit,
   RefreshCw,
@@ -42,6 +43,7 @@ interface Widget {
     aggregation?: string
     group_by?: string
     query?: string
+    logql?: string
   }
   visualization_config: {
     colors?: string[]
@@ -81,7 +83,7 @@ type NormalizedWidget =
   | { kind: 'unsupported'; message: string }
   | { kind: 'empty' }
   | { kind: 'stat'; value: number; formatted?: string; change?: number; label?: string }
-  | { kind: 'series'; rows: { label: string; value: number }[] }
+  | { kind: 'series'; rows: Record<string, any>[]; names: string[] }
   | { kind: 'table'; columns: string[]; rows: any[] }
 
 const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
@@ -188,10 +190,24 @@ const normalizeWidgetData = (widgetType: string, entry: WidgetDataEntry): Normal
     }
   }
 
-  // Chart types
+  // Chart types. Query panels (Phase 6) send {labels, series: [{name, data}]},
+  // possibly several series; other widgets one series of {label, value}.
+  const panel = seriesFromPanel(d)
+  if (panel) {
+    if (panel.rows.length === 0 || panel.names.length === 0) return { kind: 'empty' }
+    return { kind: 'series', rows: panel.rows, names: panel.names }
+  }
   const rows = extractSeriesRows(d)
   if (rows.length === 0) return { kind: 'empty' }
-  return { kind: 'series', rows }
+  return { kind: 'series', rows, names: ['value'] }
+}
+
+// Time buckets come as ISO strings; show them as local times.
+const axisLabel = (value: any) => {
+  const text = String(value)
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(text)) return text
+  const date = new Date(text)
+  return Number.isNaN(date.getTime()) ? text : date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 // Widget Components
@@ -276,20 +292,25 @@ function TableWidget({ data }: { data: Extract<NormalizedWidget, { kind: 'table'
   )
 }
 
-function ChartWidget({ widget, rows }: { widget: Widget; rows: { label: string; value: number }[] }) {
+function ChartWidget({ widget, rows, names }: { widget: Widget; rows: Record<string, any>[]; names: string[] }) {
   const type = widget.type
+  const legend = names.length > 1 ? <Legend wrapperStyle={{ fontSize: 10 }} /> : null
 
   if (type === 'line_chart') {
     return (
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={rows}>
           <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-          <XAxis dataKey="label" stroke="#64748b" fontSize={10} />
+          <XAxis dataKey="label" stroke="#64748b" fontSize={10} tickFormatter={axisLabel} />
           <YAxis stroke="#64748b" fontSize={10} />
           <Tooltip
             contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
           />
-          <Line type="monotone" dataKey="value" stroke={CHART_COLORS[0]} strokeWidth={2} dot={false} />
+          {legend}
+          {names.map((name, i) => (
+            <Line key={name} type="monotone" dataKey={name} stroke={CHART_COLORS[i % CHART_COLORS.length]}
+              strokeWidth={2} dot={false} />
+          ))}
         </LineChart>
       </ResponsiveContainer>
     )
@@ -306,12 +327,16 @@ function ChartWidget({ widget, rows }: { widget: Widget; rows: { label: string; 
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-          <XAxis dataKey="label" stroke="#64748b" fontSize={10} />
+          <XAxis dataKey="label" stroke="#64748b" fontSize={10} tickFormatter={axisLabel} />
           <YAxis stroke="#64748b" fontSize={10} />
           <Tooltip
             contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
           />
-          <Area type="monotone" dataKey="value" stroke={CHART_COLORS[0]} fill="url(#areaGradient)" />
+          {legend}
+          {names.map((name, i) => (
+            <Area key={name} type="monotone" dataKey={name} stroke={CHART_COLORS[i % CHART_COLORS.length]}
+              fill={i === 0 ? 'url(#areaGradient)' : 'none'} />
+          ))}
         </AreaChart>
       </ResponsiveContainer>
     )
@@ -323,11 +348,15 @@ function ChartWidget({ widget, rows }: { widget: Widget; rows: { label: string; 
         <BarChart data={rows} layout="vertical">
           <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={false} />
           <XAxis type="number" stroke="#64748b" fontSize={10} />
-          <YAxis dataKey="label" type="category" stroke="#64748b" fontSize={10} width={80} />
+          <YAxis dataKey="label" type="category" stroke="#64748b" fontSize={10} width={120}
+            tickFormatter={(v: string) => (String(v).length > 20 ? `${String(v).slice(0, 19)}…` : String(v))} />
           <Tooltip
             contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
           />
-          <Bar dataKey="value" fill={CHART_COLORS[0]} radius={[0, 4, 4, 0]} />
+          {legend}
+          {names.map((name, i) => (
+            <Bar key={name} dataKey={name} fill={CHART_COLORS[i % CHART_COLORS.length]} radius={[0, 4, 4, 0]} />
+          ))}
         </BarChart>
       </ResponsiveContainer>
     )
@@ -344,7 +373,7 @@ function ChartWidget({ widget, rows }: { widget: Widget; rows: { label: string; 
             innerRadius={40}
             outerRadius={60}
             paddingAngle={2}
-            dataKey="value"
+            dataKey={names[0]}
             nameKey="label"
           >
             {rows.map((_, index) => (
@@ -451,7 +480,7 @@ function WidgetRenderer({ widget, entry, isLoading, fetchError, dataEndpoint }: 
     case 'table':
       return <TableWidget data={normalized} />
     case 'series':
-      return <ChartWidget widget={widget} rows={normalized.rows} />
+      return <ChartWidget widget={widget} rows={normalized.rows} names={normalized.names} />
   }
 }
 
@@ -467,6 +496,10 @@ export default function DashboardViewPage() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null)
+  // Phase 6: dashboard variables, their options, and the chosen values
+  const [variables, setVariables] = useState<DashboardVariable[]>([])
+  const [variableOptions, setVariableOptions] = useState<Record<string, string[]>>({})
+  const [variableValues, setVariableValues] = useState<Record<string, string>>({})
 
   const dataEndpoint = `GET /v1/dashboards/${params.id}/data`
 
@@ -492,12 +525,39 @@ export default function DashboardViewPage() {
     fetchDashboard()
   }, [params.id])
 
+  // Variables and the values each offers over the current time range
+  useEffect(() => {
+    if (!dashboard || !Array.isArray((dashboard as any).variables) || (dashboard as any).variables.length === 0) {
+      setVariables([])
+      return
+    }
+    let cancelled = false
+    const load = async () => {
+      try {
+        const response = await apiClient.get(`/v1/dashboards/${params.id}/variables`, { params: getApiTimeRange() })
+        const data: any = (response as any)?.data ?? response
+        if (cancelled) return
+        const defs: DashboardVariable[] = Array.isArray(data?.variables) ? data.variables : []
+        setVariables(defs)
+        setVariableOptions(data?.options && typeof data.options === 'object' ? data.options : {})
+        setVariableValues(prev => {
+          const next: Record<string, string> = {}
+          defs.forEach(v => { next[v.name] = prev[v.name] ?? v.default })
+          return next
+        })
+      } catch (err) {
+        console.error('Failed to load dashboard variables:', err)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [dashboard, params.id, getApiTimeRange, refreshTrigger])
+
   // Fetch real widget data for the whole dashboard
   const fetchDashboardData = useCallback(async () => {
     try {
-      const { start_time, end_time } = getApiTimeRange()
       const response = await apiClient.get(`/v1/dashboards/${params.id}/data`, {
-        params: { start_time, end_time }
+        params: dataParams(getApiTimeRange(), variableValues)
       })
       const data: any = response?.data ?? response
 
@@ -522,7 +582,7 @@ export default function DashboardViewPage() {
     } finally {
       setIsDataLoading(false)
     }
-  }, [params.id, getApiTimeRange, dataEndpoint])
+  }, [params.id, getApiTimeRange, dataEndpoint, variableValues])
 
   // Initial fetch + refetch when the global time range changes
   useEffect(() => {
@@ -648,6 +708,41 @@ export default function DashboardViewPage() {
             </button>
           </div>
         </div>
+
+        {/* Variables */}
+        {variables.length > 0 && (
+          <div className="flex flex-wrap items-end gap-4" data-testid="dashboard-variables">
+            {variables.map(v => (
+              <label key={v.name} className="flex flex-col gap-1 text-xs text-slate-400">
+                {v.label}
+                {v.type === 'text' ? (
+                  <input
+                    data-testid={`dashboard-variable-${v.name}`}
+                    defaultValue={variableValues[v.name] ?? v.default}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const value = (e.target as HTMLInputElement).value
+                        setVariableValues(prev => ({ ...prev, [v.name]: value }))
+                      }
+                    }}
+                    className="px-2 py-1.5 bg-slate-800 border border-white/10 rounded-md text-sm text-white min-w-[10rem]"
+                  />
+                ) : (
+                  <select
+                    data-testid={`dashboard-variable-${v.name}`}
+                    value={variableValues[v.name] ?? v.default}
+                    onChange={(e) => setVariableValues(prev => ({ ...prev, [v.name]: e.target.value }))}
+                    className="px-2 py-1.5 bg-slate-800 border border-white/10 rounded-md text-sm text-white min-w-[10rem]"
+                  >
+                    {(variableOptions[v.name] ?? []).map(option => (
+                      <option key={option} value={option}>{option === ALL ? 'All' : option}</option>
+                    ))}
+                  </select>
+                )}
+              </label>
+            ))}
+          </div>
+        )}
 
         {/* Dashboard-level data error */}
         {dataError && (

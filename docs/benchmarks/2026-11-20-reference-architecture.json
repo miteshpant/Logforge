@@ -1,0 +1,59 @@
+{
+  "inputs": {
+    "gb_per_day": 50,
+    "hot_days": 7,
+    "searchable_days": 30,
+    "archive_days": 365,
+    "clickhouse_replicas": 2,
+    "peak_factor": 3.0,
+    "events_per_second_per_api_replica": 343.0,
+    "raw_bytes_per_event": 297,
+    "stored_bytes_per_event": 29,
+    "archive_bytes_per_event": 33
+  },
+  "volume": {
+    "events_per_day": 168350168,
+    "average_events_per_second": 1948,
+    "peak_events_per_second": 5845,
+    "stored_gib_per_day_per_replica": 4.55,
+    "archive_gib_per_day": 5.17
+  },
+  "steady_state_gib": {
+    "hot_all_replicas": 64,
+    "warm_all_replicas": 209,
+    "cold_parquet": 1733,
+    "local_disk_per_clickhouse_node": 100
+  },
+  "api_replicas": 18,
+  "monthly_usd": {
+    "storage": {
+      "clickhouse_local_disks": 16.0,
+      "warm_s3": 4.81,
+      "cold_parquet_s3_ia": 21.67,
+      "redpanda_disks": 2.79,
+      "s3_requests": 20.0
+    },
+    "compute": {
+      "clickhouse_replicas": 1121.28,
+      "keeper_x3": 91.1,
+      "redpanda_x3": 420.48,
+      "api_replicas": 1261.44,
+      "ui_and_jobs": 70.08
+    },
+    "total": 3029.65
+  },
+  "yearly_usd": 36356,
+  "target_monthly_usd": 2000.0,
+  "within_target": false,
+  "prices": {
+    "ebs_gp3": 0.08,
+    "s3_standard": 0.023,
+    "s3_standard_ia": 0.0125,
+    "clickhouse_node": 0.768,
+    "keeper_node": 0.0416,
+    "redpanda_node": 0.192,
+    "api_replica": 0.096,
+    "ui_and_jobs": 0.096,
+    "s3_requests_month": 20.0
+  }
+}

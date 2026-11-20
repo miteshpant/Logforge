@@ -17,6 +17,7 @@ interface AuthProviderState {
   
   // Actions
   login: (email: string, password: string) => Promise<void>
+  loginWithTokens: (access_token: string, refresh_token?: string | null) => Promise<void>
   logout: () => Promise<void>
   refreshAuth: () => Promise<void>
   
@@ -189,6 +190,114 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  /**
+   * Set up the session from an access token: tenant and role from the JWT,
+   * the tenant from the API, then on to `next`. Used by password sign-in and
+   * by single sign-on (/login/sso), which has no profile yet.
+   */
+  const establish = async (access_token: string, profile: UserProfile | null) => {
+    let userProfile = profile
+    // Step 2: Extract tenant_id and user_role from JWT token (backend now includes both)
+    const tokenPayload = JSON.parse(atob(access_token.split('.')[1]))
+    const tenantId = tokenPayload.tenant_id
+    const userRole = tokenPayload.user_role
+    
+    if (!tenantId) {
+      throw new Error('No tenant_id found in JWT token')
+    }
+
+    // Platform-scoped accounts (super_admin & co.) have no tenant to open
+    // here; their console is the admin UI. Without this the tenant lookup
+    // 404s and the user sees "Tenant data not found in expected format".
+    if (tenantId === 'platform') {
+      throw new Error(
+        'This is a platform administrator account. Sign in to the admin console instead; ' +
+        'the tenant console needs a tenant user.'
+      )
+    }
+    
+    if (!userRole) {
+      throw new Error('No user_role found in JWT token')
+    }
+    
+    // Step 5: Set auth context with tenant ID from JWT
+    apiClient.setAuth(access_token, tenantId, undefined)
+    if (!userProfile) {
+      const me = await AuthApi.getCurrentUser()
+      if (!me.success || !me.data) throw new Error(me.error || 'Could not load your profile')
+      userProfile = me.data
+    }
+    
+    // Step 6: Fetch actual tenant information from API using tenant ID
+    console.log('🔑 Fetching tenant data for tenantId:', tenantId)
+    const tenantData = await TenantsApi.getTenant(tenantId)
+    console.log('🏢 Raw tenant API response:', tenantData)
+    
+    if (!tenantData) {
+      throw new Error('Failed to fetch tenant information')
+    }
+    
+    // Handle different response formats - backend might return data directly or wrapped
+    let tenant
+    if (tenantData.data && tenantData.data.tenant_id) {
+      // Standard ApiResponse<Tenant> format (wrapped)
+      tenant = tenantData.data
+      console.log('🏢 Using tenant from .data property:', tenant)
+    } else if (tenantData.tenant_id) {
+      // Backend returns tenant directly (not wrapped) - this is the actual format
+      tenant = tenantData
+      console.log('🏢 Using tenant directly from response:', tenant)
+    } else {
+      console.error('🚨 Unexpected tenant response format:', tenantData)
+      throw new Error('Tenant data not found in expected format')
+    }
+    
+    const tenantInfo: TenantInfo = {
+      id: tenant.tenant_id,
+      name: tenant.name,
+      subscription_tier: await resolveSubscriptionTier(tenant),
+      features: ['logs', 'analytics', 'alerts', 'dashboards', 'security'],
+      limits: {
+        users: 100,
+        storage_gb: 1000,
+        retention_days: 90,
+        api_calls_per_month: 1000000
+      }
+    }
+    
+    // Step 7: Update authentication state with actual role from JWT
+    setUser(userProfile)
+    setTenant(tenantInfo)
+    setTenantId(tenantId)
+    setUserRole(userRole) // Use actual role from JWT token
+    setPermissions(['logs:read', 'analytics:read', 'dashboards:read'])
+    setIsAuthenticated(true)
+
+    // Step 8: Return to the page that sent the user to /login (AuthGate
+    // sets ?next=), else the default landing page. Same-origin paths only,
+    // so `next` can't be used as an open redirect.
+    const next = new URLSearchParams(window.location.search).get('next')
+    const safeNext = next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/login')
+    router.push(safeNext ? next : '/centrum')
+  }
+
+  /** Single sign-on: the callback handed the UI its tokens (see app/login/sso). */
+  const loginWithTokens = async (access_token: string, refresh_token?: string | null) => {
+    try {
+      setIsLoading(true)
+      setError(null)
+      if (refresh_token) apiClient.setRefreshToken(refresh_token)
+      await establish(access_token, null)
+    } catch (error: any) {
+      apiClient.logout()
+      setUser(null); setTenant(null); setTenantId(null); setUserRole(null); setIsAuthenticated(false)
+      setError(error.message || 'Single sign-on failed.')
+      throw error
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const login = async (email: string, password: string) => {
     try {
       setIsLoading(true)
@@ -200,83 +309,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (loginResponse.success && loginResponse.data) {
         const { access_token, user: userProfile, expires_at } = loginResponse.data
         
-        // Step 2: Extract tenant_id and user_role from JWT token (backend now includes both)
-        const tokenPayload = JSON.parse(atob(access_token.split('.')[1]))
-        const tenantId = tokenPayload.tenant_id
-        const userRole = tokenPayload.user_role
-        
-        if (!tenantId) {
-          throw new Error('No tenant_id found in JWT token')
-        }
-
-        // Platform-scoped accounts (super_admin & co.) have no tenant to open
-        // here; their console is the admin UI. Without this the tenant lookup
-        // 404s and the user sees "Tenant data not found in expected format".
-        if (tenantId === 'platform') {
-          throw new Error(
-            'This is a platform administrator account. Sign in to the admin console instead; ' +
-            'the tenant console needs a tenant user.'
-          )
-        }
-        
-        if (!userRole) {
-          throw new Error('No user_role found in JWT token')
-        }
-        
-        // Step 5: Set auth context with tenant ID from JWT
-        apiClient.setAuth(access_token, tenantId, undefined)
-        
-        // Step 6: Fetch actual tenant information from API using tenant ID
-        console.log('🔑 Fetching tenant data for tenantId:', tenantId)
-        const tenantData = await TenantsApi.getTenant(tenantId)
-        console.log('🏢 Raw tenant API response:', tenantData)
-        
-        if (!tenantData) {
-          throw new Error('Failed to fetch tenant information')
-        }
-        
-        // Handle different response formats - backend might return data directly or wrapped
-        let tenant
-        if (tenantData.data && tenantData.data.tenant_id) {
-          // Standard ApiResponse<Tenant> format (wrapped)
-          tenant = tenantData.data
-          console.log('🏢 Using tenant from .data property:', tenant)
-        } else if (tenantData.tenant_id) {
-          // Backend returns tenant directly (not wrapped) - this is the actual format
-          tenant = tenantData
-          console.log('🏢 Using tenant directly from response:', tenant)
-        } else {
-          console.error('🚨 Unexpected tenant response format:', tenantData)
-          throw new Error('Tenant data not found in expected format')
-        }
-        
-        const tenantInfo: TenantInfo = {
-          id: tenant.tenant_id,
-          name: tenant.name,
-          subscription_tier: await resolveSubscriptionTier(tenant),
-          features: ['logs', 'analytics', 'alerts', 'dashboards', 'security'],
-          limits: {
-            users: 100,
-            storage_gb: 1000,
-            retention_days: 90,
-            api_calls_per_month: 1000000
-          }
-        }
-        
-        // Step 7: Update authentication state with actual role from JWT
-        setUser(userProfile)
-        setTenant(tenantInfo)
-        setTenantId(tenantId)
-        setUserRole(userRole) // Use actual role from JWT token
-        setPermissions(['logs:read', 'analytics:read', 'dashboards:read'])
-        setIsAuthenticated(true)
-
-        // Step 8: Return to the page that sent the user to /login (AuthGate
-        // sets ?next=), else the default landing page. Same-origin paths only,
-        // so `next` can't be used as an open redirect.
-        const next = new URLSearchParams(window.location.search).get('next')
-        const safeNext = next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/login')
-        router.push(safeNext ? next : '/centrum')
+        await establish(access_token, userProfile)
       } else {
         throw new Error(loginResponse.error || loginResponse.message || 'Login failed')
       }
@@ -439,6 +472,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     tenant,
     login,
+    loginWithTokens,
     logout,
     refreshAuth,
     tenantId,

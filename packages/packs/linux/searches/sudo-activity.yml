@@ -1,0 +1,3 @@
+name: sudo activity by user
+description: Who ran what with sudo.
+query: '| where service = "sudo" | stats count() as runs, latest(ts) as last_run by attrs.sudo_user, attrs.sudo_target, attrs.sudo_command | sort -runs'

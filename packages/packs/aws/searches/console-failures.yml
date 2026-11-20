@@ -1,0 +1,10 @@
+name: AWS console sign-in failures by user
+description: Alert template. Five or more failed console sign-ins for one user in an hour. Enable it and add a channel.
+query: '| where service = "cloudtrail" and attrs.event_name = "ConsoleLogin" and attrs.login_result = "Failure" | stats count() as failures, values(src_ip) as sources by user_id | where failures >= 5'
+every: 15m
+window: 1h
+enabled: false
+alert:
+  condition: {kind: rows, op: gt, value: 0}
+  severity: medium
+  throttle_minutes: 60

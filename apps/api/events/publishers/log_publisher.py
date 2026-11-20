@@ -87,7 +87,8 @@ class LogEventPublisher:
         source_format: str,
         processing_time_ms: float,
         correlation_id: Optional[str] = None,
-        trace_id: Optional[str] = None
+        trace_id: Optional[str] = None,
+        durable: bool = False,
     ) -> bool:
         """
         Publish event when a batch of logs is ingested
@@ -164,12 +165,14 @@ class LogEventPublisher:
                     metadata=metadata
                 )
 
-                chunk_results = await self.publisher_manager.publish(event)
+                chunk_results = (await self.publisher_manager.publish(event, durable=True) if durable
+                                 else await self.publisher_manager.publish(event))
                 results.update(chunk_results)
                 success_count += sum(1 for r in chunk_results.values() if r)
                 total_publishers += len(chunk_results)
 
-            success = success_count > 0
+            # durable: every chunk acknowledged by every publisher; else any
+            success = (success_count == total_publishers > 0) if durable else success_count > 0
 
             if success:
                 self.logger.info(

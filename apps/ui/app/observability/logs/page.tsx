@@ -6,8 +6,15 @@ import { createCase } from '@/lib/api/cases'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { apiClient } from '@/lib/api'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
+import { parseLogsLink } from '@/lib/aiFormat'
 import QueryBar from '@/components/query/QueryBar'
 import FieldSidebar from '@/components/query/FieldSidebar'
+import AddToDashboard from '@/components/query/AddToDashboard'
+import QueryBuilder from '@/components/query/QueryBuilder'
+import QueryResults from '@/components/query/QueryResults'
+import { LOGQL_FIELDS } from '@/components/query/logqlSyntax'
+import AskQueryBox from '@/components/ai/AskQueryBox'
+import ExplainPanel from '@/components/ai/ExplainPanel'
 import { addFilter } from '@/lib/fieldFormat'
 import { useLiveTail } from '@/components/query/useLiveTail'
 import {
@@ -44,6 +51,7 @@ import {
   SlidersHorizontal,
   Terminal,
   ListTree,
+  Sparkles,
 } from 'lucide-react'
 
 interface LogStats {
@@ -73,7 +81,7 @@ const TAIL_STATUS_LABELS: Record<string, { label: string; dot: string }> = {
 }
 
 export default function LogExplorerPage() {
-  const { getApiTimeRange, refreshTrigger } = useTimeRange()
+  const { getApiTimeRange, refreshTrigger, setTimeRange } = useTimeRange()
 
   // --- Mode -----------------------------------------------------------------
   const [mode, setMode] = useState<SearchMode>('filters')
@@ -114,6 +122,8 @@ export default function LogExplorerPage() {
   // --- LogQL mode (LF-023) --------------------------------------------------
   const [logqlQuery, setLogqlQuery] = useState('')
   const [showFields, setShowFields] = useState(false)
+  const [showAddToDashboard, setShowAddToDashboard] = useState(false)
+  const [showBuilder, setShowBuilder] = useState(false)
   const [catalogueFields, setCatalogueFields] = useState<string[]>([])
   const [logqlResult, setLogqlResult] = useState<LogQLResult | null>(null)
   const [logqlSyntaxError, setLogqlSyntaxError] = useState<string | null>(null)
@@ -241,6 +251,31 @@ export default function LogExplorerPage() {
     }
   }, [logqlQuery, isRunningQuery, getApiTimeRange])
   logqlRunRef.current = runQuery
+
+  // A drafted or suggested query (Phase 9): switch to LogforgeQL, fill it in and run it.
+  const useDraftedQuery = useCallback((query: string) => {
+    setMode('logql')
+    setLogqlQuery(query)
+    setLogqlSyntaxError(null)
+    requestAnimationFrame(() => requestAnimationFrame(() => logqlRunRef.current()))
+  }, [])
+
+  // Deep links (AI answer citations): ?logql=<LogforgeQL>&since=24h, or &from=<iso>&to=<iso>.
+  useEffect(() => {
+    const link = parseLogsLink(window.location.search)
+    if (!link) return
+    if (link.start && link.end) {
+      setTimeRange({ label: 'From link', value: 'custom', startTime: link.start, endTime: link.end, isCustom: true })
+    }
+    setMode('logql')
+    setLogqlQuery(link.query)
+    // Run it only when the link came from Logforge itself (an AI citation);
+    // a link from elsewhere fills in the query and waits for Run.
+    let sameOrigin = false
+    try { sameOrigin = !!document.referrer && new URL(document.referrer).origin === window.location.origin } catch {}
+    if (sameOrigin) requestAnimationFrame(() => requestAnimationFrame(() => logqlRunRef.current()))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ---------------------------------------------------------------------------
   // Saved queries (existing API, extended with mode + LogQL text)
@@ -449,6 +484,9 @@ export default function LogExplorerPage() {
       : []
 
   const showListLoading = !isTailing && mode === 'filters' && isLoading
+  const showQueryTable =
+    mode === 'logql' && !isTailing && !!logqlResult &&
+    (logqlResult.resultType === 'table' || logqlResult.resultType === 'timechart')
   const tailStatus = TAIL_STATUS_LABELS[tail.status]
 
   const toggleLogExpansion = (logId: string) => {
@@ -487,8 +525,8 @@ export default function LogExplorerPage() {
   return (
     <DashboardLayout>
       <div className="h-[calc(100vh-120px)] flex flex-col">
-        {/* Controls Bar */}
-        <div className="flex items-center gap-3 mb-4">
+        {/* Controls Bar (wraps: LogQL mode adds Builder and Add to dashboard) */}
+        <div className="flex flex-wrap items-center gap-3 mb-4 [&>button]:whitespace-nowrap">
           {/* Mode toggle: simple filters <-> LogforgeQL (LF-023 item 5) */}
           <div className="flex items-center bg-slate-800/30 rounded-lg p-1">
             <button
@@ -510,6 +548,19 @@ export default function LogExplorerPage() {
               LogQL
             </button>
           </div>
+
+          {mode === 'logql' && (
+            <button
+              data-testid="builder-toggle"
+              onClick={() => setShowBuilder(v => !v)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                showBuilder ? 'bg-blue-600 text-white' : 'bg-slate-800/30 text-slate-300 hover:bg-white/10'
+              }`}
+              title="Build a query from a form"
+            >
+              Builder
+            </button>
+          )}
 
           {/* Field explorer (Phase 5) */}
           <button
@@ -656,6 +707,27 @@ export default function LogExplorerPage() {
           </button>
           {caseError && <span role="alert" className="text-sm text-red-400">{caseError}</span>}
 
+          {mode === 'logql' && (
+            <button
+              data-testid="add-to-dashboard"
+              onClick={() => setShowAddToDashboard(true)}
+              disabled={!logqlQuery.trim()}
+              title="Make this query a dashboard panel"
+              className="flex items-center gap-2 px-4 py-2 border border-white/10 rounded-lg text-slate-300 hover:bg-white/5 disabled:opacity-50"
+            >
+              Add to dashboard
+            </button>
+          )}
+          {showAddToDashboard && (
+            <AddToDashboard
+              query={logqlQuery}
+              result={logqlResult?.resultType
+                ? { resultType: logqlResult.resultType, columns: logqlResult.columns, rows: logqlResult.rows }
+                : null}
+              onClose={() => setShowAddToDashboard(false)}
+            />
+          )}
+
           <button
             data-testid="logs-refresh"
             onClick={() => (mode === 'logql' ? runQuery() : loadLogs())}
@@ -690,6 +762,9 @@ export default function LogExplorerPage() {
             </span>
           </div>
         )}
+
+        {/* Ask in plain English (Phase 9): drafts a LogforgeQL query to run or edit */}
+        <AskQueryBox onUse={useDraftedQuery} />
 
         {/* Query input area */}
         {mode === 'logql' ? (
@@ -787,8 +862,8 @@ export default function LogExplorerPage() {
           </div>
         )}
 
-        {/* Stats Bar */}
-        <div className="flex gap-4 mb-4">
+        {/* Stats Bar (log counts; not shown for table and timechart results) */}
+        <div className={`${showQueryTable ? 'hidden' : 'flex'} gap-4 mb-4`}>
           <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/30 rounded-lg">
             <FileText className="w-4 h-4 text-slate-400" />
             <span className="text-sm font-medium text-slate-300">
@@ -842,8 +917,31 @@ export default function LogExplorerPage() {
           </div>
         )}
 
+        {/* Query builder (Phase 6) */}
+        {mode === 'logql' && showBuilder && (
+          <QueryBuilder
+            fields={Array.from(new Set([...LOGQL_FIELDS, ...catalogueFields]))}
+            onClose={() => setShowBuilder(false)}
+            onUse={(query) => {
+              setLogqlQuery(query)
+              setShowBuilder(false)
+              requestAnimationFrame(() => logqlRunRef.current())
+            }}
+          />
+        )}
+
+        {/* Table and timechart results (Phase 6) */}
+        {showQueryTable && logqlResult && (
+          <QueryResults
+            resultType={logqlResult.resultType as 'table' | 'timechart'}
+            columns={logqlResult.columns}
+            rows={logqlResult.rows}
+            truncated={logqlResult.truncated}
+          />
+        )}
+
         {/* Log List */}
-        <div className="flex-1 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-2xl border border-white/5 shadow-xl overflow-hidden flex flex-col relative">
+        <div className={`${showQueryTable ? 'hidden' : ''} flex-1 bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl rounded-2xl border border-white/5 shadow-xl overflow-hidden flex flex-col relative`}>
           {/* Table Header */}
           <div className="flex items-center gap-4 px-4 py-2 bg-slate-800/50 border-b border-white/5 text-xs font-semibold text-slate-400 uppercase">
             <div className="w-8" />
@@ -940,6 +1038,18 @@ export default function LogExplorerPage() {
                               {log.message}
                             </p>
                           </div>
+                          <button
+                            data-testid="log-explain"
+                            onClick={e => {
+                              e.stopPropagation()
+                              setSelectedLog(log)
+                            }}
+                            title="Explain this event"
+                            className="flex items-center gap-1 px-2 py-0.5 rounded border border-white/10 text-xs text-slate-300 hover:bg-white/10 shrink-0"
+                          >
+                            <Sparkles className="w-3 h-3 text-blue-300" />
+                            Explain
+                          </button>
                           <div className="w-24">
                             {log.trace_id && (
                               <button
@@ -1078,6 +1188,7 @@ export default function LogExplorerPage() {
                     <p className="text-sm text-white font-mono">{selectedLog.trace_id}</p>
                   </div>
                 )}
+                <ExplainPanel log={selectedLog} onUseQuery={query => { setSelectedLog(null); useDraftedQuery(query) }} />
                 <div>
                   <label className="text-xs text-slate-400">Metadata</label>
                   <pre className="mt-2 p-4 bg-slate-900 text-green-400 rounded-lg text-xs overflow-x-auto">

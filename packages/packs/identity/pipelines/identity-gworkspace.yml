@@ -1,0 +1,42 @@
+# Google Workspace activities from the Admin SDK Reports API
+# (https://developers.google.com/admin-sdk/reports/reference/rest/v1/activities),
+# one activity per line. The first event of the activity is used.
+name: identity-gworkspace
+description: Google Workspace audit activities (login, admin, token)
+routing: {services: [gworkspace, google-workspace, gsuite]}
+processors:
+  - regex:
+      field: msg
+      patterns: ['"name": ?"(?:USER_EMAIL|affected_email_address)", ?"value": ?"(?P<target_user>[^"]+)"']
+    ignore_failure: true
+  - regex:
+      field: msg
+      patterns: ['"name": ?"ROLE_NAME", ?"value": ?"(?P<admin_role>[^"]+)"']
+    ignore_failure: true
+  - regex:
+      field: msg
+      patterns: ['"name": ?"login_failure_type", ?"value": ?"(?P<failure_reason>[^"]+)"']
+    ignore_failure: true
+  - json: {field: msg, target: attrs.gws}
+  - date: {field: attrs.gws.id.time, formats: [ISO8601]}
+    ignore_failure: true
+  - script:
+      source: |
+        attrs.app = attrs.gws.id.applicationName
+        attrs.event_name = field('attrs.gws.events.0.name')
+        attrs.event_category = field('attrs.gws.events.0.type')
+        attrs.event_type = str(attrs.gws.id.applicationName) + '.' + str(field('attrs.gws.events.0.name'))
+        attrs.login_failure = 'yes' if attrs.event_type == 'login.login_failure' else 'no'
+        attrs.outcome = 'FAILURE' if attrs.event_type in ['login.login_failure', 'login.login_challenge'] else 'SUCCESS'
+        user_id = attrs.gws.actor.email
+        src_ip = attrs.gws.ipAddress
+        level = 'warn' if attrs.outcome == 'FAILURE' or attrs.event_category == 'account_warning' else 'info'
+        msg = attrs.event_type + ' by ' + str(user_id) + (' for ' + attrs.target_user if exists('attrs.target_user') else '')
+        attrs.ocsf.class_uid = 3002 if attrs.app == 'login' else 3001
+        attrs.ocsf.class_name = 'Authentication' if attrs.app == 'login' else 'Account Change'
+        attrs.ocsf.actor.user.name = user_id
+        attrs.ocsf.user.name = attrs.target_user
+        attrs.ocsf.src_endpoint.ip = src_ip
+        attrs.ocsf.status = 'Failure' if attrs.outcome == 'FAILURE' else 'Success'
+        service = 'gworkspace'
+  - compact: {field: attrs}

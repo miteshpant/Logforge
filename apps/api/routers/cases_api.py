@@ -255,6 +255,14 @@ async def pin_evidence(case_id: str, body: Evidence, customer_id: str = Header(.
                                                 evidence=body.model_dump(exclude_none=True))))
 
 
+@router.delete("/{case_id}/evidence/{evidence_id}")
+async def unpin_evidence(case_id: str, evidence_id: str, customer_id: str = Header(..., alias="X-Customer-ID"),
+                         current_user: User = Depends(get_current_user)) -> Dict[str, Any]:
+    """Take back a pin (the pin stays in the timeline, marked as taken back)."""
+    return _dict(await _run(_case_service().act(customer_id, case_id, "unpin_evidence", _actor(current_user),
+                                                evidence_id=evidence_id)))
+
+
 @router.post("/{case_id}/alerts")
 async def attach_alerts(case_id: str, body: AlertIds, customer_id: str = Header(..., alias="X-Customer-ID"),
                         current_user: User = Depends(get_current_user)) -> Dict[str, Any]:

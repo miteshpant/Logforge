@@ -45,6 +45,8 @@ export function describeEvent(event: CaseEvent): string {
       return `${actor} commented`
     case 'evidence_pinned':
       return `${actor} pinned ${data.kind}: ${data.title || data.ref}`
+    case 'evidence_unpinned':
+      return `${actor} took back a pinned item`
     case 'tags_changed':
       return `${actor} set tags: ${(data.to || []).join(', ') || 'none'}`
     case 'merged':
@@ -82,8 +84,16 @@ export function evidenceHref(evidence: { kind: string; ref: string }): string | 
       return `/observability/traces?trace_id=${encodeURIComponent(evidence.ref)}`
     case 'link':
     case 'file':
-      return /^https?:\/\//i.test(evidence.ref) ? evidence.ref : null
+      // a full http(s) URL, or a path in Logforge itself (the copilot pins Log Explorer links)
+      return /^https?:\/\//i.test(evidence.ref) || /^\/(?![/\\])/.test(evidence.ref) ? evidence.ref : null
     default:
       return null
   }
+}
+
+/** The pins not taken back: the server's list when it sends one, else worked out from the timeline. */
+export function currentEvidence(detail: { timeline: CaseEvent[]; evidence?: CaseEvent[] }): CaseEvent[] {
+  if (detail.evidence) return detail.evidence
+  const takenBack = new Set(detail.timeline.filter(e => e.kind === 'evidence_unpinned').map(e => String((e.data as any)?.evidence_id)))
+  return detail.timeline.filter(e => e.kind === 'evidence_pinned' && !takenBack.has(e.id))
 }

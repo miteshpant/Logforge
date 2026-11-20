@@ -1,0 +1,160 @@
+# Logforge, highly available (Phase 12, docs/deployment.md).
+#
+#   keeper        ClickHouse Keeper (one node here; three in production)
+#   ch1, ch2      two ClickHouse replicas of one shard; `logforge` is a
+#                 Replicated database, so every table is replicated and DDL
+#                 (migrations) runs on both
+#   redpanda      the ingest log: API replicas publish, and consume as one
+#                 consumer group, so a batch acknowledged by one replica is
+#                 written by whichever replica is alive
+#   api1, api2    stateless API replicas
+#   lb            HAProxy: the API on :7180 and ClickHouse HTTP on :8180,
+#                 health-checked, so a dead replica stops getting traffic
+#
+#   docker compose -f infra/docker/ha/compose.ha.yml -p logforge-ha up -d --build
+#   python scripts/chaos_test.py        # kill a ClickHouse replica and an API replica under load
+#
+# Ports differ from compose.yml so both stacks can run side by side.
+
+x-clickhouse: &clickhouse
+  image: clickhouse/clickhouse-server:23.8
+  environment: &ch-env
+    CLICKHOUSE_USER: logforge
+    CLICKHOUSE_PASSWORD: logforge123
+    CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+  healthcheck:
+    test: ["CMD", "clickhouse-client", "--user", "logforge", "--password", "logforge123", "--query", "SELECT 1"]
+    interval: 5s
+    timeout: 5s
+    retries: 30
+  depends_on:
+    keeper:
+      condition: service_started
+
+x-api: &api
+  image: docker-api:latest
+  build:
+    context: ../../../apps/api
+    dockerfile: Dockerfile
+  volumes:
+    - ../../../apps/api:/app   # as in compose.yml: the checked-out code
+  environment: &api-env
+    PYTHONPATH: /app
+    CLICKHOUSE_HOST: lb
+    CLICKHOUSE_PORT: "8123"
+    CLICKHOUSE_USER: logforge
+    CLICKHOUSE_PASSWORD: logforge123
+    CLICKHOUSE_DATABASE: logforge
+    REDPANDA_BOOTSTRAP_SERVERS: redpanda:9092
+    KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+    KAFKA_SECURITY_PROTOCOL: PLAINTEXT
+    REDIS_HOST: redis
+    REDIS_PORT: "6379"
+    JWT_SECRET: ha-demo-secret-change-me     # the same on every replica: any replica verifies any token
+    LOGFORGE_STORAGE_TIERS: "off"      # no object storage in this stack
+    LOGFORGE_RETENTION_JOB: "off"      # one runner per cluster: a CronJob in Kubernetes
+    LOGFORGE_SEARCH_SCHEDULER: "off"
+    CORS_ORIGINS: http://localhost:3000
+  depends_on:
+    init:
+      condition: service_completed_successfully
+    redpanda:
+      condition: service_healthy
+    redis:
+      condition: service_started
+    lb:
+      condition: service_started
+  healthcheck:
+    test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=3)\""]
+    interval: 5s
+    timeout: 5s
+    retries: 30
+
+services:
+  keeper:
+    image: clickhouse/clickhouse-server:23.8
+    entrypoint: ["clickhouse-keeper", "--config-file", "/etc/clickhouse-keeper/keeper.xml"]
+    volumes:
+      - ./keeper.xml:/etc/clickhouse-keeper/keeper.xml:ro
+      - keeper-data:/var/lib/clickhouse-keeper
+
+  ch1:
+    <<: *clickhouse
+    hostname: ch1
+    environment:
+      <<: *ch-env
+      REPLICA_NAME: ch1
+    volumes:
+      - ./clickhouse-node.xml:/etc/clickhouse-server/config.d/cluster.xml:ro
+      - ./profile.xml:/etc/clickhouse-server/users.d/ha-profile.xml:ro
+      - ch1-data:/var/lib/clickhouse
+
+  ch2:
+    <<: *clickhouse
+    hostname: ch2
+    environment:
+      <<: *ch-env
+      REPLICA_NAME: ch2
+    volumes:
+      - ./clickhouse-node.xml:/etc/clickhouse-server/config.d/cluster.xml:ro
+      - ./profile.xml:/etc/clickhouse-server/users.d/ha-profile.xml:ro
+      - ch2-data:/var/lib/clickhouse
+
+  # Creates the Replicated database on both replicas, then runs the schema
+  # and migrations once (they replicate).
+  init:
+    image: curlimages/curl:latest
+    entrypoint: ["/bin/sh", "/init-ha.sh"]
+    volumes:
+      - ./init-ha.sh:/init-ha.sh:ro
+      - ../clickhouse/run_migrations.sh:/run_migrations.sh:ro
+      - ../clickhouse/apply_schema.sh:/apply_schema.sh:ro
+      - ../clickhouse/init_simple.sql:/init_simple.sql:ro
+      - ../clickhouse/migrations:/migrations:ro
+    depends_on:
+      ch1: {condition: service_healthy}
+      ch2: {condition: service_healthy}
+
+  redpanda:
+    image: redpandadata/redpanda:v23.2.8
+    command:
+      - redpanda
+      - start
+      - --kafka-addr=internal://0.0.0.0:9092
+      - --advertise-kafka-addr=internal://redpanda:9092
+      - --rpc-addr=redpanda:33145
+      - --advertise-rpc-addr=redpanda:33145
+      - --smp=1
+      - --memory=512M
+      - --mode=dev-container
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy'"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+
+  api1:
+    <<: *api
+    hostname: api1
+  api2:
+    <<: *api
+    hostname: api2
+
+  lb:
+    image: haproxy:2.8-alpine
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "7180:7080"
+      - "8180:8123"
+    depends_on:
+      ch1: {condition: service_healthy}
+      ch2: {condition: service_healthy}
+
+volumes:
+  keeper-data:
+  ch1-data:
+  ch2-data:

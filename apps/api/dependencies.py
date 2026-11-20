@@ -149,6 +149,26 @@ def process_logs_and_tracking_background(
         processing_time_ms=processing_time_ms,
     )
 
+async def publish_logs_durably(logs: List[LogEntry], customer_id: str, endpoint: str, format_type: str,
+                               bytes_processed: int, processing_time_ms: int) -> bool:
+    """Publish a batch to the ingest topic; True once the broker acknowledged it (Phase 12)."""
+    if log_event_publisher is None:
+        return False
+    batch_info = {
+        "batch_id": f"batch_{customer_id}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}",
+        "log_count": len(logs), "bytes_processed": bytes_processed, "endpoint": endpoint,
+        "timestamp": datetime.now(timezone.utc).isoformat(), "success_count": len(logs), "error_count": 0,
+        "logs": [log.model_dump(mode='json') if hasattr(log, 'model_dump') else log.__dict__ for log in logs],
+    }
+    try:
+        return bool(await log_event_publisher.publish_batch_ingested(
+            customer_id=customer_id, batch_info=batch_info, source_format=format_type,
+            processing_time_ms=float(processing_time_ms), durable=True))
+    except Exception as e:
+        logger.error(f"Durable publish failed: {e}")
+        return False
+
+
 async def process_logs_and_tracking_async(
     logs: List[LogEntry],
     customer_id: str,
@@ -385,6 +405,37 @@ async def initialize_engines():
         except Exception as e:
             logger.error(f"Failed to start the threat feed scheduler: {e}")
 
+        # Saved searches (Phase 6): runs each tenant's due scheduled searches.
+        try:
+            from routers.searches_api import start_scheduler as start_saved_searches
+            if start_saved_searches():
+                logger.info("Saved search scheduler started")
+        except Exception as e:
+            logger.error(f"Failed to start the saved search scheduler: {e}")
+
+        # Storage tiers (Phase 12): buckets, the tiered policy and table TTLs,
+        # then the hourly retention job (LOGFORGE_RETENTION_JOB).
+        try:
+            from routers.storage_tiers_api import start as start_storage_tiers
+            if start_storage_tiers():
+                logger.info("Retention job started")
+        except Exception as e:
+            logger.error(f"Failed to start storage tiers: {e}")
+
+        # Playbooks (Phase 13): start runs from new alerts and cases.
+        try:
+            from playbooks.service import start as start_playbooks
+            if start_playbooks():
+                logger.info("Playbook dispatcher started")
+            from integrations.sync_service import start as start_ticket_sync
+            if start_ticket_sync():
+                logger.info("Ticket sync started")
+            from routers.reports_api import start as start_reports
+            if start_reports():
+                logger.info("Report scheduler started")
+        except Exception as e:
+            logger.error(f"Failed to start playbooks: {e}")
+
         logger.info("All engines initialized successfully")
 
     except Exception as e:
@@ -457,7 +508,8 @@ def setup_router_dependencies():
     from routers import ingestion, query, dashboard, storage, alerts
 
     # Setup router dependencies
-    ingestion.setup_dependencies(parser_factory, process_logs_background, process_logs_and_tracking_background)
+    ingestion.setup_dependencies(parser_factory, process_logs_background, process_logs_and_tracking_background,
+                                 publish_logs_durably)
     query.setup_dependencies(query_engine, clickhouse_client)
     dashboard.setup_dependencies(dashboard_engine)
     storage.setup_dependencies(ttl_manager)

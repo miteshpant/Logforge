@@ -1,0 +1,36 @@
+name: Kubernetes
+description: API server activity and container logs (Kubernetes pack)
+variables:
+  - name: namespace
+    label: Namespace
+    type: query
+    query: '| where service = "k8s-audit" and isnotnull(attrs.namespace) | stats count() by attrs.namespace'
+    include_all: true
+    default: "*"
+panels:
+  - name: API requests
+    type: metric
+    query: '| where service = "k8s-audit" and attrs.namespace = $namespace | stats count() as requests'
+  - name: Forbidden
+    type: metric
+    query: '| where service = "k8s-audit" and attrs.namespace = $namespace and attrs.response_code = 403 | stats count() as forbidden'
+  - name: Exec sessions
+    type: metric
+    query: '| where service = "k8s-audit" and attrs.namespace = $namespace and attrs.subresource in ["exec", "attach"] | stats count() as sessions'
+  - name: Secret reads by people
+    type: metric
+    query: '| where service = "k8s-audit" and attrs.namespace = $namespace and attrs.resource = "secrets" and attrs.human = "yes" | stats count() as reads'
+  - name: Requests by verb
+    type: line_chart
+    query: '| where service = "k8s-audit" and attrs.namespace = $namespace | timechart count() by attrs.verb'
+  - name: Busiest users
+    type: bar_chart
+    query: '| where service = "k8s-audit" and attrs.namespace = $namespace and attrs.human = "yes" | top limit=10 user_id'
+  - name: Changes by people
+    type: table
+    size: {w: 2, h: 2}
+    query: '| where service = "k8s-audit" and attrs.namespace = $namespace and attrs.human = "yes" and attrs.verb in ["create", "update", "patch", "delete"] | fields ts, user_id, attrs.verb, attrs.resource, attrs.object_name, attrs.response_code | sort -ts | head 20'
+  - name: Container errors
+    type: table
+    size: {w: 2, h: 2}
+    query: '| where isnotnull(attrs.stream) and level = "error" | stats count() as errors by service, msg | sort -errors | head 10'

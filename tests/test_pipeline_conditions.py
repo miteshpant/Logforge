@@ -93,3 +93,16 @@ def test_scripts_reject_anything_but_assignments():
     for source in ["import os", "while True: pass", "attrs.x = 1; print(1)", "def f(): pass", "attrs[0] = 1"]:
         with pytest.raises(ConditionError):
             compile_script(source)
+
+
+def test_numeric_path_parts_index_lists():
+    """JSON sources nest values in lists (Okta targets, Workspace parameters):
+    a numeric part of a path reads that element; a missing one is None."""
+    from pipeline_conditions import get_path
+
+    doc = {"attrs": {"target": [{"id": "u1", "type": "User"}, {"id": "g1", "type": "Group"}]}}
+    assert get_path(doc, "attrs.target.0.id") == "u1"
+    assert get_path(doc, "attrs.target.1.type") == "Group"
+    assert get_path(doc, "attrs.target.2.id") is None and get_path(doc, "attrs.target.x") is None
+    assert compile_condition('field("attrs.target.1.type") == "Group"')(doc)
+    assert compile_condition('exists("attrs.target.0.id") and not exists("attrs.target.5")')(doc)

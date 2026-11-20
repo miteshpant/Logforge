@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
+import CitedSections from '@/components/ai/CitedSections'
+import type { CitedSummary } from '@/lib/api/ai'
 import { apiClient } from '@/lib/api'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
 import {
@@ -68,6 +70,8 @@ interface InvestigationResult {
   confidence?: number
   confidence_score?: number
   status?: string
+  /** Phase 10: the cited analysis (statistical, or the model's). */
+  analysis?: Omit<CitedSummary, 'subject'> & { mode: string }
 }
 
 export default function AIInvestigationsPage() {
@@ -583,6 +587,12 @@ export default function AIInvestigationsPage() {
                             )}
                           </p>
                         )}
+                      </div>
+                    )}
+
+                    {investigationResult.analysis && investigationResult.analysis.sections?.length > 0 && (
+                      <div className="rounded-lg border border-white/10 p-4" data-testid="rca-analysis">
+                        <CitedSections summary={investigationResult.analysis as unknown as CitedSummary} />
                       </div>
                     )}
 
