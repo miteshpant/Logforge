@@ -109,8 +109,9 @@ markers).
     role check as in Logforge.
   - **Built-in containment connectors** (Okta and Entra ID user disable,
     AWS security groups), each behind an approval.
-  - **Branches and parallel steps in playbooks**, and a run history kept
-    longer than 180 days for audits.
+  - ~~**Branches and parallel steps in playbooks**, and a run history kept
+    longer than 180 days~~: done (step `if`, `parallel` groups; runs kept 400
+    days).
   - ~~**A Unicode font in the PDF report**~~: done (embedded DejaVu when a
     report has non-Latin-1 text). Still open: CJK, and subsetting the fonts
     to shrink those PDFs.

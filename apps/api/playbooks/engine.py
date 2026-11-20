@@ -89,59 +89,94 @@ class Runner:
                 return False
         return False
 
+    async def _execute(self, run: Run, step, state: Dict[str, Any], index: int, integrations) -> None:
+        """Run one non-approval step; raises on failure."""
+        ctx = self._ctx(run)
+        if step.type == "action":
+            integration = integrations.get(step.spec["integration"])
+            if integration is None:
+                raise RunError(f"no integration named {step.spec['integration']!r}")
+            kind = actions.KINDS.get(integration["kind"])
+            if kind and kind.containment:
+                state["containment"] = True
+                if not self._approved_before(run, index):
+                    raise RunError("containment needs an approved approval step before it")
+            inputs = templates.render_tree(step.spec.get("inputs") or {}, ctx)
+            result = await self.action(integration, inputs, ctx)
+            state["output"] = result.output
+            if not result.ok:
+                raise RunError(result.error or "the action failed")
+            if step.link_case and result.output.get("ticket"):
+                case_id = (run.context.get("case") or {}).get("id")
+                if case_id:
+                    self.link_ticket(run.tenant_id, case_id, {**result.output,
+                                                              "integration": integration.get("id", "")})
+                    state["output"]["linked_case"] = case_id
+        elif step.type == "enrich":
+            state["output"] = await self.enrich(run.tenant_id, templates.render_tree(step.spec, ctx), ctx)
+        elif step.type == "search":
+            state["output"] = await self.search(run.tenant_id, templates.render_tree(step.spec, ctx), ctx)
+
+    async def _attempt(self, run: Run, step, state: Dict[str, Any], index: int, integrations) -> bool:
+        """Run a step and record its outcome; False if the run must stop here."""
+        try:
+            await self._execute(run, step, state, index, integrations)
+            state["status"] = "done"
+        except Exception as e:
+            state["status"] = "failed"
+            state["error"] = str(e)
+            if step.on_error != "continue":
+                state["finished_at"] = self.clock().isoformat()
+                return False
+        state["finished_at"] = self.clock().isoformat()
+        return True
+
     async def advance(self, run: Run, pb: Playbook) -> Run:
+        import asyncio
+
         by_id = {s.id: s for s in pb.steps}
         integrations = None
-        for index, state in enumerate(run.steps):
+        index = 0
+        while index < len(run.steps):
+            state = run.steps[index]
             if state["status"] != "pending":
+                index += 1
                 continue
             step = by_id[state["id"]]
+            # a parallel group: this step and the adjacent pending ones with the same group
+            batch = [index]
+            if step.parallel:
+                while (batch[-1] + 1 < len(run.steps) and run.steps[batch[-1] + 1]["status"] == "pending"
+                       and by_id[run.steps[batch[-1] + 1]["id"]].parallel == step.parallel):
+                    batch.append(batch[-1] + 1)
             ctx = self._ctx(run)
-            state["started_at"] = self.clock().isoformat()
-            try:
-                if step.type == "approval":
-                    state["status"] = "waiting"
-                    state["prompt"] = templates.render(step.spec["prompt"], ctx)
-                    state["approvers"] = step.spec.get("approvers") or DEFAULT_APPROVERS
-                    state["deadline"] = (self.clock() + duration(step.spec.get("timeout"))).isoformat()
-                    run.status = "waiting_approval"
+            todo = []
+            for i in batch:
+                s_state, s_step = run.steps[i], by_id[run.steps[i]["id"]]
+                s_state["started_at"] = self.clock().isoformat()
+                if not s_step.applies(ctx):  # its `if` is false: this branch isn't taken
+                    s_state["status"] = "skipped"
+                    s_state["finished_at"] = s_state["started_at"]
+                else:
+                    todo.append(i)
+            if step.type == "approval" and todo:
+                state["status"] = "waiting"
+                state["prompt"] = templates.render(step.spec["prompt"], ctx)
+                state["approvers"] = step.spec.get("approvers") or DEFAULT_APPROVERS
+                state["deadline"] = (self.clock() + duration(step.spec.get("timeout"))).isoformat()
+                run.status = "waiting_approval"
+                run.updated_at = self.clock().isoformat()
+                return run
+            if todo:
+                if integrations is None and any(by_id[run.steps[i]["id"]].type == "action" for i in todo):
+                    integrations = self.integrations(run.tenant_id)
+                outcomes = await asyncio.gather(*(self._attempt(run, by_id[run.steps[i]["id"]], run.steps[i], i,
+                                                                integrations or {}) for i in todo))
+                if not all(outcomes):
+                    run.status = "failed"
                     run.updated_at = self.clock().isoformat()
                     return run
-                if step.type == "action":
-                    integrations = integrations if integrations is not None else self.integrations(run.tenant_id)
-                    integration = integrations.get(step.spec["integration"])
-                    if integration is None:
-                        raise RunError(f"no integration named {step.spec['integration']!r}")
-                    kind = actions.KINDS.get(integration["kind"])
-                    if kind and kind.containment:
-                        state["containment"] = True
-                        if not self._approved_before(run, index):
-                            raise RunError("containment needs an approved approval step before it")
-                    inputs = templates.render_tree(step.spec.get("inputs") or {}, ctx)
-                    result = await self.action(integration, inputs, ctx)
-                    state["output"] = result.output
-                    if not result.ok:
-                        raise RunError(result.error or "the action failed")
-                    if step.link_case and result.output.get("ticket"):
-                        case_id = (run.context.get("case") or {}).get("id")
-                        if case_id:
-                            self.link_ticket(run.tenant_id, case_id, {**result.output,
-                                                                      "integration": integration.get("id", "")})
-                            state["output"]["linked_case"] = case_id
-                elif step.type == "enrich":
-                    state["output"] = await self.enrich(run.tenant_id, templates.render_tree(step.spec, ctx), ctx)
-                elif step.type == "search":
-                    state["output"] = await self.search(run.tenant_id, templates.render_tree(step.spec, ctx), ctx)
-                state["status"] = "done"
-            except Exception as e:
-                state["status"] = "failed"
-                state["error"] = str(e)
-                if step.on_error != "continue":
-                    state["finished_at"] = self.clock().isoformat()
-                    run.status = "failed"
-                    run.updated_at = state["finished_at"]
-                    return run
-            state["finished_at"] = self.clock().isoformat()
+            index = batch[-1] + 1
         run.status = "failed" if any(s["status"] == "failed" for s in run.steps) else "succeeded"
         run.updated_at = self.clock().isoformat()
         return run

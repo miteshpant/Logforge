@@ -95,10 +95,28 @@ steps:
   - `approval` waits for a person. `approvers` lists the roles that may
     decide (default `tenant_admin`, `security_analyst`); `timeout` is like
     `30m`, `4h` or `2d` (default 24h). Rejected or expired, the run stops.
+- **Branches:** a step's `if` is the same condition language over the run
+  context and earlier steps (`steps.<id>.status`, `steps.<id>.output...`);
+  when it's false the step is skipped. Two steps with opposite conditions
+  make an either/or:
+
+  ```yaml
+  - id: page
+    if: steps.intel.output.verdict == "malicious"
+    action: {integration: PagerDuty, inputs: {summary: "{{ alert.title }}"}}
+  - id: fyi
+    if: steps.intel.output.verdict != "malicious"
+    action: {integration: SOC Slack, inputs: {text: "FYI {{ alert.title }}"}}
+  ```
+- **Parallel steps:** adjacent steps with the same `parallel: <group>` run at
+  the same time (for example an `enrich` and a `search`); the next step sees
+  all their outputs. Approvals and containment can't be in a group, and a
+  group's steps must be next to each other.
 - **Containment needs an approval.** A step that calls a containment
   integration must have an approval step after the start, or after the
   previous containment step. A playbook breaking this is refused when it's
-  saved.
+  saved, and an approval skipped by its `if` doesn't count: the containment
+  step after it fails.
 - **Runs start once per alert or case.** The dispatcher checks every
   `LOGFORGE_PLAYBOOK_TICK_SECONDS` (15) for alerts and cases from the last
   `LOGFORGE_PLAYBOOK_LOOKBACK_MINUTES` (15), so a restart doesn't lose any.
@@ -111,7 +129,8 @@ steps:
   reject, note}`. Every decision records who made it and when.
 
 Definitions need `settings:write` to change; runs and approvals need
-`security:read` and `security:write`.
+`security:read` and `security:write`. Run history is kept 400 days
+(migration 040), long enough for an annual audit period.
 
 ## Ticket sync
 
