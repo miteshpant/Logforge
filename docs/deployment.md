@@ -64,15 +64,12 @@ The init container creates the `Replicated` database on both replicas,
 then applies the schema and migrations once
 (`infra/docker/clickhouse/apply_schema.sh` with `REPLICATED_ENGINES=true`).
 
-ClickHouse 23.8 needs two settings for this (`ha/profile.xml`):
-
-- `allow_experimental_database_replicated`: the `Replicated` database
-  engine is marked experimental in 23.8, and production-ready in later
-  releases.
-- `allow_nondeterministic_mutations`: about 16 API mutations stamp a
-  time with `now64()`. Each replica stamps its own clock, milliseconds
-  apart, and applies mutations in the same order, so the same row versions
-  win everywhere. Binding those times as parameters is a follow-up.
+ClickHouse 23.8 needs one setting for this (`ha/profile.xml`):
+`allow_experimental_database_replicated`. The `Replicated` database engine
+is marked experimental in 23.8, and production-ready in later releases.
+(API mutations bind their timestamps as parameters rather than calling
+`now()`, so replicas apply identical values and
+`allow_nondeterministic_mutations` isn't needed; a unit test keeps it so.)
 
 23.8 also doesn't turn `MergeTree` into replicated tables by itself, so
 `REPLICATED_ENGINES=true` creates every MergeTree-family table as its

@@ -124,8 +124,10 @@ markers).
     twice.
   - **ClickHouse 24.x:** a production-ready Replicated database that
     converts MergeTree tables itself, so `REPLICATED_ENGINES` can go.
-  - **Bind mutation timestamps as parameters** (about 16 `now64()`
-    mutations), so `allow_nondeterministic_mutations` can go.
+  - ~~**Bind mutation timestamps as parameters.**~~ Done: 15 mutations
+    bind the time (`mutation_time.now_param`), the HA profile no longer sets
+    `allow_nondeterministic_mutations`, and a test fails if a mutation
+    calls `now()` again.
   - **Three Keepers and three Redpanda brokers in the HA compose**, and the
     chaos test killing them too.
   - **Install the Helm chart on a real cluster in CI** (kind), and publish

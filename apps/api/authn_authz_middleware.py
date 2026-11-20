@@ -47,6 +47,7 @@ SESSION_EXPIRY_HOURS = int(os.getenv("SESSION_EXPIRY_HOURS", "8"))
 
 # ClickHouse configuration (single source: app_config.clickhouse_settings)
 from app_config import clickhouse_settings as _clickhouse_settings
+from mutation_time import now_param
 
 _CH = _clickhouse_settings()
 CLICKHOUSE_HOST = _CH["host"]
@@ -728,11 +729,11 @@ class SetupTokenManager:
         # the update, so a second request cannot see the token as unused.
         self.db.client.command(
             f"""
-            ALTER TABLE {self.TABLE} UPDATE used_at = now64(3)
+            ALTER TABLE {self.TABLE} UPDATE used_at = toDateTime64({{now:String}}, 3)
             WHERE token_hash = {{token_hash:String}} AND used_at IS NULL
             SETTINGS mutations_sync = 2
             """,
-            parameters={"token_hash": token_hash},
+            parameters={"token_hash": token_hash, "now": now_param()},
         )
         logger.debug("Setup token consumed", token=token[:8] + "...")
         return True

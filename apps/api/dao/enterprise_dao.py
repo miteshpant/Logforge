@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 
 from database_layer import DatabaseLayer
+from mutation_time import now_param
 
 logger = structlog.get_logger()
 
@@ -129,7 +130,8 @@ class EnterpriseDAO:
         if not set_clauses:
             return False
 
-        set_clauses.append("updated_at = now64(3)")
+        set_clauses.append("updated_at = toDateTime64(%(now)s, 3)")
+        params["now"] = now_param()
 
         query = f"""
         ALTER TABLE auth_providers_mt
@@ -264,11 +266,11 @@ class EnterpriseDAO:
         """Update API key last used timestamp and usage count"""
         query = """
         ALTER TABLE api_keys_enterprise_mt
-        UPDATE last_used = now64(3), usage_count = usage_count + 1
+        UPDATE last_used = toDateTime64(%(now)s, 3), usage_count = usage_count + 1
         WHERE customer_id = %(customer_id)s AND id = %(key_id)s
         """
 
-        params = {'customer_id': customer_id, 'key_id': key_id}
+        params = {'customer_id': customer_id, 'key_id': key_id, 'now': now_param()}
         await self.db.execute_query(query, params)
         return True
 
@@ -276,11 +278,11 @@ class EnterpriseDAO:
         """Revoke API key"""
         query = """
         ALTER TABLE api_keys_enterprise_mt
-        UPDATE is_active = 0, updated_at = now64(3)
+        UPDATE is_active = 0, updated_at = toDateTime64(%(now)s, 3)
         WHERE customer_id = %(customer_id)s AND id = %(key_id)s
         """
 
-        params = {'customer_id': customer_id, 'key_id': key_id}
+        params = {'customer_id': customer_id, 'key_id': key_id, 'now': now_param()}
         await self.db.execute_query(query, params)
         return True
 
@@ -343,11 +345,11 @@ class EnterpriseDAO:
         """Update MFA setup verification status"""
         query = """
         ALTER TABLE mfa_setups_mt
-        UPDATE is_verified = 1, verified_at = now64(3)
+        UPDATE is_verified = 1, verified_at = toDateTime64(%(now)s, 3)
         WHERE customer_id = %(customer_id)s AND user_id = %(user_id)s AND mfa_type = %(mfa_type)s
         """
 
-        params = {'customer_id': customer_id, 'user_id': user_id, 'mfa_type': mfa_type}
+        params = {'customer_id': customer_id, 'user_id': user_id, 'mfa_type': mfa_type, 'now': now_param()}
         await self.db.execute_query(query, params)
         return True
 
@@ -526,7 +528,8 @@ class EnterpriseDAO:
         if not set_clauses:
             return False
 
-        set_clauses.append("updated_at = now64(3)")
+        set_clauses.append("updated_at = toDateTime64(%(now)s, 3)")
+        params["now"] = now_param()
 
         query = f"""
         ALTER TABLE tenants_mt
@@ -689,14 +692,15 @@ class EnterpriseDAO:
         """Update integration health status"""
         query = """
         ALTER TABLE enterprise_integrations_mt
-        UPDATE health_status = %(health_status)s, last_health_check = now64(3), updated_at = now64(3)
+        UPDATE health_status = %(health_status)s, last_health_check = toDateTime64(%(now)s, 3), updated_at = toDateTime64(%(now)s, 3)
         WHERE customer_id = %(customer_id)s AND id = %(integration_id)s
         """
 
         params = {
             'customer_id': customer_id,
             'integration_id': integration_id,
-            'health_status': health_status
+            'health_status': health_status,
+            'now': now_param(),
         }
 
         await self.db.execute_query(query, params)

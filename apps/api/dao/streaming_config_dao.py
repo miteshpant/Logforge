@@ -7,6 +7,7 @@ import structlog
 from typing import Dict, Any, Optional, List
 from database_layer import DatabaseLayer
 from constants.streaming_config import VALID_STREAMING_CONFIG_TYPES
+from mutation_time import now_param
 
 logger = structlog.get_logger(__name__)
 
@@ -118,7 +119,7 @@ class StreamingConfigDAO:
             query = """
             ALTER TABLE tenant_configs_mt UPDATE 
                 config_value = %(config_value)s,
-                updated_at = now64(3)
+                updated_at = toDateTime64(%(now)s, 3)
             WHERE customer_id = %(customer_id)s 
             AND config_key = %(config_key)s
             AND config_type = 'json'
@@ -127,7 +128,8 @@ class StreamingConfigDAO:
             await self.db.execute_update(query, {
                 "customer_id": customer_id,
                 "config_key": config_key,
-                "config_value": config_value
+                "config_value": config_value,
+                "now": now_param(),
             })
             
             logger.info(f"Updated streaming config: {customer_id}:{config_key}")

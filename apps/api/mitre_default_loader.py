@@ -46,6 +46,7 @@ import structlog
 
 from mitre_metadata_generator import generate_production_metadata
 from database_layer import DatabaseLayer
+from mutation_time import now_param
 
 logger = structlog.get_logger(__name__)
 
@@ -1115,11 +1116,11 @@ class MitreDefaultLoader:
             try:
                 await self.database.execute_update(
                     """
-                    ALTER TABLE sigma_rules_mt UPDATE is_enabled = 0, updated_at = now64(3)
+                    ALTER TABLE sigma_rules_mt UPDATE is_enabled = 0, updated_at = toDateTime64(%(now)s, 3)
                     WHERE customer_id = %(customer_id)s AND id IN %(ids)s
                     SETTINGS mutations_sync = 2
                     """,
-                    {"customer_id": DEFAULT_RULE_TENANT, "ids": retired},
+                    {"customer_id": DEFAULT_RULE_TENANT, "ids": retired, "now": now_param()},
                 )
                 counts["retired"] = len(retired)
                 logger.info(f"Disabled {len(retired)} default rules that are no longer shipped")

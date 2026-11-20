@@ -12,6 +12,7 @@ import json
 import uuid
 
 from dao.storage_dao import StorageDAO
+from mutation_time import now_param
 
 logger = structlog.get_logger()
 
@@ -1007,14 +1008,17 @@ class StorageService:
             await self.clickhouse_client.execute_insert('archive_access_log_mt', access_log_data)
             
             # Update access count in metadata
-            update_access_query = f"""
-            ALTER TABLE archive_metadata_mt UPDATE 
+            # Bound values: the archive key comes from the request, and the time is
+            # fixed here rather than evaluated by each replica.
+            update_access_query = """
+            ALTER TABLE archive_metadata_mt UPDATE
                 access_count = access_count + 1,
-                last_accessed_at = now64()
-            WHERE customer_id = '{customer_id}' AND archive_key = '{archive_key}'
+                last_accessed_at = toDateTime64(%(now)s, 3)
+            WHERE customer_id = %(customer_id)s AND archive_key = %(archive_key)s
             """
-            
-            await self.clickhouse_client.execute_update(update_access_query)
+
+            await self.clickhouse_client.execute_update(update_access_query, {
+                "customer_id": customer_id, "archive_key": archive_key, "now": now_param()})
             
             logger.info("Access logged for archive", 
                        customer_id=customer_id, 

@@ -24,6 +24,7 @@ import re
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
 
 import yaml
+from mutation_time import now_param
 
 CREATED_BY = "git-sync"
 MAX_RULES = 1000
@@ -218,10 +219,10 @@ async def apply_sync(db, tenant_id: str, plan: Dict[str, Any]) -> Dict[str, int]
             counts["updated"] += 1
     if plan["retire"]:
         await db.execute_update(
-            "ALTER TABLE sigma_rules_mt UPDATE is_enabled = 0, updated_at = now64(3) "
+            "ALTER TABLE sigma_rules_mt UPDATE is_enabled = 0, updated_at = toDateTime64(%(now)s, 3) "
             "WHERE customer_id = %(customer_id)s AND created_by = %(created_by)s AND id IN %(ids)s "
             "SETTINGS mutations_sync = 2",
-            {"customer_id": tenant_id, "created_by": CREATED_BY, "ids": plan["retire"]})
+            {"customer_id": tenant_id, "created_by": CREATED_BY, "ids": plan["retire"], "now": now_param()})
         counts["retired"] = len(plan["retire"])
     return counts
 
