@@ -4053,6 +4053,32 @@ paths:
       summary: Login User
       tags:
       - Authentication
+  /v1/auth/login/mfa:
+    post:
+      description: 'Second step of sign-in for accounts with MFA: the challenge from /login and a code.'
+      operationId: login_mfa_v1_auth_login_mfa_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaLogin'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Login Mfa
+      tags:
+      - Authentication
   /v1/auth/logout:
     post:
       description: User logout - invalidate session and revoke the refresh token
@@ -4111,6 +4137,88 @@ paths:
       security:
       - HTTPBearer: []
       summary: Get Current User Roles
+      tags:
+      - Authentication
+  /v1/auth/mfa:
+    delete:
+      description: Turn MFA off; needs a current code or a backup code.
+      operationId: mfa_disable_v1_auth_mfa_delete
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaCode'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Mfa Disable
+      tags:
+      - Authentication
+    get:
+      operationId: mfa_status_v1_auth_mfa_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: Mfa Status
+      tags:
+      - Authentication
+  /v1/auth/mfa/confirm:
+    post:
+      description: Turn MFA on with a code from the app. Returns one-time backup codes, shown only now.
+      operationId: mfa_confirm_v1_auth_mfa_confirm_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaCode'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Mfa Confirm
+      tags:
+      - Authentication
+  /v1/auth/mfa/setup:
+    post:
+      description: 'Start enrolling: a new secret for the authenticator app (not active until confirmed).'
+      operationId: mfa_setup_v1_auth_mfa_setup_post
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: Mfa Setup
       tags:
       - Authentication
   /v1/auth/password/change:
@@ -17920,6 +18028,34 @@ components:
           title: Sample Rate
           type: number
       title: MetricsStreamingConfig
+      type: object
+    MfaCode:
+      properties:
+        code:
+          maxLength: 20
+          minLength: 1
+          title: Code
+          type: string
+      required:
+      - code
+      title: MfaCode
+      type: object
+    MfaLogin:
+      properties:
+        code:
+          maxLength: 20
+          minLength: 1
+          title: Code
+          type: string
+        mfa_token:
+          maxLength: 2000
+          minLength: 1
+          title: Mfa Token
+          type: string
+      required:
+      - mfa_token
+      - code
+      title: MfaLogin
       type: object
     ModelRetrainRequest:
       description: Model retraining request

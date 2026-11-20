@@ -126,8 +126,9 @@ The workflow hasn't run yet: the first tag will be its first run.
 
 - **Data scopes** don't cover traces, metrics, alerts or archive search
   (refused), and there's no field-level masking.
-- **Sign-in:** no SAML, and MFA enrollment exists but isn't enforced at
-  sign-in.
+- **Sign-in:** no SAML. Two-step sign-in (TOTP) is per user and optional; a
+  tenant can't require it yet. Accounts that sign in through OIDC use their
+  identity provider's MFA.
 - **Prompt injection** from log content is mitigated (tools are read-only and
   answers are cited), not prevented.
 - **Next.js 14:** the UIs run it until the Next.js 15 migration.

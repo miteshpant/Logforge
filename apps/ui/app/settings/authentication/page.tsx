@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import SsoProviders from '@/components/settings/SsoProviders'
 import ScimTokens from '@/components/settings/ScimTokens'
+import MfaSettings from '@/components/settings/MfaSettings'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { apiClient } from '@/lib/api'
 import {
@@ -673,141 +674,7 @@ export default function AuthenticationPage() {
             {activeTab === 'sso' && <><SsoProviders /><ScimTokens /></>}
 
             {/* MFA Tab */}
-            {activeTab === 'mfa' && (
-              <div className="space-y-4">
-                {/* ENH-046: there is no endpoint that reports MFA status, so the
-                    panel below cannot show live state. Say so explicitly --
-                    rendering the per-method cards as "Disabled" would assert a
-                    security posture we have not measured. */}
-                {!mfaStatus && (
-                  <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
-                    <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium text-amber-300">MFA status is unavailable</p>
-                      <p className="text-sm text-amber-200/80">
-                        This deployment does not expose an MFA status endpoint, so enrolment and
-                        enforcement cannot be reported here. The settings below are not live state.
-                      </p>
-                    </div>
-                  </div>
-                )}
-                <div className="rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5 p-6">
-                  <div className="flex items-start justify-between mb-6">
-                    <div>
-                      <h3 className="text-lg font-semibold text-white">Multi-Factor Authentication</h3>
-                      <p className="text-slate-400 text-sm mt-1">
-                        Require users to verify their identity with a second factor
-                      </p>
-                    </div>
-                    <div className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
-                      !mfaStatus
-                        ? 'bg-slate-500/20 text-slate-400'
-                        : mfaStatus.enforced
-                          ? 'bg-green-500/20 text-green-400'
-                          : mfaStatus.enabled
-                            ? 'bg-blue-500/20 text-blue-400'
-                            : 'bg-slate-500/20 text-slate-400'
-                    }`}>
-                      {!mfaStatus
-                        ? 'Unknown'
-                        : mfaStatus.enforced
-                          ? 'Enforced'
-                          : mfaStatus.enabled
-                            ? 'Optional'
-                            : 'Disabled'}
-                    </div>
-                  </div>
-
-                  {/* MFA Options */}
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <div className="p-4 bg-slate-700/30 rounded-lg border border-white/5">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="p-2 bg-blue-500/20 rounded-lg">
-                          <Smartphone className="w-5 h-5 text-blue-400" />
-                        </div>
-                        <div>
-                          <h4 className="text-white font-medium">Authenticator App</h4>
-                          <p className="text-xs text-slate-400">TOTP-based (Google, Authy)</p>
-                        </div>
-                      </div>
-                      <div className={`px-2 py-1 rounded text-xs font-medium inline-block ${
-                        mfaStatus?.methods?.includes('totp')
-                          ? 'bg-green-500/20 text-green-400'
-                          : 'bg-slate-500/20 text-slate-400'
-                      }`}>
-                        {mfaStatus?.methods?.includes('totp') ? 'Enabled' : 'Disabled'}
-                      </div>
-                    </div>
-
-                    <div className="p-4 bg-slate-700/30 rounded-lg border border-white/5">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="p-2 bg-purple-500/20 rounded-lg">
-                          <Key className="w-5 h-5 text-purple-400" />
-                        </div>
-                        <div>
-                          <h4 className="text-white font-medium">Security Keys</h4>
-                          <p className="text-xs text-slate-400">FIDO2/WebAuthn</p>
-                        </div>
-                      </div>
-                      <div className={`px-2 py-1 rounded text-xs font-medium inline-block ${
-                        mfaStatus?.methods?.includes('webauthn')
-                          ? 'bg-green-500/20 text-green-400'
-                          : 'bg-slate-500/20 text-slate-400'
-                      }`}>
-                        {mfaStatus?.methods?.includes('webauthn') ? 'Enabled' : 'Disabled'}
-                      </div>
-                    </div>
-
-                    <div className="p-4 bg-slate-700/30 rounded-lg border border-white/5">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="p-2 bg-orange-500/20 rounded-lg">
-                          <Lock className="w-5 h-5 text-orange-400" />
-                        </div>
-                        <div>
-                          <h4 className="text-white font-medium">Backup Codes</h4>
-                          <p className="text-xs text-slate-400">One-time recovery codes</p>
-                        </div>
-                      </div>
-                      <div className={`px-2 py-1 rounded text-xs font-medium inline-block ${
-                        mfaStatus?.methods?.includes('backup_codes')
-                          ? 'bg-green-500/20 text-green-400'
-                          : 'bg-slate-500/20 text-slate-400'
-                      }`}>
-                        {mfaStatus?.methods?.includes('backup_codes') ? 'Enabled' : 'Disabled'}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* MFA Enrollment Stats */}
-                  <div className="mt-6 pt-6 border-t border-white/5">
-                    <h4 className="text-white font-medium mb-4">Enrollment Status</h4>
-                    <div className="flex items-center gap-4">
-                      <div className="flex-1">
-                        <div className="flex justify-between text-sm mb-2">
-                          <span className="text-slate-400">Users with MFA</span>
-                          <span className="text-white font-medium">
-                            {mfaStatus?.enrolled_users || 0} / {mfaStatus?.total_users || 0}
-                          </span>
-                        </div>
-                        <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-green-500 rounded-full transition-all duration-500"
-                            style={{
-                              width: mfaStatus?.total_users
-                                ? `${(mfaStatus.enrolled_users / mfaStatus.total_users) * 100}%`
-                                : '0%'
-                            }}
-                          />
-                        </div>
-                      </div>
-                      <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors">
-                        Enforce MFA
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            {activeTab === 'mfa' && <MfaSettings />}
           </>
         )}
 

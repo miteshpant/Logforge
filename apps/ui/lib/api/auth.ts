@@ -100,6 +100,24 @@ export async function login(
 }
 
 /**
+ * Second sign-in step for accounts with MFA: the challenge from login() and a code.
+ */
+export async function loginMfa(mfa_token: string, code: string): Promise<ApiResponse<LoginResponse>> {
+  const response = await apiClient.post<LoginResponse>('/v1/auth/login/mfa', { mfa_token, code })
+  if (response.success && response.data?.refresh_token) {
+    apiClient.setRefreshToken(response.data.refresh_token)
+  }
+  return response
+}
+
+export interface MfaStatus { enabled: boolean; pending: boolean; backup_codes_left: number }
+export const mfaStatus = () => apiClient.get<MfaStatus>('/v1/auth/mfa')
+export const mfaSetup = () => apiClient.post<{ secret: string; otpauth_url: string }>('/v1/auth/mfa/setup', {})
+export const mfaConfirm = (code: string) =>
+  apiClient.post<{ enabled: boolean; backup_codes: string[] }>('/v1/auth/mfa/confirm', { code })
+export const mfaDisable = (code: string) => apiClient.request('/v1/auth/mfa', { method: 'DELETE', body: JSON.stringify({ code }), headers: { 'Content-Type': 'application/json' } })
+
+/**
  * Logout current user. Revokes the server-side session and the
  * refresh token, then clears local auth state.
  */
@@ -220,6 +238,7 @@ export const AuthApi = {
   sendEmailVerification,
   verifyEmail,
   listSessions,
+  loginMfa,
 }
 
 export default AuthApi

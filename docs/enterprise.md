@@ -117,6 +117,27 @@ What a scope doesn't cover yet:
   a service outside the scope.
 - **Fields:** there is no field-level masking.
 
+## Two-step sign-in (TOTP)
+
+Any user can turn it on from **Your account** (the profile menu → Profile
+Settings, `/account`): scan or type the key into an authenticator app, confirm
+with a code, and keep the eight one-time backup codes shown once. From then on
+`POST /v1/auth/login` with the right password returns
+`{"mfa_required": true, "mfa_token": "..."}` instead of a session, and
+`POST /v1/auth/login/mfa` with that token (valid 5 minutes) and a code or a
+backup code finishes the sign-in.
+
+- Codes follow RFC 6238 (SHA-1, 6 digits, 30 s), accepted one step either side.
+  A step can't be used twice, and each backup code works once.
+- Wrong codes count toward the same sign-in throttle as wrong passwords.
+- The secret is sealed with `LOGFORGE_SECRETS_KEY` like other stored secrets;
+  backup codes are stored as SHA-256 hashes.
+- Turning it off (`DELETE /v1/auth/mfa`) needs a current code or a backup code.
+- `GET /v1/auth/mfa` reports whether it's on and how many backup codes remain.
+
+Not yet: a tenant setting that requires it for everyone. OIDC sign-ins rely on
+the identity provider's MFA.
+
 ## Account emails
 
 Links point at `LOGFORGE_PUBLIC_URL` and are sent through the same SMTP

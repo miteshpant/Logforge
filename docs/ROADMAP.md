@@ -85,8 +85,8 @@ markers).
     advisories fixed only there; they're allowlisted until 2027-01-31
     (`security/audit-allowlist.json`), and three Server Components DoS ones
     apply.
-  - **SAML** sign-in, and **MFA enforced** at sign-in (enrollment exists but
-    nothing checks a code).
+  - **SAML** sign-in. (MFA is done: TOTP with backup codes, enforced at
+    sign-in; see [enterprise.md](./enterprise.md#two-step-sign-in-totp).)
   - **Data scopes for traces, metrics and alerts**, archive search under a
     scope (filtering the Parquet read), and **field-level masking**.
   - **API key scopes**: a key acts with its creator's roles today.

@@ -18,6 +18,10 @@ interface AuthProviderState {
   // Actions
   login: (email: string, password: string) => Promise<void>
   loginWithTokens: (access_token: string, refresh_token?: string | null) => Promise<void>
+  /** Set when the password was right and the account needs an MFA code (see loginWithMfa). */
+  mfaRequired: boolean
+  loginWithMfa: (code: string) => Promise<void>
+  cancelMfa: () => void
   logout: () => Promise<void>
   refreshAuth: () => Promise<void>
   
@@ -59,6 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [user, setUser] = useState<UserProfile | null>(null)
+  const [mfaToken, setMfaToken] = useState<string | null>(null)
   const [tenant, setTenant] = useState<TenantInfo | null>(null)
   const [tenantId, setTenantId] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<string | null>(null)
@@ -298,6 +303,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const loginWithMfa = async (code: string) => {
+    if (!mfaToken) throw new Error('Sign in with your password first')
+    try {
+      setIsLoading(true)
+      setError(null)
+      const response = await AuthApi.loginMfa(mfaToken, code) // throws on a wrong code
+      setMfaToken(null)
+      await establish(response.data!.access_token, response.data!.user as any)
+    } catch (error: any) {
+      setError(error.message || 'That code isn\'t valid')
+      if (/expired|start again/i.test(error.message || '')) setMfaToken(null)
+      throw error
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const login = async (email: string, password: string) => {
     try {
       setIsLoading(true)
@@ -306,6 +328,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Step 1: Authenticate with backend
       const loginResponse = await AuthApi.login({ email, password })
       
+      // MFA: the password was right; the session comes after a code (loginWithMfa)
+      const challenge = loginResponse.data as any
+      if (loginResponse.success && challenge?.mfa_required) {
+        setMfaToken(challenge.mfa_token)
+        return
+      }
+
       if (loginResponse.success && loginResponse.data) {
         const { access_token, user: userProfile, expires_at } = loginResponse.data
         
@@ -473,6 +502,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     tenant,
     login,
     loginWithTokens,
+    mfaRequired: mfaToken !== null,
+    loginWithMfa,
+    cancelMfa: () => setMfaToken(null),
     logout,
     refreshAuth,
     tenantId,

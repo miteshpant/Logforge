@@ -16,7 +16,8 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const { login, error, clearError } = useAuth()
+  const { login, error, clearError, mfaRequired, loginWithMfa, cancelMfa } = useAuth()
+  const [code, setCode] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -122,6 +123,23 @@ export default function LoginPage() {
             </CardHeader>
             
             <CardContent>
+              {mfaRequired ? (
+                <form className="space-y-4" data-testid="mfa-form" onSubmit={async (e) => {
+                  e.preventDefault()
+                  try { setIsSubmitting(true); clearError(); await loginWithMfa(code) } catch { /* shown by AuthContext */ }
+                  finally { setIsSubmitting(false) }
+                }}>
+                  {error && <p className="text-sm text-red-700" data-testid="mfa-error">{error}</p>}
+                  <p className="text-sm text-slate-600">Enter the 6-digit code from your authenticator app, or a backup code.</p>
+                  <Input autoFocus inputMode="numeric" autoComplete="one-time-code" value={code} data-testid="mfa-code"
+                    onChange={(e) => setCode(e.target.value)} className="h-11 border-slate-200" placeholder="123456" />
+                  <Button type="submit" className="w-full h-11 bg-blue-700 hover:bg-blue-800 text-white" disabled={isSubmitting || !code}
+                    data-testid="mfa-submit">Verify</Button>
+                  <button type="button" className="text-sm text-slate-500 hover:underline" onClick={() => { cancelMfa(); setCode('') }}>
+                    Use a different account
+                  </button>
+                </form>
+              ) : (
               <form onSubmit={handleSubmit} className="space-y-6">
                 {error && (
                   <Alert variant="destructive" className="border-red-200 bg-red-50" data-testid="error-message">
@@ -212,6 +230,7 @@ export default function LoginPage() {
                   </p>
                 </div>
               </form>
+              )}
             </CardContent>
           </Card>
           
