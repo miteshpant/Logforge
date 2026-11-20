@@ -9,9 +9,11 @@
                         `default`. The API switches existing tables with
                         `ALTER TABLE ... MODIFY SETTING storage_policy='tiered'`
                         and sets each table's TTL (... TO VOLUME 'warm').
-  * named collection    `logforge_archive`: the cold tier, Parquet archives
-                        written and read by the s3() table function, so the
-                        credentials never appear in queries or query_log.
+  * named collections   `logforge_archive`: the cold tier, Parquet archives
+                        written and read by the s3() table function;
+                        `logforge_backups`: BACKUP/RESTORE (apps/api/backup.py).
+                        Either way the credentials never appear in queries
+                        or query_log.
 
   Credentials come from the server's environment (LOGFORGE_S3_*); compose sets
   them to MinIO's. The API creates the buckets (ClickHouse can't), so the disk
@@ -55,5 +57,11 @@
       <access_key_id from_env="LOGFORGE_S3_ACCESS_KEY"/>
       <secret_access_key from_env="LOGFORGE_S3_SECRET_KEY"/>
     </logforge_archive>
+    <!-- Backups (apps/api/backup.py): BACKUP ... TO S3(logforge_backups, '<name>') -->
+    <logforge_backups>
+      <url from_env="LOGFORGE_S3_BACKUP_URL"/>
+      <access_key_id from_env="LOGFORGE_S3_ACCESS_KEY"/>
+      <secret_access_key from_env="LOGFORGE_S3_SECRET_KEY"/>
+    </logforge_backups>
   </named_collections>
 </clickhouse>

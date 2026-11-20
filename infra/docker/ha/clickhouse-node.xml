@@ -1,0 +1,23 @@
+<!-- A replica of the HA compose: one shard, two replicas (ch1, ch2), Keeper
+     for coordination. The `logforge` database is created with the Replicated
+     engine (init-ha.sh), so every table the migrations create is replicated
+     and DDL runs on both replicas. -->
+<clickhouse>
+  <macros>
+    <shard>01</shard>
+    <replica from_env="REPLICA_NAME"/>
+  </macros>
+  <zookeeper>
+    <node><host>keeper</host><port>9181</port></node>
+  </zookeeper>
+  <remote_servers>
+    <logforge>
+      <shard>
+        <internal_replication>true</internal_replication>
+        <replica><host>ch1</host><port>9000</port><user>logforge</user><password>logforge123</password></replica>
+        <replica><host>ch2</host><port>9000</port><user>logforge</user><password>logforge123</password></replica>
+      </shard>
+    </logforge>
+  </remote_servers>
+  <distributed_ddl><path>/clickhouse/task_queue/ddl</path></distributed_ddl>
+</clickhouse>

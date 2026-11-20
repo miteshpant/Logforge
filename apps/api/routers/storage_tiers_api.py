@@ -156,7 +156,7 @@ def ensure() -> Optional[Dict[str, Any]]:
         return None
     try:
         mgr = _manager()
-        mgr.objects.ensure_buckets(mgr.cfg.archive_bucket, mgr.cfg.warm_bucket)
+        mgr.objects.ensure_buckets(mgr.cfg.archive_bucket, mgr.cfg.warm_bucket, mgr.cfg.backup_bucket)
         _status.update(mgr.ensure_tables())
         logger.info("Storage tiers ready: warm=%s", _status.get("warm"))
         return _status

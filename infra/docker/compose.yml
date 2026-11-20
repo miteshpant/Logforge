@@ -17,6 +17,7 @@ services:
     environment:
       LOGFORGE_S3_WARM_ENDPOINT: http://minio:9000/logforge-warm/clickhouse/
       LOGFORGE_S3_ARCHIVE_URL: http://minio:9000/logforge-archive/
+      LOGFORGE_S3_BACKUP_URL: http://minio:9000/logforge-backups/
       LOGFORGE_S3_ACCESS_KEY: minio
       LOGFORGE_S3_SECRET_KEY: minio123
       CLICKHOUSE_DB: logforge

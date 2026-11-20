@@ -338,7 +338,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
     mgr = from_env()
     if args.command == "ensure":
-        mgr.objects.ensure_buckets(mgr.cfg.archive_bucket, mgr.cfg.warm_bucket)
+        mgr.objects.ensure_buckets(mgr.cfg.archive_bucket, mgr.cfg.warm_bucket, mgr.cfg.backup_bucket)
         out = mgr.ensure_tables()
     else:
         out = mgr.run()

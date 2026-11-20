@@ -13,6 +13,7 @@ max_archive_days: 3650
 warm_policy: tiered
 warm_bucket: logforge-warm
 archive_bucket: logforge-archive
+backup_bucket: logforge-backups
 
 data_types:
   logs:     {table: logs_raw_mt,        ts: ts}

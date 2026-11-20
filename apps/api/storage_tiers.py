@@ -62,6 +62,7 @@ class Config:
     warm_policy: str = "tiered"
     archive_bucket: str = "logforge-archive"
     warm_bucket: str = "logforge-warm"
+    backup_bucket: str = "logforge-backups"
     prices: Dict[str, float] = field(default_factory=dict)
 
 
@@ -86,6 +87,7 @@ def load_config(path: Optional[Path] = None) -> Config:
                   warm_policy=raw.get("warm_policy", "tiered"),
                   archive_bucket=os.getenv("LOGFORGE_ARCHIVE_BUCKET", raw.get("archive_bucket", "logforge-archive")),
                   warm_bucket=raw.get("warm_bucket", "logforge-warm"),
+                  backup_bucket=os.getenv("LOGFORGE_BACKUP_BUCKET", raw.get("backup_bucket", "logforge-backups")),
                   prices={k: float(v) for k, v in (raw.get("prices") or {}).items()})
 
 
