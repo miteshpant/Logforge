@@ -201,6 +201,23 @@ async function main() {
   await page.waitForTimeout(800)
   await shot(page, 'ai-rule-draft')
 
+  // Entity analytics (Phase 11): the risk ranking, the top entity's page, log patterns.
+  await page.goto(`${UI}/security/entities`, { waitUntil: 'load' })
+  await page.getByTestId('entity-risk-row').first().waitFor({ timeout: 30000 })
+  await page.waitForTimeout(800)
+  await shot(page, 'entities')
+  await page.getByTestId('entity-risk-row').first().getByRole('link').click()
+  await page.getByTestId('entity-factors').waitFor({ timeout: 30000 })
+  await page.getByTestId('entity-events').locator('li').first().waitFor({ timeout: 30000 })
+  await page.waitForTimeout(800)
+  await shot(page, 'entity')
+  const patterns = '| where service = "sshd" | patterns'
+  await page.goto(`${UI}/observability/logs?logql=${encodeURIComponent(patterns)}&since=7d`,
+    { waitUntil: 'load', referer: `${UI}/observability/logs` })
+  await page.getByTestId('query-results-table').locator('tbody tr').first().waitFor({ timeout: 30000 })
+  await page.waitForTimeout(800)
+  await shot(page, 'log-patterns')
+
   await browser.close()
   if (errors.length) {
     console.error('page errors:', errors)

@@ -111,6 +111,7 @@ const navSections: NavSection[] = [
       { name: 'SIEM Dashboard', href: '/security/siem', icon: ShieldAlert },
       { name: 'Cases', href: '/security/cases', icon: Briefcase },
       { name: 'Events', href: '/security/events', icon: Shield },
+      { name: 'Entities', href: '/security/entities', icon: Users },
       { name: 'Detection Rules', href: '/security/rules', icon: FileText },
       { name: 'Threat Intel', href: '/security/threat-intel', icon: Globe },
       { name: 'Threat Hunting', href: '/security/threat-hunting', icon: Crosshair },

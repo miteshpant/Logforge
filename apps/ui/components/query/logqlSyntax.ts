@@ -16,7 +16,8 @@
  */
 
 export const LOGQL_STAGES = ['where', 'eval', 'stats', 'eventstats', 'timechart', 'top', 'rare', 'sort', 'head',
-  'limit', 'dedup', 'fields', 'table', 'rename', 'bin', 'rex', 'parse', 'json', 'lookup', 'join', 'last'] as const
+  'limit', 'dedup', 'fields', 'table', 'rename', 'bin', 'rex', 'parse', 'json', 'lookup', 'join', 'last',
+  'patterns'] as const
 
 /** eval / where functions (apps/api/logql_pipeline.py FUNCTIONS). */
 export const LOGQL_FUNCTIONS = ['if()', 'case()', 'coalesce()', 'isnull()', 'isnotnull()', 'lower()', 'upper()',

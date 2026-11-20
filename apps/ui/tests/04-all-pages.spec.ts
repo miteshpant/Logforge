@@ -27,6 +27,7 @@ const ROUTES = [
   '/security/rules',
   '/security/threat-intel',
   '/security/threat-hunting',
+  '/security/entities',
   '/ai/alert-correlation',
   '/ai/predictive-analytics',
   '/ai/investigations',
