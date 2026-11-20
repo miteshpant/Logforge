@@ -220,9 +220,10 @@ markers).
   need typed columns materialized from `attrs` (or ClickHouse's JSON type),
   which the compiler would then read instead. The hourly counts cover only
   service, level and status (not host or attributes). `join` reads at most
-  50,000 subsearch rows and keeps one row per key. The saved-search
-  scheduler runs inside each API process, so with several replicas each
-  would run every search (needs a lease or a separate worker). Dashboard
+  50,000 subsearch rows and keeps one row per key. ~~The saved-search
+  scheduler runs inside each API process~~ (done: saved searches, scheduled
+  reports, ticket sync and playbook dispatch take a Redis lease per tick, so
+  one replica runs each tick). Dashboard
   panels have one query each and no per-panel time range. The query builder
   writes `where`, `stats`, `timechart`, `sort` and `head` only. Queries the
   first LogforgeQL accepted still run on the original engine.

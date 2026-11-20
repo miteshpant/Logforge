@@ -303,6 +303,10 @@ async def loop() -> None:
     while True:
         await asyncio.sleep(TICK_SECONDS)
         try:
+            import scheduler_lease
+
+            if not await scheduler_lease.acquire("reports", TICK_SECONDS):
+                continue
             now = datetime.now(timezone.utc)
             for s in await asyncio.to_thread(_schedules):
                 last = s.get("last_sent")

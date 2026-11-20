@@ -191,7 +191,10 @@ async def scheduler_loop() -> None:
     logger = logging.getLogger(__name__)
     while True:
         try:
-            for run in await _runner().run_due():
+            import scheduler_lease
+
+            due = await _runner().run_due() if await scheduler_lease.acquire("saved-searches", TICK_SECONDS) else []
+            for run in due:
                 logger.info(f"Saved search run {run.search_id}: {run.status}, {run.rows} rows, "
                             f"fired={run.fired} alerted={run.alerted} throttled={run.throttled}")
         except Exception as e:

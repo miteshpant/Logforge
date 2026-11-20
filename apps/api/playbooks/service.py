@@ -176,15 +176,10 @@ async def dispatch(client=None, now: Optional[datetime] = None, runner: Optional
 
 
 async def _locked(seconds: int) -> bool:
-    """One dispatcher per tick across API replicas (Redis SET NX); without Redis, run."""
-    try:
-        import redis.asyncio as redis
+    """One dispatcher per tick across API replicas; without Redis, run."""
+    import scheduler_lease
 
-        r = redis.Redis(host=os.getenv("REDIS_HOST", "redis"), port=int(os.getenv("REDIS_PORT", "6379")),
-                        socket_timeout=2)
-        return bool(await r.set("logforge:playbooks:dispatch", "1", nx=True, ex=max(1, seconds - 1)))
-    except Exception:
-        return True
+    return await scheduler_lease.acquire("playbooks", seconds)
 
 
 async def loop() -> None:

@@ -36,6 +36,14 @@ Replicated tables do this by default). A redelivered batch is therefore
 stored once. The chaos run below predates this and still counted 60
 duplicates; it hasn't been re-run since.
 
+**Background schedulers run once per tick, not once per replica.** Saved
+searches, scheduled reports, ticket sync and playbook dispatch run as loops
+in every API process; each tick, the replica that takes the tick's Redis
+lease (`logforge:lease:<scheduler>`, expiring just before the next tick)
+does the work and the others skip it. If Redis is down, every replica runs
+every tick, which can send a report or a search's alert twice. The hourly
+retention job is a CronJob in Kubernetes instead (one runner per cluster).
+
 ## The HA compose
 
 ```bash

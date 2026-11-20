@@ -98,6 +98,10 @@ async def loop() -> None:
     while True:
         await asyncio.sleep(POLL_SECONDS)
         try:
+            import scheduler_lease
+
+            if not await scheduler_lease.acquire("ticket-sync", POLL_SECONDS):
+                continue
             async with httpx.AsyncClient(follow_redirects=False) as http:
                 report = await poll(get_clickhouse_client(), CaseService(), http)
             if report["actions"]:
