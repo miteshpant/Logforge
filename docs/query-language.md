@@ -330,6 +330,30 @@ w; at most 90 days in the query, and the API's window limit still applies).
 | last 30m | where level = "error"
 ```
 
+### `patterns`
+
+Groups the lines the query selects into templates, with the variable parts
+(addresses, ids, numbers, versions) as `<*>`: up to 1 million lines of the
+window, in a few seconds. It must be the last stage. Each row is a template:
+`pattern`, `count`, `first_seen`, `last_seen`, an `example` line, the
+`services` it came from, and two flags:
+
+- `new`: the template never appeared in the same query over the 7 days
+  before the window;
+- `rare`: it appeared at most twice in the window.
+
+`| patterns new` keeps only the new ones and `| patterns rare` the new or
+rare ones. A saved search on `| patterns new` with "more than 0 rows" alerts
+on a sudden new pattern.
+
+```logforgeql
+| where service = "checkout" | patterns
+```
+
+```logforgeql
+| where level = "error" | patterns new
+```
+
 ## Functions
 
 For `eval` and `where`:

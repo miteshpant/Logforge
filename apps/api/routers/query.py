@@ -431,6 +431,28 @@ async def execute_pipeline_text(query_text: str, customer_id: str, start: dateti
 
     from logql_pipeline import PipelineError, compile_pipeline, execute
 
+    import pattern_query
+
+    try:
+        patterns = pattern_query.split(query_text)
+    except pattern_query.PatternQueryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if patterns:
+        base, mode = patterns
+        lookups = await _lookup_metas(customer_id, base)
+        try:
+            compile_pipeline(pattern_query.lines_query(base, 1), customer_id=customer_id, start=start, end=end,
+                             lookups=lookups)
+        except (PipelineError, QueryFieldError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        if not query_engine:
+            raise HTTPException(status_code=500, detail="Query engine not initialized")
+        settings = {"readonly": 2, "max_execution_time": PIPELINE_QUERY_TIMEOUT_SECONDS,
+                    "max_bytes_to_read": AdvancedQueryEngine.DEFAULT_MAX_BYTES_TO_READ}
+        result = await asyncio.to_thread(pattern_query.run, query_engine.client, base, mode, customer_id, start, end,
+                                         settings, lookups)
+        return {**result, "estimated_rows": None, "rollup": False}
+
     lookups = await _lookup_metas(customer_id, query_text)
     try:
         compiled = compile_pipeline(query_text, customer_id=customer_id, start=start, end=end,
@@ -460,6 +482,14 @@ async def validate_pipeline_text(query_text: str, customer_id: str,
     """Raise ValueError (the message is for the user) if the query does not compile."""
     from logql_pipeline import PipelineError, compile_pipeline
 
+    import pattern_query
+
+    try:
+        patterns = pattern_query.split(query_text)
+    except pattern_query.PatternQueryError as exc:
+        raise ValueError(str(exc)) from None
+    if patterns:
+        query_text = pattern_query.lines_query(patterns[0], 1)
     lookups = await _lookup_metas(customer_id, query_text)
     end = datetime.now(timezone.utc)
     try:

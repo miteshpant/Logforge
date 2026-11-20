@@ -25,7 +25,7 @@ LOOKUPS = {"users": lp.LookupMeta("users", 1, ["user_id", "department", "manager
 
 
 def test_every_command_function_and_aggregation_is_documented():
-    for stage in lp.STAGES:
+    for stage in lp.STAGES + ("patterns",):
         assert re.search(rf"^### `{stage}`", TEXT, re.M), f"command {stage} is not documented"
     for name in lp.FUNCTIONS:
         assert f"`{name}(" in TEXT, f"function {name} is not documented"
@@ -41,5 +41,10 @@ def test_there_are_plenty_of_examples():
 def test_examples_compile(example):
     end = datetime(2026, 11, 19, 12, tzinfo=timezone.utc)
     query = " ".join(line.strip() for line in example.strip().splitlines())
+    import pattern_query
+
+    patterns = pattern_query.split(query)
+    if patterns:  # `| patterns` runs after the query that selects its lines
+        query = pattern_query.lines_query(patterns[0], 1000)
     lp.compile_pipeline(query, customer_id="acme", start=end - timedelta(days=7), end=end, lookups=LOOKUPS,
                         variables={"service": "api", "env": "prod", "hosts": ["a", "b"]})
