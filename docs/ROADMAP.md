@@ -125,9 +125,12 @@ markers).
     - move the log consumer out of the API process.
 
     The reference architecture needs 18 API replicas at today's 343 events/s.
-  - **Exactly-once ingest:** deduplicate redelivered batches (a batch id,
-    ClickHouse insert deduplication tokens). Today a failure stores a batch
-    twice.
+  - ~~**Exactly-once ingest**~~: done. Every log insert carries an
+    `insert_deduplication_token` derived from the batch's content (not from
+    `ingested_at`, which a redelivery restamps), and both log tables keep a
+    1000-insert deduplication window (migration 038): a retried or redelivered
+    batch is stored once. Not re-run: the HA chaos test that counted 60
+    duplicate rows.
   - **ClickHouse 24.x:** a production-ready Replicated database that
     converts MergeTree tables itself, so `REPLICATED_ENGINES` can go.
   - ~~**Bind mutation timestamps as parameters.**~~ Done: 15 mutations

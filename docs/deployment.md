@@ -29,8 +29,12 @@ Three ways to run Logforge:
 3. Batches a dead replica had read but not written are delivered again to
    another replica.
 
-Delivery is at least once, so a batch can be stored twice after a
-failure. The chaos test counts these duplicates.
+Delivery is at least once, but storage is deduplicated: every log insert
+carries a token derived from the batch's content, and ClickHouse drops an
+insert whose token it saw among the table's last 1000 (migration 038;
+Replicated tables do this by default). A redelivered batch is therefore
+stored once. The chaos run below predates this and still counted 60
+duplicates; it hasn't been re-run since.
 
 ## The HA compose
 
