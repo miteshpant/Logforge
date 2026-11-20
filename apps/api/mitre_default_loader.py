@@ -606,14 +606,15 @@ class MitreDefaultLoader:
             return None, str(exc)
         if not parsed.techniques:
             return None, "no MITRE technique tag"
-        referenced = []
-        for reference in parsed.rules:
+        for reference in parsed.references:
             if reference not in bases:
                 return None, f"references unknown base rule {reference!r}"
-            referenced.append(bases[reference])
+        referenced = [bases[r] for r in parsed.references]
 
         correlation = dict(rule["correlation"])
-        correlation["rules"] = [base["ref"] for base in referenced]
+        correlation["rules"] = [bases[r]["ref"] for r in parsed.rules]
+        if parsed.until:
+            correlation["until"] = [bases[r]["ref"] for r in parsed.until]
         candidate = {"id": "candidate", "title": str(title), "severity": level,
                      "tags": list(rule.get("tags") or []), "correlation": correlation}
         # Each base brings the rules it needs (a chained correlation brings
@@ -727,8 +728,12 @@ class MitreDefaultLoader:
 
     @staticmethod
     def _references(rule: Dict[str, Any]) -> List[Any]:
-        refs = (rule.get("correlation") or {}).get("rules") or []
-        return [refs] if isinstance(refs, str) else list(refs)
+        corr = rule.get("correlation") or {}
+        out: List[Any] = []
+        for key in ("rules", "until"):
+            refs = corr.get(key) or []
+            out += [refs] if isinstance(refs, str) else list(refs)
+        return out
 
     def _packaged_rule_to_row(self, rule: Any, source: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Validate one Logforge rule (Sigma shape, Logforge field names)."""

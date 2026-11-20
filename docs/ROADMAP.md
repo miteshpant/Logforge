@@ -28,8 +28,9 @@ markers).
 - ~~**The normalizer maps `hostname` onto the DNS `query` field**~~: done;
   the mapping is gone and the detection evaluation in CI still passes.
 - **Detection engine follow-ups from Phase 1**
-  ([platform roadmap](./PLATFORM_ROADMAP.md)): sequence rules have no `until`
-  (abort) condition; no correlation over alerts (e.g. "3+ distinct
+  ([platform roadmap](./PLATFORM_ROADMAP.md)): ~~sequence rules have no `until`
+  (abort) condition~~ (done: `until:` rules abandon a group's partial
+  sequence); no correlation over alerts (e.g. "3+ distinct
   techniques on one host"); git sync is push-from-CI only (no server-side
   pull on a schedule or webhook); synced correlations can't reference the
   shipped library; the streaming state has a 200k-event soak test, not a

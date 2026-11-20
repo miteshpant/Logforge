@@ -187,3 +187,37 @@ def test_a_correlation_can_feed_another_in_the_same_event():
     alerts = feed(store, [burst, chain], events)
     assert [a.rule.id for a in alerts] == ["burst", "chain"]
     assert burst.name == "brute_burst"
+
+
+# --- until: abandon a partial sequence ------------------------------------------
+
+def test_until_abandons_a_partial_sequence():
+    # brute force then success, unless the password was reset in between
+    chain = CorrelationRule.from_dict({"id": "c", "title": "c", "level": "high", "correlation": {
+        "type": "temporal_ordered", "rules": ["brute", "success"], "until": "reset",
+        "group-by": ["src_ip"], "timespan": "10m"}})
+    assert chain.until == ["reset"]
+    store = CorrelationStore()
+    assert feed(store, [chain], [(0, fail(), ["brute"]), (30, fail(), ["reset"]), (60, fail(), ["success"])]) == []
+    # a new sequence after the reset still fires
+    assert len(feed(store, [chain], [(90, fail(), ["brute"]), (120, fail(), ["success"])])) == 1
+
+
+def test_until_only_affects_its_own_group():
+    chain = rule("temporal", rules=["recon", "dump"], group_by=["host"], timespan="10m")
+    chain.until = ["reimaged"]
+    store = CorrelationStore()
+    alerts = feed(store, [chain], [(0, {"host": "h1"}, ["recon"]), (10, {"host": "h2"}, ["recon"]),
+                                   (20, {"host": "h2"}, ["reimaged"]),
+                                   (30, {"host": "h1"}, ["dump"]), (40, {"host": "h2"}, ["dump"])])
+    assert [a.group for a in alerts] == [{"host": "h1"}]
+
+
+def test_until_is_only_for_sequences():
+    with pytest.raises(Exception, match="until"):
+        CorrelationRule.from_dict({"id": "c", "title": "c", "level": "high", "correlation": {
+            "type": "event_count", "rules": ["a"], "until": "b", "group-by": ["h"], "timespan": "5m",
+            "condition": {"gte": 3}}})
+    with pytest.raises(Exception, match="until"):
+        CorrelationRule.from_dict({"id": "c", "title": "c", "level": "high", "correlation": {
+            "type": "temporal", "rules": ["a", "b"], "until": ["a"], "group-by": ["h"], "timespan": "5m"}})

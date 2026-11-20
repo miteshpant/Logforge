@@ -46,6 +46,23 @@ fixtures:
     - {repeat: 5, every: 10s, event: {event_type: authentication, result: failed, src_ip: 203.0.113.9, user: root}}
 ```
 
+A sequence (`temporal` or `temporal_ordered`) can name `until` rules: a match
+of one for the group abandons the sequence so far. Brute force then a
+successful sign-in, unless the password was reset in between:
+
+```yaml
+correlation:
+  type: temporal_ordered
+  rules: [acme_auth_failed, acme_auth_ok]
+  until: [acme_password_reset]
+  group-by: [user]
+  timespan: 30m
+```
+
+`until` is a Logforge extension to the Sigma correlation format. Its rules
+are referenced like `rules` (they must be in the rule set, and backtests
+replay them).
+
 Fixture timelines: a plain event comes 1 s after the previous one;
 `{repeat: N, every: 30s, event: ...}` repeats it; `{at: 5m, event: ...}`
 places it at an offset from the start.
