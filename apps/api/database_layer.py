@@ -68,6 +68,8 @@ class DatabaseLayer:
         'ThreatIntelDAO': os.getenv('THREAT_INTEL_SERVICE_KEY', 'threat-intel-dao-service-key'),
         'PipelineDAO': os.getenv('PIPELINE_SERVICE_KEY', 'pipeline-dao-service-key'),
         'FieldCatalogue': os.getenv('FIELD_CATALOGUE_SERVICE_KEY', 'field-catalogue-service-key'),
+        'EntityService': os.getenv('ENTITY_SERVICE_KEY', 'entity-service-key'),
+        'EntityRiskService': os.getenv('ENTITY_SERVICE_KEY', 'entity-service-key'),
         'LookupDAO': os.getenv('LOOKUP_SERVICE_KEY', 'lookup-dao-service-key'),
         'SavedSearchDAO': os.getenv('SAVED_SEARCH_SERVICE_KEY', 'saved-search-service-key'),
         'PackStore': os.getenv('PACK_STORE_SERVICE_KEY', 'pack-store-service-key'),
@@ -138,6 +140,8 @@ class DatabaseLayer:
         'ThreatIntelDAO': ['threat_feeds_mt', 'threat_indicators_mt', 'logs_raw_mt'],  # Feeds, IOCs, retro-hunts
         'PipelineDAO': ['ingest_pipelines_mt', 'pipeline_dlq_mt'],  # Ingest pipelines and their dead letters
         'FieldCatalogue': ['logs_raw_mt'],  # Field catalogue and top values (read only)
+        'EntityService': ['entities_mt', 'entity_edges_mt', 'logs_raw_mt'],  # Entities and baselines (read only)
+        'EntityRiskService': ['security_events_mt'],  # Alerts per entity for risk scoring (read only)
         'LookupDAO': ['lookup_tables_mt', 'lookup_rows_mt'],  # LogforgeQL lookup tables and managed lists
         'SavedSearchDAO': ['saved_searches_mt', 'saved_search_runs_mt'],  # Saved / scheduled searches and runs
         'PackStore': ['pack_installs_mt'],  # Source pack installs (manifests)

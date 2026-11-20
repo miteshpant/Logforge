@@ -84,6 +84,21 @@ def api(monkeypatch):
             return rows["search"] if "value" not in params else []
 
     monkeypatch.setattr(module, "_store", lambda: EntityStore(DB()))
+    from entity_risk import rank
+
+    alerts = [{"id": "a1", "rule_id": "lsass_dump", "title": "lsass dump", "severity": "critical",
+               "ts": T.isoformat(), "mitre_techniques": ["T1003.001"], "entities": {"hostname": ["web-1"]}}]
+
+    async def ranking(tenant):
+        from entity_risk import attribute
+
+        return rank(alerts, T), attribute(alerts)
+
+    async def cases(tenant, value):
+        return [{"id": "c1", "title": "web-1 compromise", "status": "new", "severity": "high"}]
+
+    monkeypatch.setattr(module, "_ranking", ranking)
+    monkeypatch.setattr(module, "_cases", cases)
     app = FastAPI()
     app.include_router(module.router)
     return TestClient(app)
@@ -98,3 +113,7 @@ def test_the_entities_api(api):
     assert api.get("/v1/entities/host/nope", headers=h).status_code == 404
     assert api.get("/v1/entities/planet/x", headers=h).status_code == 422
     assert api.get("/v1/entities?type=planet", headers=h).status_code == 422
+    assert body["risk"]["score"] > 0 and body["rank"] == 1 and body["risk"]["factors"][0]["kind"] == "alert"
+    assert body["alerts"][0]["id"] == "a1" and body["cases"][0]["id"] == "c1"
+    risk = api.get("/v1/entities/risk", headers=h).json()
+    assert risk["entities"][0]["value"] == "web-1" and risk["window_days"] == 14

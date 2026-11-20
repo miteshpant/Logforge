@@ -5930,6 +5930,52 @@ paths:
       summary: List Entities
       tags:
       - entities
+  /v1/entities/risk:
+    get:
+      description: 'Entities ranked by risk over the last 14 days: alert severity with decay (repeats
+        of one rule and rules
+
+        common across the tenant count less), ATT&CK tactic progression (shared with linked entities),
+        intel
+
+        hits. Each comes with the factors behind its score.'
+      operationId: entity_risk_v1_entities_risk_get
+      parameters:
+      - in: query
+        name: type
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Type
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 25
+          maximum: 500
+          minimum: 1
+          title: Limit
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Entity Risk V1 Entities Risk Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Entity Risk
+      tags:
+      - entities
   /v1/entities/{entity_type}/{value}:
     get:
       operationId: get_entity_v1_entities__entity_type___value__get

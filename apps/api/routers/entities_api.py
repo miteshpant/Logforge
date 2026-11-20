@@ -2,10 +2,9 @@
 Entity analytics API (Phase 11), under /v1/entities (security:read).
 
   GET /v1/entities                         entities, newest first; ?type=user|host|ip|service|cloud_account&q=
-  GET /v1/entities/{type}/{value}          one entity: summary, related entities, the query for its events
-
-Risk, alerts, cases, intel and baselines are added to the entity view by the
-later Phase 11 deliverables.
+  GET /v1/entities/risk                    entities ranked by risk, with the factors behind each score
+  GET /v1/entities/{type}/{value}          one entity: summary, risk and its factors, its alerts and
+                                           cases, related entities, the query for its events
 """
 
 from __future__ import annotations
@@ -36,6 +35,34 @@ async def list_entities(customer_id: str = MiddlewareTenant, type: str | None = 
         raise internal_error(e, "Failed to list entities", customer_id=customer_id)
 
 
+async def _ranking(tenant_id: str):
+    from entity_risk_service import ranking
+
+    return await ranking(tenant_id)
+
+
+async def _cases(tenant_id: str, value: str) -> list[dict[str, Any]]:
+    from services.case_service import CaseService, case_to_dict
+
+    cases, _ = await CaseService().list(tenant_id, entity=value, limit=20)
+    return [{k: v for k, v in case_to_dict(c).items() if k in ("id", "title", "status", "severity", "updated_at")}
+            for c in cases]
+
+
+@router.get("/risk")
+async def entity_risk(customer_id: str = MiddlewareTenant, type: str | None = Query(None),
+                      limit: int = Query(25, ge=1, le=500)) -> dict[str, Any]:
+    """Entities ranked by risk over the last 14 days: alert severity with decay (repeats of one rule and rules
+    common across the tenant count less), ATT&CK tactic progression (shared with linked entities), intel
+    hits. Each comes with the factors behind its score."""
+    try:
+        ranked, _ = await _ranking(customer_id)
+    except Exception as e:
+        raise internal_error(e, "Failed to rank entities by risk", customer_id=customer_id)
+    rows = [r for r in ranked if r.raw > 0 and (type is None or r.entity_type == type)]
+    return {"entities": [r.to_public(top=5) for r in rows[:limit]], "window_days": 14}
+
+
 @router.get("/{entity_type}/{value:path}")
 async def get_entity(entity_type: str, value: str, customer_id: str = MiddlewareTenant) -> dict[str, Any]:
     store = _store()
@@ -51,4 +78,13 @@ async def get_entity(entity_type: str, value: str, customer_id: str = Middleware
         related = await store.related(customer_id, entity_type, value)
     except Exception as e:
         raise internal_error(e, "Failed to read related entities", customer_id=customer_id)
-    return {"entity": summary, "related": related, "query": query_for(entity_type, value)}
+    try:
+        ranked, by_entity = await _ranking(customer_id)
+        cases = await _cases(customer_id, value)
+    except Exception as e:
+        raise internal_error(e, "Failed to read the entity's risk and cases", customer_id=customer_id)
+    risk = next((r for r in ranked if r.entity_type == entity_type and r.value == value), None)
+    position = next((i + 1 for i, r in enumerate(ranked) if r is risk), None)
+    alerts = sorted(by_entity.get((entity_type, value), []), key=lambda a: str(a.get("ts")), reverse=True)[:50]
+    return {"entity": summary, "risk": risk.to_public(top=20) if risk else None, "rank": position,
+            "alerts": alerts, "cases": cases, "related": related, "query": query_for(entity_type, value)}
