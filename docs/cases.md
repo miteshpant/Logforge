@@ -46,7 +46,8 @@ new → investigating → contained → resolved | false positive
   note; they are not delivered as notifications yet), **tag**, change
   **severity**, **pin evidence** (a log search, an event, a trace, a log
   line, a link), **attach alerts**, **merge** cases (the others close as
-  merged) and **split** alerts into a new case. The case list has bulk
+  merged: on the case page, choose another open case to merge into it) and
+  **split** alerts into a new case (tick the alerts on the case page). The case list has bulk
   assign and status.
 * A case can be opened by hand from an alert (**Events → Create case from
   this alert**) or from a search (**Log Explorer → Create case**, which pins

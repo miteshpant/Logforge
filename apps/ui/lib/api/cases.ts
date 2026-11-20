@@ -117,6 +117,12 @@ export async function bulkCases(body: { case_ids: string[]; action: 'assign' | '
   return (await apiClient.post<{ updated: string[]; errors: Record<string, string> }>(`${BASE}/bulk`, body)).data
 }
 
+/** Move some alerts out of a case into a new one; returns both. */
+export async function splitCase(id: string, alertIds: string[], title?: string): Promise<{ case: Case; new_case: Case }> {
+  return (await apiClient.post<{ case: Case; new_case: Case }>(`${BASE}/${encodeURIComponent(id)}/split`,
+    { alert_ids: alertIds, title: title || undefined })).data as { case: Case; new_case: Case }
+}
+
 /** Take back a pin (Phase 10): it stays in the timeline, marked as taken back. */
 export async function unpinEvidence(id: string, evidenceId: string): Promise<Case> {
   return (await apiClient.delete<Case>(`${BASE}/${encodeURIComponent(id)}/evidence/${encodeURIComponent(evidenceId)}`)).data as Case

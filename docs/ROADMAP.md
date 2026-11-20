@@ -36,8 +36,8 @@ markers).
   24 h one; correlation state is per process (lost on restart, not shared
   between API replicas).
 - **Cases follow-ups from Phase 2**
-  ([platform roadmap](./PLATFORM_ROADMAP.md)): merge and split need UI
-  (the API has them); @mentions are recorded on notes but not delivered,
+  ([platform roadmap](./PLATFORM_ROADMAP.md)): ~~merge and split need UI~~
+  (done: pick alerts to split off, merge another open case, on the case page); @mentions are recorded on notes but not delivered,
   which needs per-user notifications; "create case" should be available
   wherever an alert is shown (SIEM dashboard, Centrum incidents); a case
   per host splits lateral movement across hosts (link source and
