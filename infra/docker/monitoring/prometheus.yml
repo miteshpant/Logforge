@@ -1,0 +1,8 @@
+# Logforge's own metrics (Phase 14, docs/deployment.md#self-monitoring).
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: logforge-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api:8080"]

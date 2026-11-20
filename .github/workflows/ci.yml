@@ -294,6 +294,54 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: UI dependency vulnerabilities
+        # Blocking: a high or critical advisory fails CI unless it's in
+        # security/audit-allowlist.json with a reason and an expiry date
+        # (scripts/audit_gate.py, docs/security.md).
+        run: |
+          status=0
+          for app in ui admin-ui; do
+            echo "== apps/$app"
+            (cd apps/$app && npm audit --omit=dev --json > ../../audit-$app.json) || true
+            python scripts/audit_gate.py security/audit-allowlist.json < audit-$app.json || status=1
+          done
+          exit $status
+
+  image-scan:
+    name: Image scan and SBOM
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, ui, admin-ui]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t logforge-${{ matrix.app }}:ci apps/${{ matrix.app }}
+
+      - name: Vulnerabilities (fails on fixable critical findings)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: logforge-${{ matrix.app }}:ci
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+
+      - name: SBOM (SPDX)
+        uses: anchore/sbom-action@v0
+        with:
+          image: logforge-${{ matrix.app }}:ci
+          format: spdx-json
+          output-file: sbom-${{ matrix.app }}.spdx.json
+          artifact-name: sbom-${{ matrix.app }}.spdx.json
+
   ui-build:
     name: UI build
     runs-on: ubuntu-latest

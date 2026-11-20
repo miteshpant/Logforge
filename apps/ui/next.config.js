@@ -2,6 +2,9 @@
 const nextConfig = {
   // Self-contained server for the production Docker image (see Dockerfile).
   output: 'standalone',
+  // Nothing uses next/image. Next 14's image optimizer has unfixed advisories (fixed only in
+  // Next 15.5+, see security/audit-allowlist.json), so it is turned off.
+  images: { unoptimized: true },
   // App directory is now stable in Next.js 14 - no experimental flag needed
   typescript: {
     // Allow production builds to succeed even if there are type errors

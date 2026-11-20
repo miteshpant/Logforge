@@ -1260,6 +1260,49 @@ human control.
 
 **Ongoing, pulled forward when users ask for it.**
 
+> **Status: first pass done (2026-11-20); SAML, field-level access, admin UI pages and self-tracing not yet.** Guides: [Enterprise access](./enterprise.md), [Security](./security.md), [Self-monitoring](./deployment.md#self-monitoring).
+>
+> - **Done: SSO.**
+>   - OIDC per tenant: authorization code with PKCE, ID tokens checked
+>     against the IdP's keys.
+>   - Groups map to tenant roles, and the IdP stays the source of the role.
+>   - Accounts are created on first sign-in. An account with access outside
+>     the tenant can't sign in through the tenant's IdP.
+> - **Done: SCIM 2.0.** Users, roles and deprovisioning, with tenant-scoped
+>   hashed tokens.
+> - **Done: fine-grained RBAC.**
+>   - Custom roles are stored and enforced.
+>   - Data scopes limit which services' logs a user reads. ClickHouse
+>     enforces them on every query of the request (`additional_table_filters`),
+>     tested with injection attempts.
+>   - Per-field access isn't done.
+> - **Done: auth flows.**
+>   - Password reset, invitation and verification emails.
+>   - A reset ends every session; an accepted invitation grants its role.
+>   - Session revocation already worked.
+> - **Done: security hardening.**
+>   - In CI: `npm audit` with a reviewed, expiring allowlist; Trivy image
+>     scans; SPDX SBOMs.
+>   - A cosign-signed release workflow (not run yet: it needs a tag).
+>   - A published threat model.
+> - **Done: self-monitoring.** Prometheus and a Grafana dashboard for the
+>   API and ingest. OpenTelemetry self-tracing isn't done.
+> - **Fixed on the way:**
+>   - email verification accepted any token;
+>   - `/v1/users` listed every user on the platform to any tenant admin;
+>   - custom roles were validated and then dropped;
+>   - the requests-in-flight metric was a counter;
+>   - Next.js 14.0.3 moved to 14.2.35, and the unused image optimizer was
+>     turned off;
+>   - SSO provider storage built its secret box without a key, caught by a
+>     live test.
+> - **Not done:**
+>   - SAML;
+>   - MFA enforcement;
+>   - field-level access, and scopes for traces, metrics and alerts;
+>   - the admin UI's billing, features and support pages;
+>   - Next.js 15.
+
 - SSO: OIDC first, then SAML; SCIM user provisioning.
 - Fine-grained RBAC: per-data-source and per-field access, roles per tenant.
 - Auth flows from [ROADMAP.md](./ROADMAP.md): password reset, invites, email

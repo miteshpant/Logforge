@@ -80,6 +80,22 @@ markers).
   persistent per-tenant index with type history. LogforgeQL extraction
   uses RE2, so no lookaround or backreferences, and allows at most 32
   extracted fields per query.
+- **Enterprise follow-ups from Phase 14** ([enterprise access](./enterprise.md), [security](./security.md)):
+  - **Next.js 15.5+ for both UIs** (React 19, async request APIs). Next 14 has
+    advisories fixed only there; they're allowlisted until 2027-01-31
+    (`security/audit-allowlist.json`), and three Server Components DoS ones
+    apply.
+  - **SAML** sign-in, and **MFA enforced** at sign-in (enrollment exists but
+    nothing checks a code).
+  - **Data scopes for traces, metrics and alerts**, archive search under a
+    scope (filtering the Parquet read), and **field-level masking**.
+  - **API key scopes**: a key acts with its creator's roles today.
+  - **Authentication on `/metrics`**, or a separate metrics port.
+  - **Run the release workflow** on the first tag, and check `cosign verify`.
+  - **Admin UI** billing, features and support pages.
+  - **Retire the Enterprise RBAC and OIDC-config routes**
+    (`/v1/enterprise/rbac/*`, `/v1/enterprise/auth/oidc/configure`) in favour
+    of `/v1/roles/custom` and `/v1/sso/providers`.
 - **Response follow-ups from Phase 13** ([response automation](./response.md)):
   - **Compliance reports** (the Phase 13 deliverable not done): evidence
     for SOC 2 and ISO 27001 controls from the audit log, retention and
@@ -205,13 +221,10 @@ markers).
 ## Remove demo / fake data from the UI
 
 - The admin UI `billing`, `features` and `support` pages are "Coming soon"
-  placeholders.
+  placeholders (still so after Phase 14).
 
 ## Features
 
-- **Auth flows**: sending password-reset and invite emails, email
-  verification, and session revocation are TODOs in
-  `apps/api/routers/auth_api.py`.
 - **Threat-intel feed clients** (for example MISP, OTX, abuse.ch) for
   `apps/api/threat_intel.py`.
 - **Pluggable LLM backend** for the natural-language query in
@@ -219,8 +232,8 @@ markers).
   Define a small provider interface selected by configuration, with **no
   provider enabled by default**: without one, the keyword templates stay the
   behaviour, and no data leaves the deployment unless an operator opts in.
-- A dead-letter queue for the event bus; Grafana dashboards for Logforge's own
-  metrics; OpenTelemetry self-tracing.
+- A dead-letter queue for the event bus; OpenTelemetry self-tracing (Grafana
+  dashboards for Logforge's own metrics came in Phase 14).
 
 ## Recently completed
 

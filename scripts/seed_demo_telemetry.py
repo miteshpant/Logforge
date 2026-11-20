@@ -287,6 +287,32 @@ def seed_response(case_id):
     print(f"response: {len(INTEGRATIONS)} integrations, {len(ids)} playbooks")
 
 
+def seed_access():
+    """Phase 14: a scoped custom role (no members, so the demo user isn't limited), an SSO
+    provider on a reserved .example host, and a SCIM token for provisioning."""
+    roles = {r["name"]: r["id"] for r in call("GET", "/v1/roles/custom")["roles"]}
+    for name, body in {
+        "Payments team": {"description": "Payments engineers: their services' logs and dashboards",
+                          "permissions": ["dashboards:read,write:tenant"], "services": ["payments*", "checkout"]},
+        "Auditor": {"description": "Read-only reports and audit trail", "permissions": ["reports:read:tenant",
+                                                                                         "audit:read:tenant"]},
+    }.items():
+        body = {"name": name, **body}
+        call("PUT", f"/v1/roles/custom/{roles[name]}", body) if name in roles else call("POST", "/v1/roles/custom", body)
+    providers = {p["name"]: p["id"] for p in call("GET", "/v1/sso/providers")["providers"]}
+    sso = {"name": "Acme Okta", "issuer": "https://acme.okta.example", "client_id": "0oa1logforge",
+           "client_secret": "demo-client-secret", "groups_claim": "groups",
+           "role_mapping": {"secops": "security_analyst", "platform-admins": "tenant_admin", "sre": "devops_engineer"},
+           "default_role": "viewer", "allowed_domains": ["acme.example"], "enabled": True}
+    if "Acme Okta" in providers:
+        call("PUT", f"/v1/sso/providers/{providers['Acme Okta']}", sso)
+    else:
+        call("POST", "/v1/sso/providers", sso)
+    if not call("GET", "/v1/scim/tokens")["tokens"]:
+        call("POST", "/v1/scim/tokens", {"name": "Okta provisioning"})
+    print("access: 2 custom roles, 1 SSO provider, SCIM token")
+
+
 DASHBOARD = "Service health"
 PANELS = [
     ("Events", "metric", {"w": 1, "h": 1}, '| where service = $service | stats count() as events'),
@@ -338,3 +364,4 @@ if __name__ == "__main__":
     case_id = work_a_case(brute_source)
     seed_dashboard()
     seed_response(case_id)
+    seed_access()

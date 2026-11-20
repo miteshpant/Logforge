@@ -249,6 +249,30 @@ async function main() {
   await page.waitForTimeout(800)
   await shot(page, 'reports')
 
+  // Phase 14: roles and data scopes, SSO and SCIM, Logforge's own metrics in Grafana
+  await page.goto(`${UI}/settings/roles`, { waitUntil: 'load' })
+  await page.getByTestId('role-Payments team').waitFor({ timeout: 30000 })
+  await page.waitForTimeout(800)
+  await shot(page, 'roles')
+  await page.goto(`${UI}/settings/authentication`, { waitUntil: 'load' })
+  await page.getByRole('button', { name: /SSO/ }).first().click()
+  await page.getByTestId('sso-provider-Acme Okta').waitFor({ timeout: 30000 })
+  await page.waitForTimeout(800)
+  await shot(page, 'sso')
+  if (process.env.GRAFANA_URL) {  // docker compose --profile monitoring up -d
+    // sign in through Grafana's login API (the session cookie lands in this context),
+    // which skips the login form and its first-login password prompt
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+    const grafana = await context.newPage()
+    const signedIn = await grafana.request.post(`${process.env.GRAFANA_URL}/login`,
+      { data: { user: 'admin', password: process.env.GRAFANA_PASSWORD || 'admin' } })
+    if (!signedIn.ok()) throw new Error(`Grafana sign-in failed: ${signedIn.status()}`)
+    await grafana.goto(`${process.env.GRAFANA_URL}/d/logforge-self?orgId=1&from=now-15m&to=now&kiosk`, { waitUntil: 'load' })
+    await grafana.waitForTimeout(6000)
+    await shot(grafana, 'self-monitoring')
+    await context.close()
+  }
+
   await browser.close()
   if (errors.length) {
     console.error('page errors:', errors)

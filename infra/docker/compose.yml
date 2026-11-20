@@ -219,6 +219,36 @@ services:
     networks:
       - logforge-network
 
+  # Self-monitoring (Phase 14): docker compose --profile monitoring up -d
+  # Prometheus scrapes the API's /metrics; Grafana has the "Logforge: API and ingest" dashboard.
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: logforge-prometheus
+    profiles: ["monitoring"]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9091:9090"
+    depends_on: [api]
+    networks:
+      - logforge-network
+
+  grafana:
+    image: grafana/grafana:11.2.2
+    container_name: logforge-grafana
+    profiles: ["monitoring"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3030:3000"
+    depends_on: [prometheus]
+    networks:
+      - logforge-network
+
 volumes:
   clickhouse-data:
   minio-data:

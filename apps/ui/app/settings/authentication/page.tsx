@@ -145,7 +145,7 @@ export default function AuthenticationPage() {
       // status reporting is unavailable rather than implying "MFA is off".
       const [keysRes, providersRes] = await Promise.allSettled([
         apiClient.get('/v1/enterprise/auth/api-keys'),
-        apiClient.get('/v1/enterprise/auth/providers')
+        apiClient.get('/v1/sso/providers')  // Phase 14: the OIDC providers sign-in uses
       ])
 
       // ENH-047: a rejected promise, or the client's resolved-but-failed shape,

@@ -250,3 +250,30 @@ ClickHouse replicas, and peak = 3 × average.
   all.
 - **Prices:** on-demand AWS list prices (late 2026), assumptions rather
   than quotes; change `PRICES` in the script for yours.
+
+## Self-monitoring
+
+The API serves Prometheus metrics at `/metrics` (unauthenticated: keep it
+on the internal network). The compose stack has a `monitoring` profile with
+Prometheus and Grafana:
+
+```bash
+docker compose -f infra/docker/compose.yml --profile monitoring up -d prometheus grafana
+```
+
+Grafana (port 3030, `admin` / `GRAFANA_ADMIN_PASSWORD`) has the "Logforge:
+API and ingest" dashboard:
+
+- request rate by status and the share of 5xx;
+- p95 latency of the slowest routes, and requests in flight;
+- the ingest queue against its capacity, and the write buffer;
+- log loss: events the broker refused, logs dead-lettered or dropped at
+  ingest. These should stay at 0.
+
+Prometheus is on port 9091. Its scrape config is
+`infra/docker/monitoring/prometheus.yml`.
+
+![Self-monitoring](images/self-monitoring.png)
+
+OpenTelemetry tracing of Logforge itself isn't there yet.
+
