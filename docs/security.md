@@ -116,12 +116,14 @@ The workflow hasn't run yet: the first tag will be its first run.
 - **Elevation of privilege**
   - Containment needs a person's approval, checked against roles.
   - Custom roles can't grant platform permissions.
+  - An API key created with permissions (`logs:write`, `metrics:read`, …) can
+    do only that, whatever its service account's role. Keys created without
+    permissions keep full tenant access.
   - SSO and SCIM can't grant platform roles.
   - Failing to read custom roles fails closed (503).
 
 ### Known gaps
 
-- **API key scopes** aren't enforced: a key acts with its creator's roles.
 - **Data scopes** don't cover traces, metrics, alerts or archive search
   (refused), and there's no field-level masking.
 - **Sign-in:** no SAML, and MFA enrollment exists but isn't enforced at
