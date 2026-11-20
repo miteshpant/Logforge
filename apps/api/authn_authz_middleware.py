@@ -417,6 +417,17 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in WRITE_METHODS:
             return "security:write:tenant"
         return "security:read:tenant"
+    elif path.startswith("/v1/playbooks/runs") or (path.startswith("/v1/playbooks/") and path.endswith("/run")):
+        # Running playbooks and deciding approvals is analyst work (Phase 13);
+        # the decision also needs one of the step's approver roles.
+        if method in WRITE_METHODS:
+            return "security:write:tenant"
+        return "security:read:tenant"
+    elif path.startswith("/v1/playbooks"):
+        # Playbook definitions act on outside systems: tenant admins write them.
+        if method in WRITE_METHODS and not path.endswith("/validate"):
+            return "settings:write:tenant"
+        return "security:read:tenant"
     elif path.startswith("/v1/integrations"):
         # Integrations hold the tenant's tokens for outside systems (Phase 13).
         if method in WRITE_METHODS:

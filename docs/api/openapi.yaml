@@ -8276,6 +8276,297 @@ paths:
       summary: Pipeline Versions
       tags:
       - pipelines
+  /v1/playbooks:
+    get:
+      operationId: list_playbooks_v1_playbooks_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response List Playbooks V1 Playbooks Get
+                type: object
+          description: Successful Response
+      summary: List Playbooks
+      tags:
+      - playbooks
+    post:
+      operationId: create_v1_playbooks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlaybookBody'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Create V1 Playbooks Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Create
+      tags:
+      - playbooks
+  /v1/playbooks/runs:
+    get:
+      operationId: list_runs_v1_playbooks_runs_get
+      parameters:
+      - in: query
+        name: status
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 50
+          maximum: 500
+          minimum: 1
+          title: Limit
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response List Runs V1 Playbooks Runs Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List Runs
+      tags:
+      - playbooks
+  /v1/playbooks/runs/{run_id}:
+    get:
+      operationId: get_run_v1_playbooks_runs__run_id__get
+      parameters:
+      - in: path
+        name: run_id
+        required: true
+        schema:
+          title: Run Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Get Run V1 Playbooks Runs  Run Id  Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Run
+      tags:
+      - playbooks
+  /v1/playbooks/runs/{run_id}/decision:
+    post:
+      operationId: decide_v1_playbooks_runs__run_id__decision_post
+      parameters:
+      - in: path
+        name: run_id
+        required: true
+        schema:
+          title: Run Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Decide V1 Playbooks Runs  Run Id  Decision Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Decide
+      tags:
+      - playbooks
+  /v1/playbooks/validate:
+    post:
+      operationId: validate_v1_playbooks_validate_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlaybookBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Validate V1 Playbooks Validate Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Validate
+      tags:
+      - playbooks
+  /v1/playbooks/{playbook_id}:
+    delete:
+      operationId: delete_v1_playbooks__playbook_id__delete
+      parameters:
+      - in: path
+        name: playbook_id
+        required: true
+        schema:
+          title: Playbook Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Delete V1 Playbooks  Playbook Id  Delete
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Delete
+      tags:
+      - playbooks
+    get:
+      operationId: get_one_v1_playbooks__playbook_id__get
+      parameters:
+      - in: path
+        name: playbook_id
+        required: true
+        schema:
+          title: Playbook Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Get One V1 Playbooks  Playbook Id  Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get One
+      tags:
+      - playbooks
+    put:
+      operationId: update_v1_playbooks__playbook_id__put
+      parameters:
+      - in: path
+        name: playbook_id
+        required: true
+        schema:
+          title: Playbook Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlaybookBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Update V1 Playbooks  Playbook Id  Put
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Update
+      tags:
+      - playbooks
+  /v1/playbooks/{playbook_id}/run:
+    post:
+      operationId: run_now_v1_playbooks__playbook_id__run_post
+      parameters:
+      - in: path
+        name: playbook_id
+        required: true
+        schema:
+          title: Playbook Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Run Now V1 Playbooks  Playbook Id  Run Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Run Now
+      tags:
+      - playbooks
   /v1/query/advanced:
     post:
       description: Advanced log querying with filters, aggregations, and analysis
@@ -15742,6 +16033,24 @@ components:
           title: Pipeline Id
       title: DeadLetterAction
       type: object
+    DecisionBody:
+      properties:
+        decision:
+          title: Decision
+          type: string
+        note:
+          default: ''
+          maxLength: 2000
+          title: Note
+          type: string
+        step:
+          title: Step
+          type: string
+      required:
+      - step
+      - decision
+      title: DecisionBody
+      type: object
     DeletionType:
       description: Tenant deletion types
       enum:
@@ -17174,6 +17483,21 @@ components:
       - samples
       title: PipelineDraftBody
       type: object
+    PlaybookBody:
+      properties:
+        definition:
+          maxLength: 50000
+          minLength: 1
+          title: Definition
+          type: string
+        enabled:
+          default: true
+          title: Enabled
+          type: boolean
+      required:
+      - definition
+      title: PlaybookBody
+      type: object
     PolicyBody:
       properties:
         archive_days:
@@ -17625,6 +17949,20 @@ components:
       required:
       - yaml
       title: RuleSyncRequest
+      type: object
+    RunBody:
+      properties:
+        alert_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Alert Id
+        case_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Case Id
+      title: RunBody
       type: object
     SchemaInfo:
       description: Information about a registered schema

@@ -290,11 +290,14 @@ def validate(kind: str, config: Dict[str, Any], secrets: Dict[str, str]) -> Kind
 
 
 async def run(kind: str, config: Dict[str, Any], secrets: Dict[str, str], inputs: Dict[str, Any],
-              ctx: Dict[str, Any], http: Optional[httpx.AsyncClient] = None) -> ActionResult:
-    """Render the inputs against the context and run the action."""
+              ctx: Dict[str, Any], http: Optional[httpx.AsyncClient] = None, render: bool = True) -> ActionResult:
+    """Render the inputs against the context and run the action. Playbooks
+    pass render=False: their inputs are already rendered, and rendering again
+    would treat `{{ }}` in alert data (attacker-controlled log text) as a
+    template."""
     try:
         spec = validate(kind, config, secrets)
-        rendered = templates.render_tree(inputs or {}, ctx)
+        rendered = templates.render_tree(inputs or {}, ctx) if render else (inputs or {})
     except (ActionError, templates.TemplateError) as e:
         return ActionResult(False, error=str(e))
     if http is not None:

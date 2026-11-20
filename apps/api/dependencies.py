@@ -422,6 +422,14 @@ async def initialize_engines():
         except Exception as e:
             logger.error(f"Failed to start storage tiers: {e}")
 
+        # Playbooks (Phase 13): start runs from new alerts and cases.
+        try:
+            from playbooks.service import start as start_playbooks
+            if start_playbooks():
+                logger.info("Playbook dispatcher started")
+        except Exception as e:
+            logger.error(f"Failed to start playbooks: {e}")
+
         logger.info("All engines initialized successfully")
 
     except Exception as e:
