@@ -4,11 +4,9 @@ import { useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 
-/** Routes that render without a session. */
-const PUBLIC_ROUTES = ['/login']
+import { isPublicRoute, loginRedirect } from '@/lib/authRoutes'
 
-export const isPublicRoute = (pathname: string | null) =>
-  !!pathname && PUBLIC_ROUTES.some(p => pathname === p || pathname.startsWith(`${p}/`))
+export { isPublicRoute }
 
 /**
  * Route guard for the whole app.
@@ -26,7 +24,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isPublic && !isLoading && !isAuthenticated) {
-      router.replace(`/login?next=${encodeURIComponent(pathname || '/')}`)
+      router.replace(loginRedirect(pathname, typeof window === 'undefined' ? '' : window.location.search))
     }
   }, [isPublic, isLoading, isAuthenticated, pathname, router])
 

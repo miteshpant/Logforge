@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
@@ -160,6 +162,11 @@ export default function LoginPage() {
                     disabled={isSubmitting}
                     data-testid="password-input"
                   />
+                  <div className="text-right">
+                    <Link href="/forgot-password" className="text-sm text-blue-700 hover:underline" data-testid="forgot-password">
+                      Forgot your password?
+                    </Link>
+                  </div>
                 </div>
 
                 <Button

@@ -172,6 +172,19 @@ export async function resetPassword(params: {
 }
 
 /**
+ * Accept an invitation: creates the account and grants the invited role
+ */
+export async function acceptInvite(params: {
+  invitation_token: string
+  email: string
+  tenant_id: string
+  name: string
+  password: string
+}): Promise<ApiResponse<void>> {
+  return apiClient.post('/v1/auth/accept-invite', params)
+}
+
+/**
  * Send an email-verification token to the current user
  */
 export async function sendEmailVerification(): Promise<ApiResponse<void>> {

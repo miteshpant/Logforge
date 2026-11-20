@@ -432,7 +432,7 @@ class AuthRouterTestSuite(BaseTestSuite):
             response = await self.make_authenticated_request(
                 "POST",
                 "/v1/auth/password/reset-confirm",
-                params={
+                json={
                     "token": "invalid-reset-token",
                     "new_password": f"NewPassword{self.test_id}!"
                 },
@@ -795,12 +795,12 @@ class AuthRouterTestSuite(BaseTestSuite):
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     f"{self.base_url}/v1/auth/verify-email-confirm",
-                    params={"token": "invalid-verification-token"},
+                    json={"token": "invalid-verification-token"},
                     headers=confirm_headers
                 )
 
-            # Implementation may vary - accept success or validation error
-            assert response.status_code in [200, 400, 500], f"Expected 200, 400, or 500, got {response.status_code}: {response.text}"
+            # A token that wasn't issued for this user and address is refused
+            assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.text}"
 
             response_data = response.json()
             if response.status_code == 200:
