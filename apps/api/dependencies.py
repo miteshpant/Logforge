@@ -515,6 +515,28 @@ def setup_router_dependencies():
     storage.setup_dependencies(ttl_manager)
     alerts.setup_dependencies(alert_engine)
 
+async def wait_for(check, what: str, attempts: int = 30, delay: float = 2.0) -> None:
+    """Call `check` until it doesn't raise; after `attempts` tries, fail startup with the last error."""
+    last = None
+    for attempt in range(1, attempts + 1):
+        try:
+            result = check()
+            if asyncio.iscoroutine(result):
+                await result
+            return
+        except Exception as e:
+            last = e
+            logger.warning(f"Waiting for {what} ({attempt}/{attempts}): {e}")
+            await asyncio.sleep(delay)
+    raise RuntimeError(f"{what} isn't reachable: {last}")
+
+
+def _ping_clickhouse() -> None:
+    from app_config import clickhouse_settings
+
+    get_client(**clickhouse_settings(), connect_timeout=3).query("SELECT 1")
+
+
 @asynccontextmanager
 async def lifespan(app):
     """Application lifespan manager"""
@@ -529,6 +551,12 @@ async def lifespan(app):
     # misconfigured deployment fails fast and loudly.
     from security_config import validate_security_configuration
     validate_security_configuration()
+
+    # ClickHouse may still be starting (compose, a rolling restart): wait for it rather
+    # than fail half-way through startup. A startup that still fails stops the server
+    # (uvicorn --lifespan on) instead of serving with nothing initialised.
+    await wait_for(_ping_clickhouse, "ClickHouse",
+                   attempts=int(os.getenv("LOGFORGE_STARTUP_WAIT_ATTEMPTS", "30")))
 
     # Load configuration
     config = load_config()

@@ -538,6 +538,19 @@ def get_endpoint_permission(path: str, method: str) -> str:
     else:
         return "platform:general:tenant"
 
+def api_key_denied(state, required_permission: str):
+    """For an API key request, why its permissions don't allow `required_permission` (else None)."""
+    if not getattr(state, "is_api_key_auth", False):
+        return None
+    from api_key_scopes import allows
+
+    permissions = getattr(state, "api_key_permissions", None) or []
+    if allows(permissions, required_permission):
+        return None
+    resource, action, _ = required_permission.split(":")
+    return f"This API key doesn't allow {resource}:{action} (it has: {', '.join(permissions)})"
+
+
 async def _custom_roles_of(tenant_id: str, user_id: str) -> list:
     """The user's custom roles in the tenant (custom_roles.py, cached 30 s). A failure to read
     them grants nothing extra, but would also drop a data scope, so it fails closed: 503."""
@@ -794,9 +807,11 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app):
         super().__init__(app)
-        self.user_service = get_user_service()
-        # Resolved on first middleware construction (app startup), not at import.
-        self.subscription_service = get_subscription_service()
+        # Resolved on first use, not here: Starlette builds the middleware stack at
+        # startup, before the lifespan waits for ClickHouse, and these services
+        # connect to it. A ClickHouse still starting used to fail startup here.
+        self._user_service = None
+        self._subscription_service = None
 
         # Public endpoints (no authentication required)
         self.public_endpoints = [
@@ -894,6 +909,9 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
                     if not grants(effective(custom)[0], required_permission):
                         raise HTTPException(403, f"Insufficient permissions for {request.url.path}")
+                denied = api_key_denied(request.state, required_permission)
+                if denied:
+                    raise HTTPException(403, denied)
 
             # Step 5: Feature Access - Check subscription (skip for admin endpoints)
             if not is_admin_endpoint and tenant_id:
@@ -963,6 +981,26 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 status_code=500,
                 content={"error": "Authentication system error"}
             )
+
+    @property
+    def user_service(self):
+        if getattr(self, "_user_service", None) is None:
+            self._user_service = get_user_service()
+        return self._user_service
+
+    @user_service.setter
+    def user_service(self, value):
+        self._user_service = value
+
+    @property
+    def subscription_service(self):
+        if getattr(self, "_subscription_service", None) is None:
+            self._subscription_service = get_subscription_service()
+        return self._subscription_service
+
+    @subscription_service.setter
+    def subscription_service(self, value):
+        self._subscription_service = value
 
     def _is_public_endpoint(self, path: str) -> bool:
         """Check if endpoint is public (no auth required)"""
