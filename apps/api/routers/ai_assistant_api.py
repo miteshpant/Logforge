@@ -6,6 +6,7 @@ used; with AI off, /ask returns the rule-based answer.
 Permissions (checked here with the caller's roles, and by the middleware):
   GET /status, GET /usage, POST /ask    ai:read
   POST /nl2query                        ai:read and logs:read
+  POST /pipeline-draft                  ai:read and logs:write (who may edit pipelines)
   POST /triage                          ai:read; the evidence is read with
                                         the caller's own permissions
   GET /settings, GET /audit             settings:read   (tenant admin)
@@ -38,6 +39,11 @@ class QuestionBody(BaseModel):
 class TriageBody(BaseModel):
     kind: Literal["alert", "case"]
     id: str = Field(..., min_length=1, max_length=128)
+
+
+class PipelineDraftBody(BaseModel):
+    samples: list[str] = Field(..., min_length=1, max_length=50)
+    service: str = Field("sample", min_length=1, max_length=200)
 
 
 class SettingsBody(BaseModel):
@@ -205,3 +211,31 @@ async def ai_triage(body: TriageBody, request: Request, customer_id: str = Middl
         raise HTTPException(status_code=502, detail=f"The AI provider failed: {e}")
     except Exception as e:
         raise internal_error(e, "AI triage failed", customer_id=customer_id)
+
+
+@router.post("/pipeline-draft")
+async def ai_pipeline_draft(body: PipelineDraftBody, request: Request,
+                            customer_id: str = MiddlewareTenant) -> dict[str, Any]:
+    """Draft an ingest pipeline that parses the sample lines, checked by simulation (how many lines parsed,
+    the fields extracted, the failures). Nothing is saved. The model sees the samples, redacted; with AI off,
+    or if it parses fewer lines, the heuristic draft."""
+    from ai.pipeline_draft import draft, heuristic
+
+    _require(request, customer_id, "ai:read:tenant")
+    _require(request, customer_id, "logs:write:tenant")
+    roles = getattr(request.state, "roles", None) or []
+    try:
+        async with assistant.ai_session(tenant_id=customer_id, user_id=_user_id(request), roles=roles,
+                                        feature="pipeline_draft") as session:
+            out = await draft(body.samples, session.provider, redactor=session.redactor, session=session,
+                              service=body.service)
+            return {**out.to_public(), "provider": session.provider_info(), "request_id": session.request_id}
+    except assistant.AIUnavailable as e:
+        return {**heuristic(body.samples, body.service).to_public(), "reason_code": e.code, "reason": str(e),
+                "provider": None}
+    except assistant.LimitExceeded as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    except ProviderError as e:
+        raise HTTPException(status_code=502, detail=f"The AI provider failed: {e}")
+    except Exception as e:
+        raise internal_error(e, "AI pipeline drafting failed", customer_id=customer_id)

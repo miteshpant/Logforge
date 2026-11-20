@@ -3610,6 +3610,31 @@
         "title": "PipelineBody",
         "type": "object"
       },
+      "PipelineDraftBody": {
+        "properties": {
+          "samples": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Samples",
+            "type": "array"
+          },
+          "service": {
+            "default": "sample",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Service",
+            "type": "string"
+          }
+        },
+        "required": [
+          "samples"
+        ],
+        "title": "PipelineDraftBody",
+        "type": "object"
+      },
       "PricingModel": {
         "description": "Pricing model types",
         "enum": [
@@ -10661,6 +10686,50 @@
         "summary": "Optimize Performance",
         "tags": [
           "ai"
+        ]
+      }
+    },
+    "/v1/ai/pipeline-draft": {
+      "post": {
+        "description": "Draft an ingest pipeline that parses the sample lines, checked by simulation (how many lines parsed,\nthe fields extracted, the failures). Nothing is saved. The model sees the samples, redacted; with AI off,\nor if it parses fewer lines, the heuristic draft.",
+        "operationId": "ai_pipeline_draft_v1_ai_pipeline_draft_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PipelineDraftBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Ai Pipeline Draft V1 Ai Pipeline Draft Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ai Pipeline Draft",
+        "tags": [
+          "ai-assistant"
         ]
       }
     },

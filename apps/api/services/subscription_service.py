@@ -164,6 +164,7 @@ class SubscriptionService:
             "/v1/ai/ask": "ai_assistant.query",
             "/v1/ai/nl2query": "ai_assistant.query",
             "/v1/ai/triage": "ai_assistant.query",
+            "/v1/ai/pipeline-draft": "ai_assistant.query",
             "/v1/ai/analysis": "ai_assistant.analysis",
             "/v1/ai/rca": "ai_assistant.rca",
             "/v1/ai/anomaly": "ai_assistant.anomaly",

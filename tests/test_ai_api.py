@@ -317,3 +317,38 @@ def test_triage_errors(api, data):
     assert api.post("/v1/ai/triage", headers=ACME, json={"kind": "rule", "id": "a-1"}).status_code == 422
     viewer = {**ACME, "X-Test-Role": "viewer"}
     assert api.post("/v1/ai/triage", headers=viewer, json={"kind": "alert", "id": "a-1"}).status_code == 403
+
+
+# -- Phase 9: pipeline drafts from sample logs ----------------------------------------
+
+def test_pipeline_draft_without_ai_is_the_heuristic(api):
+    from test_ai_pipeline_draft import KV_LINES
+
+    r = api.post("/v1/ai/pipeline-draft", headers=ACME, json={"samples": KV_LINES, "service": "fw"})
+    body = r.json()
+    assert r.status_code == 200, r.text
+    assert body["mode"] == "heuristic" and body["reason_code"] == "tenant_off"
+    assert body["report"]["parsed"] == 2 and body["pipeline"]["processors"][0] == {"kv": {"field": "msg",
+                                                                                          "target": "attrs"}}
+    # drafting is for people who may edit pipelines
+    analyst = {**ACME, "X-Test-Role": "viewer"}
+    assert api.post("/v1/ai/pipeline-draft", headers=analyst, json={"samples": KV_LINES}).status_code == 403
+
+
+def test_pipeline_draft_with_ai_is_audited(api):
+    import json as _json
+
+    opt_in(api)
+    regex = {"regex": {"field": "msg", "patterns": [r"^(?P<who>\w+) did (?P<what>\w+)$"]}}
+    api.state["provider"] = ScriptedProvider(answer(_json.dumps({"pipeline": {"processors": [regex]},
+                                                                 "explanation": "who did what"})))
+    api.state["provider"].name = "claude"
+    body = api.post("/v1/ai/pipeline-draft", headers=ACME,
+                    json={"samples": ["alice did login", "bob did logout"]}).json()
+    assert body["mode"] == "ai" and body["report"]["parsed"] == 2 and body["request_id"]
+    assert all(e["feature"] == "pipeline_draft" for e in api.audit.rows)
+
+
+def test_pipeline_draft_samples_are_bounded(api):
+    assert api.post("/v1/ai/pipeline-draft", headers=ACME, json={"samples": []}).status_code == 422
+    assert api.post("/v1/ai/pipeline-draft", headers=ACME, json={"samples": ["x"] * 51}).status_code == 422

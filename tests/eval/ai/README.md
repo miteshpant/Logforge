@@ -105,6 +105,32 @@ all of them. It says less than a model could (nothing about why the events
 matter beyond the tactic). Record a model with
 `record_triage.py --provider ... --update-baseline`.
 
+## Pipeline drafts from sample logs (Phase 9)
+
+Held-out formats: the content packs' 14 sample files (85 lines: CloudTrail,
+VPC flow logs, Okta, Google Workspace, Kubernetes audit and container logs,
+auth.log, auditd, syslog, nginx and Apache access and error logs, Windows
+Security and Sysmon). The drafter gets the raw lines and the service name,
+never the packs' pipelines. `tests/test_ai_pipeline_draft_eval.py` scores, per
+`pipeline_draft_eval.py`:
+
+* parse rate: lines the draft parses in simulation;
+* value recall: field values the pack's own expectations name that appear
+  literally in the raw line (58 of them), found among the values the draft
+  extracted, whatever it named the field.
+
+| Drafter | Files | Lines | Parse rate | Value recall |
+|---|---|---|---|---|
+| Heuristic (AI off) | 14 | 85 | 100% | 91.4% |
+| Model (`ai.pipeline_draft.draft`) | 14 | 85 | not recorded | not recorded |
+
+The heuristic misses values inside free-text messages (the user in an sshd
+line, the request in an nginx error line): it splits a syslog header and
+key=value pairs but doesn't write a regex for prose. The packs were written
+before the drafter, but the drafter was developed with these files in view,
+so they are held out from the drafting, not from its author. Record a model
+with `record_pipeline_draft.py --provider ... --update-baseline`.
+
 ## Status
 
 This is the Phase 0 skeleton: scorers, small seed datasets (8 / 5 / 5 items)
