@@ -272,15 +272,37 @@ class CaseService:
 
     async def metrics(self, tenant_id: str, days: int) -> Dict[str, Any]:
         """SLA metrics and SOC overview (case_metrics) for cases created in
-        the last `days` plus every case still open."""
+        the last `days` plus every case still open, against the tenant's targets."""
         from datetime import timedelta
 
-        from case_metrics import case_metrics
+        from case_metrics import case_metrics, sla_targets
 
         now = self.clock()
-        report = case_metrics(await self.dao.for_metrics(tenant_id, now - timedelta(days=days)), now)
+        targets = sla_targets(await self.sla_overrides(tenant_id))
+        report = case_metrics(await self.dao.for_metrics(tenant_id, now - timedelta(days=days)), now, targets)
         report["window_days"] = days
         return report
+
+    # -- SLA targets (per tenant) ------------------------------------------------------
+
+    async def sla_overrides(self, tenant_id: str) -> Dict[str, Dict[str, int]]:
+        import json
+
+        if not hasattr(self.dao, "sla_overrides"):  # a DAO without SLA storage: the defaults
+            return {}
+        return json.loads(await self.dao.sla_overrides(tenant_id) or "{}")
+
+    async def set_sla_overrides(self, tenant_id: str, overrides: Dict[str, Dict[str, int]], actor: str):
+        import json
+
+        from case_metrics import validate_sla_overrides
+
+        try:
+            clean = validate_sla_overrides(overrides or {})
+        except ValueError as e:
+            raise CaseError(str(e))
+        await self.dao.save_sla_overrides(tenant_id, json.dumps(clean), actor)
+        return clean
 
     async def audit(self, tenant_id: str, start: datetime, end: datetime, limit: int) -> List[Dict[str, Any]]:
         """Every case change in [start, end): the audit trail."""
@@ -288,16 +310,85 @@ class CaseService:
 
 _locks: Dict[Tuple[str, str], Any] = {}
 
+_RELEASE = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"
+
+
+class GroupLock:
+    """The lock grouping holds per (tenant, entity key) while it looks for an open
+    case and creates one: a local asyncio lock, plus a Redis lock so several API
+    replicas don't open duplicate cases for one entity. The Redis lock expires
+    (ttl) so a crashed holder can't block grouping for long, and only its holder
+    releases it. Without Redis, the local lock alone applies."""
+
+    def __init__(self, tenant_id: str, key: str, redis=None, local=None, ttl_ms: int = 15_000,
+                 wait_s: float = 15.0):
+        self.tenant_id, self.group_key = tenant_id, key
+        self.key = f"case:group:{tenant_id}:{key}"
+        self._redis, self._local_table = redis, _locks if local is None else local
+        self.ttl_ms, self.wait_s = ttl_ms, wait_s
+        self._token = None
+        self._local = None
+        self._shared = None
+
+    def _local_lock(self):
+        import asyncio
+
+        table = self._local_table
+        if not self.group_key:
+            return asyncio.Lock()
+        if len(table) > 10_000:
+            for k in [k for k, lock in table.items() if not lock.locked()][:5_000]:
+                table.pop(k, None)
+        return table.setdefault((self.tenant_id, self.group_key), asyncio.Lock())
+
+    async def _client(self):
+        if self._redis is not None:
+            return self._redis
+        try:
+            from events.management.cache.redis_manager import get_raw_client
+
+            return await get_raw_client()
+        except Exception:
+            return None
+
+    async def __aenter__(self):
+        import asyncio
+        import secrets
+        import time
+
+        self._local = self._local_lock()
+        await self._local.acquire()
+        if not self.group_key:
+            return self
+        try:
+            client = await self._client()
+            if client is None:
+                return self
+            token, deadline = secrets.token_hex(16), time.monotonic() + self.wait_s
+            while not await client.set(self.key, token, nx=True, px=self.ttl_ms):
+                if time.monotonic() > deadline:
+                    raise TimeoutError(f"case grouping lock {self.key} is held")
+                await asyncio.sleep(0.05)
+            self._shared, self._token = client, token
+        except TimeoutError:
+            self._local.release()
+            raise
+        except Exception as e:  # Redis down: the local lock still serialises this process
+            logger.warning("Case grouping lock unavailable in Redis; using the local lock", error=str(e))
+        return self
+
+    async def __aexit__(self, *exc):
+        try:
+            if self._shared is not None:
+                await self._shared.eval(_RELEASE, 1, self.key, self._token)
+        except Exception as e:
+            logger.warning("Could not release the case grouping lock (it expires)", error=str(e))
+        finally:
+            self._local.release()
+        return False
+
 
 def _lock_for(tenant_id: str, key: str):
-    """One lock per (tenant, entity key) so concurrent alerts for one entity
-    in this process open a single case."""
-    import asyncio
-
-    if not key:
-        return asyncio.Lock()
-    if len(_locks) > 10_000:
-        for k in [k for k, lock in _locks.items() if not lock.locked()][:5_000]:
-            _locks.pop(k, None)
-    return _locks.setdefault((tenant_id, key), asyncio.Lock())
-
+    """One lock per (tenant, entity key) so concurrent alerts for one entity open a
+    single case, in this process and across API replicas."""
+    return GroupLock(tenant_id, key)

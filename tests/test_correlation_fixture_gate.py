@@ -149,3 +149,15 @@ def test_a_correlation_cycle_is_rejected(loader):
     _, awaiting = load(loader, BASES + [a, b])
     assert sorted(awaiting) == ["a.yml: references unknown base rule 'b_rule'",
                                 "b.yml: references unknown base rule 'a_rule'"]
+
+
+def test_until_references_resolve_and_are_gated(loader):
+    reset = base("lf-pw-reset", "reset", name="pw_reset")
+    negative = [{"repeat": 5, "event": FAILED}, dict(FAILED, result="reset"), SUCCESS]
+    rows, awaiting = load(loader, BASES + [reset, correlation(until="lf-pw-reset", negative=negative)])
+    assert awaiting == []
+    content = json.loads(next(r for r in rows if r["id"] == "logforge_bf-success")["rule_content"])
+    assert content["correlation"]["until"] == ["pw_reset"]  # named rules are referenced by name
+    assert "logforge_lf-pw-reset" in content["replay_rules"]
+    _, awaiting = load(loader, BASES + [correlation(until="missing")])
+    assert awaiting == ["bf-success.yml: references unknown base rule 'missing'"]

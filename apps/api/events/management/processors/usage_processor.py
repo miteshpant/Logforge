@@ -181,14 +181,10 @@ async def update_tenant_quota_only(tenant_service, customer_id: str, usage_type:
         # Find the relevant quota and update usage
         for quota in db_quotas:
             if quota['quota_type'] == f"{usage_type}_quota" or quota['quota_type'] == usage_type:
-                current_used = quota['current_usage']
-                new_used = current_used + amount
-
-                # Update usage in database
-                await tenant_service.tenant_dao.update_tenant_quota(
-                    customer_id,
-                    quota['quota_type'],
-                    {'current_usage': new_used}
+                # Appended, not ALTER TABLE ... UPDATE: one mutation per API call
+                # piled up in ClickHouse and lost increments when calls raced.
+                await tenant_service.tenant_dao.add_quota_usage(
+                    customer_id, str(quota['quota_type']), quota['last_reset'], amount
                 )
                 logger.debug(f"Quota updated: customer_id={customer_id}, usage_type={usage_type}, amount={amount}")
                 break

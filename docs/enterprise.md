@@ -93,29 +93,82 @@ custom role adds to it:
   - Roles without a scope don't widen it.
   - An empty scope reads no logs.
 
-`/v1/auth/access` shows a user their custom roles, permissions and scope.
+`/v1/auth/access` shows a user their custom roles, permissions and scope,
+and their built-in role's grants (`role_permissions`). The UI uses it to
+leave out what a role can't read: Centrum, the landing page, shows a viewer
+the logs summary but not usage, alerts or security, instead of failing
+requests.
 
 How the scope is enforced:
 
 - **In ClickHouse.** The middleware puts the scope on the request. Every
   ClickHouse query the request makes carries the `additional_table_filters`
-  setting for `logs_raw_mt`, so ClickHouse adds the filter to every read of
-  the table, in subqueries and joins too. That covers everything that reads
-  logs: search, LogforgeQL, dashboards, the field catalogue, entities, and the
-  AI tools.
+  setting, so ClickHouse adds the filter to every read of these tables, in
+  subqueries and joins too:
+  - logs (`logs_raw_mt`, `logs_normalized_mt`, the hourly rollup), so search,
+    LogforgeQL, dashboards, the field catalogue, entities and the AI tools;
+  - traces and metrics (`traces_mt`, `metrics_mt`, the service topology), on
+    their service name;
+  - security events, on the service of the log that matched;
+  - alert instances: none are shown, because an alert can summarise several
+    services and doesn't record which.
+- **Archive search** reads Parquet with the `s3()` table function, which
+  table filters don't reach, so the read is wrapped in a subquery with the
+  same service filter.
 - **Escaping.** Service names are escaped literals; this is tested against
   ClickHouse with injection attempts.
 - **Caches.** Cached query results are keyed by scope.
 - **Failing closed.** If custom roles can't be read, the request fails (503)
   rather than run unscoped.
 
+### Masked fields
+
+A custom role can also mask fields (`email`, `password`, `attrs.card_number`).
+For its holders:
+
+- **Values read `[masked]`** in every JSON answer, at any depth: a log's
+  `attrs` (also when stored as a JSON string), tabular query results (by column
+  name), entities, cases, the field catalogue's examples.
+- **AI answers** can't repeat them: the AI tools redact the masked fields
+  before the model sees any data.
+- **Requests that name a masked field are refused (403)**: a query could
+  otherwise copy the value to another name (`| eval e = attrs.email`).
+- **Streams and file downloads are refused (403)** (live tail, CSV and PDF
+  exports, archive downloads): they can't be masked.
+
+Names match on their last segment, case-insensitively: `attrs.email` masks
+every `email` key. Values inside free text, such as a message that contains an
+address, aren't masked; mask at ingest with a pipeline's `mask` processor for
+that. `/v1/auth/access` lists the caller's masked fields.
+
 What a scope doesn't cover yet:
 
-- **Archive search** reads Parquet with the `s3()` table function, which the
-  filter doesn't reach. It is refused under a scope (403).
-- **Traces, metrics and alerts** aren't scoped. An alert's raw event can show
-  a service outside the scope.
-- **Fields:** there is no field-level masking.
+- **Alerts** are hidden rather than filtered: alert rules would need to
+  record the services behind each alert.
+- **Security events** whose matched log has no service are hidden too.
+- **Plain-English answers without AI** are refused under a scope (the
+  rule-based fallback reads tables a scope can't fully cover).
+
+## Two-step sign-in (TOTP)
+
+Any user can turn it on from **Your account** (the profile menu → Profile
+Settings, `/account`): scan or type the key into an authenticator app, confirm
+with a code, and keep the eight one-time backup codes shown once. From then on
+`POST /v1/auth/login` with the right password returns
+`{"mfa_required": true, "mfa_token": "..."}` instead of a session, and
+`POST /v1/auth/login/mfa` with that token (valid 5 minutes) and a code or a
+backup code finishes the sign-in.
+
+- Codes follow RFC 6238 (SHA-1, 6 digits, 30 s), accepted one step either side.
+  A step can't be used twice, and each backup code works once.
+- Wrong codes count toward the same sign-in throttle as wrong passwords.
+- The secret is sealed with `LOGFORGE_SECRETS_KEY` like other stored secrets;
+  backup codes are stored as SHA-256 hashes.
+- Turning it off (`DELETE /v1/auth/mfa`) needs a current code or a backup code.
+- `GET /v1/auth/mfa` reports whether it's on and how many backup codes remain.
+
+Not yet: a tenant setting that requires it for everyone. OIDC sign-ins rely on
+the identity provider's MFA.
 
 ## Account emails
 

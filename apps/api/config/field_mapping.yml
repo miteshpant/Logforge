@@ -226,7 +226,7 @@ field_mappings:
     - "query"
     - "dns_query"
     - "domain"
-    - "hostname"
+    # not "hostname": a host name isn't a DNS query (DNS rules on `query` matched host names)
     - "fqdn"
     - "dns_name"
     

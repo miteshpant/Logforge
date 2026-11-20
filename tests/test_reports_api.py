@@ -148,3 +148,38 @@ def test_coverage_comes_from_the_security_service(monkeypatch):
 
     monkeypatch.setattr(security_api, "get_security_service", lambda: Service())
     assert asyncio.run(module._coverage("acme"))["tenant"] == "acme"
+
+
+def test_compliance_report_formats(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    import routers.reports_api as module
+    from tenant_dependencies import get_middleware_tenant_id
+    from test_compliance_report import INPUTS as COMPLIANCE
+
+    async def gather_compliance(tenant, start, end):
+        return dict(COMPLIANCE, tenant=tenant, start=start, end=end)
+
+    monkeypatch.setattr(module, "gather_compliance", gather_compliance)
+    app = FastAPI()
+    app.include_router(module.router)
+    app.dependency_overrides[get_middleware_tenant_id] = lambda: "acme"
+    api = TestClient(app)
+    j = api.get("/v1/reports/compliance").json()
+    assert j["title"] == "Compliance evidence report" and j["period"]["days"] == 90
+    c = api.get("/v1/reports/compliance?format=csv")
+    assert c.headers["content-type"].startswith("text/csv") and "Access review" in c.text
+    p = api.get("/v1/reports/compliance?days=365&format=pdf")
+    assert p.content.startswith(b"%PDF") and "compliance-report" in p.headers["content-disposition"]
+
+
+def test_compliance_report_is_for_compliance_readers():
+    from authn_authz_middleware import UserRole, check_permission, get_endpoint_permission as perm
+
+    need = perm("/v1/reports/compliance", "GET")
+    assert need == "compliance:read:tenant"
+    allowed = {r for r in (UserRole.TENANT_ADMIN, UserRole.COMPLIANCE_OFFICER, UserRole.SECURITY_ANALYST,
+                           UserRole.DEVOPS_ENGINEER, UserRole.VIEWER)
+               if check_permission([{"tenant_id": "t", "role": r.value}], need, "t")}
+    assert allowed == {UserRole.TENANT_ADMIN, UserRole.COMPLIANCE_OFFICER, UserRole.SECURITY_ANALYST}

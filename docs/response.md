@@ -95,10 +95,28 @@ steps:
   - `approval` waits for a person. `approvers` lists the roles that may
     decide (default `tenant_admin`, `security_analyst`); `timeout` is like
     `30m`, `4h` or `2d` (default 24h). Rejected or expired, the run stops.
+- **Branches:** a step's `if` is the same condition language over the run
+  context and earlier steps (`steps.<id>.status`, `steps.<id>.output...`);
+  when it's false the step is skipped. Two steps with opposite conditions
+  make an either/or:
+
+  ```yaml
+  - id: page
+    if: steps.intel.output.verdict == "malicious"
+    action: {integration: PagerDuty, inputs: {summary: "{{ alert.title }}"}}
+  - id: fyi
+    if: steps.intel.output.verdict != "malicious"
+    action: {integration: SOC Slack, inputs: {text: "FYI {{ alert.title }}"}}
+  ```
+- **Parallel steps:** adjacent steps with the same `parallel: <group>` run at
+  the same time (for example an `enrich` and a `search`); the next step sees
+  all their outputs. Approvals and containment can't be in a group, and a
+  group's steps must be next to each other.
 - **Containment needs an approval.** A step that calls a containment
   integration must have an approval step after the start, or after the
   previous containment step. A playbook breaking this is refused when it's
-  saved.
+  saved, and an approval skipped by its `if` doesn't count: the containment
+  step after it fails.
 - **Runs start once per alert or case.** The dispatcher checks every
   `LOGFORGE_PLAYBOOK_TICK_SECONDS` (15) for alerts and cases from the last
   `LOGFORGE_PLAYBOOK_LOOKBACK_MINUTES` (15), so a restart doesn't lose any.
@@ -111,7 +129,8 @@ steps:
   reject, note}`. Every decision records who made it and when.
 
 Definitions need `settings:write` to change; runs and approvals need
-`security:read` and `security:write`.
+`security:read` and `security:write`. Run history is kept 400 days
+(migration 040), long enough for an annual audit period.
 
 ## Ticket sync
 
@@ -155,6 +174,27 @@ Security → Reports, or `/v1/reports`.
   - response automation: runs by outcome, approvals given and refused.
 
   `GET /v1/reports/soc?days=30&format=json|csv|pdf`.
+- **Compliance evidence report** for the last 1 to 366 days (default 90),
+  for SOC 2 and ISO 27001 audits. Each section names the controls it is
+  evidence for:
+  - **Access review** (CC6.2, CC6.3; A.5.15, A.5.18): every user with a
+    role in the tenant, their built-in and custom roles, last sign-in and
+    MFA. The summary counts administrators, active users without MFA and
+    those not seen in 90 days.
+  - **API keys** (CC6.1; A.5.17, A.8.5): who created each, its scope, last
+    use and expiry; the summary counts keys unused for 90 days and keys
+    that never expire.
+  - **Audit trail** (CC7.2, CC8.1; A.8.15): the period's audited changes
+    by action and resource.
+  - **Retention** (CC6.5; A.5.33, A.8.10) and **legal holds** (A.5.33).
+  - **Incident response** (CC7.3–CC7.5; A.5.24, A.5.26): cases, open
+    cases and SLA misses.
+
+  `GET /v1/reports/compliance?days=90&format=json|csv|pdf`, or "Compliance
+  evidence" on the Reports page (PDF). It needs `compliance:read`, which
+  tenant administrators, compliance officers and security analysts have.
+  The report is evidence for an auditor, not an attestation: the controls
+  are met by how you use it (reviewing access each quarter, for example).
 - **ATT&CK Navigator layer** of detection coverage:
   `GET /v1/reports/attack-navigator`. Each technique is scored by its
   enabled, fixture-tested rules and commented with its last detection. Open
@@ -208,15 +248,16 @@ fixed:
 
 ## Limits
 
-- **Compliance reports** (from the Phase 13 deliverables) aren't done; the
-  security operations report isn't one.
 - **Ticket systems:** Jira and GitHub only. ServiceNow, Linear and others
   can be reached by a webhook action, without sync.
 - **Containment** goes only through your own automation (a webhook to a
   SOAR, a firewall API, an IdP workflow). Logforge has no built-in
   connectors that block or disable anything itself.
-- **Playbook steps run in order:** no branches, loops or parallel steps. A
-  run waits only at approvals; an approval is decided in Logforge, not from
-  Slack.
-- **The PDF** uses the standard PDF fonts, so characters outside Latin-1
-  print as `?`.
+- **Playbooks** branch with `if` and run adjacent steps in parallel, but
+  have no loops. A run waits only at approvals; an approval is decided in
+  Logforge, not from Slack.
+- **The PDF** uses the standard PDF fonts when all its text is Latin-1 (about
+  1 KB a page). A report with other characters (a tenant, rule or case name in
+  Greek, Cyrillic and so on) embeds DejaVu Sans and Sans Mono instead, which
+  adds about 0.9 MB; text stays searchable and copyable. DejaVu has no CJK
+  glyphs, so those characters print as `?`.

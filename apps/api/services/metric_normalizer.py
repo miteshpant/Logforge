@@ -135,6 +135,7 @@ class MetricNameNormalizer:
 
             # Set normalized name
             result['metric_name'] = normalized_name
+            self._convert_units(result, original_name, normalized_name)
 
             # Preserve original name for debugging/reference
             if was_normalized:
@@ -148,6 +149,31 @@ class MetricNameNormalizer:
                 result['original_metric_name'] = original_name
 
         return result
+
+    # Factors to the canonical unit from units metrics are commonly sent in.
+    _UNIT_FACTORS = {
+        "%": {"%": 1, "percent": 1, "1": 100, "ratio": 100},
+        "ms": {"ms": 1, "s": 1000, "us": 0.001, "µs": 0.001, "ns": 0.000001, "min": 60000},
+    }
+
+    def _convert_units(self, result: Dict[str, Any], original: str, standard: str) -> None:
+        """Convert the value to the standard metric's unit: from the unit it was sent
+        with if there is one, else by the alias's configured factor."""
+        value = result.get("value")
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return
+        target = (self.mappings.get(standard) or {}).get("unit")
+        unit = result.get("unit")
+        factor = None
+        if unit not in (None, ""):
+            factor = self._UNIT_FACTORS.get(target, {}).get(str(unit).strip())
+        else:
+            factor = ((self.mappings.get(standard) or {}).get("conversions") or {}).get(original.lower().strip())
+        if factor is None or factor == 1:
+            return
+        result["original_value"], result["original_unit"] = value, unit
+        result["value"] = value * factor
+        result["unit"] = target
 
     def get_standard_metrics(self) -> List[Dict[str, Any]]:
         """

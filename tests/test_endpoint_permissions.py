@@ -58,3 +58,18 @@ def test_who_may_ask_and_who_may_configure_ai():
     assert can("security_analyst", "ai:read:tenant") and can("devops_engineer", "ai:read:tenant")
     assert not can("viewer", "ai:read:tenant")
     assert can("tenant_admin", "settings:write:tenant") and not can("security_analyst", "settings:write:tenant")
+
+
+def test_centrum_reads_need_read_permissions():
+    # Centrum's log summary is an aggregation (a read) and the live alert feed
+    # shows alerts: they needed queries:write and observability:read, so
+    # analysts and viewers got 403s on the landing page.
+    from authn_authz_middleware import UserRole, check_permission, get_endpoint_permission as perm
+
+    assert perm("/v1/query/advanced", "POST") == "logs:read:tenant"
+    assert perm("/v1/query/searches", "POST") == "queries:write:tenant"
+    assert perm("/v1/stream/alerts", "GET") == "alerts:read:tenant"
+    assert perm("/v1/stream/security", "GET") == "security:read:tenant"
+    assert perm("/v1/stream/logs", "GET") == "observability:read:tenant"
+    for role in (UserRole.VIEWER, UserRole.SECURITY_ANALYST, UserRole.DEVOPS_ENGINEER, UserRole.COMPLIANCE_OFFICER):
+        assert check_permission([{"tenant_id": "t", "role": role.value}], perm("/v1/query/advanced", "POST"), "t")

@@ -40,15 +40,51 @@ def _minutes(delta: timedelta) -> float:
     return delta.total_seconds() / 60
 
 
-def _breached(case: Case, kind: str, now: datetime) -> bool:
-    target = SLA_TARGETS[kind].get(case.severity)
+MAX_TARGET_MINUTES = 365 * 24 * 60
+
+
+def validate_sla_overrides(overrides: Dict[str, Dict[str, int]]) -> Dict[str, Dict[str, int]]:
+    """Check a tenant's SLA overrides ({kind: {severity: minutes}}); return them cleaned."""
+    if not isinstance(overrides, dict):
+        raise ValueError("SLA targets must be an object of {acknowledge|resolve: {severity: minutes}}")
+    clean: Dict[str, Dict[str, int]] = {}
+    for kind, per_severity in overrides.items():
+        if kind not in SLA_TARGETS:
+            raise ValueError(f"unknown SLA kind {kind!r}; use acknowledge or resolve")
+        if not isinstance(per_severity, dict):
+            raise ValueError(f"{kind}: expected {{severity: minutes}}")
+        for severity, minutes in per_severity.items():
+            if severity not in SLA_TARGETS[kind]:
+                raise ValueError(f"unknown severity {severity!r}")
+            if not isinstance(minutes, int) or isinstance(minutes, bool) or not 1 <= minutes <= MAX_TARGET_MINUTES:
+                raise ValueError(f"{kind}.{severity}: minutes must be a whole number from 1 to {MAX_TARGET_MINUTES}")
+            clean.setdefault(kind, {})[severity] = minutes
+    merged = sla_targets(clean)
+    for severity in SLA_TARGETS["acknowledge"]:
+        if merged["acknowledge"][severity] > merged["resolve"][severity]:
+            raise ValueError(f"{severity}: the acknowledge target can't be longer than the resolve target")
+    return clean
+
+
+def sla_targets(overrides: Dict[str, Dict[str, int]] = None) -> Dict[str, Dict[str, timedelta]]:
+    """The defaults, with a tenant's overrides (minutes) replacing what they name."""
+    targets = {kind: dict(per) for kind, per in SLA_TARGETS.items()}
+    for kind, per_severity in (overrides or {}).items():
+        for severity, minutes in per_severity.items():
+            targets[kind][severity] = timedelta(minutes=minutes)
+    return targets
+
+
+def _breached(case: Case, kind: str, now: datetime, targets=None) -> bool:
+    target = (targets or SLA_TARGETS)[kind].get(case.severity)
     if target is None or case.created_at is None:
         return False
     done = case.acknowledged_at if kind == "acknowledge" else (case.resolved_at if case.status in CLOSED else None)
     return ((done or now) - case.created_at) > target
 
 
-def case_metrics(cases: Sequence[Case], now: datetime) -> Dict[str, Any]:
+def case_metrics(cases: Sequence[Case], now: datetime, targets=None) -> Dict[str, Any]:
+    targets = targets or SLA_TARGETS
     cases = [c for c in cases if not c.merged_into]
     by_severity: Dict[str, Any] = {}
     for severity in SEVERITIES:
@@ -82,9 +118,9 @@ def case_metrics(cases: Sequence[Case], now: datetime) -> Dict[str, Any]:
         "analyst_load": dict(sorted(load.items(), key=lambda kv: (-kv[1], kv[0]))),
         "alerts": alerts,
         "alerts_per_case": round(alerts / len(cases), 2) if cases else 0.0,
-        "sla_targets_minutes": {k: {s: _minutes(v) for s, v in t.items()} for k, t in SLA_TARGETS.items()},
-        "sla_breaches": {kind: {s: sum(1 for c in cases if c.severity == s and _breached(c, kind, now))
-                                for s in SEVERITIES} for kind in SLA_TARGETS},
+        "sla_targets_minutes": {k: {s: _minutes(v) for s, v in t.items()} for k, t in targets.items()},
+        "sla_breaches": {kind: {s: sum(1 for c in cases if c.severity == s and _breached(c, kind, now, targets))
+                                for s in SEVERITIES} for kind in targets},
     }
 
 

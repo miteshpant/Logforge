@@ -6,7 +6,10 @@ FastAPI router for authentication operations: login, logout, setup, password man
 from fastapi import APIRouter, HTTPException, Request, Depends
 from datetime import datetime, timedelta
 from typing import Optional
+import asyncio
+
 import structlog
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from models import (
@@ -95,6 +98,68 @@ def get_refresh_token_service():
 # AUTHENTICATION ENDPOINTS
 # =================================================================
 
+async def _finish_login(user, request: Request, email: str) -> LoginResponse:
+    """Issue the session for a user whose credentials (and MFA code, if enrolled) checked out."""
+    from login_throttle import get_login_throttle
+
+    ip_address = request.client.host if request.client else "unknown"
+    # Get user's tenant roles to determine primary tenant context
+    from services.role_service import RoleService
+    role_service = RoleService()
+    user_roles = await role_service.get_user_roles(user.id)
+    
+    # Determine primary tenant ID from user's roles
+    primary_tenant_id = None  # No default - user must have tenant assignment
+    if user_roles:
+        # Use the first role's tenant_id as primary tenant context
+        primary_tenant_id = user_roles[0].tenant_id
+    
+    if not primary_tenant_id:
+        logger.error("User has no tenant role assignments", user_id=user.id, email=user.email)
+        raise HTTPException(403, "User has no tenant role assignments. Contact administrator.")
+    
+    # Create session with tenant context
+    user_agent = request.headers.get("user-agent", "unknown")
+
+    session_data = await get_user_service().create_session(user, ip_address, user_agent, primary_tenant_id, user_roles[0].role)
+
+    # ENH-013: clear the account counter so a legitimate user who mistyped
+    # a few times is not penalised after a successful login.
+    await get_login_throttle().record_success(email)
+
+    logger.info("User login successful",
+               user_id=user.id,
+               email=user.email,
+               ip_address=ip_address)
+
+    # LF-015: issue a rotating refresh token alongside the access token.
+    refresh_token = None
+    refresh_expires_at = None
+    if _refresh_tokens_enabled():
+        refresh_data = await get_refresh_token_service().issue(
+            user.id, primary_tenant_id, ip_address, user_agent
+        )
+        refresh_token = refresh_data["refresh_token"]
+        refresh_expires_at = refresh_data["expires_at"]
+
+    return LoginResponse(
+        access_token=session_data["access_token"],
+        expires_at=session_data["expires_at"],
+        refresh_token=refresh_token,
+        refresh_expires_at=refresh_expires_at,
+        user=UserResponse(
+            id=user.id,
+            email=user.email,
+            name=user.name,
+            status=user.status,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+            last_login_at=user.last_login_at,
+            email_verified_at=user.email_verified_at
+        )
+    )
+
+
 @router.post("/login", response_model=LoginResponse)
 async def login_user(
     login_request: LoginRequest,
@@ -162,67 +227,131 @@ async def login_user(
                 f"Account is {user.status.value}. Ask an administrator to activate it.",
             )
 
-        # Get user's tenant roles to determine primary tenant context
-        from services.role_service import RoleService
-        role_service = RoleService()
-        user_roles = await role_service.get_user_roles(user.id)
-        
-        # Determine primary tenant ID from user's roles
-        primary_tenant_id = None  # No default - user must have tenant assignment
-        if user_roles:
-            # Use the first role's tenant_id as primary tenant context
-            primary_tenant_id = user_roles[0].tenant_id
-        
-        if not primary_tenant_id:
-            logger.error("User has no tenant role assignments", user_id=user.id, email=user.email)
-            raise HTTPException(403, "User has no tenant role assignments. Contact administrator.")
-        
-        # Create session with tenant context
-        user_agent = request.headers.get("user-agent", "unknown")
+        # Phase 14 follow-up: with MFA confirmed, the password alone gets a short-lived
+        # challenge, not a session; POST /v1/auth/login/mfa with a code completes it.
+        enrolled = await asyncio.to_thread(_mfa_store().get, user.id)
+        if enrolled and enrolled["confirmed"]:
+            import mfa
 
-        session_data = await get_user_service().create_session(user, ip_address, user_agent, primary_tenant_id, user_roles[0].role)
+            return JSONResponse({"mfa_required": True, "mfa_token": mfa.challenge(user.id)})
 
-        # ENH-013: clear the account counter so a legitimate user who mistyped
-        # a few times is not penalised after a successful login.
-        await throttle.record_success(login_request.email)
+        return await _finish_login(user, request, login_request.email)
 
-        logger.info("User login successful",
-                   user_id=user.id,
-                   email=user.email,
-                   ip_address=ip_address)
-
-        # LF-015: issue a rotating refresh token alongside the access token.
-        refresh_token = None
-        refresh_expires_at = None
-        if _refresh_tokens_enabled():
-            refresh_data = await get_refresh_token_service().issue(
-                user.id, primary_tenant_id, ip_address, user_agent
-            )
-            refresh_token = refresh_data["refresh_token"]
-            refresh_expires_at = refresh_data["expires_at"]
-
-        return LoginResponse(
-            access_token=session_data["access_token"],
-            expires_at=session_data["expires_at"],
-            refresh_token=refresh_token,
-            refresh_expires_at=refresh_expires_at,
-            user=UserResponse(
-                id=user.id,
-                email=user.email,
-                name=user.name,
-                status=user.status,
-                created_at=user.created_at,
-                updated_at=user.updated_at,
-                last_login_at=user.last_login_at,
-                email_verified_at=user.email_verified_at
-            )
-        )
-        
     except HTTPException:
         raise
     except Exception as e:
         logger.error("Login failed", error=str(e))
         raise HTTPException(500, "Login system error")
+
+class MfaCode(BaseModel):
+    code: str = Field(..., min_length=1, max_length=20)
+
+
+class MfaLogin(BaseModel):
+    mfa_token: str = Field(..., min_length=1, max_length=2000)
+    code: str = Field(..., min_length=1, max_length=20)
+
+
+def _mfa_store():
+    from dependencies import get_clickhouse_client
+    from mfa import MFAStore
+
+    return MFAStore(get_clickhouse_client())
+
+
+def _verify_code(record: dict, code: str):
+    """(updated record, True) if `code` is a valid TOTP code or an unused backup code."""
+    import mfa
+
+    step = mfa.check(record["secret"], code, record.get("last_step", 0))
+    if step is not None:
+        return {**record, "last_step": step}, True
+    remaining = mfa.use_backup_code(record.get("backup_hashes") or [], code)
+    if remaining is not None:
+        return {**record, "backup_hashes": remaining}, True
+    return record, False
+
+
+@router.post("/login/mfa", response_model=LoginResponse)
+async def login_mfa(body: MfaLogin, request: Request):
+    """Second step of sign-in for accounts with MFA: the challenge from /login and a code."""
+    import mfa
+    from login_throttle import get_login_throttle
+
+    ip_address = request.client.host if request.client else "unknown"
+    try:
+        user_id = mfa.open_challenge(body.mfa_token)
+    except mfa.MFAError as e:
+        raise HTTPException(401, str(e))
+    user = await get_user_service().get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(401, "The sign-in expired; start again")
+    throttle = get_login_throttle()
+    decision = await throttle.check(user.email, ip_address)
+    if not decision.allowed:
+        raise HTTPException(429, "Too many failed attempts. Please try again later.")
+    record = await asyncio.to_thread(_mfa_store().get, user.id)
+    if not record or not record["confirmed"]:
+        raise HTTPException(401, "The sign-in expired; start again")
+    updated, ok = _verify_code(record, body.code)
+    if not ok:
+        await throttle.record_failure(user.email, ip_address)
+        raise HTTPException(401, "That code isn't valid")
+    await asyncio.to_thread(_mfa_store().save, user.id, updated)
+    return await _finish_login(user, request, user.email)
+
+
+@router.get("/mfa")
+async def mfa_status(current_user: User = Depends(get_current_user)):
+    record = await asyncio.to_thread(_mfa_store().get, current_user.id)
+    return {"enabled": bool(record and record["confirmed"]), "pending": bool(record and not record["confirmed"]),
+            "backup_codes_left": len(record["backup_hashes"]) if record and record["confirmed"] else 0}
+
+
+@router.post("/mfa/setup")
+async def mfa_setup(current_user: User = Depends(get_current_user)):
+    """Start enrolling: a new secret for the authenticator app (not active until confirmed)."""
+    import mfa
+
+    record = await asyncio.to_thread(_mfa_store().get, current_user.id)
+    if record and record["confirmed"]:
+        raise HTTPException(409, "MFA is already on; turn it off first to enrol a new device")
+    secret = mfa.new_secret()
+    await asyncio.to_thread(_mfa_store().save, current_user.id, {"secret": secret, "confirmed": False})
+    return {"secret": secret, "otpauth_url": mfa.otpauth_url(secret, current_user.email)}
+
+
+@router.post("/mfa/confirm")
+async def mfa_confirm(body: MfaCode, current_user: User = Depends(get_current_user)):
+    """Turn MFA on with a code from the app. Returns one-time backup codes, shown only now."""
+    import mfa
+
+    record = await asyncio.to_thread(_mfa_store().get, current_user.id)
+    if not record or record["confirmed"]:
+        raise HTTPException(400, "Start enrolment first")
+    step = mfa.check(record["secret"], body.code, 0)
+    if step is None:
+        raise HTTPException(400, "That code isn't valid; check the app's clock")
+    codes, hashes = mfa.new_backup_codes(8)
+    await asyncio.to_thread(_mfa_store().save, current_user.id,
+                            {"secret": record["secret"], "confirmed": True, "backup_hashes": hashes, "last_step": step})
+    logger.info("MFA enabled", user_id=current_user.id)
+    return {"enabled": True, "backup_codes": codes}
+
+
+@router.delete("/mfa")
+async def mfa_disable(body: MfaCode, current_user: User = Depends(get_current_user)):
+    """Turn MFA off; needs a current code or a backup code."""
+    record = await asyncio.to_thread(_mfa_store().get, current_user.id)
+    if not record or not record["confirmed"]:
+        raise HTTPException(400, "MFA isn't on")
+    _, ok = _verify_code(record, body.code)
+    if not ok:
+        raise HTTPException(400, "That code isn't valid")
+    await asyncio.to_thread(_mfa_store().delete, current_user.id)
+    logger.info("MFA disabled", user_id=current_user.id)
+    return {"enabled": False}
+
 
 @router.post("/logout")
 async def logout_user(

@@ -29,8 +29,20 @@ Three ways to run Logforge:
 3. Batches a dead replica had read but not written are delivered again to
    another replica.
 
-Delivery is at least once, so a batch can be stored twice after a
-failure. The chaos test counts these duplicates.
+Delivery is at least once, but storage is deduplicated: every log insert
+carries a token derived from the batch's content, and ClickHouse drops an
+insert whose token it saw among the table's last 1000 (migration 038;
+Replicated tables do this by default). A redelivered batch is therefore
+stored once. The chaos run below predates this and still counted 60
+duplicates; it hasn't been re-run since.
+
+**Background schedulers run once per tick, not once per replica.** Saved
+searches, scheduled reports, ticket sync and playbook dispatch run as loops
+in every API process; each tick, the replica that takes the tick's Redis
+lease (`logforge:lease:<scheduler>`, expiring just before the next tick)
+does the work and the others skip it. If Redis is down, every replica runs
+every tick, which can send a report or a search's alert twice. The hourly
+retention job is a CronJob in Kubernetes instead (one runner per cluster).
 
 ## The HA compose
 
@@ -64,15 +76,12 @@ The init container creates the `Replicated` database on both replicas,
 then applies the schema and migrations once
 (`infra/docker/clickhouse/apply_schema.sh` with `REPLICATED_ENGINES=true`).
 
-ClickHouse 23.8 needs two settings for this (`ha/profile.xml`):
-
-- `allow_experimental_database_replicated`: the `Replicated` database
-  engine is marked experimental in 23.8, and production-ready in later
-  releases.
-- `allow_nondeterministic_mutations`: about 16 API mutations stamp a
-  time with `now64()`. Each replica stamps its own clock, milliseconds
-  apart, and applies mutations in the same order, so the same row versions
-  win everywhere. Binding those times as parameters is a follow-up.
+ClickHouse 23.8 needs one setting for this (`ha/profile.xml`):
+`allow_experimental_database_replicated`. The `Replicated` database engine
+is marked experimental in 23.8, and production-ready in later releases.
+(API mutations bind their timestamps as parameters rather than calling
+`now()`, so replicas apply identical values and
+`allow_nondeterministic_mutations` isn't needed; a unit test keeps it so.)
 
 23.8 also doesn't turn `MergeTree` into replicated tables by itself, so
 `REPLICATED_ENGINES=true` creates every MergeTree-family table as its
@@ -253,8 +262,11 @@ ClickHouse replicas, and peak = 3 × average.
 
 ## Self-monitoring
 
-The API serves Prometheus metrics at `/metrics` (unauthenticated: keep it
-on the internal network). The compose stack has a `monitoring` profile with
+The API serves Prometheus metrics at `/metrics`. Set
+`LOGFORGE_METRICS_TOKEN` and scrapers must send it as a bearer token. In
+Prometheus that's `authorization: {credentials_file: /etc/prometheus/metrics-token}`
+on the job. Without a token the endpoint is open: keep it on the internal
+network. The compose stack has a `monitoring` profile with
 Prometheus and Grafana:
 
 ```bash

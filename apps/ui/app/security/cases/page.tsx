@@ -7,6 +7,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout'
 import { Briefcase, Loader2, Plus, RefreshCw, Search } from 'lucide-react'
 import { bulkCases, Case, caseMetrics, CaseMetrics, createCase, listCases, Severity } from '@/lib/api/cases'
 import { formatMinutes, needsReason, statusLabel } from '@/lib/caseFormat'
+import SlaTargets from '@/components/cases/SlaTargets'
 
 const VIEWS: Record<string, string[] | undefined> = {
   open: ['new', 'investigating', 'contained'],
@@ -66,6 +67,7 @@ export default function CasesPage() {
   const [newTitle, setNewTitle] = useState('')
   const [newSeverity, setNewSeverity] = useState<Severity>('medium')
   const [showNew, setShowNew] = useState(false)
+  const [showSla, setShowSla] = useState(false)
   const [bulkAssignee, setBulkAssignee] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -170,6 +172,10 @@ export default function CasesPage() {
         )}
 
         <Overview metrics={metrics} />
+        <button data-testid="sla-toggle" onClick={() => setShowSla(!showSla)} className="text-sm text-blue-300 hover:underline">
+          {showSla ? 'Hide SLA targets' : 'SLA targets'}
+        </button>
+        {showSla && <SlaTargets onSaved={() => caseMetrics().then(setMetrics).catch(() => {})} />}
 
         {error && (
           <div role="alert" data-testid="cases-error" className="p-3 rounded-lg border border-red-500/30 bg-red-500/10 text-sm text-red-400">{error}</div>

@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
 import { apiClient } from '@/lib/api'
+import { createCase } from '@/lib/api/cases'
+import { useAccess } from '@/lib/access'
 import {
   AlertTriangle,
   AlertCircle,
@@ -85,6 +87,9 @@ const STATUS_CONFIG = {
 
 export default function IncidentCommandCenter({ isLoading: externalLoading, timeRange }: IncidentCommandCenterProps) {
   const router = useRouter()
+  const [busy, setBusy] = useState<string | null>(null)
+  const { can } = useAccess()
+  const [actionError, setActionError] = useState<string | null>(null)
   const { getApiTimeRange, currentTimeRange } = useTimeRange()
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -164,6 +169,39 @@ export default function IncidentCommandCenter({ isLoading: externalLoading, time
   const navigateToTraces = (service: string, timestamp: string) => {
     const startTime = new Date(new Date(timestamp).getTime() - 3600000).toISOString()
     router.push(`/apm/traces?service=${service}&start_time=${startTime}`)
+  }
+
+  const setStatus = async (incident: Incident, action: 'acknowledge' | 'resolve') => {
+    setBusy(incident.id)
+    setActionError(null)
+    try {
+      await apiClient.post(`/v1/alerts/${encodeURIComponent(incident.id)}/${action}`, {})
+      setIncidents(list => list.map(i => i.id === incident.id
+        ? { ...i, status: action === 'resolve' ? 'resolved' : 'acknowledged' } : i))
+    } catch (err: any) {
+      setActionError(err?.message || `Could not ${action} the alert`)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /** A case for an operational alert: cases link security alerts by id, so
+   *  this one is linked as evidence (back to the alert) instead. */
+  const openCase = async (incident: Incident) => {
+    setBusy(incident.id)
+    setActionError(null)
+    try {
+      const created = await createCase({
+        title: incident.title, severity: incident.severity,
+        description: incident.description || `Alert on ${incident.service} at ${incident.triggered_at}.`,
+        tags: incident.service && incident.service !== 'unknown' ? [`service:${incident.service}`] : [],
+        evidence: [{ kind: 'link', ref: `/alerts/instances?id=${incident.id}`, title: `Alert: ${incident.title}` }],
+      })
+      router.push(`/security/cases/${created.id}`)
+    } catch (err: any) {
+      setActionError(err?.message || 'Could not open a case')
+      setBusy(null)
+    }
   }
 
   const navigateToAlert = (incidentId: string) => {
@@ -394,20 +432,31 @@ export default function IncidentCommandCenter({ isLoading: externalLoading, time
                     )}
 
                     {/* Action Buttons */}
-                    <div className="flex items-center gap-2 pt-2">
-                      {incident.status === 'triggered' && (
-                        <button className="px-4 py-2 rounded-lg bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 text-sm font-medium transition-colors">
+                    <div className="flex items-center gap-2 pt-2 flex-wrap">
+                      {incident.status === 'triggered' && can('alerts:write') && (
+                        <button data-testid="incident-acknowledge" disabled={busy === incident.id}
+                          onClick={(e) => { e.stopPropagation(); setStatus(incident, 'acknowledge') }}
+                          className="px-4 py-2 rounded-lg bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 text-sm font-medium transition-colors disabled:opacity-50">
                           Acknowledge
                         </button>
                       )}
-                      {incident.status !== 'resolved' && (
-                        <button className="px-4 py-2 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 text-sm font-medium transition-colors">
+                      {incident.status !== 'resolved' && can('alerts:write') && (
+                        <button data-testid="incident-resolve" disabled={busy === incident.id}
+                          onClick={(e) => { e.stopPropagation(); setStatus(incident, 'resolve') }}
+                          className="px-4 py-2 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 text-sm font-medium transition-colors disabled:opacity-50">
                           Resolve
                         </button>
                       )}
-                      <button className="px-4 py-2 rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 text-sm font-medium transition-colors">
+                      {can('security:write') && <button data-testid="incident-open-case" disabled={busy === incident.id}
+                        onClick={(e) => { e.stopPropagation(); openCase(incident) }}
+                        className="px-4 py-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 text-sm font-medium transition-colors disabled:opacity-50">
+                        Open case
+                      </button>}
+                      <button onClick={(e) => { e.stopPropagation(); navigateToAlert(incident.id) }}
+                        className="px-4 py-2 rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 text-sm font-medium transition-colors">
                         View Full Details
                       </button>
+                      {actionError && <span className="text-xs text-red-400" data-testid="incident-error">{actionError}</span>}
                     </div>
                   </div>
                 )}

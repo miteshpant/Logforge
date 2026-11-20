@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import structlog
 
 from database_layer import DatabaseLayer
+from mutation_time import now_param
 
 logger = structlog.get_logger()
 
@@ -39,10 +40,10 @@ class SubscriptionDAO:
             # arbitrarily).
             await self.db.execute_query(
                 "ALTER TABLE tenant_subscriptions_mt UPDATE status = 'inactive', "
-                "updated_at = now64(3) "
+                "updated_at = toDateTime64(%(now)s, 3) "
                 "WHERE tenant_id = %(tenant_id)s AND status = 'active' "
                 "SETTINGS mutations_sync = 2",
-                {"tenant_id": subscription_data['tenant_id']},
+                {"tenant_id": subscription_data['tenant_id'], "now": now_param()},
             )
 
             db_subscription_data = {

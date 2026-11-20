@@ -50,7 +50,7 @@ test('a scoped custom role limits what its holder can query', async ({ page, req
   // nothing granted and no scope: refused
   await page.getByTestId('role-name').fill(name)
   await page.getByTestId('role-save').click()
-  await expect(page.getByTestId('roles-error')).toContainText('permissions, a data scope, or both')
+  await expect(page.getByTestId('roles-error')).toContainText('permissions, a data scope, masked fields, or a mix')
   await page.getByTestId('role-scoped').check()
   await page.getByTestId('role-services').fill(allowed)
   await page.getByTestId('grant-reports').selectOption('read')

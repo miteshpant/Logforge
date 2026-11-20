@@ -2,14 +2,14 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import TriagePanel from '@/components/ai/TriagePanel'
 import CopilotPanel from '@/components/ai/CopilotPanel'
 import CaseReportPanel from '@/components/ai/CaseReportPanel'
 import CaseTickets from '@/components/response/CaseTickets'
 import { ArrowLeft, Link2, Loader2, MessageSquare, Pin, ShieldAlert, Tag, User } from 'lucide-react'
-import { caseAction, CaseDetail, Evidence, getCase, Severity, unpinEvidence, updateCase } from '@/lib/api/cases'
+import { Case, caseAction, CaseDetail, Evidence, getCase, listCases, Severity, splitCase, unpinEvidence, updateCase } from '@/lib/api/cases'
 import { threatBadge } from '@/lib/intelFormat'
 import { CaseStatus, currentEvidence, describeEvent, evidenceHref, nextStatuses, needsReason, statusLabel } from '@/lib/caseFormat'
 
@@ -34,6 +34,11 @@ export default function CaseDetailPage() {
   const [comment, setComment] = useState('')
   const [tag, setTag] = useState('')
   const [evidence, setEvidence] = useState<Evidence>({ kind: 'search', ref: '', title: '' })
+  const router = useRouter()
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [splitTitle, setSplitTitle] = useState('')
+  const [others, setOthers] = useState<Case[]>([])
+  const [mergeId, setMergeId] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -46,6 +51,23 @@ export default function CaseDetailPage() {
   }, [id])
 
   useEffect(() => { if (id) load() }, [id, load])
+
+  // Other open cases this one can absorb (merge).
+  useEffect(() => {
+    if (!id) return
+    listCases({ status: ['new', 'investigating', 'contained'], limit: 200 })
+      .then(r => setOthers(r.cases.filter(c => c.id !== id)))
+      .catch(() => setOthers([]))
+  }, [id, detail?.case.updated_at])
+
+  const split = async () => {
+    setBusy(true); setError(null)
+    try {
+      const r = await splitCase(id, Array.from(picked), splitTitle.trim())
+      setPicked(new Set()); setSplitTitle('')
+      router.push(`/security/cases/${encodeURIComponent(r.new_case.id)}`)
+    } catch (e: any) { setError(e?.message || 'The split was not saved') } finally { setBusy(false) }
+  }
 
   const run = async (change: () => Promise<unknown>, after?: () => void) => {
     setBusy(true)
@@ -208,7 +230,13 @@ export default function CaseDetailPage() {
               </h2>
               {detail.alerts.length === 0 && <p className="text-xs text-slate-500">No alerts linked.</p>}
               {detail.alerts.map(alert => (
-                <div key={alert.id} data-testid="case-alert" className="p-3 rounded-lg border border-white/5 bg-slate-800/40 text-sm">
+                <div key={alert.id} data-testid="case-alert" className="p-3 rounded-lg border border-white/5 bg-slate-800/40 text-sm flex gap-2">
+                  {detail.alerts.length > 1 && (
+                    <input type="checkbox" aria-label="Pick for split" data-testid="split-pick" className="mt-1"
+                      checked={picked.has(alert.id)}
+                      onChange={e => { const next = new Set(picked); e.target.checked ? next.add(alert.id) : next.delete(alert.id); setPicked(next) }} />
+                  )}
+                  <div className="flex-1 min-w-0">
                   {alert.missing ? (
                     <span className="text-slate-500">Alert {alert.id.slice(0, 8)} is no longer stored</span>
                   ) : (
@@ -231,9 +259,37 @@ export default function CaseDetailPage() {
                       ))}
                     </>
                   )}
+                  </div>
                 </div>
               ))}
+              {picked.size > 0 && (
+                <div className="flex gap-2 items-center" data-testid="split-bar">
+                  <input value={splitTitle} onChange={e => setSplitTitle(e.target.value)} placeholder="Title of the new case (optional)"
+                    className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm text-white" data-testid="split-title" />
+                  <button disabled={busy || picked.size === detail.alerts.length} onClick={split} data-testid="split-submit"
+                    className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm">
+                    Split {picked.size} alert{picked.size === 1 ? '' : 's'} into a new case
+                  </button>
+                </div>
+              )}
             </section>
+
+            {['new', 'investigating', 'contained'].includes(c.status) && others.length > 0 && (
+              <section className="space-y-2" data-testid="merge-panel">
+                <h2 className="text-sm font-semibold text-white">Merge another case into this one</h2>
+                <div className="flex gap-2">
+                  <select value={mergeId} onChange={e => setMergeId(e.target.value)} data-testid="merge-pick"
+                    className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm text-white">
+                    <option value="">Choose an open case…</option>
+                    {others.map(o => <option key={o.id} value={o.id}>{o.title} ({o.severity}, {o.alert_ids.length} alerts)</option>)}
+                  </select>
+                  <button disabled={busy || !mergeId} data-testid="merge-submit"
+                    onClick={() => run(() => caseAction(id, 'merge', { source_ids: [mergeId] }), () => setMergeId(''))}
+                    className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm">Merge</button>
+                </div>
+                <p className="text-xs text-slate-500">Its alerts, entities and evidence move here; it is closed as merged.</p>
+              </section>
+            )}
 
             <CaseTickets caseId={c.id} refreshKey={c.status} />
 

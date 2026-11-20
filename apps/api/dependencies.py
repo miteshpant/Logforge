@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Optional, List
 from contextlib import asynccontextmanager
 
+import clickhouse_connect
 from clickhouse_connect import get_client
 from clickhouse_connect.driver.exceptions import ClickHouseError
 
@@ -52,11 +53,20 @@ alert_event_publisher = None
 alert_rule_cache_instance = None
 sigma_rule_cache_instance = None
 
+def _no_clickhouse_sessions() -> None:
+    """Clients are shared across threads (requests, to_thread calls, background workers).
+    A client pinned to one ClickHouse session makes the server reject overlapping queries
+    ("concurrent queries within the same session"), so no client gets a session id. This
+    used to happen only as a side effect of utils.connection_pool being imported first."""
+    clickhouse_connect.common.set_setting("autogenerate_session_id", False)
+
+
 def get_clickhouse_client():
     """Get or create ClickHouse client"""
     global clickhouse_client, config
 
     if not clickhouse_client and config:
+        _no_clickhouse_sessions()
         try:
             clickhouse_client = get_client(
                 host=config["clickhouse_host"],
@@ -515,6 +525,29 @@ def setup_router_dependencies():
     storage.setup_dependencies(ttl_manager)
     alerts.setup_dependencies(alert_engine)
 
+async def wait_for(check, what: str, attempts: int = 30, delay: float = 2.0) -> None:
+    """Call `check` until it doesn't raise; after `attempts` tries, fail startup with the last error."""
+    last = None
+    for attempt in range(1, attempts + 1):
+        try:
+            result = check()
+            if asyncio.iscoroutine(result):
+                await result
+            return
+        except Exception as e:
+            last = e
+            logger.warning(f"Waiting for {what} ({attempt}/{attempts}): {e}")
+            await asyncio.sleep(delay)
+    raise RuntimeError(f"{what} isn't reachable: {last}")
+
+
+def _ping_clickhouse() -> None:
+    from app_config import clickhouse_settings
+
+    _no_clickhouse_sessions()
+    get_client(**clickhouse_settings(), connect_timeout=3).query("SELECT 1")
+
+
 @asynccontextmanager
 async def lifespan(app):
     """Application lifespan manager"""
@@ -529,6 +562,12 @@ async def lifespan(app):
     # misconfigured deployment fails fast and loudly.
     from security_config import validate_security_configuration
     validate_security_configuration()
+
+    # ClickHouse may still be starting (compose, a rolling restart): wait for it rather
+    # than fail half-way through startup. A startup that still fails stops the server
+    # (uvicorn --lifespan on) instead of serving with nothing initialised.
+    await wait_for(_ping_clickhouse, "ClickHouse",
+                   attempts=int(os.getenv("LOGFORGE_STARTUP_WAIT_ATTEMPTS", "30")))
 
     # Load configuration
     config = load_config()

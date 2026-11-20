@@ -97,31 +97,6 @@ class BackupPolicyRequest(BaseModel):
 
 # Authentication & Authorization Endpoints (6 endpoints)
 
-@router.post("/auth/oidc/configure")
-async def configure_oidc_provider(
-    request: OIDCConfigRequest,
-    customer_id: str = Header(..., alias="X-Customer-ID")
-):
-    """Configure OIDC authentication provider"""
-    try:
-        enterprise_service = EnterpriseService()
-        result = await enterprise_service.configure_oidc_provider(customer_id, request.model_dump())
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/auth/providers")
-async def list_auth_providers(
-    customer_id: str = Header(..., alias="X-Customer-ID")
-):
-    """List all authentication providers"""
-    try:
-        enterprise_service = EnterpriseService()
-        result = await enterprise_service.list_auth_providers(customer_id)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 @router.post("/auth/api-keys")
 async def generate_api_key(
     request: APIKeyRequest,
@@ -165,102 +140,6 @@ async def revoke_api_key(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/auth/mfa/setup")
-async def setup_mfa(
-    request: MFASetupRequest,
-    customer_id: str = Header(..., alias="X-Customer-ID")
-):
-    """Setup Multi-Factor Authentication for user"""
-    try:
-        enterprise_service = EnterpriseService()
-        result = await enterprise_service.setup_mfa(customer_id, request.model_dump())
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# RBAC & Permissions Endpoints (4 endpoints)
-
-@router.get("/rbac/roles")
-async def list_roles(
-    customer_id: str = Header(..., alias="X-Customer-ID")
-):
-    """List all available roles and permissions"""
-    try:
-        enterprise_service = EnterpriseService()
-        result = await enterprise_service.list_roles(customer_id)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/rbac/roles")
-async def create_custom_role(
-    request: CustomRoleRequest,
-    customer_id: str = Header(..., alias="X-Customer-ID")
-):
-    """Create custom role with specific permissions"""
-    try:
-        enterprise_service = EnterpriseService()
-        result = await enterprise_service.create_custom_role(customer_id, request.model_dump())
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.put("/rbac/roles/{role_id}")
-async def update_role(
-    role_id: str,
-    request: CustomRoleRequest,
-    customer_id: str = Header(..., alias="X-Customer-ID")
-):
-    """Update an existing custom role"""
-    try:
-        enterprise_service = EnterpriseService()
-        result = await enterprise_service.update_custom_role(customer_id, role_id, request.model_dump())
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.delete("/rbac/roles/{role_id}")
-async def delete_role(
-    role_id: str,
-    customer_id: str = Header(..., alias="X-Customer-ID")
-):
-    """Delete a custom role"""
-    try:
-        enterprise_service = EnterpriseService()
-        result = await enterprise_service.delete_custom_role(customer_id, role_id)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.put("/rbac/users/{user_id}/roles")
-async def assign_user_roles(
-    user_id: str,
-    request: UserRoleAssignment,
-    customer_id: str = Header(..., alias="X-Customer-ID")
-):
-    """Assign roles to user"""
-    try:
-        enterprise_service = EnterpriseService()
-        result = await enterprise_service.assign_user_roles(customer_id, user_id, request.roles)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/rbac/permissions")
-async def get_user_permissions(
-    customer_id: str = Header(..., alias="X-Customer-ID"),
-    current_user = Depends(get_current_user)
-):
-    """Get effective permissions for current user"""
-    try:
-        enterprise_service = EnterpriseService()
-        result = await enterprise_service.get_user_permissions(customer_id, current_user.id)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Multi-Tenancy & Compliance Endpoints (6 endpoints)
 
 @router.get("/tenants")
 async def list_tenants(
@@ -407,73 +286,6 @@ async def get_audit_logs(
 
 # Enterprise Integration Endpoints (3 endpoints)
 
-@router.get("/integrations")
-async def list_integrations(
-    customer_id: str = Header(..., alias="X-Customer-ID")
-):
-    """List all available enterprise integrations"""
-    try:
-        enterprise_service = EnterpriseService()
-        result = await enterprise_service.list_integrations(customer_id)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/integrations/{integration_type}/configure")
-async def configure_integration(
-    integration_type: str,
-    config: Dict[str, Any],
-    customer_id: str = Header(..., alias="X-Customer-ID")
-):
-    """Configure enterprise integration"""
-    try:
-        enterprise_service = EnterpriseService()
-        result = await enterprise_service.configure_integration(customer_id, integration_type, config)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/integrations/{integration_type}/status")
-async def get_integration_health(
-    integration_type: str,
-    customer_id: str = Header(..., alias="X-Customer-ID")
-):
-    """Check integration health and connectivity"""
-    try:
-        enterprise_service = EnterpriseService()
-        result = await enterprise_service.get_integration_health(customer_id, integration_type)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/integrations/{integration_id}/test")
-async def test_integration(
-    integration_id: str,
-    customer_id: str = Header(..., alias="X-Customer-ID")
-):
-    """Test connectivity for a configured integration"""
-    try:
-        enterprise_service = EnterpriseService()
-        result = await enterprise_service.test_integration(customer_id, integration_id)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.delete("/integrations/{integration_id}")
-async def delete_integration(
-    integration_id: str,
-    customer_id: str = Header(..., alias="X-Customer-ID")
-):
-    """Remove/disconnect an integration"""
-    try:
-        enterprise_service = EnterpriseService()
-        result = await enterprise_service.delete_integration(customer_id, integration_id)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Administration & Governance Endpoints (3 endpoints)
-
 @router.get("/usage/billing")
 async def get_usage_billing(
     period_start: str = Query(..., description="Billing period start"),
@@ -538,10 +350,36 @@ async def enterprise_health():
         "status": "healthy",
         "module": "enterprise",
         "version": "1.0.0",
-        "features": [
-            "authentication", "authorization", "rbac", "multi_tenancy", 
-            "compliance", "integrations", "governance"
-        ],
-        "endpoints_count": 22,
+        "features": ["api_keys", "multi_tenancy", "compliance", "governance"],
+        "endpoints_count": sum(1 for r in router.routes if getattr(r, "include_in_schema", True)),
         "timestamp": datetime.now().isoformat()
     }
+
+
+# -- retired routes ---------------------------------------------------------------------
+# The Enterprise RBAC, OIDC-config, MFA-setup and integrations routes are superseded.
+# They answer 410 Gone with their successor, and are left out of the API spec.
+
+_RETIRED = {
+    "auth/oidc/configure": "/v1/sso/providers",
+    "auth/providers": "/v1/sso/providers",
+    "auth/mfa/setup": "/v1/auth/mfa (setup, confirm, delete)",
+    "rbac/users/{user_id}/roles": "/v1/users/{user_id}/roles",
+    "rbac/permissions": "/v1/auth/access",
+    "rbac/roles": "/v1/roles/custom",
+    "rbac/roles/{role_id}": "/v1/roles/custom/{id}",
+    "integrations": "/v1/integrations",
+    "integrations/{rest:path}": "/v1/integrations",
+}
+
+
+def _retired(successor: str):
+    async def gone():
+        raise HTTPException(status_code=410, detail=f"This route was retired; use {successor}")
+    return gone
+
+
+for _path, _successor in _RETIRED.items():
+    router.add_api_route(f"/{_path}", _retired(_successor), methods=["GET", "POST", "PUT", "DELETE"],
+                         include_in_schema=False, status_code=410)
+

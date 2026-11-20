@@ -82,6 +82,24 @@ async def process_log_batch_with_client(logs: List[LogEntry], customer_id: str) 
         return False
 
 
+def dedup_token(customer_id: str, logs: List[LogEntry]) -> str:
+    """The insert_deduplication_token of a batch: a hash of its tenant and logs,
+    leaving out ingested_at (a redelivered message is restamped when consumed).
+    Writing the same batch again (a retry after an insert that did succeed, a
+    Kafka redelivery) gives the same token, and ClickHouse drops the repeat."""
+    import hashlib
+    import json
+
+    digest = hashlib.sha256(customer_id.encode())
+    for log in logs:
+        if hasattr(log, "model_dump"):
+            data = log.model_dump(mode="json", exclude={"ingested_at"})
+        else:
+            data = {k: v for k, v in dict(log).items() if k != "ingested_at"}
+        digest.update(json.dumps(data, sort_keys=True, default=str).encode())
+    return digest.hexdigest()
+
+
 async def process_log_batch_internal(logs: List[LogEntry], client, customer_id: str):
     """
     Internal function that exactly matches the old system's process_log_batch
@@ -114,7 +132,7 @@ async def process_log_batch_internal(logs: List[LogEntry], client, customer_id: 
         ]
         rows.append(row)
 
-    # Batch insert to ClickHouse - EXACT same logic as old system
+    # Batch insert to ClickHouse; a repeat of the same batch is dropped (dedup_token)
     client.insert(
         "logs_raw_mt",
         rows,
@@ -122,7 +140,8 @@ async def process_log_batch_internal(logs: List[LogEntry], client, customer_id: 
             "ts", "host", "service", "level", "msg", "trace_id", "span_id",
             "attrs", "status", "src_ip", "user_id", "ingested_at",
             "severity_num", "facility", "parser_version", "customer_id"
-        ]
+        ],
+        settings={"insert_deduplication_token": dedup_token(customer_id, logs)},
     )
     logger.info(f"Successfully inserted {len(logs)} logs for customer {customer_id}")
 
@@ -182,7 +201,7 @@ async def process_log_batch(logs: List[LogEntry], customer_id: str) -> bool:
                 ]
                 rows.append(row)
 
-            # Batch insert to ClickHouse
+            # Batch insert to ClickHouse; a repeat of the same batch is dropped (dedup_token)
             client.insert(
                 "logs_raw_mt",
                 rows,
@@ -190,7 +209,8 @@ async def process_log_batch(logs: List[LogEntry], customer_id: str) -> bool:
                     "ts", "host", "service", "level", "msg", "trace_id", "span_id",
                     "attrs", "status", "src_ip", "user_id", "ingested_at",
                     "severity_num", "facility", "parser_version", "customer_id"
-                ]
+                ],
+                settings={"insert_deduplication_token": dedup_token(customer_id, logs)},
             )
 
             logger.info(f"Successfully inserted {len(logs)} logs for customer {customer_id}")
@@ -307,7 +327,8 @@ async def process_dual_write_optimized(
                         "ts", "host", "service", "level", "msg", "trace_id", "span_id",
                         "attrs", "status", "src_ip", "user_id", "ingested_at",
                         "severity_num", "facility", "parser_version", "customer_id"
-                    ]
+                    ],
+                    settings={"insert_deduplication_token": dedup_token(customer_id, raw_table_data)},
                 )
                 
                 raw_write_time = (datetime.now() - write_start).total_seconds() * 1000
@@ -356,7 +377,8 @@ async def process_dual_write_optimized(
                         "ts", "date", "hour", "host", "service", "level", "msg", 
                         "trace_id", "span_id", "status", "src_ip", "user_id", 
                         "severity_num", "facility", "ingested_at", "customer_id"
-                    ]
+                    ],
+                    settings={"insert_deduplication_token": dedup_token(customer_id, normalized_table_data)},
                 )
                 
                 norm_write_time = (datetime.now() - norm_start).total_seconds() * 1000
@@ -475,7 +497,8 @@ async def process_normalized_write_only(
                     "ts", "date", "hour", "host", "service", "level", "msg", 
                     "trace_id", "span_id", "status", "src_ip", "user_id", 
                     "severity_num", "facility", "ingested_at", "customer_id"
-                ]
+                ],
+                settings={"insert_deduplication_token": dedup_token(customer_id, normalized_table_data)},
             )
             
             # Calculate performance metrics

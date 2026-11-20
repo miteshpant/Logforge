@@ -244,17 +244,36 @@ class TenantDAO:
     async def get_tenant_quotas(self, tenant_id: str) -> List[Dict[str, Any]]:
         """Get all quotas for a tenant"""
         try:
-            result = await self.db.execute_query(
-                f"SELECT * FROM {TENANT_QUOTAS_TABLE} WHERE tenant_id = %(tenant_id)s",
-                {"tenant_id": tenant_id}
-            )
-            
+            # tenant_quotas_v adds the usage counted in quota_usage_events_mt (migration 036).
+            try:
+                result = await self.db.execute_query(
+                    "SELECT * FROM tenant_quotas_v WHERE tenant_id = %(tenant_id)s",
+                    {"tenant_id": tenant_id}
+                )
+            except Exception as e:
+                if "UNKNOWN_TABLE" not in str(e) and "doesn't exist" not in str(e):
+                    raise
+                result = await self.db.execute_query(
+                    f"SELECT * FROM {TENANT_QUOTAS_TABLE} WHERE tenant_id = %(tenant_id)s",
+                    {"tenant_id": tenant_id}
+                )
+
             return [dict(row) for row in result] if result else []
-            
+
         except Exception as e:
             logger.error("Failed to get tenant quotas", error=str(e))
             return []
     
+    async def add_quota_usage(self, tenant_id: str, quota_type: str, reset_epoch, amount: int) -> None:
+        """Count usage against a quota by appending a row (no mutation, no lost
+        increments when requests race). `reset_epoch` is the quota's last_reset, so a
+        reset makes earlier rows stop counting. Read the total through tenant_quotas_v."""
+        await self.db.execute_query(
+            "INSERT INTO quota_usage_events_mt (tenant_id, quota_type, reset_epoch, amount) "
+            "VALUES (%(tenant_id)s, %(quota_type)s, %(reset_epoch)s, %(amount)s)",
+            {"tenant_id": tenant_id, "quota_type": quota_type, "reset_epoch": reset_epoch, "amount": amount},
+        )
+
     async def update_tenant_quota(self, tenant_id: str, quota_type: str, quota_data: Dict[str, Any]) -> bool:
         """Update specific tenant quota"""
         try:

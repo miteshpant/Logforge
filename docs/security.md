@@ -19,21 +19,13 @@ artifact.
 
 **The allowlist** is for advisories that can't be fixed yet. Each entry
 names the package and the GHSA advisory, says why it's accepted, and has an
-expiry date, after which CI fails again. Today it holds Next.js 14
-advisories:
+expiry date, after which CI fails again. It is empty: both UIs run Next.js
+15.5 with React 19, which fixes the Next.js 14 advisories that were listed
+there, and PostCSS is pinned to 8.5.33 (an npm `overrides` entry also replaces
+the 8.4 copy Next.js bundles).
 
-- Their fixes need Next.js 15.5 or later, a migration that's on the roadmap.
-- Most don't apply to Logforge:
-  - the image optimizer is turned off (`images.unoptimized`, and
-    `/_next/image` answers 404);
-  - the apps use no Server Actions, middleware, rewrites or i18n;
-  - the images run on Linux.
-- Three Server Components denial-of-service advisories do apply. Until the
-  upgrade, run the UIs behind a proxy with request limits.
-- The rest are two build-time PostCSS advisories.
-
-`security/trivyignore` holds the same Next.js advisories for the image scan,
-with the same expiry. The UI images' runtime stage has npm, npx, corepack
+`security/trivyignore` holds the image-scan exceptions in the same form; it is
+empty too. The UI images' runtime stage has npm, npx, corepack
 and yarn removed: the standalone server needs only node, and npm bundled an
 old `tar` (CVE-2026-59873).
 
@@ -105,7 +97,8 @@ The workflow hasn't run yet: the first tag will be its first run.
   - Redaction runs before anything reaches an LLM.
   - Integrations may not call private addresses unless allowed.
   - The user list is tenant scoped (Phase 14 fixed a cross-tenant listing).
-  - `/metrics` is unauthenticated: keep it on the internal network.
+  - `/metrics` needs a bearer token when `LOGFORGE_METRICS_TOKEN` is set; it's
+    open without one.
 - **Denial of service**
   - Request size limits and query cost limits (`EXPLAIN ESTIMATE`).
   - Rate limits and token budgets for AI.
@@ -115,17 +108,18 @@ The workflow hasn't run yet: the first tag will be its first run.
 - **Elevation of privilege**
   - Containment needs a person's approval, checked against roles.
   - Custom roles can't grant platform permissions.
+  - An API key created with permissions (`logs:write`, `metrics:read`, …) can
+    do only that, whatever its service account's role. Keys created without
+    permissions keep full tenant access.
   - SSO and SCIM can't grant platform roles.
   - Failing to read custom roles fails closed (503).
 
 ### Known gaps
 
-- **API key scopes** aren't enforced: a key acts with its creator's roles.
 - **Data scopes** don't cover traces, metrics, alerts or archive search
   (refused), and there's no field-level masking.
-- **Sign-in:** no SAML, and MFA enrollment exists but isn't enforced at
-  sign-in.
-- **`/metrics`** has no authentication.
+- **Sign-in:** no SAML. Two-step sign-in (TOTP) is per user and optional; a
+  tenant can't require it yet. Accounts that sign in through OIDC use their
+  identity provider's MFA.
 - **Prompt injection** from log content is mitigated (tools are read-only and
   answers are cited), not prevented.
-- **Next.js 14:** the UIs run it until the Next.js 15 migration.

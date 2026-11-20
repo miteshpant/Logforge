@@ -13,6 +13,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from fastapi import Request, HTTPException
+import json
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 import structlog
@@ -47,6 +48,7 @@ SESSION_EXPIRY_HOURS = int(os.getenv("SESSION_EXPIRY_HOURS", "8"))
 
 # ClickHouse configuration (single source: app_config.clickhouse_settings)
 from app_config import clickhouse_settings as _clickhouse_settings
+from mutation_time import now_param
 
 _CH = _clickhouse_settings()
 CLICKHOUSE_HOST = _CH["host"]
@@ -364,24 +366,29 @@ ROLE_PERMISSIONS = {
         "security:*:tenant", "users:*:tenant", "settings:*:tenant",
         "storage:*:tenant", "queries:*:tenant", "ai:*:tenant", "enterprise:*:tenant",
         "observability:*:tenant", "roles:*:tenant", "usage:*:tenant", "billing:read:tenant",
-        "costs:*:tenant", "analytics:read:tenant", "tenants:read,write:tenant"
+        "costs:*:tenant", "analytics:read:tenant", "tenants:read,write:tenant",
+        "tenant_profile:read:tenant", "compliance:read:tenant"
     ],
     UserRole.SECURITY_ANALYST: [
+        "tenant_profile:read:tenant",
         "security:*:tenant", "logs:read,search:tenant", "ai:read:tenant",
         "alerts:read,investigate:tenant", "compliance:read:tenant",
         "threat_hunting:*:tenant"
     ],
     UserRole.DEVOPS_ENGINEER: [
+        "tenant_profile:read:tenant",
         "logs:read,search:tenant", "alerts:*:tenant", "ai:read:tenant",
         "dashboards:*:tenant", "observability:*:tenant",
         "integrations:*:tenant"
     ],
     UserRole.COMPLIANCE_OFFICER: [
+        "tenant_profile:read:tenant",
         "compliance:*:tenant", "audit:read:tenant",
         "reports:generate:tenant", "legal_hold:*:tenant",
         "logs:read:tenant"
     ],
     UserRole.VIEWER: [
+        "tenant_profile:read:tenant",
         "logs:read:tenant", "dashboards:read:tenant",
         "alerts:read:own", "reports:read:tenant"
     ]
@@ -408,6 +415,9 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in WRITE_METHODS:
             return "security:write:tenant"
         return "security:read:tenant"
+    elif path == "/v1/query/advanced":
+        # An aggregation over the tenant's logs: reading them, like GET /v1/logs.
+        return "logs:read:tenant"
     elif path.startswith("/v1/query/"):
         if method in WRITE_METHODS:
             return "queries:write:tenant"
@@ -436,6 +446,12 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in WRITE_METHODS:
             return "settings:write:tenant"
         return "settings:read:tenant"
+    elif path.startswith("/v1/inbox"):
+        # Your own notifications: everyone signed in to the tenant.
+        return "tenant_profile:read:tenant"
+    elif path.startswith("/v1/reports/compliance"):
+        # The access review lists every user and key: compliance, not SOC, readers.
+        return "compliance:read:tenant"
     elif path.startswith("/v1/reports"):
         return "security:read:tenant"
     elif path.startswith("/v1/integrations"):
@@ -510,6 +526,10 @@ def get_endpoint_permission(path: str, method: str) -> str:
         if method in WRITE_METHODS:
             return "observability:write:tenant"
         return "observability:read:tenant"
+    elif path == "/v1/stream/alerts":
+        return "alerts:read:tenant"  # the live alert feed: what GET /v1/alerts shows
+    elif path == "/v1/stream/security":
+        return "security:read:tenant"  # live security events: what the SIEM pages show
     elif path.startswith("/v1/stream/"):
         return "observability:read:tenant"  # Streaming endpoints require observability read access
     elif path.startswith("/v1/streaming/config"):
@@ -520,6 +540,12 @@ def get_endpoint_permission(path: str, method: str) -> str:
         # /v1/tenants (list all) requires platform admin
         # /v1/tenants (create) requires platform admin
         return "platform:admin:platform"
+    elif method == "GET" and path.startswith("/v1/tenants/") and (
+            path.count("/") == 3 or (path.count("/") == 4 and path.endswith("/subscription"))):
+        # The tenant's own profile and plan: every member reads them (the UI loads
+        # both at sign-in to know what to offer).
+        # tenant_path_denied() keeps the id in the path to the caller's own tenant.
+        return "tenant_profile:read:tenant"
     elif path.startswith("/v1/tenants/") and path.count("/") >= 3:
         # /v1/tenants/{tenant_id}/* allows both platform admin and tenant admin
         if method in WRITE_METHODS:
@@ -537,6 +563,82 @@ def get_endpoint_permission(path: str, method: str) -> str:
         return "roles:read:tenant"
     else:
         return "platform:general:tenant"
+
+_TENANT_PATH_LITERALS = frozenset({"stats"})
+
+
+def tenant_path_denied(path: str, tenant_id: str, user_roles: List[Dict[str, Any]]) -> Optional[str]:
+    """/v1/tenants/{id}/...: the id must be the tenant the caller is acting in, unless
+    they hold a platform role. Without this a tenant admin could read any tenant by
+    putting its id in the path while sending their own X-Customer-ID."""
+    if not path.startswith("/v1/tenants/"):
+        return None
+    target = path.split("/")[3]
+    if not target or target in _TENANT_PATH_LITERALS or target == tenant_id:
+        return None
+    if any(r.get("tenant_id") == "platform" for r in user_roles):
+        return None
+    return f"No access to tenant: {target}"
+
+
+# Routes a user with masked fields may still call although their requests or answers
+# name fields: their own account and access, and signing out.
+_MASKING_EXEMPT = ("/v1/auth/",)
+
+
+async def _masking_refusal(request: Request, masked) -> Optional[JSONResponse]:
+    """Refuse a request that names a masked field: a query could copy it to another name."""
+    import field_masking
+
+    if request.url.path.startswith(_MASKING_EXEMPT):
+        return None
+    payload: Any = dict(request.query_params)
+    if request.method in WRITE_METHODS and "json" in request.headers.get("content-type", ""):
+        try:
+            payload = [payload, json.loads((await request.body()) or b"null")]
+        except ValueError:
+            pass
+    named = field_masking.mentions(payload, masked)
+    if named:
+        return JSONResponse(status_code=403, content={
+            "detail": f"Your role masks the field '{named}', so requests can't use it"})
+    return None
+
+
+async def _masked_response(response, masked):
+    """Mask JSON answers; refuse other successful answers (streams, CSV, PDF) outright."""
+    import field_masking
+
+    content_type = response.headers.get("content-type", "")
+    if response.status_code >= 400 or response.status_code == 204:
+        return response
+    if "json" not in content_type:
+        return JSONResponse(status_code=403, content={
+            "detail": "Your role masks fields, and this response can't be masked (stream or file download)"})
+    if hasattr(response, "body_iterator"):  # what call_next returns
+        body = b"".join([chunk async for chunk in response.body_iterator])
+    else:
+        body = response.body
+    try:
+        data = json.loads(body or b"null")
+    except ValueError:
+        return JSONResponse(status_code=403, content={"detail": "Your role masks fields; this response can't be masked"})
+    headers = {k: v for k, v in response.headers.items() if k.lower() not in ("content-length", "content-type")}
+    return JSONResponse(status_code=response.status_code, content=field_masking.mask(data, masked), headers=headers)
+
+
+def api_key_denied(state, required_permission: str):
+    """For an API key request, why its permissions don't allow `required_permission` (else None)."""
+    if not getattr(state, "is_api_key_auth", False):
+        return None
+    from api_key_scopes import allows
+
+    permissions = getattr(state, "api_key_permissions", None) or []
+    if allows(permissions, required_permission):
+        return None
+    resource, action, _ = required_permission.split(":")
+    return f"This API key doesn't allow {resource}:{action} (it has: {', '.join(permissions)})"
+
 
 async def _custom_roles_of(tenant_id: str, user_id: str) -> list:
     """The user's custom roles in the tenant (custom_roles.py, cached 30 s). A failure to read
@@ -687,11 +789,11 @@ class SetupTokenManager:
         # the update, so a second request cannot see the token as unused.
         self.db.client.command(
             f"""
-            ALTER TABLE {self.TABLE} UPDATE used_at = now64(3)
+            ALTER TABLE {self.TABLE} UPDATE used_at = toDateTime64({{now:String}}, 3)
             WHERE token_hash = {{token_hash:String}} AND used_at IS NULL
             SETTINGS mutations_sync = 2
             """,
-            parameters={"token_hash": token_hash},
+            parameters={"token_hash": token_hash, "now": now_param()},
         )
         logger.debug("Setup token consumed", token=token[:8] + "...")
         return True
@@ -794,9 +896,11 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app):
         super().__init__(app)
-        self.user_service = get_user_service()
-        # Resolved on first middleware construction (app startup), not at import.
-        self.subscription_service = get_subscription_service()
+        # Resolved on first use, not here: Starlette builds the middleware stack at
+        # startup, before the lifespan waits for ClickHouse, and these services
+        # connect to it. A ClickHouse still starting used to fail startup here.
+        self._user_service = None
+        self._subscription_service = None
 
         # Public endpoints (no authentication required)
         self.public_endpoints = [
@@ -809,6 +913,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "/openapi.json",
             "/redoc",
             "/v1/auth/login",
+            "/v1/auth/login/mfa",
             # LF-015: the refresh endpoint authenticates via the refresh token
             # in its body — requiring a valid (unexpired) access token here
             # made refresh useless by design.
@@ -888,12 +993,18 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             # Phase 14: a tenant's custom roles add permissions and may carry a data scope.
             custom = await _custom_roles_of(tenant_id, user.id) if tenant_id and tenant_id != "platform" else []
             if tenant_id and not request.url.path.startswith("/v1/auth/"):
+                denied = tenant_path_denied(request.url.path, tenant_id, user_roles)
+                if denied:
+                    raise HTTPException(403, denied)
                 required_permission = get_endpoint_permission(request.url.path, request.method)
                 if not check_permission(user_roles, required_permission, tenant_id):
                     from custom_roles import effective, grants
 
                     if not grants(effective(custom)[0], required_permission):
                         raise HTTPException(403, f"Insufficient permissions for {request.url.path}")
+                denied = api_key_denied(request.state, required_permission)
+                if denied:
+                    raise HTTPException(403, denied)
 
             # Step 5: Feature Access - Check subscription (skip for admin endpoints)
             if not is_admin_endpoint and tenant_id:
@@ -924,11 +1035,24 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
             scope = effective(custom)[1]
             request.state.data_scope = scope
+            # Fields the user's custom roles mask (field_masking.py).
+            import field_masking
+            from custom_roles import masked_fields
+
+            masked = masked_fields(custom)
+            if masked:
+                refused = await _masking_refusal(request, masked)
+                if refused:
+                    return refused
             scope_token = data_scope.set_scope(scope)
+            mask_token = field_masking.set_fields(masked)
             try:
                 response = await call_next(request)
             finally:
                 data_scope._SCOPE.reset(scope_token)
+                field_masking.reset(mask_token)
+            if masked:
+                response = await _masked_response(response, masked)
 
             # Step 8: Usage Tracking - Track API usage asynchronously
             if tenant_id and tenant_id != "platform":
@@ -963,6 +1087,26 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 status_code=500,
                 content={"error": "Authentication system error"}
             )
+
+    @property
+    def user_service(self):
+        if getattr(self, "_user_service", None) is None:
+            self._user_service = get_user_service()
+        return self._user_service
+
+    @user_service.setter
+    def user_service(self, value):
+        self._user_service = value
+
+    @property
+    def subscription_service(self):
+        if getattr(self, "_subscription_service", None) is None:
+            self._subscription_service = get_subscription_service()
+        return self._subscription_service
+
+    @subscription_service.setter
+    def subscription_service(self, value):
+        self._subscription_service = value
 
     def _is_public_endpoint(self, path: str) -> bool:
         """Check if endpoint is public (no auth required)"""

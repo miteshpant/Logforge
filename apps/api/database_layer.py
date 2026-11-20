@@ -12,6 +12,7 @@ from functools import lru_cache
 import clickhouse_connect
 import structlog
 from contextlib import asynccontextmanager
+from mutation_time import now_param
 
 logger = structlog.get_logger()
 
@@ -722,7 +723,8 @@ class DatabaseLayer:
         if not set_clauses:
             return False
         
-        set_clauses.append("updated_at = now()")
+        set_clauses.append("updated_at = toDateTime64(%(update_now)s, 3)")
+        params["update_now"] = now_param()
         
         query = f"""
             ALTER TABLE users_mt UPDATE 
@@ -782,12 +784,12 @@ class DatabaseLayer:
         
         query = """
             ALTER TABLE user_sessions_mt UPDATE 
-            last_activity = now()
+            last_activity = toDateTime64(%(now)s, 3)
             WHERE session_token = %(session_token)s
             AND status = 'active'
         """
-        
-        result = await self.execute_update(query, {'session_token': session_token})
+
+        result = await self.execute_update(query, {'session_token': session_token, 'now': now_param()})
         return result > 0
     
     async def revoke_session(self, session_token: str) -> bool:

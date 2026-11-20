@@ -46,6 +46,43 @@ fixtures:
     - {repeat: 5, every: 10s, event: {event_type: authentication, result: failed, src_ip: 203.0.113.9, user: root}}
 ```
 
+A sequence (`temporal` or `temporal_ordered`) can name `until` rules: a match
+of one for the group abandons the sequence so far. Brute force then a
+successful sign-in, unless the password was reset in between:
+
+```yaml
+correlation:
+  type: temporal_ordered
+  rules: [acme_auth_failed, acme_auth_ok]
+  until: [acme_password_reset]
+  group-by: [user]
+  timespan: 30m
+```
+
+`until` is a Logforge extension to the Sigma correlation format. Its rules
+are referenced like `rules` (they must be in the rule set, and backtests
+replay them).
+
+**Correlations over alerts** reference `alerts` (every alert another rule
+raises) or `alerts:<severity>` (`alerts:high`, ...). Each alert is fed in
+once, on the event that raised it, with `alert.rule_id`, `alert.severity`,
+`alert.technique` (the rule's first, primary ATT&CK technique) and
+`alert.techniques`. Three different techniques on one host within an hour:
+
+```yaml
+correlation:
+  type: value_count
+  rules: [alerts]
+  group-by: [hostname]
+  timespan: 1h
+  condition: {field: alert.technique, gte: 3}
+```
+
+The shipped `lf-c-multi-technique-host` is this rule. Alerts of correlations
+over alerts aren't fed back, so they can't loop. Their fixtures and
+backtests replay every rule in the set, since any of them can raise the
+alerts they count.
+
 Fixture timelines: a plain event comes 1 s after the previous one;
 `{repeat: N, every: 30s, event: ...}` repeats it; `{at: 5m, event: ...}`
 places it at an offset from the start.

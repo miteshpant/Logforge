@@ -123,7 +123,7 @@ jobs:
           LOGFORGE_TEST_CLICKHOUSE: localhost:8124
           LOGFORGE_REQUIRE_CLICKHOUSE: "1"
           LOGFORGE_BACKUP_FULL: "1"
-        run: pytest tests/test_logql_pipeline_live.py tests/test_analyst_questions_live.py tests/test_pack_ci_live.py tests/test_nl2query_eval_live.py tests/test_copilot_eval_live.py tests/test_entities_live.py tests/test_log_patterns_live.py tests/test_storage_tiers_live.py tests/test_backup_live.py tests/test_response_acceptance_live.py tests/test_sso_store_live.py tests/test_scim_live.py tests/test_data_scope_live.py -v
+        run: pytest tests/test_logql_pipeline_live.py tests/test_analyst_questions_live.py tests/test_pack_ci_live.py tests/test_nl2query_eval_live.py tests/test_copilot_eval_live.py tests/test_entities_live.py tests/test_log_patterns_live.py tests/test_storage_tiers_live.py tests/test_backup_live.py tests/test_response_acceptance_live.py tests/test_sso_store_live.py tests/test_scim_live.py tests/test_data_scope_live.py tests/test_ingest_dedup.py -v
 
       - name: API logs on failure
         if: failure()

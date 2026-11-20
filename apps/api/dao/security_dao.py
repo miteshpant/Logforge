@@ -10,6 +10,7 @@ import json
 import uuid
 
 from database_layer import DatabaseLayer
+from mutation_time import now_param
 
 
 def to_clickhouse_datetime(iso_timestamp: str) -> str:
@@ -611,8 +612,8 @@ class SecurityDAO:
         """Update security event status using existing table fields"""
         try:
             # Build update query dynamically
-            update_fields = ["status = %(status)s", "updated_at = now64(3)"]
-            params = {"status": status, "detection_id": detection_id, "customer_id": customer_id}
+            update_fields = ["status = %(status)s", "updated_at = toDateTime64(%(now)s, 3)"]
+            params = {"status": status, "detection_id": detection_id, "customer_id": customer_id, "now": now_param()}
             
             if assigned_to is not None:
                 update_fields.append("assigned_to = %(assigned_to)s")
@@ -668,11 +669,12 @@ class SecurityDAO:
                 return 0
             
             # Now perform the update
-            update_fields = ["status = %(status)s", "updated_at = now64(3)"]
+            update_fields = ["status = %(status)s", "updated_at = toDateTime64(%(now)s, 3)"]
             params = {
                 "status": status,
                 "rule_id": rule_id,
-                "customer_id": customer_id
+                "customer_id": customer_id,
+                "now": now_param(),
             }
             
             if assigned_to is not None:

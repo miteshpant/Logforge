@@ -67,6 +67,17 @@ class Step:
     on_error: str = "stop"
     link_case: bool = False
     containment: bool = False
+    when: str = ""  # the step's `if`: skipped when false
+    parallel: str = ""  # adjacent steps with the same group run at the same time
+    _cond: Optional[Callable[[Dict[str, Any]], bool]] = field(default=None, repr=False)
+
+    def applies(self, ctx: Dict[str, Any]) -> bool:
+        if self._cond is None:
+            return True
+        try:
+            return bool(self._cond(ctx))
+        except Exception:
+            return False
 
 
 @dataclass
@@ -119,6 +130,7 @@ def parse(text: str, integrations: Optional[Dict[str, Dict[str, Any]]] = None) -
         raise PlaybookError("steps must be a non-empty list")
     steps: List[Step] = []
     seen = set()
+    closed_groups: set = set()
     approved_since_containment = False
     for i, raw in enumerate(raw_steps):
         if not isinstance(raw, dict):
@@ -168,6 +180,26 @@ def parse(text: str, integrations: Optional[Dict[str, Dict[str, Any]]] = None) -
             raise PlaybookError(f"step {sid!r}: search.query is required")
         elif stype == "enrich" and not (spec.get("indicator") or spec.get("entity")):
             raise PlaybookError(f"step {sid!r}: enrich needs an indicator or an entity")
-        steps.append(Step(sid, stype, spec, on_error, bool(raw.get("link_case")), containment))
+        step_when = str(raw.get("if") or "").strip()
+        step_cond = None
+        if step_when:
+            from pipeline_conditions import ConditionError, compile_condition
+
+            try:
+                step_cond = compile_condition(step_when)
+            except ConditionError as e:
+                raise PlaybookError(f"step {sid!r}: if: {e}") from None
+        group = str(raw.get("parallel") or "").strip()
+        if group:
+            if not _ID.match(group):
+                raise PlaybookError(f"step {sid!r}: parallel group names are lowercase letters, digits and _")
+            if stype == "approval" or containment:
+                raise PlaybookError(f"step {sid!r}: approvals and containment can't run in a parallel group")
+            if group in closed_groups:
+                raise PlaybookError(f"step {sid!r}: the steps of parallel group {group!r} must be adjacent")
+        if steps and steps[-1].parallel and steps[-1].parallel != group:
+            closed_groups.add(steps[-1].parallel)
+        steps.append(Step(sid, stype, spec, on_error, bool(raw.get("link_case")), containment,
+                          when=step_when, parallel=group, _cond=step_cond))
     return Playbook(name=name, trigger_on=trigger["on"], when=when, steps=steps,
                     description=str(doc.get("description") or ""), _cond=cond)

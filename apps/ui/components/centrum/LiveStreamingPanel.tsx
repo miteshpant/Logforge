@@ -15,8 +15,12 @@ interface StreamEvent {
 // Counter for generating unique IDs when data has none
 let eventIdCounter = 0
 
-export default function LiveStreamingPanel() {
-  const [activeStream, setActiveStream] = useState<StreamType>('alerts')
+const ALL_STREAMS: StreamType[] = ['alerts', 'security', 'traces', 'metrics']
+
+/** `streams`: which streams the viewer may read (others' tabs are hidden). */
+export default function LiveStreamingPanel({ streams }: { streams?: Partial<Record<StreamType, boolean>> } = {}) {
+  const allowed = ALL_STREAMS.filter(s => !streams || streams[s])
+  const [activeStream, setActiveStream] = useState<StreamType>(allowed[0] || 'alerts')
   const [events, setEvents] = useState<StreamEvent[]>([])
   const [isConnected, setIsConnected] = useState(false)
   const [isExpanded, setIsExpanded] = useState(true) // Default to expanded
@@ -41,6 +45,8 @@ export default function LiveStreamingPanel() {
       }
       return
     }
+
+    if (!allowed.includes(activeStream)) return
 
     // Clear events when switching streams
     setEvents([])
@@ -378,7 +384,9 @@ export default function LiveStreamingPanel() {
     { id: 'security' as StreamType, label: 'Security', icon: '🛡️' },
     { id: 'traces' as StreamType, label: 'Traces', icon: '📊' },
     { id: 'metrics' as StreamType, label: 'Metrics', icon: '📈' }
-  ]
+  ].filter(tab => allowed.includes(tab.id))
+
+  if (allowed.length === 0) return null
 
   return (
     <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-900/95 backdrop-blur-xl shadow-xl border border-white/5">

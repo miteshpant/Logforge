@@ -117,3 +117,11 @@ def test_unknown_rule_and_bad_ranges_are_rejected():
         backtest([], end=T0)
     with pytest.raises(BacktestError, match="at most 31 days"):
         backtest([], end=T0 + timedelta(days=40))
+
+
+def test_a_backtest_replays_the_until_rules_too():
+    from backtest import resolve_rules
+
+    rules = [{"id": "a", "name": "brute"}, {"id": "b", "name": "success"}, {"id": "r", "name": "reset"},
+             {"id": "c", "correlation": {"type": "temporal_ordered", "rules": ["brute", "success"], "until": "reset"}}]
+    assert [r["id"] for r in resolve_rules(rules, "c")] == ["a", "b", "r", "c"]

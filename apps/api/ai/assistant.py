@@ -14,11 +14,12 @@ and the reason.
 
 from __future__ import annotations
 
+import contextvars
 import json
 import time
 import uuid
 from collections import defaultdict, deque
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -84,10 +85,50 @@ def _build_provider(settings: ProviderSettings):
     return build_provider(settings)
 
 
-async def _rule_based(question: str, tenant_id: str) -> dict[str, Any]:
+_REDACT: "contextvars.ContextVar[frozenset]" = contextvars.ContextVar("logforge_ai_redact", default=frozenset())
+
+
+def current_redact_fields() -> frozenset:
+    """The redacted fields of the AI session this request runs in (empty outside one)."""
+    return _REDACT.get()
+
+
+@contextmanager
+def redacting(fields):
+    import field_masking
+
+    token = _REDACT.set(field_masking.normalise_fields(fields))
+    try:
+        yield
+    finally:
+        _REDACT.reset(token)
+
+
+def _redact_fields(tenant_fields: list[str]) -> list[str]:
+    """The tenant's redaction fields plus those the asker's custom roles mask: tool
+    output is redacted before the model sees it, so an answer can't repeat them."""
+    import field_masking
+
+    return sorted(set(tenant_fields or []) | set(field_masking.current()))
+
+
+def permission_check(roles: list[dict[str, Any]], tenant_id: str):
+    from authn_authz_middleware import check_permission
+
+    def allowed(permission: str) -> bool:
+        try:
+            return check_permission(roles, permission, tenant_id)
+        except ValueError:
+            return False
+
+    return allowed
+
+
+async def _rule_based(question: str, tenant_id: str, roles: list[dict[str, Any]]) -> dict[str, Any]:
     from services.nlq_processor import get_nlq_processor
 
-    result = await get_nlq_processor().process_question(question, tenant_id)
+    result = await get_nlq_processor().process_question(question, tenant_id,
+                                                        allowed=permission_check(roles, tenant_id))
     return {"text": result.answer, "generated_sql": result.generated_sql, "suggestions": result.suggestions,
             "results": result.results, "confidence": result.confidence}
 
@@ -170,22 +211,72 @@ async def status(tenant_id: str) -> dict[str, Any]:
 
 # -- limits ----------------------------------------------------------------------------
 
-_requests: dict[str, deque[float]] = defaultdict(deque)
+class LocalRateCounter:
+    """Sliding one-minute window in this process only."""
+
+    def __init__(self) -> None:
+        self._requests: dict[str, deque[float]] = defaultdict(deque)
+
+    async def hit(self, tenant_id: str, per_minute: int, now: float) -> bool:
+        window = self._requests[tenant_id]
+        while window and now - window[0] > 60:
+            window.popleft()
+        if len(window) >= per_minute:
+            return False
+        window.append(now)
+        return True
+
+
+class RedisRateCounter:
+    """One counter per tenant and minute in Redis, shared by every API replica.
+    If Redis fails, this process counts on its own until it's back (a warning is
+    logged), so AI keeps working with a per-replica limit instead of none."""
+
+    def __init__(self, client) -> None:
+        self.client = client
+        self.local = LocalRateCounter()
+
+    async def hit(self, tenant_id: str, per_minute: int, now: float) -> bool:
+        key = f"ai:rate:{tenant_id}:{int(now // 60)}"
+        try:
+            count = int(await self.client.incr(key))
+            if count == 1:
+                await self.client.expire(key, 120)
+            return count <= per_minute
+        except Exception as e:
+            logger.warning("AI rate limit store unavailable; counting in this process", error=str(e))
+            return await self.local.hit(tenant_id, per_minute, now)
+
+
+_rate_counter: Any = None
 
 
 def reset_rate_limits() -> None:
-    _requests.clear()
+    """Tests: count in this process, from zero."""
+    global _rate_counter
+    _rate_counter = LocalRateCounter()
 
 
-def _rate_limit(tenant_id: str, per_minute: int, now: float | None = None) -> None:
-    """Per-process sliding window (each API replica counts on its own)."""
-    now = now or time.monotonic()
-    window = _requests[tenant_id]
-    while window and now - window[0] > 60:
-        window.popleft()
-    if len(window) >= per_minute:
+async def _get_rate_counter():
+    global _rate_counter
+    if _rate_counter is None:
+        try:
+            from events.management.cache.redis_manager import get_raw_client
+
+            client = await get_raw_client()
+            if client is None:
+                raise ConnectionError("Redis not reachable")
+            _rate_counter = RedisRateCounter(client)
+        except Exception as e:
+            logger.warning("Redis unavailable; AI rate limits are per process", error=str(e))
+            _rate_counter = LocalRateCounter()
+    return _rate_counter
+
+
+async def check_rate(counter, tenant_id: str, per_minute: int, now: float | None = None) -> None:
+    """Fixed one-minute windows when shared (a burst can straddle two), sliding when local."""
+    if not await counter.hit(tenant_id, per_minute, time.time() if now is None else now):
         raise LimitExceeded(f"AI rate limit reached ({per_minute} requests per minute); try again shortly")
-    window.append(now)
 
 
 def _month_start(now: datetime) -> datetime:
@@ -251,7 +342,7 @@ async def ai_session(*, tenant_id: str, user_id: str, roles: list[dict[str, Any]
     used = (await audit_store.usage(tenant_id, _month_start(now)))["tokens"]
     if used >= limits["monthly_token_budget"]:
         raise LimitExceeded(f"this tenant's monthly AI token budget ({limits['monthly_token_budget']:,}) is used up")
-    _rate_limit(tenant_id, max(limits["requests_per_minute"], 0))
+    await check_rate(await _get_rate_counter(), tenant_id, max(limits["requests_per_minute"], 0))
     try:
         provider = _build_provider(provider_settings)
     except ProviderConfigError as e:
@@ -292,9 +383,10 @@ async def ai_session(*, tenant_id: str, user_id: str, roles: list[dict[str, Any]
         if max(month, used + spent["tokens"]) >= limits["monthly_token_budget"]:
             raise LimitExceeded("this tenant's monthly AI token budget ran out during the request")
 
+    redact_token = _REDACT.set(frozenset(_redact_fields(limits["redact_fields"])))
     session = AISession(request_id=request_id, tenant_id=tenant_id, user_id=user_id, roles=roles, feature=feature,
                         provider=provider, provider_settings=provider_settings,
-                        redactor=Redactor(limits["redact_fields"]), limits=limits, config=config,
+                        redactor=Redactor(_redact_fields(limits["redact_fields"])), limits=limits, config=config,
                         audit=audit, before_call=before_call)
     try:
         yield session
@@ -305,6 +397,7 @@ async def ai_session(*, tenant_id: str, user_id: str, roles: list[dict[str, Any]
         await audit("error", {"error": type(e).__name__})
         raise
     finally:
+        _REDACT.reset(redact_token)
         try:
             await flush()
         except Exception as e:  # don't hide the request's own error; the rows are lost, so say so loudly
@@ -327,15 +420,9 @@ async def answer(question: str, *, tenant_id: str, user_id: str, roles: list[dic
                                label=session.provider_info()["label"])
             return {**result.to_public(), "request_id": session.request_id}
     except AIUnavailable as e:
-        # The rule-based NLQ checks no per-intent permissions (it reads logs,
-        # alerts and security events directly), so only those allowed to use
-        # it through /v1/ai/query get its answer.
-        from authn_authz_middleware import check_permission
-
-        if not check_permission(roles, "ai:write:tenant", tenant_id):
-            return {"mode": "off", "reason_code": e.code, "reason": str(e), "text": "", "citations": [],
-                    "grounded": False, "flags": [], "provider": None}
-        fallback = await _rule_based(question, tenant_id)
+        # The rule-based NLQ checks the permission each kind of question needs
+        # (logs, alerts, security events) and refuses under a data scope.
+        fallback = await _rule_based(question, tenant_id, roles)
         return {"mode": "rule_based", "reason_code": e.code, "reason": str(e), "citations": [], "grounded": False,
                 "flags": ["rule_based"], "provider": None, **fallback}
 

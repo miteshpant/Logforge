@@ -10,8 +10,9 @@ Exports and reports (Phase 13).
   within targets).
 - due / window: when a scheduled report is sent, and what period it covers.
 
-to_pdf writes PDF 1.4 itself (Helvetica, A4, compressed text streams):
-no PDF library is a dependency of the API.
+to_pdf writes PDF 1.4 itself (A4, compressed text streams): Helvetica for
+Latin-1 text, embedded DejaVu fonts otherwise (pdf_fonts.py). No PDF library
+is a dependency of the API.
 """
 
 from __future__ import annotations
@@ -117,6 +118,89 @@ def build(inputs: Dict[str, Any]) -> Dict[str, Any]:
             "generated_at": inputs.get("generated_at", end).isoformat(), "sections": sections}
 
 
+# -- compliance evidence ---------------------------------------------------------------------
+
+STALE_DAYS = 90
+ADMIN_ROLES = ("tenant_admin",)
+
+
+def _day(value: Any) -> str:
+    if not value:
+        return "never"
+    return value.strftime("%Y-%m-%d") if hasattr(value, "strftime") else str(value)[:10]
+
+
+def _older(value: Any, end: datetime, days: int) -> bool:
+    if not value:
+        return True
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value)
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return end - value > timedelta(days=days)
+
+
+def build_compliance(inputs: Dict[str, Any]) -> Dict[str, Any]:
+    """Evidence for SOC 2 and ISO 27001 controls from the tenant's own records:
+    the access review (users, roles, MFA, API keys), the audit trail, retention
+    and legal holds, and incident response. Each section names the controls."""
+    start, end = inputs["start"], inputs["end"]
+    users = inputs.get("users", [])
+    active = [u for u in users if u.get("status") == "active"]
+    keys = inputs.get("api_keys", [])
+    active_keys = [k for k in keys if k.get("is_active")]
+    audit = inputs.get("audit", [])
+    holds = inputs.get("legal_holds", [])
+    cm = inputs.get("case_metrics", {})
+    breaches = cm.get("sla_breaches", {})
+    sections = [
+        {"title": "Summary", "kind": "kv", "rows": [
+            ["Active users", len(active)],
+            ["Administrators", sum(1 for u in active if set(u.get("roles", [])) & set(ADMIN_ROLES))],
+            ["Active users without MFA", sum(1 for u in active if not u.get("mfa"))],
+            [f"Active users not seen in {STALE_DAYS} days", sum(1 for u in active if _older(u.get("last_login_at"), end, STALE_DAYS))],
+            ["Active API keys", len(active_keys)],
+            [f"API keys unused in {STALE_DAYS} days", sum(1 for k in active_keys if _older(k.get("last_used"), end, STALE_DAYS))],
+            ["API keys without an expiry", sum(1 for k in active_keys if not k.get("expires_at"))],
+            ["Audited changes", sum(int(a.get("count", 0)) for a in audit)],
+            ["Active legal holds", sum(1 for h in holds if h.get("status") == "active")],
+        ]},
+        {"title": "Access review (SOC 2 CC6.2, CC6.3; ISO 27001 A.5.15, A.5.18)", "kind": "table",
+         "columns": ["User", "Roles", "Status", "Last sign-in", "MFA"],
+         "note": f"Review each account: remove leavers, check administrators, and follow up on MFA off or no sign-in for {STALE_DAYS} days.",
+         "rows": [[u["email"], ", ".join(list(u.get("roles", [])) + list(u.get("custom_roles", []))),
+                   u.get("status", ""), _day(u.get("last_login_at")), "yes" if u.get("mfa") else "no"]
+                  for u in sorted(users, key=lambda u: u["email"])]},
+        {"title": "API keys (SOC 2 CC6.1; ISO 27001 A.5.17, A.8.5)", "kind": "table",
+         "columns": ["Key", "Created by", "Scope", "Last used", "Expires", "Active"],
+         "note": "Keys with an empty scope act with their creator's roles.",
+         "rows": [[k["name"], k.get("created_by", ""), ", ".join(k.get("permissions") or []) or "creator's roles",
+                   _day(k.get("last_used")), _day(k.get("expires_at")) if k.get("expires_at") else "never",
+                   "yes" if k.get("is_active") else "no"] for k in keys]},
+        {"title": "Audit trail (SOC 2 CC7.2, CC8.1; ISO 27001 A.8.15)", "kind": "table",
+         "columns": ["Action", "Resource", "Changes"],
+         "note": "Changes recorded in the audit log during the period, by kind. The full log: Settings, Compliance.",
+         "rows": sorted([[a["action_type"], a["resource_type"], int(a.get("count", 0))] for a in audit],
+                        key=lambda r: -r[2])},
+        {"title": "Retention (SOC 2 CC6.5; ISO 27001 A.5.33, A.8.10)", "kind": "table",
+         "columns": ["Data", "Searchable days", "Archive days"],
+         "rows": [[r["data_type"], r["searchable_days"], r["archive_days"] or "none"]
+                  for r in inputs.get("retention", [])]},
+        {"title": "Legal holds (ISO 27001 A.5.33)", "kind": "table", "columns": ["Reason", "Status", "From", "Until"],
+         "rows": [[h.get("reason", ""), h.get("status", ""), _day(h.get("start_date")),
+                   _day(h.get("end_date")) if h.get("end_date") else "open"] for h in holds]},
+        {"title": "Incident response (SOC 2 CC7.3, CC7.4, CC7.5; ISO 27001 A.5.24, A.5.26)", "kind": "kv", "rows": [
+            ["Cases in the period", cm.get("cases", 0)],
+            ["Open cases", cm.get("open_total", 0)],
+            ["Acknowledge SLA missed", sum((breaches.get("acknowledge") or {}).values())],
+            ["Resolve SLA missed", sum((breaches.get("resolve") or {}).values())],
+        ]},
+    ]
+    return {"title": "Compliance evidence report", "tenant": inputs.get("tenant", ""),
+            "period": {"start": f"{start:%Y-%m-%d}", "end": f"{end:%Y-%m-%d}", "days": (end - start).days},
+            "generated_at": inputs.get("generated_at", end).isoformat(), "sections": sections}
+
+
 def to_csv(report: Dict[str, Any]) -> str:
     out = io.StringIO()
     w = csv.writer(out)
@@ -163,11 +247,28 @@ def _escape(text: str) -> str:
 
 
 def to_pdf(report: Dict[str, Any]) -> bytes:
+    """A4 PDF. Latin-1 text uses the built-in Helvetica/Courier fonts; a report with
+    other characters (a tenant or rule name in Greek or Cyrillic...) embeds DejaVu
+    fonts instead (pdf_fonts.py), so its text isn't lost."""
+    import pdf_fonts
+
     width, height, margin = 595, 842, 50  # A4 in points
     fonts = {"title": ("F2", 16, 22), "h": ("F2", 12, 18), "t": ("F1", 9, 13), "m": ("F3", 8, 11)}
+    lines = _lines(report)
+    unicode = pdf_fonts.available() and not all(_latin1(text) for _, text in lines)
+    embedded = {key: pdf_fonts.TrueTypeFont.load(f) for key, f in pdf_fonts.FONTS.items()} if unicode else {}
+    used: Dict[str, list] = {key: [] for key in embedded}
+
+    def show(font: str, size: int, x: float, y: float, text: str) -> str:
+        if unicode:
+            hexed, glyphs = embedded[font].encode(text)
+            used[font] += glyphs
+            return f"BT /{font} {size} Tf {x} {y} Td {hexed} Tj ET"
+        return f"BT /{font} {size} Tf {x} {y} Td ({_escape(text)}) Tj ET"
+
     pages: List[List[str]] = [[]]
     y = height - margin
-    for style, text in _lines(report):
+    for style, text in lines:
         font, size, lead = fonts[style]
         chunks = [text[i:i + 110] for i in range(0, len(text), 110)] or [""]
         for chunk in chunks:
@@ -175,7 +276,8 @@ def to_pdf(report: Dict[str, Any]) -> bytes:
                 pages.append([])
                 y = height - margin
             y -= lead
-            pages[-1].append(f"BT /{font} {size} Tf {margin} {y} Td ({_escape(chunk)}) Tj ET")
+            pages[-1].append(show(font, size, margin, y, chunk))
+    footers = [show("F1", 8, margin, 25, f"Page {n} of {len(pages)}") for n in range(1, len(pages) + 1)]
     objects: List[bytes] = []
 
     def add(body: bytes) -> int:
@@ -184,12 +286,14 @@ def to_pdf(report: Dict[str, Any]) -> bytes:
 
     catalog = add(b"")  # filled in below
     pages_obj = add(b"")
-    f1 = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
-    f2 = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>")
-    f3 = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>")
+    if unicode:
+        f1, f2, f3 = (embedded[key].pdf_objects(add, used[key]) for key in ("F1", "F2", "F3"))
+    else:
+        f1 = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
+        f2 = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>")
+        f3 = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>")
     kids = []
-    for n, page in enumerate(pages, start=1):
-        footer = f"BT /F1 8 Tf {margin} 25 Td (Page {n} of {len(pages)}) Tj ET"
+    for page, footer in zip(pages, footers):
         stream = zlib.compress("\n".join(page + [footer]).encode("latin-1"))
         content = add(b"<< /Length %d /Filter /FlateDecode >>\r\nstream\r\n" % len(stream) + stream + b"\r\nendstream")
         kids.append(add(("<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %d %d] /Contents %d 0 R "
@@ -208,6 +312,14 @@ def to_pdf(report: Dict[str, Any]) -> bytes:
     out += b"".join(b"%010d 00000 n \n" % o for o in offsets)
     out += b"trailer\n<< /Size %d /Root %d 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, catalog, xref)
     return bytes(out)
+
+
+def _latin1(text: str) -> bool:
+    try:
+        text.encode("latin-1")
+        return True
+    except UnicodeEncodeError:
+        return False
 
 
 # -- schedules -------------------------------------------------------------------------------

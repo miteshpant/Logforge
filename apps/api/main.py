@@ -21,6 +21,7 @@ from routers.alerts import router as alerts_router
 # Import API routers for additional functionality
 from routers.security_api import router as security_router
 from routers.cases_api import router as cases_router
+from routers.inbox_api import router as inbox_router
 from routers.threat_intel_api import router as threat_intel_router
 from routers.pipelines_api import router as pipelines_router
 from routers.fields_api import router as fields_router
@@ -139,6 +140,7 @@ app.include_router(quota_management_router, tags=["Quota Management"])
 # Cases first: its /v1/security/cases/... routes must win over the security
 # router's /{detection_id}/... patterns.
 app.include_router(cases_router)
+app.include_router(inbox_router)
 app.include_router(threat_intel_router)
 app.include_router(pipelines_router)
 app.include_router(fields_router)

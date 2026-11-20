@@ -90,6 +90,13 @@ export const getCase = (id: string) => read<CaseDetail>(`${BASE}/${encodeURIComp
 
 export const caseMetrics = (days = 30) => read<CaseMetrics>(`${BASE}/metrics`, { days })
 
+export type SlaMinutes = Record<'acknowledge' | 'resolve', Record<Severity, number>>
+export interface SlaTargets { targets_minutes: SlaMinutes; defaults_minutes: SlaMinutes; overrides: Partial<SlaMinutes> }
+export const slaTargets = () => read<SlaTargets>(`${BASE}/sla`)
+export async function saveSlaTargets(overrides: Partial<Record<'acknowledge' | 'resolve', Partial<Record<Severity, number>>>>): Promise<SlaTargets> {
+  return (await apiClient.put<SlaTargets>(`${BASE}/sla`, overrides)).data as SlaTargets
+}
+
 export async function createCase(body: { title: string; severity?: Severity; description?: string;
   alert_ids?: string[]; evidence?: Evidence[]; tags?: string[] }): Promise<Case> {
   return (await apiClient.post<Case>(BASE, body)).data as Case
@@ -108,6 +115,12 @@ export async function updateCase(id: string, body: { title?: string; description
 export async function bulkCases(body: { case_ids: string[]; action: 'assign' | 'set_status' | 'tags';
   assignee?: string | null; status?: string; reason?: string; add?: string[]; remove?: string[] }) {
   return (await apiClient.post<{ updated: string[]; errors: Record<string, string> }>(`${BASE}/bulk`, body)).data
+}
+
+/** Move some alerts out of a case into a new one; returns both. */
+export async function splitCase(id: string, alertIds: string[], title?: string): Promise<{ case: Case; new_case: Case }> {
+  return (await apiClient.post<{ case: Case; new_case: Case }>(`${BASE}/${encodeURIComponent(id)}/split`,
+    { alert_ids: alertIds, title: title || undefined })).data as { case: Case; new_case: Case }
 }
 
 /** Take back a pin (Phase 10): it stays in the timeline, marked as taken back. */

@@ -304,7 +304,13 @@ def test_login_endpoint_records_failures_and_successes():
 
     source = inspect.getsource(auth_api.login_user)
     assert "record_failure" in source
-    assert "record_success" in source
+    # A session is issued only by _finish_login (after the password, or after the
+    # MFA code when the account has MFA), and that is where success is recorded.
+    assert "_finish_login(" in source
+    assert "record_success" in inspect.getsource(auth_api._finish_login)
+    # A wrong MFA code counts as a failed attempt too.
+    mfa_source = inspect.getsource(auth_api.login_mfa)
+    assert "record_failure" in mfa_source and "_finish_login(" in mfa_source
 
 
 def test_failed_login_response_does_not_disclose_account_existence():

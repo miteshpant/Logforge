@@ -24,8 +24,23 @@ def test_no_scope_no_filter():
 
 def test_services_and_prefixes():
     s = data_scope.settings_for(data_scope.DataScope(services=("auth", "payments-*")))
-    assert s == {"additional_table_filters":
-                 "{'logs_raw_mt': 'service IN (\\'auth\\') OR service LIKE \\'payments-%\\''}"}
+    assert s["additional_table_filters"].startswith(
+        "{'logs_raw_mt': 'service IN (\\'auth\\') OR service LIKE \\'payments-%\\''")
+
+
+def test_every_table_with_service_data_is_filtered():
+    """Phase 14 follow-up: traces, metrics, normalized logs, rollups, the topology and
+    security events carry the scope too; alert instances name no service, so a scoped
+    user sees none."""
+    filters = data_scope.table_filters(data_scope.DataScope(services=("auth",)))
+    assert filters["logs_normalized_mt"] == "service IN ('auth')"
+    assert filters["traces_mt"] == "service_name IN ('auth')"
+    assert filters["metrics_mt"] == "service_name IN ('auth')"
+    assert filters["service_topology_mt"] == "service_name IN ('auth')"
+    assert filters["security_events_mt"] == \
+        "JSONExtractString(raw_log_data, 'normalized_log', 'service') IN ('auth')"
+    assert filters["alert_instances_mt"] == "0"
+    assert {"traces", "metrics", "logs_raw", "logs_normalized", "logs_view"} <= set(filters)  # older tables
 
 
 def test_an_empty_scope_sees_nothing():
@@ -56,7 +71,7 @@ def test_the_scope_applies_only_inside_its_context():
     assert seen[2] == {}
     data_scope.install(Client)  # idempotent
     with data_scope.scoped(data_scope.DataScope(services=("auth",))):
-        assert client._validate_settings({}).get("additional_table_filters").count("auth") == 1
+        assert "'logs_raw_mt': 'service IN (\\'auth\\')'" in client._validate_settings({}).get("additional_table_filters")
 
 
 # -- roles ----------------------------------------------------------------------------
@@ -116,14 +131,3 @@ def test_caches_never_share_results_across_scopes():
     assert len({unscoped, scoped, other}) == 3 and plain != scoped_plain
 
 
-def test_archive_search_is_refused_under_a_scope():
-    import asyncio
-
-    from fastapi import HTTPException
-
-    from routers.query import run_archive_query
-
-    with data_scope.scoped(data_scope.DataScope(services=("auth",))):
-        with pytest.raises(HTTPException) as e:
-            asyncio.run(run_archive_query("| stats count()", {}, "acme"))
-    assert e.value.status_code == 403

@@ -46,6 +46,7 @@ import structlog
 
 from mitre_metadata_generator import generate_production_metadata
 from database_layer import DatabaseLayer
+from mutation_time import now_param
 
 logger = structlog.get_logger(__name__)
 
@@ -605,14 +606,21 @@ class MitreDefaultLoader:
             return None, str(exc)
         if not parsed.techniques:
             return None, "no MITRE technique tag"
-        referenced = []
-        for reference in parsed.rules:
-            if reference not in bases:
+        from correlation import is_alert_reference
+
+        for reference in parsed.references:
+            if reference not in bases and not is_alert_reference(reference):
                 return None, f"references unknown base rule {reference!r}"
-            referenced.append(bases[reference])
+        if parsed.reads_alerts:
+            # A correlation over alerts is replayed with every alerting rule.
+            referenced = list({id(b): b for b in bases.values()}.values())
+        else:
+            referenced = [bases[r] for r in parsed.references]
 
         correlation = dict(rule["correlation"])
-        correlation["rules"] = [base["ref"] for base in referenced]
+        correlation["rules"] = [r if is_alert_reference(r) else bases[r]["ref"] for r in parsed.rules]
+        if parsed.until:
+            correlation["until"] = [bases[r]["ref"] for r in parsed.until]
         candidate = {"id": "candidate", "title": str(title), "severity": level,
                      "tags": list(rule.get("tags") or []), "correlation": correlation}
         # Each base brings the rules it needs (a chained correlation brings
@@ -691,8 +699,9 @@ class MitreDefaultLoader:
                 continue  # aggregations aren't base rules
             name = rule.get("name")
             ref = str(name) if name else row["id"]
-            base = {"ref": ref, "replay": [{"id": row["id"], "name": name,
-                                            "generate": rule.get("generate", True), "detection": detection}]}
+            base = {"ref": ref, "replay": [{"id": row["id"], "name": name, "generate": rule.get("generate", True),
+                                            "detection": detection, "severity": rule.get("level"),
+                                            "tags": list(rule.get("tags") or [])}]}
             bases[str(rule["id"])] = base
             if name:
                 bases[str(name)] = base
@@ -702,8 +711,12 @@ class MitreDefaultLoader:
         # (unknown references, cycles) is rejected with the reason.
         pending = list(correlations)
         while pending:
+            # Correlations over alerts go last: they replay every other rule.
             ready = [(r, src) for r, src in pending
                      if all(str(ref) in bases for ref in self._references(r))]
+            if not ready:
+                ready = [(r, src) for r, src in pending if self._reads_alerts(r)
+                         and not any(not self._reads_alerts(o) for o, _ in pending)]
             final = not ready
             for rule, source in list(pending if final else ready):
                 pending.remove((rule, source))
@@ -717,17 +730,31 @@ class MitreDefaultLoader:
                 name = rule.get("name")
                 own = {"id": row["id"], "name": name, "generate": content["generate"],
                        "tags": content["tags"], "correlation": content["correlation"]}
-                deps = [r for ref in self._references(rule) for r in bases[str(ref)]["replay"]]
+                if self._reads_alerts(rule):
+                    deps = [r for b in {id(b): b for b in bases.values()}.values() for r in b["replay"]]
+                else:
+                    deps = [r for ref in self._references(rule) for r in bases[str(ref)]["replay"]]
+                deps = list({d["id"]: d for d in deps}.values())
                 base = {"ref": str(name) if name else row["id"], "replay": deps + [own]}
                 bases[str(rule["id"])] = base
                 if name:
                     bases[str(name)] = base
         return rows, awaiting
 
+    @classmethod
+    def _reads_alerts(cls, rule: Dict[str, Any]) -> bool:
+        from correlation import is_alert_reference
+
+        return any(is_alert_reference(str(r)) for r in cls._references(rule))
+
     @staticmethod
     def _references(rule: Dict[str, Any]) -> List[Any]:
-        refs = (rule.get("correlation") or {}).get("rules") or []
-        return [refs] if isinstance(refs, str) else list(refs)
+        corr = rule.get("correlation") or {}
+        out: List[Any] = []
+        for key in ("rules", "until"):
+            refs = corr.get(key) or []
+            out += [refs] if isinstance(refs, str) else list(refs)
+        return out
 
     def _packaged_rule_to_row(self, rule: Any, source: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Validate one Logforge rule (Sigma shape, Logforge field names)."""
@@ -1115,11 +1142,11 @@ class MitreDefaultLoader:
             try:
                 await self.database.execute_update(
                     """
-                    ALTER TABLE sigma_rules_mt UPDATE is_enabled = 0, updated_at = now64(3)
+                    ALTER TABLE sigma_rules_mt UPDATE is_enabled = 0, updated_at = toDateTime64(%(now)s, 3)
                     WHERE customer_id = %(customer_id)s AND id IN %(ids)s
                     SETTINGS mutations_sync = 2
                     """,
-                    {"customer_id": DEFAULT_RULE_TENANT, "ids": retired},
+                    {"customer_id": DEFAULT_RULE_TENANT, "ids": retired, "now": now_param()},
                 )
                 counts["retired"] = len(retired)
                 logger.info(f"Disabled {len(retired)} default rules that are no longer shipped")

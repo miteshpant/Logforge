@@ -1196,7 +1196,7 @@ human control.
 
 **Goal:** act on findings, not only observe them (SOAR-lite).
 
-> **Status: done, compliance reports not yet (2026-11-20).** Guide: [Response automation](./response.md).
+> **Status: done (2026-11-20); compliance reports added in the follow-up PR.** Guide: [Response automation](./response.md).
 >
 > | Acceptance criterion | Result |
 > |---|---|
@@ -1230,10 +1230,9 @@ human control.
 >   - an integration's Test button now sends containment requests as a dry
 >     run.
 > - **Gaps:**
->   - compliance reports;
 >   - ticket sync for systems other than Jira and GitHub;
 >   - no built-in containment connectors;
->   - playbooks are linear (no branches or parallel steps);
+>   - playbooks have no loops (branches and parallel steps added in the follow-up PR);
 >   - approvals are decided in Logforge only.
 
 ### Deliverables

@@ -61,6 +61,7 @@ import {
   MessageSquare,
   Key, Briefcase , HardDrive, Workflow, FileBarChart } from 'lucide-react'
 import { TenantSelector } from '@/components/TenantSelector'
+import InboxBell from '@/components/layout/InboxBell'
 import PWASupport from '@/components/PWASupport'
 
 interface NavItem {
@@ -355,12 +356,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <DropdownMenuLabel className="px-3 py-2 text-sm font-semibold text-white bg-slate-700/50">
                   Account
                 </DropdownMenuLabel>
-                <DropdownMenuItem
+                <DropdownMenuItem asChild
                   data-testid="profile-settings"
                   className="flex items-center px-3 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white cursor-pointer rounded-sm"
                 >
-                  <User className="w-4 h-4 mr-2" />
-                  Profile Settings
+                  <Link href="/account"><User className="w-4 h-4 mr-2" />Profile Settings</Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   data-testid="preferences"
@@ -418,10 +418,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               {/* Tenant Selector */}
               <TenantSelector />
 
-              {/* Settings */}
-              <Button variant="ghost" size="sm">
-                <Settings className="w-5 h-5" />
-              </Button>
+              {/* Notifications: case mentions and assignments */}
+              <InboxBell />
             </div>
           </div>
         </header>

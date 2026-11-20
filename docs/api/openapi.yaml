@@ -4053,6 +4053,32 @@ paths:
       summary: Login User
       tags:
       - Authentication
+  /v1/auth/login/mfa:
+    post:
+      description: 'Second step of sign-in for accounts with MFA: the challenge from /login and a code.'
+      operationId: login_mfa_v1_auth_login_mfa_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaLogin'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Login Mfa
+      tags:
+      - Authentication
   /v1/auth/logout:
     post:
       description: User logout - invalidate session and revoke the refresh token
@@ -4111,6 +4137,88 @@ paths:
       security:
       - HTTPBearer: []
       summary: Get Current User Roles
+      tags:
+      - Authentication
+  /v1/auth/mfa:
+    delete:
+      description: Turn MFA off; needs a current code or a backup code.
+      operationId: mfa_disable_v1_auth_mfa_delete
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaCode'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Mfa Disable
+      tags:
+      - Authentication
+    get:
+      operationId: mfa_status_v1_auth_mfa_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: Mfa Status
+      tags:
+      - Authentication
+  /v1/auth/mfa/confirm:
+    post:
+      description: Turn MFA on with a code from the app. Returns one-time backup codes, shown only now.
+      operationId: mfa_confirm_v1_auth_mfa_confirm_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaCode'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Mfa Confirm
+      tags:
+      - Authentication
+  /v1/auth/mfa/setup:
+    post:
+      description: 'Start enrolling: a new secret for the authenticator app (not active until confirmed).'
+      operationId: mfa_setup_v1_auth_mfa_setup_post
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: Mfa Setup
       tags:
       - Authentication
   /v1/auth/password/change:
@@ -5311,96 +5419,6 @@ paths:
       summary: Revoke Api Key
       tags:
       - enterprise
-  /v1/enterprise/auth/mfa/setup:
-    post:
-      description: Setup Multi-Factor Authentication for user
-      operationId: setup_mfa_v1_enterprise_auth_mfa_setup_post
-      parameters:
-      - in: header
-        name: X-Customer-ID
-        required: true
-        schema:
-          title: X-Customer-Id
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/MFASetupRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema: {}
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Setup Mfa
-      tags:
-      - enterprise
-  /v1/enterprise/auth/oidc/configure:
-    post:
-      description: Configure OIDC authentication provider
-      operationId: configure_oidc_provider_v1_enterprise_auth_oidc_configure_post
-      parameters:
-      - in: header
-        name: X-Customer-ID
-        required: true
-        schema:
-          title: X-Customer-Id
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/OIDCConfigRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema: {}
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Configure Oidc Provider
-      tags:
-      - enterprise
-  /v1/enterprise/auth/providers:
-    get:
-      description: List all authentication providers
-      operationId: list_auth_providers_v1_enterprise_auth_providers_get
-      parameters:
-      - in: header
-        name: X-Customer-ID
-        required: true
-        schema:
-          title: X-Customer-Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema: {}
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: List Auth Providers
-      tags:
-      - enterprise
   /v1/enterprise/backup/configure:
     post:
       description: Configure backup and disaster recovery policies
@@ -5611,168 +5629,6 @@ paths:
       summary: Enterprise Health
       tags:
       - enterprise
-  /v1/enterprise/integrations:
-    get:
-      description: List all available enterprise integrations
-      operationId: list_integrations_v1_enterprise_integrations_get
-      parameters:
-      - in: header
-        name: X-Customer-ID
-        required: true
-        schema:
-          title: X-Customer-Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema: {}
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: List Integrations
-      tags:
-      - enterprise
-  /v1/enterprise/integrations/{integration_id}:
-    delete:
-      description: Remove/disconnect an integration
-      operationId: delete_integration_v1_enterprise_integrations__integration_id__delete
-      parameters:
-      - in: path
-        name: integration_id
-        required: true
-        schema:
-          title: Integration Id
-          type: string
-      - in: header
-        name: X-Customer-ID
-        required: true
-        schema:
-          title: X-Customer-Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema: {}
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Delete Integration
-      tags:
-      - enterprise
-  /v1/enterprise/integrations/{integration_id}/test:
-    post:
-      description: Test connectivity for a configured integration
-      operationId: test_integration_v1_enterprise_integrations__integration_id__test_post
-      parameters:
-      - in: path
-        name: integration_id
-        required: true
-        schema:
-          title: Integration Id
-          type: string
-      - in: header
-        name: X-Customer-ID
-        required: true
-        schema:
-          title: X-Customer-Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema: {}
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Test Integration
-      tags:
-      - enterprise
-  /v1/enterprise/integrations/{integration_type}/configure:
-    post:
-      description: Configure enterprise integration
-      operationId: configure_integration_v1_enterprise_integrations__integration_type__configure_post
-      parameters:
-      - in: path
-        name: integration_type
-        required: true
-        schema:
-          title: Integration Type
-          type: string
-      - in: header
-        name: X-Customer-ID
-        required: true
-        schema:
-          title: X-Customer-Id
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              additionalProperties: true
-              title: Config
-              type: object
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema: {}
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Configure Integration
-      tags:
-      - enterprise
-  /v1/enterprise/integrations/{integration_type}/status:
-    get:
-      description: Check integration health and connectivity
-      operationId: get_integration_health_v1_enterprise_integrations__integration_type__status_get
-      parameters:
-      - in: path
-        name: integration_type
-        required: true
-        schema:
-          title: Integration Type
-          type: string
-      - in: header
-        name: X-Customer-ID
-        required: true
-        schema:
-          title: X-Customer-Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema: {}
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Get Integration Health
-      tags:
-      - enterprise
   /v1/enterprise/metrics:
     get:
       description: Get enterprise-wide metrics and KPIs
@@ -5797,198 +5653,6 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
           description: Validation Error
       summary: Get Enterprise Metrics
-      tags:
-      - enterprise
-  /v1/enterprise/rbac/permissions:
-    get:
-      description: Get effective permissions for current user
-      operationId: get_user_permissions_v1_enterprise_rbac_permissions_get
-      parameters:
-      - in: header
-        name: X-Customer-ID
-        required: true
-        schema:
-          title: X-Customer-Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema: {}
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Get User Permissions
-      tags:
-      - enterprise
-  /v1/enterprise/rbac/roles:
-    get:
-      description: List all available roles and permissions
-      operationId: list_roles_v1_enterprise_rbac_roles_get
-      parameters:
-      - in: header
-        name: X-Customer-ID
-        required: true
-        schema:
-          title: X-Customer-Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema: {}
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: List Roles
-      tags:
-      - enterprise
-    post:
-      description: Create custom role with specific permissions
-      operationId: create_custom_role_v1_enterprise_rbac_roles_post
-      parameters:
-      - in: header
-        name: X-Customer-ID
-        required: true
-        schema:
-          title: X-Customer-Id
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CustomRoleRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema: {}
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Create Custom Role
-      tags:
-      - enterprise
-  /v1/enterprise/rbac/roles/{role_id}:
-    delete:
-      description: Delete a custom role
-      operationId: delete_role_v1_enterprise_rbac_roles__role_id__delete
-      parameters:
-      - in: path
-        name: role_id
-        required: true
-        schema:
-          title: Role Id
-          type: string
-      - in: header
-        name: X-Customer-ID
-        required: true
-        schema:
-          title: X-Customer-Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema: {}
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Delete Role
-      tags:
-      - enterprise
-    put:
-      description: Update an existing custom role
-      operationId: update_role_v1_enterprise_rbac_roles__role_id__put
-      parameters:
-      - in: path
-        name: role_id
-        required: true
-        schema:
-          title: Role Id
-          type: string
-      - in: header
-        name: X-Customer-ID
-        required: true
-        schema:
-          title: X-Customer-Id
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CustomRoleRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema: {}
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Update Role
-      tags:
-      - enterprise
-  /v1/enterprise/rbac/users/{user_id}/roles:
-    put:
-      description: Assign roles to user
-      operationId: assign_user_roles_v1_enterprise_rbac_users__user_id__roles_put
-      parameters:
-      - in: path
-        name: user_id
-        required: true
-        schema:
-          title: User Id
-          type: string
-      - in: header
-        name: X-Customer-ID
-        required: true
-        schema:
-          title: X-Customer-Id
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserRoleAssignment'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema: {}
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Assign User Roles
       tags:
       - enterprise
   /v1/enterprise/system/health:
@@ -6516,6 +6180,82 @@ paths:
       summary: Webhook
       tags:
       - integrations
+  /v1/inbox:
+    get:
+      description: Your notifications, newest first, and how many are unread.
+      operationId: list_inbox_v1_inbox_get
+      parameters:
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 50
+          maximum: 200
+          minimum: 1
+          title: Limit
+          type: integer
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response List Inbox V1 Inbox Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: List Inbox
+      tags:
+      - Notifications
+  /v1/inbox/read:
+    post:
+      operationId: mark_read_v1_inbox_read_post
+      parameters:
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReadBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Mark Read V1 Inbox Read Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Mark Read
+      tags:
+      - Notifications
   /v1/ingest:
     post:
       description: Auto-detect format and ingest logs
@@ -9688,6 +9428,45 @@ paths:
       summary: Attack Navigator
       tags:
       - reports
+  /v1/reports/compliance:
+    get:
+      description: 'Evidence for SOC 2 and ISO 27001 controls: access review, API keys, audit
+
+        trail, retention, legal holds and incident response.'
+      operationId: compliance_report_v1_reports_compliance_get
+      parameters:
+      - in: query
+        name: days
+        required: false
+        schema:
+          default: 90
+          maximum: 366
+          minimum: 1
+          title: Days
+          type: integer
+      - in: query
+        name: format
+        required: false
+        schema:
+          default: json
+          pattern: ^(json|csv|pdf)$
+          title: Format
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Compliance Report
+      tags:
+      - reports
   /v1/reports/schedules:
     get:
       operationId: list_schedules_v1_reports_schedules_get
@@ -10587,6 +10366,73 @@ paths:
       security:
       - HTTPBearer: []
       summary: Case Metrics
+      tags:
+      - cases
+  /v1/security/cases/sla:
+    get:
+      description: This tenant's SLA targets (minutes to acknowledge and resolve per severity).
+      operationId: get_sla_targets_v1_security_cases_sla_get
+      parameters:
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Get Sla Targets V1 Security Cases Sla Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Get Sla Targets
+      tags:
+      - cases
+    put:
+      description: Override the default targets; severities left out keep the default. {} resets.
+      operationId: put_sla_targets_v1_security_cases_sla_put
+      parameters:
+      - in: header
+        name: X-Customer-ID
+        required: true
+        schema:
+          title: X-Customer-Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SlaBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Put Sla Targets V1 Security Cases Sla Put
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Put Sla Targets
       tags:
       - cases
   /v1/security/cases/{case_id}:
@@ -16796,34 +16642,6 @@ components:
       - correlation_confidence
       title: CrossServiceCorrelation
       type: object
-    CustomRoleRequest:
-      properties:
-        description:
-          description: Role description
-          title: Description
-          type: string
-        inherits_from:
-          anyOf:
-          - type: string
-          - type: 'null'
-          description: Parent role for inheritance
-          title: Inherits From
-        name:
-          description: Role name
-          title: Name
-          type: string
-        permissions:
-          description: List of permissions
-          items:
-            type: string
-          title: Permissions
-          type: array
-      required:
-      - name
-      - description
-      - permissions
-      title: CustomRoleRequest
-      type: object
     DashboardRequest:
       properties:
         description:
@@ -17709,32 +17527,6 @@ components:
           title: Values
       title: LookupBody
       type: object
-    MFASetupRequest:
-      properties:
-        backup_codes:
-          default: true
-          description: Generate backup codes
-          title: Backup Codes
-          type: boolean
-        mfa_type:
-          description: MFA type (totp, sms, hardware)
-          title: Mfa Type
-          type: string
-        phone_number:
-          anyOf:
-          - type: string
-          - type: 'null'
-          description: Phone number for SMS
-          title: Phone Number
-        user_id:
-          description: User ID for MFA setup
-          title: User Id
-          type: string
-      required:
-      - user_id
-      - mfa_type
-      title: MFASetupRequest
-      type: object
     MemberAlertDetail:
       properties:
         alert_id:
@@ -17921,6 +17713,34 @@ components:
           type: number
       title: MetricsStreamingConfig
       type: object
+    MfaCode:
+      properties:
+        code:
+          maxLength: 20
+          minLength: 1
+          title: Code
+          type: string
+      required:
+      - code
+      title: MfaCode
+      type: object
+    MfaLogin:
+      properties:
+        code:
+          maxLength: 20
+          minLength: 1
+          title: Code
+          type: string
+        mfa_token:
+          maxLength: 2000
+          minLength: 1
+          title: Mfa Token
+          type: string
+      required:
+      - mfa_token
+      - code
+      title: MfaLogin
+      type: object
     ModelRetrainRequest:
       description: Model retraining request
       properties:
@@ -18040,52 +17860,6 @@ components:
       - cache_misses
       - hit_rate
       title: NormalizerStatsResponse
-      type: object
-    OIDCConfigRequest:
-      properties:
-        client_id:
-          description: OAuth client ID
-          title: Client Id
-          type: string
-        client_secret:
-          anyOf:
-          - type: string
-          - type: 'null'
-          description: OAuth client secret
-          title: Client Secret
-        domain:
-          description: Provider domain
-          title: Domain
-          type: string
-        enabled:
-          default: true
-          description: Enable this provider
-          title: Enabled
-          type: boolean
-        provider_name:
-          description: Name of the OIDC provider
-          title: Provider Name
-          type: string
-        provider_type:
-          description: Type of provider (auth0, keycloak, etc.)
-          title: Provider Type
-          type: string
-        scopes:
-          default:
-          - openid
-          - profile
-          - email
-          description: OAuth scopes
-          items:
-            type: string
-          title: Scopes
-          type: array
-      required:
-      - provider_name
-      - provider_type
-      - client_id
-      - domain
-      title: OIDCConfigRequest
       type: object
     OTLPAttribute:
       description: OTLP attribute key-value pair
@@ -18622,6 +18396,18 @@ components:
       - question
       title: QuestionBody
       type: object
+    ReadBody:
+      properties:
+        ids:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          description: Notifications to mark read; omit for all
+          title: Ids
+      title: ReadBody
+      type: object
     RefreshRequest:
       description: 'Token refresh request (LF-015).
 
@@ -18767,6 +18553,12 @@ components:
           maxLength: 1000
           title: Description
           type: string
+        masked_fields:
+          items:
+            type: string
+          maxItems: 100
+          title: Masked Fields
+          type: array
         name:
           maxLength: 120
           minLength: 1
@@ -19505,6 +19297,20 @@ components:
       required:
       - docs
       title: SimulateBody
+      type: object
+    SlaBody:
+      properties:
+        acknowledge:
+          additionalProperties:
+            type: integer
+          title: Acknowledge
+          type: object
+        resolve:
+          additionalProperties:
+            type: integer
+          title: Resolve
+          type: object
+      title: SlaBody
       type: object
     SolutionRequest:
       description: Add solution request
@@ -21200,24 +21006,6 @@ components:
       - viewer
       title: UserRole
       type: string
-    UserRoleAssignment:
-      properties:
-        effective_date:
-          anyOf:
-          - type: string
-          - type: 'null'
-          description: When roles take effect
-          title: Effective Date
-        roles:
-          description: List of role names to assign
-          items:
-            type: string
-          title: Roles
-          type: array
-      required:
-      - roles
-      title: UserRoleAssignment
-      type: object
     UserRolesResponse:
       description: User roles response
       properties:

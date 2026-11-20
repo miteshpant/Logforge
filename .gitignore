@@ -148,3 +148,6 @@ site/
 
 # AI evaluation run output (per-item results)
 tests/eval/ai/results/
+
+# Local Playwright config overrides (not shared)
+*.local.config.ts

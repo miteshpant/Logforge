@@ -2,7 +2,8 @@
 Custom roles (Phase 14), under /v1/roles/custom (roles:read / roles:write):
 
   GET    /v1/roles/custom                          roles, their members, and the permission vocabulary
-  POST   /v1/roles/custom                          {name, description, permissions, services: null | [...]}
+  POST   /v1/roles/custom                          {name, description, permissions, services: null | [...],
+                                                    masked_fields: [...]}
   PUT    /v1/roles/custom/{id}, DELETE /v1/roles/custom/{id}
   PUT    /v1/roles/custom/{id}/members/{user_id}   grant; DELETE to take back
   GET    /v1/auth/access                           the caller's custom roles, permissions and data scope
@@ -22,6 +23,7 @@ import custom_roles as cr
 router = APIRouter(prefix="/v1/roles/custom", tags=["roles"])
 access_router = APIRouter(prefix="/v1/auth", tags=["roles"])
 SERVICE = r"^[A-Za-z0-9._:/-]{1,128}\*?$"
+FIELD = r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$"
 
 
 class RoleBody(BaseModel):
@@ -29,6 +31,7 @@ class RoleBody(BaseModel):
     description: str = Field("", max_length=1000)
     permissions: List[str] = Field(default_factory=list, max_length=100)
     services: Optional[List[str]] = Field(None, max_length=200)
+    masked_fields: List[str] = Field(default_factory=list, max_length=100)
 
 
 def _store() -> cr.CustomRoleStore:
@@ -55,10 +58,14 @@ def _role(body: RoleBody, tenant_id: str, role_id: str = "") -> cr.CustomRole:
         bad = [s for s in services if not re.match(SERVICE, s)]
         if bad:
             raise HTTPException(422, f"{bad[0]!r} isn't a service name (letters, digits, . _ : / -, optionally ending in *)")
-    if not permissions and services is None:
-        raise HTTPException(422, "A custom role needs permissions, a data scope, or both")
+    masked = sorted({f.strip() for f in body.masked_fields if f.strip()})
+    bad = [f for f in masked if not re.match(FIELD, f)]
+    if bad:
+        raise HTTPException(422, f"{bad[0]!r} isn't a field name (letters, digits, _ and dots)")
+    if not permissions and services is None and not masked:
+        raise HTTPException(422, "A custom role needs permissions, a data scope, masked fields, or a mix")
     return cr.CustomRole(id=role_id, tenant_id=tenant_id, name=body.name.strip(), description=body.description,
-                         permissions=permissions, services=services)
+                         permissions=permissions, services=services, masked_fields=masked)
 
 
 @router.get("")
@@ -124,5 +131,19 @@ async def remove_member(role_id: str, user_id: str, request: Request, customer_i
 async def my_access(request: Request, customer_id: str = MiddlewareTenant) -> Dict[str, Any]:
     roles = await asyncio.to_thread(_store().roles_of, customer_id, _user(request))
     permissions, scope = cr.effective(roles)
+    from authn_authz_middleware import ROLE_PERMISSIONS, UserRole
+
+    granted = []
+    for assignment in getattr(request.state, "roles", None) or []:
+        if assignment.get("tenant_id") not in (customer_id, "platform"):
+            continue
+        try:
+            granted += ROLE_PERMISSIONS.get(UserRole(assignment["role"]), [])
+        except ValueError:
+            continue
+    # role_permissions: the built-in roles' grants ("logs:read,search:tenant"),
+    # so the UI can leave out what the caller would be refused.
     return {"custom_roles": [r.name for r in roles], "permissions": permissions,
-            "data_scope": {"services": list(scope.services)} if scope else None}
+            "role_permissions": sorted(set(granted)),
+            "data_scope": {"services": list(scope.services)} if scope else None,
+            "masked_fields": sorted(cr.masked_fields(roles))}

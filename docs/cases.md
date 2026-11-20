@@ -42,15 +42,34 @@ new → investigating → contained → resolved | false positive
   what the [tuning suggestion](detection-as-code.md#related) learns from;
   *resolved* resolves them.
 * **Acknowledged** is the first move out of *new* or the first assignment.
-* Analysts can **assign**, add **notes** (`@name` mentions are recorded on the
-  note; they are not delivered as notifications yet), **tag**, change
+* Analysts can **assign**, add **notes**, **tag**, change
   **severity**, **pin evidence** (a log search, an event, a trace, a log
   line, a link), **attach alerts**, **merge** cases (the others close as
-  merged) and **split** alerts into a new case. The case list has bulk
+  merged: on the case page, choose another open case to merge into it) and
+  **split** alerts into a new case (tick the alerts on the case page). The case list has bulk
   assign and status.
-* A case can be opened by hand from an alert (**Events → Create case from
-  this alert**) or from a search (**Log Explorer → Create case**, which pins
-  the search as evidence).
+* A case can be opened by hand wherever an alert is shown:
+  - **Events → Create case from this alert**, and the **Case** button on
+    the SIEM dashboard's recent alerts (the alert is attached);
+  - **Open case** on a Centrum incident. Those are operational alerts, not
+    security alerts, so the case links to the alert as evidence;
+  - from a search (**Log Explorer → Create case**, which pins the search as
+    evidence).
+
+## Mentions and notifications
+
+`@name` in a note notifies that person: `name` is the part of a tenant
+member's email before the @, in any case (`@dana` for `dana@acme.example`).
+A name matching nobody, or more than one member, notifies no one, and you
+aren't notified of your own note. Assigning a case to someone else notifies
+them too.
+
+Notifications appear under the bell in the header (unread count, the
+latest 20, a link to the case; opening one marks it read) and are emailed
+when SMTP is configured (`LOGFORGE_SMTP_HOST`, as for account emails, with
+links to `LOGFORGE_PUBLIC_URL`). They are kept 180 days (migration 041).
+`GET /v1/inbox` lists yours; `POST /v1/inbox/read` with `{"ids": [...]}`,
+or `{}` for all, marks them read.
 
 ## Timeline and audit
 
@@ -66,7 +85,11 @@ GET /v1/security/cases/audit/export?start=2026-11-01T00:00:00Z&end=2026-12-01T00
 `GET /v1/security/cases/metrics?days=30` (the strip at the top of the Cases
 page) reports, per severity, mean and median time to acknowledge and to
 resolve, SLA breaches, open cases by status and age, open cases per
-analyst, and alerts per case. Targets:
+analyst, and alerts per case. The default targets are below; a tenant can
+change any of them under **SLA targets** on the Cases page
+(`PUT /v1/security/cases/sla` with `{"acknowledge": {"critical": 10}, ...}`,
+minutes, `security:write`; `{}` resets). Acknowledging can't be set longer
+than resolving, and a target is 1 minute to a year.
 
 | Severity | Acknowledge | Resolve |
 |---|---|---|
@@ -86,6 +109,8 @@ analyst, and alerts per case. Targets:
 | `POST /v1/security/cases/{id}/assign` · `/comments` · `/status` · `/tags` · `/evidence` · `/alerts` · `/merge` · `/split` | analyst actions |
 | `POST /v1/security/cases/bulk` | assign, status or tags for many cases |
 | `GET /v1/security/cases/metrics` | SLA and overview |
+| `GET /v1/security/cases/sla` · `PUT` | this tenant's SLA targets (minutes), and the defaults |
 | `GET /v1/security/cases/audit/export` | audit trail, JSON or CSV |
+| `GET /v1/inbox` · `POST /v1/inbox/read` | your notifications (mentions, assignments) |
 
 Full schemas are in the [API reference](https://miteshpant.github.io/Logforge/api/).

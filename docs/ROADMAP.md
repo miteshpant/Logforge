@@ -25,27 +25,29 @@ markers).
   path, move post-ingest work (normalisation, detection) out of the
   request-serving process into separate workers, and run the API with
   multiple workers instead of a single `--reload` process.
-- **The normalizer maps `hostname` onto the DNS `query` field**
-  (`apps/api/config/field_mapping.yml`), so every event with a host name
-  carries `query: <hostname>` and DNS rules on `query` can match host names.
-  Remove the mapping and check the evaluation baseline.
+- ~~**The normalizer maps `hostname` onto the DNS `query` field**~~: done;
+  the mapping is gone and the detection evaluation in CI still passes.
 - **Detection engine follow-ups from Phase 1**
-  ([platform roadmap](./PLATFORM_ROADMAP.md)): sequence rules have no `until`
-  (abort) condition; no correlation over alerts (e.g. "3+ distinct
-  techniques on one host"); git sync is push-from-CI only (no server-side
+  ([platform roadmap](./PLATFORM_ROADMAP.md)): ~~sequence rules have no `until`
+  (abort) condition~~ (done: `until:` rules abandon a group's partial
+  sequence); ~~no correlation over alerts~~ (done: correlations can
+  reference `alerts`, e.g. the shipped "3+ techniques on one host in an
+  hour"); git sync is push-from-CI only (no server-side
   pull on a schedule or webhook); synced correlations can't reference the
   shipped library; the streaming state has a 200k-event soak test, not a
   24 h one; correlation state is per process (lost on restart, not shared
   between API replicas).
 - **Cases follow-ups from Phase 2**
-  ([platform roadmap](./PLATFORM_ROADMAP.md)): merge and split need UI
-  (the API has them); @mentions are recorded on notes but not delivered,
-  which needs per-user notifications; "create case" should be available
-  wherever an alert is shown (SIEM dashboard, Centrum incidents); a case
+  ([platform roadmap](./PLATFORM_ROADMAP.md)): ~~merge and split need UI~~
+  (done: pick alerts to split off, merge another open case, on the case page); ~~@mentions are recorded on notes but not delivered~~
+  (done: a bell in the header and email, also for assignments); ~~"create
+  case" should be available wherever an alert is shown~~ (done: SIEM
+  dashboard and Centrum incidents, whose Acknowledge and Resolve buttons
+  also work now); a case
   per host splits lateral movement across hosts (link source and
-  destination hosts); the grouping lock is per API process, so two
-  replicas can open duplicate cases for one entity; SLA targets should be
-  configurable per tenant.
+  destination hosts); ~~the grouping lock is per API process~~ (done: a Redis
+  lock per tenant and entity, with the local lock as fallback); ~~SLA targets
+  should be configurable per tenant~~ (done: Cases page, `/v1/security/cases/sla`).
 - **Threat-intel follow-ups from Phase 3**
   ([guide](./threat-intel.md)): URLhaus and ThreatFox need an abuse.ch
   Auth-Key (anonymous downloads return 410), so those feeds have only been
@@ -81,37 +83,47 @@ markers).
   uses RE2, so no lookaround or backreferences, and allows at most 32
   extracted fields per query.
 - **Enterprise follow-ups from Phase 14** ([enterprise access](./enterprise.md), [security](./security.md)):
-  - **Next.js 15.5+ for both UIs** (React 19, async request APIs). Next 14 has
-    advisories fixed only there; they're allowlisted until 2027-01-31
-    (`security/audit-allowlist.json`), and three Server Components DoS ones
-    apply.
-  - **SAML** sign-in, and **MFA enforced** at sign-in (enrollment exists but
-    nothing checks a code).
-  - **Data scopes for traces, metrics and alerts**, archive search under a
-    scope (filtering the Parquet read), and **field-level masking**.
-  - **API key scopes**: a key acts with its creator's roles today.
-  - **Authentication on `/metrics`**, or a separate metrics port.
+  - ~~**Next.js 15.5+ for both UIs**~~: done. Both run Next.js 15.5.29 and
+    React 19; the audit allowlist and `trivyignore` are empty.
+  - **SAML** sign-in. (MFA is done: TOTP with backup codes, enforced at
+    sign-in; see [enterprise.md](./enterprise.md#two-step-sign-in-totp).)
+  - ~~**Data scopes for traces, metrics and alerts**, archive search under a
+    scope~~: done. Traces, metrics, the topology and security events are
+    filtered by service; alert instances are hidden under a scope (they don't
+    record their services); archive reads carry the filter. Field-level
+    masking is done too ([masked fields](./enterprise.md#masked-fields)). Still
+    open: alerts filtered rather than hidden, and masking values inside free
+    text (use an ingest `mask` processor for that).
+  - ~~**API key scopes**~~: done; a key's permissions are checked on every
+    route ([security](./security.md)).
+  - ~~**Authentication on `/metrics`**~~: done; set `LOGFORGE_METRICS_TOKEN`
+    ([self-monitoring](./deployment.md#self-monitoring)).
   - **Run the release workflow** on the first tag, and check `cosign verify`.
   - **Admin UI** billing, features and support pages.
-  - **Retire the Enterprise RBAC and OIDC-config routes**
-    (`/v1/enterprise/rbac/*`, `/v1/enterprise/auth/oidc/configure`) in favour
-    of `/v1/roles/custom` and `/v1/sso/providers`.
+  - ~~**Retire the Enterprise RBAC and OIDC-config routes**~~: done. They,
+    `/v1/enterprise/auth/providers` and `/v1/enterprise/auth/mfa/setup` answer
+    410 Gone naming `/v1/roles/custom`, `/v1/sso/providers` or `/v1/auth/mfa`.
 - **Response follow-ups from Phase 13** ([response automation](./response.md)):
-  - **Compliance reports** (the Phase 13 deliverable not done): evidence
-    for SOC 2 and ISO 27001 controls from the audit log, retention and
-    access reviews.
+  - ~~**Compliance reports**~~: done. `GET /v1/reports/compliance` (JSON,
+    CSV, PDF) gives evidence for named SOC 2 and ISO 27001 controls: access
+    review with MFA and last sign-in, API keys, audit trail, retention,
+    legal holds and incident response ([reports](./response.md#reports)).
   - **More ticket systems with sync:** ServiceNow and Linear. Today they
     can only be reached by a webhook action.
   - **Approve from Slack or Teams** (interactive messages), with the same
     role check as in Logforge.
   - **Built-in containment connectors** (Okta and Entra ID user disable,
     AWS security groups), each behind an approval.
-  - **Branches and parallel steps in playbooks**, and a run history kept
-    longer than 180 days for audits.
-  - **A Unicode font in the PDF report** (today Latin-1 only).
-  - **Retire the older `/v1/enterprise/integrations` API** and its tables
-    (`integrations_mt` in `init_simple.sql`, `enterprise_integrations_mt`).
-    The Settings → Integrations page no longer uses them.
+  - ~~**Branches and parallel steps in playbooks**, and a run history kept
+    longer than 180 days~~: done (step `if`, `parallel` groups; runs kept 400
+    days).
+  - ~~**A Unicode font in the PDF report**~~: done (embedded DejaVu when a
+    report has non-Latin-1 text). Still open: CJK, and subsetting the fonts
+    to shrink those PDFs.
+  - ~~**Retire the older `/v1/enterprise/integrations` API**~~: done; it answers
+    410 Gone naming `/v1/integrations`. Its tables (`integrations_mt`,
+    `enterprise_integrations_mt`) are kept: dropping them deletes data, so it
+    is left to an explicit migration once deployments have checked them.
 - **Storage and scale follow-ups from Phase 12** ([storage](./storage.md), [deployment](./deployment.md)):
   - **Ingest throughput, for the cost target:**
     - measure per-replica throughput on dedicated nodes;
@@ -119,13 +131,18 @@ markers).
     - move the log consumer out of the API process.
 
     The reference architecture needs 18 API replicas at today's 343 events/s.
-  - **Exactly-once ingest:** deduplicate redelivered batches (a batch id,
-    ClickHouse insert deduplication tokens). Today a failure stores a batch
-    twice.
+  - ~~**Exactly-once ingest**~~: done. Every log insert carries an
+    `insert_deduplication_token` derived from the batch's content (not from
+    `ingested_at`, which a redelivery restamps), and both log tables keep a
+    1000-insert deduplication window (migration 038): a retried or redelivered
+    batch is stored once. Not re-run: the HA chaos test that counted 60
+    duplicate rows.
   - **ClickHouse 24.x:** a production-ready Replicated database that
     converts MergeTree tables itself, so `REPLICATED_ENGINES` can go.
-  - **Bind mutation timestamps as parameters** (about 16 `now64()`
-    mutations), so `allow_nondeterministic_mutations` can go.
+  - ~~**Bind mutation timestamps as parameters.**~~ Done: 15 mutations
+    bind the time (`mutation_time.now_param`), the HA profile no longer sets
+    `allow_nondeterministic_mutations`, and a test fails if a mutation
+    calls `now()` again.
   - **Three Keepers and three Redpanda brokers in the HA compose**, and the
     chaos test killing them too.
   - **Install the Helm chart on a real cluster in CI** (kind), and publish
@@ -172,15 +189,18 @@ markers).
   - **Record the evaluations:** record a real model's answers for `nl2query`
     and `summaries` (`tests/eval/ai/run_ai_eval.py --record`, needs an API
     key) and commit the baseline, so the CI gate starts enforcing.
-  - **Share the limits:** the rate limit and the in-request budget check are
-    per API process. Move both to a shared counter (Redis or ClickHouse) so
-    replicas and parallel requests can't overshoot.
-  - **Redact renamed values:** redact at the query layer too, so values
-    renamed in a query (`| eval v = attrs.password`) are still covered.
-  - **Enforce API key scopes:** they are set at login but never checked
-    (pre-existing, every route).
-  - **Fix the rule-based NLQ:** give it per-intent permission checks and
-    parameterised SQL, then open the fallback to `ai:read` again.
+  - ~~**Share the limits.**~~ Done: the rate limit is a Redis counter per
+    tenant and minute shared by all replicas (per process only while Redis
+    is down). The budget check already re-reads the month's usage from the
+    audit log before every model call.
+  - ~~**Redact renamed values**~~: done. The AI's query tool refuses a query
+    that names a redacted field (the tenant's `redact_fields` or the asker's
+    masked fields), so a value can't come back under another name.
+  - ~~**Enforce API key scopes**~~: done; checked on every route.
+  - ~~**Fix the rule-based NLQ.**~~ Done: per-intent permission checks,
+    every value bound as a parameter, refused under a data scope, and open
+    to `ai:read` again. Its latency question read a column that doesn't
+    exist and now reads trace spans.
   - **Get a human sign-off** of the security review before enabling AI in
     production.
 - **Content pack follow-ups from Phase 7** ([guide](./packs.md)): packs
@@ -202,21 +222,24 @@ markers).
   need typed columns materialized from `attrs` (or ClickHouse's JSON type),
   which the compiler would then read instead. The hourly counts cover only
   service, level and status (not host or attributes). `join` reads at most
-  50,000 subsearch rows and keeps one row per key. The saved-search
-  scheduler runs inside each API process, so with several replicas each
-  would run every search (needs a lease or a separate worker). Dashboard
+  50,000 subsearch rows and keeps one row per key. ~~The saved-search
+  scheduler runs inside each API process~~ (done: saved searches, scheduled
+  reports, ticket sync and playbook dispatch take a Redis lease per tick, so
+  one replica runs each tick). Dashboard
   panels have one query each and no per-panel time range. The query builder
   writes `where`, `stats`, `timechart`, `sort` and `head` only. Queries the
   first LogforgeQL accepted still run on the original engine.
-- **Per-request quota mutations.** Every ingest request runs
-  `ALTER TABLE tenant_quotas_mt UPDATE ...`. ClickHouse mutations are
-  heavyweight and queue up under load; this is the likely cause of the
-  several-fold run-to-run swings in the end-to-end benchmarks. Counters
-  belong in an append-only table (or Redis) summed on read.
-- **OpenTelemetry metric aliases ignore units.** `cpu.utilization` is a 0–1
-  ratio while the canonical `cpu_usage` is a percentage. Mapping one to the
-  other needs a unit conversion in `metric_name_mappings.yml` and the
-  normalizer, not just a rename.
+- ~~**Per-request quota mutations.**~~ Done: usage is appended to
+  `quota_usage_events_mt` (migration 036) and read through `tenant_quotas_v`,
+  which adds it to the stored baseline since the last reset. No mutation per
+  request, and concurrent requests no longer lose increments (10 concurrent
+  calls counted 10). Not re-measured: whether this removes the run-to-run
+  swings in the end-to-end ingest benchmarks.
+- ~~**OpenTelemetry metric aliases ignore units.**~~ Done: values are
+  converted to the canonical unit, from the unit they were sent with (`1` to
+  `%`, `s`/`us`/`ns` to `ms`) or a per-alias factor in
+  `metric_name_mappings.yml` (`system.cpu.utilization` x100). The original
+  value and unit are kept on the record.
 
 ## Remove demo / fake data from the UI
 

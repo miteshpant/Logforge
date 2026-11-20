@@ -141,3 +141,21 @@ def test_chained_correlations_and_generate_false_correlations(engine):
     assert run(engine, logs(3), rules) == []  # the burst fires but doesn't alert
     assert [m.rule_id for m in run(engine, success, rules)] == ["bf-success"]
     assert [m.rule_id for m in engine.published] == ["bf-success"]
+
+
+def test_correlations_over_alerts_run_in_the_live_path(engine):
+    # three rules, three techniques, one host: the alert correlation fires once
+    def proc_rule(rid, process, technique):
+        return rule_dict(rid, {"selection": {"process": process}, "condition": "selection"},
+                         attack_techniques=[technique], tags=[f"attack.{technique.lower()}"])
+
+    multi = rule_dict("multi", {}, attack_techniques=["T1078"], tags=["attack.t1078"], correlation={
+        "type": "value_count", "rules": ["alerts"], "group-by": ["host"], "timespan": "1h",
+        "condition": {"field": "alert.technique", "gte": 3}})
+    rules = [proc_rule("a", "whoami", "T1033"), proc_rule("b", "procdump", "T1003"),
+             proc_rule("c", "plink", "T1572"), multi]
+    batch = [{"ts": (T0 + timedelta(minutes=i)).isoformat(), "host": "h1", "attrs": {"process": p}}
+             for i, p in enumerate(["whoami", "procdump", "plink"])]
+    matches = run(engine, batch, rules)
+    assert [m.rule_id for m in matches].count("multi") == 1
+    assert len(matches) == 4

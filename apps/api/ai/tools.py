@@ -172,8 +172,22 @@ def _window(args: dict[str, Any]) -> tuple[str, str] | None:
     return begin.isoformat(), finish.isoformat()
 
 
+async def _refuse_redacted(ctx: ToolContext, query: str) -> None:
+    """Redaction works on field names, and a query can rename a value
+    (`| eval v = attrs.password`): refuse queries that name a redacted field
+    (the tenant's AI redact_fields, or a field the asker's role masks)."""
+    import field_masking
+    from ai import assistant
+
+    fields = assistant.current_redact_fields() | field_masking.current()
+    named = field_masking.mentions({"query": query}, fields)
+    if named:
+        raise ToolError(f"run_query: the query names the redacted field '{named}', which can't be queried")
+
+
 async def run_query(ctx: ToolContext, args: dict[str, Any]) -> ToolOutput:
     query, window = args["query"], _window(args)
+    await _refuse_redacted(ctx, query)
     since = None if window else (args.get("since") or "1h")
     body = {"query": query, "start_time": window[0], "end_time": window[1]} if window else \
         {"query": query, "since": since}

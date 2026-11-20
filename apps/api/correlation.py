@@ -21,6 +21,17 @@ matches per group over a time span, in the Sigma correlation format:
 * temporal: every referenced rule matched within the window, in any order.
 * temporal_ordered: the referenced rules matched in the listed order.
 
+A temporal or temporal_ordered rule may name `until` rules (Logforge
+extension): a match of one for a group abandons that group's partial
+sequence, e.g. brute force then success `until: [password_reset]`.
+
+Correlations over alerts (Logforge extension): the reserved reference
+`alerts` (or `alerts:<severity>`) matches every alert another rule raises,
+with `alert.rule_id`, `alert.severity`, `alert.technique` (the rule's first,
+primary technique) and `alert.techniques` set on the event. One alert counts
+once, however many techniques its rule is tagged with. "Three techniques on one host in an
+hour" is a value_count of alert.technique grouped by host.
+
 Only thresholds that can be decided while events arrive are accepted
 (gt / gte / eq). "Fewer than N" is only known when a window closes, which a
 streaming engine never observes.
@@ -40,6 +51,13 @@ _OPERATORS = ("gt", "gte", "eq")
 _TECHNIQUE = re.compile(r"^attack\.(t\d{4}(?:\.\d{3})?)$", re.IGNORECASE)
 _TIMESPAN = re.compile(r"^\s*(\d+)\s*([smhd])\s*$")
 _UNITS = {"s": "seconds", "m": "minutes", "h": "hours", "d": "days"}
+
+
+ALERTS = "alerts"
+
+
+def is_alert_reference(name: str) -> bool:
+    return name == ALERTS or name.startswith(ALERTS + ":")
 
 
 class CorrelationRuleError(ValueError):
@@ -71,6 +89,16 @@ class CorrelationRule:
     tags: List[str] = dc_field(default_factory=list)
     #: Name other correlations can reference this one by (chaining).
     name: Optional[str] = None
+    #: Base rules whose match abandons a group's partial sequence.
+    until: List[str] = dc_field(default_factory=list)
+
+    @property
+    def reads_alerts(self) -> bool:
+        return any(is_alert_reference(r) for r in self.references)
+
+    @property
+    def references(self) -> List[str]:
+        return list(self.rules) + list(self.until)
 
     @property
     def techniques(self) -> List[str]:
@@ -98,6 +126,16 @@ class CorrelationRule:
             raise CorrelationRuleError("correlation needs base rules")
         if ctype in ("temporal", "temporal_ordered") and len(rules) < 2:
             raise CorrelationRuleError(f"{ctype} needs at least two base rules")
+
+        until = corr.get("until") or []
+        if isinstance(until, str):
+            until = [until]
+        if until and ctype not in ("temporal", "temporal_ordered"):
+            raise CorrelationRuleError("until is only for temporal and temporal_ordered correlations")
+        if any(is_alert_reference(str(r)) for r in rules) and not all(is_alert_reference(str(r)) for r in rules):
+            raise CorrelationRuleError("a correlation over alerts can only reference alerts")
+        if set(map(str, until)) & set(map(str, rules)):
+            raise CorrelationRuleError("a rule can't be both in rules and in until")
 
         group_by = corr.get("group-by") or []
         if isinstance(group_by, str):
@@ -137,6 +175,7 @@ class CorrelationRule:
             field=value_field,
             tags=[str(t) for t in data.get("tags") or []],
             name=str(data["name"]) if data.get("name") else None,
+            until=[str(u) for u in until],
         )
 
 
@@ -325,10 +364,17 @@ class CorrelationStore:
         matched = set(matched)
         for rule in rules:
             hits = matched.intersection(rule.rules)
-            if not hits:
+            aborts = rule.until and matched.intersection(rule.until)
+            if not hits and not aborts:
                 continue
             group = {f: field_value(event, f) for f in rule.group_by}
             key = (tenant_id, rule.id, tuple(str(group[f]) for f in rule.group_by))
+            if aborts:
+                # The sequence is abandoned for this group: drop its progress,
+                # this event included.
+                if key in self._groups:
+                    self._groups[key].reset()
+                continue
             state = self._groups.get(key)
             if state is None or state.rule is not rule and state.rule != rule:
                 state = _GroupState(rule)
@@ -350,6 +396,26 @@ class CorrelationStore:
         return alerts
 
 
+def feed_alert(store: CorrelationStore, tenant_id: str, rules: Iterable[CorrelationRule],
+               event: Dict[str, Any], ts: datetime, rule_id: str, severity: str,
+               techniques: Iterable[str]) -> List[CorrelationAlert]:
+    """Feed an alert raised by `rule_id` to the correlations over alerts.
+    Alerts of those correlations aren't fed back (no loops)."""
+    # An alert without the group's fields (no host on the event) can't be
+    # put with others: grouping all of them under "None" would correlate
+    # unrelated alerts.
+    readers = [r for r in rules if r.reads_alerts
+               and all(field_value(event, f) not in (None, "") for f in r.group_by)]
+    if not readers:
+        return []
+    names = {ALERTS, f"{ALERTS}:{str(severity or 'medium').lower()}"}
+    techniques = list(techniques)
+    alert_event = dict(event, alert={"rule_id": rule_id, "severity": severity,
+                                     "technique": techniques[0] if techniques else None,
+                                     "techniques": techniques})
+    return store.process(tenant_id, readers, alert_event, names, ts)
+
+
 def order_for_chaining(rules: List[CorrelationRule]) -> List[CorrelationRule]:
     """Order rules so a correlation comes after any correlation it references.
     Rules in a reference cycle are dropped (they could never fire)."""
@@ -364,7 +430,7 @@ def order_for_chaining(rules: List[CorrelationRule]) -> List[CorrelationRule]:
     while pending:
         progress = False
         for r in list(pending):
-            deps = {labels[ref].id for ref in r.rules if ref in labels and labels[ref] is not r}
+            deps = {labels[ref].id for ref in r.references if ref in labels and labels[ref] is not r}
             if deps <= placed:
                 ordered.append(r)
                 placed.add(r.id)

@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { apiClient } from '@/lib/api'
+import { createCase } from '@/lib/api/cases'
+import { useRouter } from 'next/navigation'
 import { useTimeRange } from '@/contexts/TimeRangeContext'
 import {
   ShieldAlert,
@@ -17,7 +19,8 @@ import {
   Search,
   XCircle,
   Eye,
-  X
+  X,
+  Briefcase,
 } from 'lucide-react'
 
 interface SecurityEvent {
@@ -115,6 +118,7 @@ const MITRE_TACTICS = [
 
 export default function SIEMDashboardPage() {
   const { getApiTimeRange } = useTimeRange()
+  const router = useRouter()
   const [dashboard, setDashboard] = useState<SecurityDashboard | null>(null)
   const [rules, setRules] = useState<SigmaRule[]>([])
   const [coverage, setCoverage] = useState<MitreCoverage | null>(null)
@@ -153,6 +157,17 @@ export default function SIEMDashboardPage() {
     } catch (err) {
       console.error(`Failed to ${action} event:`, err)
     } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleCreateCase = async (event: SecurityEvent) => {
+    setActionLoading(`${event.id}-case`)
+    try {
+      const created = await createCase({ title: event.rule_title || 'Security alert', alert_ids: [event.id] })
+      router.push(`/security/cases/${created.id}`)
+    } catch (err) {
+      console.error('Failed to create a case:', err)
       setActionLoading(null)
     }
   }
@@ -554,6 +569,16 @@ export default function SIEMDashboardPage() {
                         >
                           <XCircle className="w-3 h-3" />
                           False +
+                        </button>
+                        <button
+                          data-testid="siem-create-case"
+                          onClick={(e) => { e.stopPropagation(); handleCreateCase(event) }}
+                          disabled={actionLoading === `${event.id}-case`}
+                          title="Open a case for this alert"
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded transition-colors disabled:opacity-50"
+                        >
+                          <Briefcase className="w-3 h-3" />
+                          Case
                         </button>
                       </div>
                     )}

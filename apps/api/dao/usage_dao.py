@@ -955,7 +955,7 @@ class UsageDAO:
                 quota_limit as limit_gb,
                 ROUND(current_usage / 1073741824.0, 2) as used_gb,
                 ROUND((current_usage / 1073741824.0 / quota_limit) * 100, 1) as usage_percentage
-            FROM tenant_quotas_mt
+            FROM tenant_quotas_v
             WHERE customer_id = %(customer_id)s
               AND quota_type = 'storage_gb'
             ORDER BY updated_at DESC
@@ -968,7 +968,7 @@ class UsageDAO:
                 quota_limit as limit_records,
                 current_usage as used_records,
                 ROUND((current_usage / quota_limit) * 100, 1) as usage_percentage
-            FROM tenant_quotas_mt
+            FROM tenant_quotas_v
             WHERE customer_id = %(customer_id)s
               AND quota_type = 'monthly_ingestion'
             ORDER BY updated_at DESC

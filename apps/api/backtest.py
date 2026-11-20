@@ -17,7 +17,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
-from correlation import CorrelationStore
+from correlation import CorrelationStore, is_alert_reference
 from detection_replay import replay
 from detection_tuning import Throttler
 from sigma_sql import compile_prefilter
@@ -87,8 +87,15 @@ def resolve_rules(rules: List[Dict[str, Any]], rule_id: str) -> List[Dict[str, A
     def visit(rule: Dict[str, Any], trail: tuple) -> None:
         if rule["id"] in trail or any(r["id"] == rule["id"] for r in ordered):
             return
-        refs = (rule.get("correlation") or {}).get("rules") or []
-        for ref in [refs] if isinstance(refs, str) else refs:
+        corr = rule.get("correlation") or {}
+        refs = []
+        for key in ("rules", "until"):
+            value = corr.get(key) or []
+            refs += [value] if isinstance(value, str) else list(value)
+        if any(is_alert_reference(str(ref)) for ref in refs):
+            # A correlation over alerts replays every other rule.
+            refs = [r["id"] for r in rules if r is not rule]
+        for ref in refs:
             dependency = by_label.get(str(ref))
             if dependency is not None:
                 visit(dependency, trail + (rule["id"],))

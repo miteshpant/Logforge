@@ -70,8 +70,9 @@ def api(monkeypatch):
     monkeypatch.setattr(assistant, "_audit_store", lambda: audit)
     monkeypatch.setattr(assistant, "_build_provider", lambda p: state["provider"])
 
-    async def fallback(question, tenant_id):
+    async def fallback(question, tenant_id, roles):
         state["fallbacks"].append((question, tenant_id))
+        state["fallback_roles"] = roles
         return {"text": "There were 12 errors in the last hour.", "generated_sql": "SELECT ...", "suggestions": []}
 
     monkeypatch.setattr(assistant, "_rule_based", fallback)
@@ -196,16 +197,16 @@ def test_questions_are_bounded(api):
     assert api.post("/v1/ai/ask", headers=ACME, json={"question": "x" * 5000}).status_code == 422
 
 
-def test_the_rule_based_fallback_needs_what_v1_ai_query_needs(api):
-    """Security review, Phase 8: the old NLQ processor checks no per-intent
-    permissions, so with AI off only callers allowed to use /v1/ai/query
-    (ai:write) get its answer; others get the reason and no data."""
+def test_the_rule_based_fallback_is_open_to_ai_read_and_checks_per_intent(api):
+    """With AI off, anyone with ai:read gets the rule-based answer. It runs with
+    the asker's roles: each kind of question checks its own read permission and a
+    data scope refuses it (tests/test_nlq_fallback_hardening.py). Before that, the
+    fallback was limited to ai:write (Phase 8 security review)."""
     analyst = {**ACME, "X-Test-Role": "security_analyst"}
     body = api.post("/v1/ai/ask", headers=analyst, json={"question": "any security events?"}).json()
-    assert body["mode"] == "off" and body["reason_code"] == "tenant_off" and body["text"] == ""
-    assert api.state["fallbacks"] == []
-    admin = api.post("/v1/ai/ask", headers=ACME, json={"question": "any security events?"}).json()
-    assert admin["mode"] == "rule_based" and api.state["fallbacks"] == [("any security events?", "acme")]
+    assert body["mode"] == "rule_based" and body["reason_code"] == "tenant_off"
+    assert api.state["fallbacks"] == [("any security events?", "acme")]
+    assert [r["role"] for r in api.state["fallback_roles"]] == ["security_analyst"]
 
 
 def test_usage_is_written_before_each_model_call_and_requests_are_capped(api, monkeypatch):

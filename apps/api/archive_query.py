@@ -41,13 +41,21 @@ PLACEHOLDER = "_logforge_archive_source_"
 
 
 def compile_archive(query: str, tenant_id: str, days: List[date], start: datetime, end: datetime,
-                    variables: Optional[Dict[str, Any]] = None, lookups=None):
+                    variables: Optional[Dict[str, Any]] = None, lookups=None, scope=None):
     """Compile against a placeholder table name (the compiler accepts only
-    plain names), then read the archives in its place."""
+    plain names), then read the archives in its place. Under a data scope the
+    read is a subquery with the scope's service filter: additional_table_filters
+    (how scopes reach logs_raw_mt) don't apply to the s3() table function."""
     import dataclasses
 
     from logql_pipeline import compile_pipeline
 
     compiled = compile_pipeline(query, customer_id=tenant_id, start=start, end=end, table=PLACEHOLDER,
                                 variables=variables or {}, lookups=lookups, rollup=False)
-    return dataclasses.replace(compiled, sql=compiled.sql.replace(PLACEHOLDER, source(tenant_id, "logs", days)))
+    read = source(tenant_id, "logs", days)
+    if scope is not None:
+        from data_scope import filter_sql
+
+        # The compiled SQL is formatted with %(name)s parameters: escape LIKE's %.
+        read = f"(SELECT * FROM {read} WHERE {filter_sql(scope.services).replace('%', '%%')})"
+    return dataclasses.replace(compiled, sql=compiled.sql.replace(PLACEHOLDER, read))

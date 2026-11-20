@@ -9,98 +9,28 @@ It ingests logs, metrics and traces, stores them in ClickHouse, lets you query
 them with a pipe-style query language, raises alerts, and runs Sigma detection
 rules (with MITRE ATT&CK tags) over incoming logs to produce security events.
 
-> **Project status: early / alpha.** The ingestion, storage, query, alerting and
-> detection paths are real and tested. The "AI" features are still keyword
-> templates without a language model, and a few admin pages are placeholders. See [Feature status](#feature-status) for an honest breakdown,
-> [docs/ROADMAP.md](./docs/ROADMAP.md) for where help is needed, and
-> [docs/PLATFORM_ROADMAP.md](./docs/PLATFORM_ROADMAP.md) for the phased plan
-> toward a unified, AI-assisted platform.
+> **Active development.** Ingestion (JSON, OTLP, syslog, CEF and more),
+> LogforgeQL, ClickHouse hot/warm/cold tiering, ~300 fixture-verified Sigma
+> detection rules, cases, threat intel, SSO/SCIM and the AI features (each with
+> a rule-based fallback) are live, tested in CI and benchmarked. What isn't done
+> yet is listed plainly in [Feature status](#feature-status) and
+> [docs/ROADMAP.md](./docs/ROADMAP.md).
 
-## Screenshots
+## At a glance
 
-<sub>Captured from the current build on a local stack, with the demo tenant seeded by `scripts/seed_demo_telemetry.py` (an hour of synthetic logs, traces and metrics, plus three small attacks that the shipped rules detect). Regenerate with `node scripts/capture_screenshots.js`.</sub>
+Measured on one 4-vCPU VM running the whole compose stack, unless noted. Each row links to its raw results or method.
 
 | | |
 | --- | --- |
-| **Centrum** (tenant overview)<br>![Centrum](./docs/images/centrum.png) | **Log Explorer**<br>![Log Explorer](./docs/images/log-explorer.png) |
-| **Tracing**<br>![Tracing](./docs/images/tracing.png) | **APM** (latency, error rate, Apdex)<br>![APM](./docs/images/apm.png) |
-| **Service Map** (built from trace spans)<br>![Service Map](./docs/images/service-map.png) | **Detection Rules** (vendored SigmaHQ plus Logforge rules, correlation rules included)<br>![Detection Rules](./docs/images/detection-rules.png) |
-| **Cases** (alerts grouped per source, host or user; SLA overview)<br>![Cases](./docs/images/cases.png) | **Case detail** (timeline, linked alerts, entities, evidence)<br>![Case detail](./docs/images/case-detail.png) |
-| **Threat Intelligence** (feeds, indicators, sightings in your logs)<br>![Threat Intelligence](./docs/images/threat-intel.png) | **Ingest Pipelines** (parse, mask and shape logs on the way in; test against samples)<br>![Ingest Pipelines](./docs/images/pipelines.png) |
-| **Field explorer** (every field, its top values, add to query; common-schema fields)<br>![Field explorer](./docs/images/field-explorer.png) | **Query builder** (a form that writes LogforgeQL)<br>![Query builder](./docs/images/query-builder.png) |
-| **Query results** (a `timechart` as a chart and a table)<br>![Query results](./docs/images/query-results.png) | **Dashboards from queries** (LogforgeQL panels, Service and Level variables)<br>![Dashboards from queries](./docs/images/dashboard-queries.png) |
-| **Content Packs** (one-step installs for common sources)<br>![Content Packs](./docs/images/content-packs.png) | **Content pack plan** (what installing or upgrading changes, before it does)<br>![Content pack plan](./docs/images/content-pack.png) |
-| **AI answers** (cited sources, external-model indicator, audit log; off by default; shown with a scripted test stand-in)<br>![AI answers](./docs/images/ai-answer.png) | **Ask in plain English** (a LogforgeQL draft to run or edit; shown with AI off: the rule-based draft)<br>![Ask in plain English](./docs/images/ai-ask-query.png) |
-| **Triage summary** (what happened, ATT&CK context, entities, related activity, next steps; every sentence cited; shown with AI off)<br>![Triage summary](./docs/images/ai-triage.png) | **Explain this event** (what it is, matching rules, field meanings, follow-up queries; shown with AI off)<br>![Explain this event](./docs/images/ai-explain.png) |
-| **Pipeline draft from samples** (simulated before it's offered; shown with AI off: the heuristic drafter)<br>![Pipeline draft](./docs/images/ai-pipeline-draft.png) | **Investigation copilot** (searches the analyst approves, a cited timeline, where it likely started; pinning is the analyst's; shown with AI off)<br>![Investigation copilot](./docs/images/ai-copilot.png) |
-| **Detection drafting** (a rule and its fixtures; it must pass the gate, then is backtested before it's enabled; shown with AI off)<br>![Detection drafting](./docs/images/ai-rule-draft.png) | **Case report** (management summary or post-incident review, every sentence cited; shown with AI off)<br>![Case report](./docs/images/ai-case-report.png) |
-| **Entities by risk** (alerts with decay and rarity, ATT&CK progression, intel, anomalies; the factors behind each score)<br>![Entities](./docs/images/entities.png) | **Entity page** (why its score, unusual behaviour, events, alerts, cases, who and what it was seen with)<br>![Entity](./docs/images/entity.png) |
-| **Log patterns** (`\| patterns`: 1 M lines to templates in seconds; new and rare ones against the week before)<br>![Log patterns](./docs/images/log-patterns.png) | **Storage & retention** (hot, warm and cold tiers; days searchable and archived per data type; archive search and rehydration)<br>![Storage and retention](./docs/images/storage.png) |
-| **Ingest and cost** (per source and level; storage per tier; the monthly cost of the retention at this rate; noise a pipeline could drop)<br>![Ingest and cost](./docs/images/storage-costs.png) | **Playbooks** (alert and case triggers; enrich, notify, ticket, search; containment waits for a person to approve)<br>![Playbooks](./docs/images/playbooks.png) |
-| **Integrations** (Slack, Teams, PagerDuty, Opsgenie, email, Jira, GitHub, webhooks, containment through your automation; secrets write-only)<br>![Integrations](./docs/images/integrations.png) | **Reports** (alerts, case response and SLAs, coverage, retention, automation; PDF, CSV, ATT&CK Navigator layer, emailed on a schedule)<br>![Reports](./docs/images/reports.png) |
-| **Roles & access** (custom roles add permissions and can limit which services' logs their holders see, enforced by ClickHouse on every query)<br>![Roles and access](./docs/images/roles.png) | **Single sign-on and SCIM** (OIDC per tenant with groups mapped to roles; SCIM 2.0 provisioning)<br>![SSO and SCIM](./docs/images/sso.png) |
-| **Self-monitoring** (Prometheus and Grafana for Logforge's own API and ingest: rates, errors, latency, queue, log loss)<br>![Self-monitoring](./docs/images/self-monitoring.png) | |
-
-## Contents
-
-- [Screenshots](#screenshots)
-- [Feature status](#feature-status)
-- [Architecture](#architecture)
-- [Quick start](#quick-start)
-- [Authentication](#authentication)
-- [API reference](#api-reference)
-- [Shipping logs](#shipping-logs)
-- [Repository layout](#repository-layout)
-- [Configuration](#configuration)
-- [Development and testing](#development-and-testing)
-- [Contributing](#contributing)
-- [License](#license)
-
----
-
-## Feature status
-
-| Area | Status | Where |
-| --- | --- | --- |
-| Log ingestion: JSON, batch, OTLP, syslog, nginx, CEF, plain text | ✅ Implemented | `apps/api/routers/ingestion.py`, `parsers.py` |
-| Back-pressure (bounded worker pool, `429` + `Retry-After`) | ✅ Implemented | `apps/api/ingest_pipeline.py` |
-| Metrics and trace ingestion, APM, service map | ✅ Implemented | `apps/api/routers/observability_api.py` |
-| Query: JSON DSL, aggregations, time series | ✅ Implemented | `apps/api/query_engine.py` |
-| **LogforgeQL**, a pipe language: `where`, `eval` (35 functions), `stats` (percentiles, distinct counts, ...), `timechart`, `top`, `rare`, `dedup`, `bin`, `eventstats`, `lookup`, `join`, `rex` / `parse` / `json`; `$variables` | ✅ Implemented | `apps/api/logql_pipeline.py`, [reference](./docs/query-language.md) |
-| Lookup tables (CSV) and managed lists; saved and scheduled searches with alerts and CSV reports; dashboard panels from queries, with variables | ✅ Implemented | `apps/api/lookup_tables.py`, `apps/api/saved_searches.py`, `apps/api/dashboard_queries.py` |
-| Query performance: hourly-count projection for counts by service / level / status, skip indexes, cost estimate and per-plan scan limits | ✅ Implemented (queries reading `attrs` over 100 M events take seconds, see [benchmarks](./docs/benchmarks/README.md)) | `apps/api/query_cost.py`, `config/query_limits.yml` |
-| **Content packs**: Linux, nginx/Apache, AWS CloudTrail and VPC Flow Logs, Okta and Google Workspace, Windows Security and Sysmon, Kubernetes; each with pipelines, rules, searches and a dashboard; plan, install, upgrade (keeping local changes) and remove per tenant; checked in CI against sample data | ✅ Implemented | `packages/packs/`, `apps/api/pack_manager.py`, [guide](./docs/packs.md) |
-| **AI foundation**: one provider interface (OpenAI-compatible, Anthropic, Ollama), read-only tools that run with the asker's permissions, citations checked on every answer, redaction before data leaves, per-tenant opt-in, audit log, token budgets and rate limits; off by default, rule-based answers when off | ✅ Implemented (no recorded model evaluations yet) | `apps/api/ai/`, [guide](./docs/ai.md) |
-| **AI features**: ask in plain English (LogforgeQL drafts), cited alert and case triage summaries, explain this event, pipeline drafts from sample logs checked by simulation; each works with AI off (rule-based, template or heuristic) | ✅ Implemented (fallbacks evaluated; model evaluations not recorded yet) | `apps/api/ai/`, [guide](./docs/ai.md#features-phase-9) |
-| **AI investigation and authoring**: investigation copilot (approved read-only searches, cited timeline, root-cause candidates, reversible pins), detection rules drafted with fixtures and gated by the fixture gate and a backtest, cited case reports, grounded RCA; each works with AI off | ✅ Implemented (fallbacks evaluated; model evaluations not recorded yet) | `apps/api/ai/`, [guide](./docs/ai.md#investigation-and-authoring-phase-10) |
-| **Entity analytics (UEBA)**: users, hosts, addresses, services and cloud accounts with first/last seen and relationships; risk scores (decay, rarity, ATT&CK progression across linked entities, intel, anomalies) with their factors; behaviour baselines and peer groups; log pattern clustering (`\| patterns`, new and rare patterns, alerting through saved searches) | ✅ Implemented | `apps/api/entities.py`, `entity_risk.py`, `log_patterns.py`, [guide](./docs/entities.md) |
-| **Storage tiers and retention**: hot (local disk), warm (S3-backed ClickHouse volume) and cold (Parquet archives) tiers; per-tenant retention per data type, archived and verified before deletion; archive search with the same query language; rehydration; ingest and storage cost per tenant with projections | ✅ Implemented | `apps/api/storage_tiers.py`, `tier_manager.py`, `storage_costs.py`, [guide](./docs/storage.md) |
-| **Response automation**: integrations (Slack, Teams, PagerDuty, Opsgenie, email, Jira, GitHub, webhooks, containment through your own automation) with sealed secrets; YAML playbooks on alerts and cases (enrich, notify, ticket, search, approval), containment only after a person approves; tickets that follow their case both ways; SOC reports as PDF or CSV, ATT&CK Navigator export, scheduled email | ✅ Implemented (compliance reports not yet) | `apps/api/integrations/`, `playbooks/`, `reports.py`, [guide](./docs/response.md) |
-| **Enterprise access**: OIDC single sign-on per tenant (PKCE, groups to roles, accounts created on first sign-in); SCIM 2.0 provisioning; custom roles with extra permissions and data scopes (which services' logs a user reads, enforced by ClickHouse); password reset, invitations and email verification by email | ✅ Implemented (no SAML yet) | `apps/api/sso/`, `scim/`, `custom_roles.py`, `data_scope.py`, [guide](./docs/enterprise.md) |
-| **Supply chain and self-monitoring**: dependency audits with a reviewed allowlist, image scans and SBOMs in CI; signed releases (cosign); a threat model; Prometheus and Grafana for Logforge's own metrics | ✅ Implemented (release workflow not run yet) | [security](./docs/security.md), [self-monitoring](./docs/deployment.md#self-monitoring) |
-| Alerting: threshold, pattern, anomaly and saved-search rules | ✅ Implemented | `apps/api/alert_engine.py` |
-| Notifications: webhook, Slack, email, PagerDuty, Teams, Discord | ✅ Implemented (off by default) | `apps/api/services/notification_service.py` |
-| Sigma detection engine: ~300 fixture-verified rules (vendored SigmaHQ + Logforge's own `packages/rules/`) | ✅ Implemented | `apps/api/sigma_engine.py`, `apps/api/content/rules/`, `packages/rules/` |
-| Correlation rules: thresholds, distinct counts, sums and sequences per entity, windowed across batches | ✅ Implemented | `apps/api/correlation.py`, `packages/rules/correlations/` |
-| Rule backtesting over stored logs (7 days / 100 M events in 20–27 s) | ✅ Implemented | `apps/api/backtest.py`, [benchmarks](./docs/benchmarks/backtest.md) |
-| Detection tuning: exclusions, throttles, suggestions from false positives | ✅ Implemented | `apps/api/detection_tuning.py` |
-| Detection-as-code: sync rules from git through the gate, YAML export | ✅ Implemented | `apps/api/detection_as_code.py`, [guide](./docs/detection-as-code.md) |
-| Cases: automatic grouping of alerts, timeline, evidence, merge/split, SLA metrics, audit export | ✅ Implemented | `apps/api/cases.py`, `apps/api/routers/cases_api.py`, [guide](./docs/cases.md) |
-| Anomaly detection and forecasting (z-score / EWMA) | ✅ Implemented | `apps/api/services/anomaly_detector.py`, `predictive_analytics_service.py` |
-| Multi-tenancy, roles, API keys, quotas, subscription tiers | ✅ Implemented | `tenant_api.py`, `authn_authz_middleware.py`, `config/pricing.yml` |
-| Server-sent event streams (metrics, alerts, security, …) | ✅ Implemented | `apps/api/routers/streaming_api.py` |
-| Live log tail (`/v1/stream/logs`) | ✅ Implemented | `apps/api/routers/streaming_api.py` |
-| MITRE ATT&CK coverage (`/v1/security/mitre-coverage`), shown on the SIEM page | ✅ Implemented | `apps/api/routers/security_api.py` |
-| Threat intel and enrichment: abuse.ch, OTX, MISP, STIX and CSV feeds; ingest-time matching; retro-hunting; GeoIP/ASN, asset and user lookups | ✅ Implemented | `apps/api/threat_feeds.py`, `apps/api/ingest_enrichment.py`, [guide](./docs/threat-intel.md) |
-| Ingest pipelines: 29 processors (grok, kv, json, CEF, LEEF, date, mask, hash, script, ...), routing by service/condition/header, test against samples, versioned, dead-letter queue with replay; nginx, syslog, CEF and text are built-in pipelines | ✅ Implemented | `apps/api/pipelines.py`, `apps/api/pipeline_processors.py`, [guide](./docs/pipelines.md) |
-| Common schema (OCSF 1.3 with OpenTelemetry names): schema-on-read `ocsf.*` fields in rules and queries; Linux auth, Windows Security and Okta mapped; search-time `rex` / `parse` / `json`; field catalogue and explorer | ✅ Implemented | `apps/api/ocsf_schema.py`, `apps/api/field_catalogue.py`, [guide](./docs/schema.md) |
-| Root-cause analysis | 🟡 Partly placeholder | `apps/api/services/rca_engine.py` |
-| "AI" natural-language query and recommendations | 🧪 Keyword templates and canned output, no LLM | `apps/api/services/ai_service.py` |
-| Billing | 🟡 Usage metering and invoices computed, no payment provider | `apps/api/routers/usage_api.py` |
-| Tenant web UI (Next.js) | ✅ Screens are wired to the API | `apps/ui/` |
-| Platform admin UI (Next.js) | 🟡 Tenants, users, usage and audit work; billing, features and support pages are placeholders | `apps/admin-ui/` |
-
----
+| **Rule backtest** | 7 days / **100 M events in 5–27 s** per rule; a single-event rule 5 s, chained correlation 27 s ([backtest](./docs/benchmarks/backtest.md)) |
+| **Analyst questions at 100 M rows** | 30 published questions, each one LogforgeQL query and checked against Python in CI; counts by service, level and status **p95 133–323 ms** from hourly rollups; questions that read event JSON over all 100 M take 6–16 s ([results](./docs/benchmarks/README.md#analyst-questions-at-100-m-rows-2026-11-19)) |
+| **Queries at 10 M rows** | five common queries, **p95 117–311 ms** ([baseline](./docs/benchmarks/README.md#baseline-2026-11-17-single-node)) |
+| **Fault tolerance** | ClickHouse replica and API replica each killed under load: **0 of 4,780 acknowledged events lost** (60 duplicate rows from retried batches) ([chaos run](./docs/benchmarks/2026-11-20-chaos.json)) |
+| **Ingest, 2 API replicas** | **731 events/s accepted, 686/s stored**, 47,000 events, 0 failed requests ([run](./docs/benchmarks/2026-11-20-ingest-ha.json)) |
+| **Log pattern clustering** | **1 M lines to templates in 8.5 s** (target 30 s) ([run](./docs/benchmarks/2026-11-20-patterns.json)) |
+| **AI with no model** | investigation copilot finds the root cause in **90%** of 20 seeded scenarios with **0 fabricated evidence**; drafted detections pass the fixture gate **90%** of the time ([evaluations](./docs/ai.md)) |
+| **API surface** | **396 paths / 475 operations**, OpenAPI 3.1 generated from code and checked in CI ([spec](./docs/api/openapi.yaml)) |
+| **Detection content** | ~300 Sigma rules (vendored SigmaHQ plus Logforge's own), each loaded only if its fixtures pass; correlation rules across batches ([rules](./packages/rules/)) |
 
 ## Architecture
 
@@ -151,6 +81,93 @@ flowchart LR
 5. Queries, dashboards and alert rules read from ClickHouse. Every table is partitioned by tenant (`customer_id`).
 
 For a full assessment (architecture, security posture, code quality and priorities), read [docs/CODE_ANALYSIS.md](./docs/CODE_ANALYSIS.md). A deeper architecture map is in [docs/ARCHITECTURE_MINDMAP.md](./docs/ARCHITECTURE_MINDMAP.md).
+
+---
+
+## Screenshots
+
+<sub>Captured from the current build on a local stack, with the demo tenant seeded by `scripts/seed_demo_telemetry.py` (an hour of synthetic logs, traces and metrics, plus three small attacks that the shipped rules detect). Regenerate with `node scripts/capture_screenshots.js`.</sub>
+
+| | |
+| --- | --- |
+| **Centrum** (tenant overview)<br>![Centrum](./docs/images/centrum.png) | **Log Explorer**<br>![Log Explorer](./docs/images/log-explorer.png) |
+| **Tracing**<br>![Tracing](./docs/images/tracing.png) | **APM** (latency, error rate, Apdex)<br>![APM](./docs/images/apm.png) |
+| **Service Map** (built from trace spans)<br>![Service Map](./docs/images/service-map.png) | **Detection Rules** (vendored SigmaHQ plus Logforge rules, correlation rules included)<br>![Detection Rules](./docs/images/detection-rules.png) |
+| **Cases** (alerts grouped per source, host or user; SLA overview)<br>![Cases](./docs/images/cases.png) | **Case detail** (timeline, linked alerts, entities, evidence)<br>![Case detail](./docs/images/case-detail.png) |
+| **Threat Intelligence** (feeds, indicators, sightings in your logs)<br>![Threat Intelligence](./docs/images/threat-intel.png) | **Ingest Pipelines** (parse, mask and shape logs on the way in; test against samples)<br>![Ingest Pipelines](./docs/images/pipelines.png) |
+| **Field explorer** (every field, its top values, add to query; common-schema fields)<br>![Field explorer](./docs/images/field-explorer.png) | **Query builder** (a form that writes LogforgeQL)<br>![Query builder](./docs/images/query-builder.png) |
+| **Query results** (a `timechart` as a chart and a table)<br>![Query results](./docs/images/query-results.png) | **Dashboards from queries** (LogforgeQL panels, Service and Level variables)<br>![Dashboards from queries](./docs/images/dashboard-queries.png) |
+| **Content Packs** (one-step installs for common sources)<br>![Content Packs](./docs/images/content-packs.png) | **Content pack plan** (what installing or upgrading changes, before it does)<br>![Content pack plan](./docs/images/content-pack.png) |
+| **AI answers** (cited sources, external-model indicator, audit log; off by default; shown with a scripted test stand-in)<br>![AI answers](./docs/images/ai-answer.png) | **Ask in plain English** (a LogforgeQL draft to run or edit; shown with AI off: the rule-based draft)<br>![Ask in plain English](./docs/images/ai-ask-query.png) |
+| **Triage summary** (what happened, ATT&CK context, entities, related activity, next steps; every sentence cited; shown with AI off)<br>![Triage summary](./docs/images/ai-triage.png) | **Explain this event** (what it is, matching rules, field meanings, follow-up queries; shown with AI off)<br>![Explain this event](./docs/images/ai-explain.png) |
+| **Pipeline draft from samples** (simulated before it's offered; shown with AI off: the heuristic drafter)<br>![Pipeline draft](./docs/images/ai-pipeline-draft.png) | **Investigation copilot** (searches the analyst approves, a cited timeline, where it likely started; pinning is the analyst's; shown with AI off)<br>![Investigation copilot](./docs/images/ai-copilot.png) |
+| **Detection drafting** (a rule and its fixtures; it must pass the gate, then is backtested before it's enabled; shown with AI off)<br>![Detection drafting](./docs/images/ai-rule-draft.png) | **Case report** (management summary or post-incident review, every sentence cited; shown with AI off)<br>![Case report](./docs/images/ai-case-report.png) |
+| **Entities by risk** (alerts with decay and rarity, ATT&CK progression, intel, anomalies; the factors behind each score)<br>![Entities](./docs/images/entities.png) | **Entity page** (why its score, unusual behaviour, events, alerts, cases, who and what it was seen with)<br>![Entity](./docs/images/entity.png) |
+| **Log patterns** (`\| patterns`: 1 M lines to templates in seconds; new and rare ones against the week before)<br>![Log patterns](./docs/images/log-patterns.png) | **Storage & retention** (hot, warm and cold tiers; days searchable and archived per data type; archive search and rehydration)<br>![Storage and retention](./docs/images/storage.png) |
+| **Ingest and cost** (per source and level; storage per tier; the monthly cost of the retention at this rate; noise a pipeline could drop)<br>![Ingest and cost](./docs/images/storage-costs.png) | **Playbooks** (alert and case triggers; enrich, notify, ticket, search; containment waits for a person to approve)<br>![Playbooks](./docs/images/playbooks.png) |
+| **Integrations** (Slack, Teams, PagerDuty, Opsgenie, email, Jira, GitHub, webhooks, containment through your automation; secrets write-only)<br>![Integrations](./docs/images/integrations.png) | **Reports** (alerts, case response and SLAs, coverage, retention, automation; PDF, CSV, ATT&CK Navigator layer, emailed on a schedule)<br>![Reports](./docs/images/reports.png) |
+| **Roles & access** (custom roles add permissions and can limit which services' logs their holders see, enforced by ClickHouse on every query)<br>![Roles and access](./docs/images/roles.png) | **Single sign-on and SCIM** (OIDC per tenant with groups mapped to roles; SCIM 2.0 provisioning)<br>![SSO and SCIM](./docs/images/sso.png) |
+| **Self-monitoring** (Prometheus and Grafana for Logforge's own API and ingest: rates, errors, latency, queue, log loss)<br>![Self-monitoring](./docs/images/self-monitoring.png) | |
+
+## Contents
+
+- [At a glance](#at-a-glance)
+- [Architecture](#architecture)
+- [Screenshots](#screenshots)
+- [Feature status](#feature-status)
+- [Quick start](#quick-start)
+- [Authentication](#authentication)
+- [API reference](#api-reference)
+- [Shipping logs](#shipping-logs)
+- [Repository layout](#repository-layout)
+- [Configuration](#configuration)
+- [Development and testing](#development-and-testing)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
+## Feature status
+
+| Area | Status | Where |
+| --- | --- | --- |
+| Log ingestion: JSON, batch, OTLP, syslog, nginx, CEF, plain text | ✅ Implemented | `apps/api/routers/ingestion.py`, `parsers.py` |
+| Back-pressure (bounded worker pool, `429` + `Retry-After`) | ✅ Implemented | `apps/api/ingest_pipeline.py` |
+| Metrics and trace ingestion, APM, service map | ✅ Implemented | `apps/api/routers/observability_api.py` |
+| Query: JSON DSL, aggregations, time series | ✅ Implemented | `apps/api/query_engine.py` |
+| **LogforgeQL**, a pipe language: `where`, `eval` (35 functions), `stats` (percentiles, distinct counts, ...), `timechart`, `top`, `rare`, `dedup`, `bin`, `eventstats`, `lookup`, `join`, `rex` / `parse` / `json`; `$variables` | ✅ Implemented | `apps/api/logql_pipeline.py`, [reference](./docs/query-language.md) |
+| Lookup tables (CSV) and managed lists; saved and scheduled searches with alerts and CSV reports; dashboard panels from queries, with variables | ✅ Implemented | `apps/api/lookup_tables.py`, `apps/api/saved_searches.py`, `apps/api/dashboard_queries.py` |
+| Query performance: hourly-count projection for counts by service / level / status, skip indexes, cost estimate and per-plan scan limits | ✅ Implemented (queries reading `attrs` over 100 M events take seconds, see [benchmarks](./docs/benchmarks/README.md)) | `apps/api/query_cost.py`, `config/query_limits.yml` |
+| **Content packs**: Linux, nginx/Apache, AWS CloudTrail and VPC Flow Logs, Okta and Google Workspace, Windows Security and Sysmon, Kubernetes; each with pipelines, rules, searches and a dashboard; plan, install, upgrade (keeping local changes) and remove per tenant; checked in CI against sample data | ✅ Implemented | `packages/packs/`, `apps/api/pack_manager.py`, [guide](./docs/packs.md) |
+| **AI foundation**: one provider interface (OpenAI-compatible, Anthropic, Ollama), read-only tools that run with the asker's permissions, citations checked on every answer, redaction before data leaves, per-tenant opt-in, audit log, token budgets and rate limits; off by default, rule-based answers when off | ✅ Implemented (no recorded model evaluations yet) | `apps/api/ai/`, [guide](./docs/ai.md) |
+| **AI features**: ask in plain English (LogforgeQL drafts), cited alert and case triage summaries, explain this event, pipeline drafts from sample logs checked by simulation; each works with AI off (rule-based, template or heuristic) | ✅ Implemented (fallbacks evaluated; model evaluations not recorded yet) | `apps/api/ai/`, [guide](./docs/ai.md#features-phase-9) |
+| **AI investigation and authoring**: investigation copilot (approved read-only searches, cited timeline, root-cause candidates, reversible pins), detection rules drafted with fixtures and gated by the fixture gate and a backtest, cited case reports, grounded RCA; each works with AI off | ✅ Implemented (fallbacks evaluated; model evaluations not recorded yet) | `apps/api/ai/`, [guide](./docs/ai.md#investigation-and-authoring-phase-10) |
+| **Entity analytics (UEBA)**: users, hosts, addresses, services and cloud accounts with first/last seen and relationships; risk scores (decay, rarity, ATT&CK progression across linked entities, intel, anomalies) with their factors; behaviour baselines and peer groups; log pattern clustering (`\| patterns`, new and rare patterns, alerting through saved searches) | ✅ Implemented | `apps/api/entities.py`, `entity_risk.py`, `log_patterns.py`, [guide](./docs/entities.md) |
+| **Storage tiers and retention**: hot (local disk), warm (S3-backed ClickHouse volume) and cold (Parquet archives) tiers; per-tenant retention per data type, archived and verified before deletion; archive search with the same query language; rehydration; ingest and storage cost per tenant with projections | ✅ Implemented | `apps/api/storage_tiers.py`, `tier_manager.py`, `storage_costs.py`, [guide](./docs/storage.md) |
+| **Response automation**: integrations (Slack, Teams, PagerDuty, Opsgenie, email, Jira, GitHub, webhooks, containment through your own automation) with sealed secrets; YAML playbooks on alerts and cases (enrich, notify, ticket, search, approval), containment only after a person approves; tickets that follow their case both ways; SOC and compliance-evidence (SOC 2, ISO 27001) reports as PDF or CSV, ATT&CK Navigator export, scheduled email | ✅ Implemented | `apps/api/integrations/`, `playbooks/`, `reports.py`, [guide](./docs/response.md) |
+| **Enterprise access**: OIDC single sign-on per tenant (PKCE, groups to roles, accounts created on first sign-in); SCIM 2.0 provisioning; custom roles with extra permissions and data scopes (which services' logs a user reads, enforced by ClickHouse); password reset, invitations and email verification by email | ✅ Implemented (no SAML yet) | `apps/api/sso/`, `scim/`, `custom_roles.py`, `data_scope.py`, [guide](./docs/enterprise.md) |
+| **Supply chain and self-monitoring**: dependency audits with a reviewed allowlist, image scans and SBOMs in CI; signed releases (cosign); a threat model; Prometheus and Grafana for Logforge's own metrics | ✅ Implemented (release workflow not run yet) | [security](./docs/security.md), [self-monitoring](./docs/deployment.md#self-monitoring) |
+| Alerting: threshold, pattern, anomaly and saved-search rules | ✅ Implemented | `apps/api/alert_engine.py` |
+| Notifications: webhook, Slack, email, PagerDuty, Teams, Discord | ✅ Implemented (off by default) | `apps/api/services/notification_service.py` |
+| Sigma detection engine: ~300 fixture-verified rules (vendored SigmaHQ + Logforge's own `packages/rules/`) | ✅ Implemented | `apps/api/sigma_engine.py`, `apps/api/content/rules/`, `packages/rules/` |
+| Correlation rules: thresholds, distinct counts, sums and sequences per entity, windowed across batches | ✅ Implemented | `apps/api/correlation.py`, `packages/rules/correlations/` |
+| Rule backtesting over stored logs (7 days / 100 M events in 20–27 s) | ✅ Implemented | `apps/api/backtest.py`, [benchmarks](./docs/benchmarks/backtest.md) |
+| Detection tuning: exclusions, throttles, suggestions from false positives | ✅ Implemented | `apps/api/detection_tuning.py` |
+| Detection-as-code: sync rules from git through the gate, YAML export | ✅ Implemented | `apps/api/detection_as_code.py`, [guide](./docs/detection-as-code.md) |
+| Cases: automatic grouping of alerts, timeline, evidence, merge/split, SLA metrics, audit export | ✅ Implemented | `apps/api/cases.py`, `apps/api/routers/cases_api.py`, [guide](./docs/cases.md) |
+| Anomaly detection and forecasting (z-score / EWMA) | ✅ Implemented | `apps/api/services/anomaly_detector.py`, `predictive_analytics_service.py` |
+| Multi-tenancy, roles, API keys, quotas, subscription tiers | ✅ Implemented | `tenant_api.py`, `authn_authz_middleware.py`, `config/pricing.yml` |
+| Server-sent event streams (metrics, alerts, security, …) | ✅ Implemented | `apps/api/routers/streaming_api.py` |
+| Live log tail (`/v1/stream/logs`) | ✅ Implemented | `apps/api/routers/streaming_api.py` |
+| MITRE ATT&CK coverage (`/v1/security/mitre-coverage`), shown on the SIEM page | ✅ Implemented | `apps/api/routers/security_api.py` |
+| Threat intel and enrichment: abuse.ch, OTX, MISP, STIX and CSV feeds; ingest-time matching; retro-hunting; GeoIP/ASN, asset and user lookups | ✅ Implemented | `apps/api/threat_feeds.py`, `apps/api/ingest_enrichment.py`, [guide](./docs/threat-intel.md) |
+| Ingest pipelines: 29 processors (grok, kv, json, CEF, LEEF, date, mask, hash, script, ...), routing by service/condition/header, test against samples, versioned, dead-letter queue with replay; nginx, syslog, CEF and text are built-in pipelines | ✅ Implemented | `apps/api/pipelines.py`, `apps/api/pipeline_processors.py`, [guide](./docs/pipelines.md) |
+| Common schema (OCSF 1.3 with OpenTelemetry names): schema-on-read `ocsf.*` fields in rules and queries; Linux auth, Windows Security and Okta mapped; search-time `rex` / `parse` / `json`; field catalogue and explorer | ✅ Implemented | `apps/api/ocsf_schema.py`, `apps/api/field_catalogue.py`, [guide](./docs/schema.md) |
+| Legacy root-cause engine behind `/v1/ai/investigate` and `/v1/ai/analyze-incident` (superseded by the grounded RCA above) | 🟡 Partly placeholder | `apps/api/services/rca_engine.py` |
+| Legacy `/v1/ai/*` query and recommendation endpoints (superseded by the AI features above) | 🧪 Keyword templates and canned output | `apps/api/services/ai_service.py` |
+| Billing | 🟡 Usage metering and invoices computed, no payment provider | `apps/api/routers/usage_api.py` |
+| Tenant web UI (Next.js) | ✅ Screens are wired to the API | `apps/ui/` |
+| Platform admin UI (Next.js) | 🟡 Tenants, users, usage and audit work; billing, features and support pages are placeholders | `apps/admin-ui/` |
 
 ---
 
@@ -276,7 +293,7 @@ Each endpoint is mapped to a permission such as `logs:write:tenant` in `apps/api
 
 ## API reference
 
-The API has **294 paths (339 operations)**. The OpenAPI 3.1 spec is generated from the code and committed in two equivalent forms:
+The API has **396 paths (475 operations)**. The OpenAPI 3.1 spec is generated from the code and committed in two equivalent forms:
 
 - **[`docs/api/openapi.yaml`](./docs/api/openapi.yaml)** and **[`docs/api/openapi.json`](./docs/api/openapi.json)**. Import either into Postman, Insomnia or Swagger Editor, or generate a client with `openapi-generator`. GitHub displays these files as source rather than as rendered API docs.
 - **Hosted docs:** once GitHub Pages is enabled, the [Publish docs](./.github/workflows/pages.yml) workflow builds the documentation site at `https://miteshpant.github.io/Logforge/` (MkDocs, from `docs/`), with the Redoc API reference at `/api/` and both spec files alongside it.
@@ -307,8 +324,8 @@ apps/
     events/           Kafka publishers, consumers, handlers
     config/           Field mappings, topics (events.yml), pricing, quotas, MITRE catalogue
     content/rules/    Vendored SigmaHQ detection rules (DRL 1.1)
-  ui/                 Tenant web UI (Next.js 14)
-  admin-ui/           Platform admin UI (Next.js 14)
+  ui/                 Tenant web UI (Next.js 15)
+  admin-ui/           Platform admin UI (Next.js 15)
 packages/
   rules/              Logforge's own Sigma rules, correlation bundles and content pack (loaded at startup)
   packs/              Source content packs: pipelines, rules, searches, dashboards, samples (docs/packs.md)

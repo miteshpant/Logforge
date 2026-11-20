@@ -4,8 +4,10 @@ Logforge can answer questions about a tenant's own logs, alerts, cases and
 threat intelligence with a language model, and **cites every source**.
 AI is **off by default**: a deployment has to enable it and offer a
 provider, and each tenant has to opt in. With AI off, questions get the
-existing rule-based answer, as before, for those allowed to use it
-(`/v1/ai/query`, tenant admins); others are told AI is off.
+rule-based answer. It checks the permission each kind of question needs
+(`logs:read`, `alerts:read`, `security:read`, `observability:read` for
+latency), binds every value as a query parameter, and isn't available to
+users whose role carries a data scope (the tables it reads aren't scoped).
 
 ![AI answer with citations](images/ai-answer.png)
 
@@ -99,7 +101,10 @@ every step ──▶ audit log (what was actually sent, after redaction)
     `api_key`, `ssn` and others from `ai.yml`, plus fields a tenant adds.
     Matches are case-insensitive, on any word of the key (`db_password`,
     `password_hash`, `sessionid`), or the end of a dotted path
-    (`attrs.customer_email`, at any depth).
+    (`attrs.customer_email`, at any depth). A query that names a field the
+    tenant added, or one the asker's role masks, is refused by `run_query`,
+    since a renamed value (`| eval v = attrs.secret`) would no longer match
+    by name.
   * **Secret-looking values anywhere in text:** `password=`, `"password":`,
     `access_token=` and "password is ..." pairs, bearer and basic
     credentials, cookies, credentials in URLs, private keys (even cut
@@ -130,8 +135,10 @@ every step ──▶ audit log (what was actually sent, after redaction)
     are capped at 50 rows and 30,000 characters.
   * **Concurrency:** before every model call the request's usage is written
     and the month's usage re-read, so parallel requests can overshoot the
-    budget by at most one model call each. The rate limit is counted per
-    API process.
+    budget by at most one model call each. The rate limit is one counter
+    per tenant and minute in Redis, shared by every API replica (fixed
+    one-minute windows, so a burst can straddle two). If Redis can't be
+    reached, each process counts on its own and logs a warning.
 
 ## Evaluation
 

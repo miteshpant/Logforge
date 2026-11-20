@@ -7,6 +7,9 @@
 #     unit: Expected unit (ms, %, count, req/s, etc.)
 #     category: Category for grouping (apm, infrastructure, custom)
 #     variations: List of accepted input names that map to this standard name
+#     conversions: (optional) factor to multiply a variation's value by when it
+#       arrives without a unit (e.g. an OpenTelemetry 0-1 ratio -> %). With a
+#       unit, the value is converted from that unit instead (metric_normalizer.py).
 #
 # Custom metrics: Any metric name starting with "custom." passes through unchanged
 
@@ -35,6 +38,12 @@ response_time:
     - service_latency
     - round_trip_time
     - rtt
+    - http.server.request.duration
+    - http.client.request.duration
+    - http.server.duration
+  conversions:
+    http.server.request.duration: 1000  # OpenTelemetry semconv: seconds
+    http.client.request.duration: 1000
 
 throughput:
   description: "Request throughput / requests per second"
@@ -95,6 +104,12 @@ cpu_usage:
     - process_cpu
     - cpu_load
     - processor_usage
+    - process.cpu.utilization
+    - container.cpu.utilization
+  conversions:
+    system.cpu.utilization: 100  # OpenTelemetry: a 0-1 ratio
+    process.cpu.utilization: 100
+    container.cpu.utilization: 100
 
 memory_usage:
   description: "Memory utilization percentage"
@@ -113,6 +128,10 @@ memory_usage:
     - process_memory
     - ram_usage
     - heap_usage
+    - process.memory.utilization
+  conversions:
+    system.memory.utilization: 100  # OpenTelemetry: a 0-1 ratio
+    process.memory.utilization: 100
 
 disk_usage:
   description: "Disk utilization percentage"

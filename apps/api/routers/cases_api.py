@@ -18,6 +18,7 @@ from authn_authz_middleware import get_current_user
 from cases import CaseError
 from error_handling import internal_error
 from models import User
+import user_inbox
 
 router = APIRouter(prefix="/v1/security/cases", tags=["cases"])
 
@@ -26,6 +27,12 @@ def _case_service():
     from services.case_service import CaseService
 
     return CaseService()
+
+
+async def _notify(tenant_id: str, build) -> None:
+    from dependencies import get_clickhouse_client
+
+    await user_inbox.notify(get_clickhouse_client(), tenant_id, build)
 
 
 def _actor(user: Any) -> str:
@@ -169,6 +176,34 @@ async def case_metrics(days: int = Query(30, ge=1, le=365), customer_id: str = H
     return await _run(_case_service().metrics(customer_id, days))
 
 
+class SlaBody(BaseModel):
+    acknowledge: Dict[str, int] = Field(default_factory=dict)
+    resolve: Dict[str, int] = Field(default_factory=dict)
+
+
+def _sla_view(overrides: Dict[str, Any]) -> Dict[str, Any]:
+    from case_metrics import SLA_TARGETS, sla_targets
+
+    minutes = lambda t: {k: {s: int(v.total_seconds() // 60) for s, v in per.items()} for k, per in t.items()}  # noqa: E731
+    return {"targets_minutes": minutes(sla_targets(overrides)), "defaults_minutes": minutes(SLA_TARGETS),
+            "overrides": overrides}
+
+
+@router.get("/sla")
+async def get_sla_targets(customer_id: str = Header(..., alias="X-Customer-ID"),
+                          current_user: User = Depends(get_current_user)) -> Dict[str, Any]:
+    """This tenant's SLA targets (minutes to acknowledge and resolve per severity)."""
+    return _sla_view(await _run(_case_service().sla_overrides(customer_id)))
+
+
+@router.put("/sla")
+async def put_sla_targets(body: SlaBody, customer_id: str = Header(..., alias="X-Customer-ID"),
+                          current_user: User = Depends(get_current_user)) -> Dict[str, Any]:
+    """Override the default targets; severities left out keep the default. {} resets."""
+    overrides = {k: v for k, v in body.model_dump().items() if v}
+    return _sla_view(await _run(_case_service().set_sla_overrides(customer_id, overrides, _actor(current_user))))
+
+
 @router.get("/audit/export")
 async def export_case_audit(
     start: Optional[datetime] = None,
@@ -221,15 +256,19 @@ async def update_case(case_id: str, body: CaseUpdate, customer_id: str = Header(
 @router.post("/{case_id}/assign")
 async def assign_case(case_id: str, body: Assign, customer_id: str = Header(..., alias="X-Customer-ID"),
                       current_user: User = Depends(get_current_user)) -> Dict[str, Any]:
-    return _dict(await _run(_case_service().act(customer_id, case_id, "assign", _actor(current_user),
-                                                assignee=body.assignee)))
+    actor = _actor(current_user)
+    case = await _run(_case_service().act(customer_id, case_id, "assign", actor, assignee=body.assignee))
+    await _notify(customer_id, lambda members: user_inbox.assignment_notice(case, actor, members))
+    return _dict(case)
 
 
 @router.post("/{case_id}/comments")
 async def comment_case(case_id: str, body: Comment, customer_id: str = Header(..., alias="X-Customer-ID"),
                        current_user: User = Depends(get_current_user)) -> Dict[str, Any]:
-    return _dict(await _run(_case_service().act(customer_id, case_id, "comment", _actor(current_user),
-                                                text=body.text)))
+    actor = _actor(current_user)
+    case = await _run(_case_service().act(customer_id, case_id, "comment", actor, text=body.text))
+    await _notify(customer_id, lambda members: user_inbox.mention_notices(case, body.text, actor, members))
+    return _dict(case)
 
 
 @router.post("/{case_id}/status")

@@ -61,6 +61,40 @@ def test_queries_see_only_the_scope(client, tenant):
     assert services(client, tenant)["billing"] == 1  # outside the scope again
 
 
+def test_traces_metrics_events_and_alerts_follow_the_scope(client, tenant):
+    from data_scope import DataScope, scoped
+
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    client.insert("traces_mt", [[str(uuid.uuid4()), "t", f"s{i}", None, "op", svc, now, now, 5, "server", "ok", None,
+                                 "{}", "[]", "[]", "{}", tenant, now] for i, svc in enumerate(["auth", "billing"])],
+                  column_names=["id", "trace_id", "span_id", "parent_span_id", "operation_name", "service_name",
+                                "start_time", "end_time", "duration_ms", "kind", "status", "status_message",
+                                "attributes", "events", "links", "resource", "customer_id", "ingested_at"])
+    client.insert("security_events_mt", [[str(uuid.uuid4()), "detection", "r", "high", "new", "t", "d",
+                                          json.dumps({"normalized_log": {"service": svc}}), "{}", [], "", "", "[]",
+                                          now, now, tenant] for svc in ["auth", "billing", ""]],
+                  column_names=["id", "event_type", "rule_id", "severity", "status", "title", "description",
+                                "raw_log_data", "enrichment_data", "mitre_techniques", "assigned_to",
+                                "investigation_notes", "artifacts", "created_at", "updated_at", "customer_id"])
+    client.insert("alert_instances_mt", [[str(uuid.uuid4()), "r", "triggered", now, None, None, None, "{}", "{}", 0,
+                                          None, tenant]],
+                  column_names=["id", "rule_id", "status", "triggered_at", "resolved_at", "acknowledged_by",
+                                "acknowledged_at", "trigger_data", "resolution_data", "escalation_level",
+                                "next_escalation", "customer_id"])
+
+    def count(table):
+        return client.query(f"SELECT count() FROM {table} WHERE customer_id = {{t:String}}",
+                            parameters={"t": tenant}).result_rows[0][0]
+
+    assert (count("traces_mt"), count("security_events_mt"), count("alert_instances_mt")) == (2, 3, 1)
+    with scoped(DataScope(services=("auth",))):
+        assert (count("traces_mt"), count("security_events_mt"), count("alert_instances_mt")) == (1, 1, 0)
+        spans = client.query("SELECT service_name FROM (SELECT * FROM traces_mt WHERE customer_id = {t:String}) "
+                             "WHERE span_id IN (SELECT span_id FROM traces_mt)",
+                             parameters={"t": tenant}).result_rows  # in subqueries too
+        assert spans == [("auth",)]
+
+
 def test_the_custom_role_store(client):
     from custom_roles import CustomRole, CustomRoleStore
 
