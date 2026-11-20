@@ -136,84 +136,6 @@ class EnterpriseRouterTestSuite(BaseTestSuite):
             print(f"❌ Failed to setup enterprise subscription: {e}")
             raise
 
-    async def test_auth_oidc_configuration(self):
-        """Test POST /v1/enterprise/auth/oidc/configure - Configure OIDC provider"""
-        print("\n🧪 Testing OIDC Configuration...")
-
-        try:
-            # Since this test fails with subscription_not_found, let's check if this
-            # endpoint actually requires subscription or if it's a general error
-
-            # OIDC configuration request
-            oidc_config = {
-                "provider_name": f"Test OIDC Provider {self.test_id}",
-                "provider_type": "auth0",
-                "client_id": f"test_client_{self.test_id}",
-                "client_secret": "test_secret_123",
-                "domain": "test-domain.auth0.com",
-                "scopes": ["openid", "profile", "email"],
-                "enabled": True
-            }
-
-            # Send OIDC configuration request
-            response = await self.make_authenticated_request(
-                "POST",
-                "/v1/enterprise/auth/oidc/configure",
-                json=oidc_config
-            )
-
-            # Validate API response
-            assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
-
-            response_data = response.json()
-
-            # Validate response structure
-            required_fields = ["provider_id", "status", "message", "test_url"]
-            for field in required_fields:
-                assert field in response_data, f"Missing required field: {field}"
-
-            assert response_data["status"] == "configured", "OIDC configuration should be successful"
-            assert "test_client_" in response_data["test_url"], "Test URL should contain client ID"
-
-            print(f"   ✅ OIDC configuration successful: {response_data['provider_id']}")
-            self.test_results["oidc_configuration"] = "PASS"
-
-        except Exception as e:
-            print(f"   ❌ OIDC configuration test error: {e}")
-            self.test_results["oidc_configuration"] = f"ERROR: {e}"
-
-    async def test_auth_providers_list(self):
-        """Test GET /v1/enterprise/auth/providers - List authentication providers"""
-        print("\n🧪 Testing Authentication Providers List...")
-
-        try:
-            # List authentication providers
-            response = await self.make_authenticated_request(
-                "GET",
-                "/v1/enterprise/auth/providers"
-            )
-
-            # Validate API response
-            assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
-
-            response_data = response.json()
-
-            # Validate response structure
-            required_fields = ["providers", "total", "enabled_count"]
-            for field in required_fields:
-                assert field in response_data, f"Missing required field: {field}"
-
-            assert isinstance(response_data["providers"], list), "Providers should be a list"
-            assert isinstance(response_data["total"], int), "Total should be an integer"
-            assert isinstance(response_data["enabled_count"], int), "Enabled count should be an integer"
-
-            print(f"   ✅ Auth providers list successful: {response_data['total']} providers found")
-            self.test_results["auth_providers_list"] = "PASS"
-
-        except Exception as e:
-            print(f"   ❌ Auth providers list test error: {e}")
-            self.test_results["auth_providers_list"] = f"ERROR: {e}"
-
     async def test_api_key_management(self):
         """Test API key CRUD operations"""
         print("\n🧪 Testing API Key Management...")
@@ -279,112 +201,6 @@ class EnterpriseRouterTestSuite(BaseTestSuite):
         except Exception as e:
             print(f"   ❌ API key management test error: {e}")
             self.test_results["api_key_management"] = f"ERROR: {e}"
-
-    async def test_mfa_setup(self):
-        """Test POST /v1/enterprise/auth/mfa/setup - Setup MFA"""
-        print("\n🧪 Testing MFA Setup...")
-
-        try:
-            # MFA setup request
-            mfa_request = {
-                "user_id": f"test-user-{self.test_id}",
-                "mfa_type": "totp",
-                "backup_codes": True,
-                "phone_number": "+1234567890"
-            }
-
-            response = await self.make_authenticated_request(
-                "POST",
-                "/v1/enterprise/auth/mfa/setup",
-                json=mfa_request
-            )
-
-            # Validate API response
-            assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
-
-            response_data = response.json()
-            # Enterprise service should return MFA setup result
-            assert "status" in response_data or "message" in response_data
-
-            print(f"   ✅ MFA setup successful")
-            self.test_results["mfa_setup"] = "PASS"
-
-        except Exception as e:
-            print(f"   ❌ MFA setup test error: {e}")
-            self.test_results["mfa_setup"] = f"ERROR: {e}"
-
-    async def test_rbac_operations(self):
-        """Test RBAC and permissions endpoints"""
-        print("\n🧪 Testing RBAC Operations...")
-
-        try:
-            # 1. List roles
-            roles_response = await self.make_authenticated_request(
-                "GET",
-                "/v1/enterprise/rbac/roles"
-            )
-
-            assert roles_response.status_code == 200, f"Expected 200, got {roles_response.status_code}: {roles_response.text}"
-            roles_data = roles_response.json()
-
-            required_fields = ["platform_roles", "tenant_roles", "total_roles"]
-            for field in required_fields:
-                assert field in roles_data, f"Missing required field: {field}"
-
-            # 2. Create custom role
-            custom_role_request = {
-                "name": f"Test Custom Role {self.test_id}",
-                "description": "Custom role for testing",
-                "permissions": ["logs:read", "dashboards:read"],
-                "inherits_from": "viewer"
-            }
-
-            create_role_response = await self.make_authenticated_request(
-                "POST",
-                "/v1/enterprise/rbac/roles",
-                json=custom_role_request
-            )
-
-            assert create_role_response.status_code == 200, f"Expected 200, got {create_role_response.status_code}: {create_role_response.text}"
-            create_role_data = create_role_response.json()
-            assert create_role_data["status"] == "created"
-
-            # 3. Assign user roles (use the test admin user ID)
-            test_user_id = f"test-admin-{self.test_id}"
-            user_role_assignment = {
-                "roles": ["security_analyst", "viewer"],
-                "effective_date": "2024-01-01T00:00:00Z"
-            }
-
-            assign_response = await self.make_authenticated_request(
-                "PUT",
-                f"/v1/enterprise/rbac/users/{test_user_id}/roles",
-                json=user_role_assignment
-            )
-
-            assert assign_response.status_code == 200, f"Expected 200, got {assign_response.status_code}: {assign_response.text}"
-            assign_data = assign_response.json()
-            assert assign_data["status"] == "assigned"
-
-            # 4. Get user permissions
-            permissions_response = await self.make_authenticated_request(
-                "GET",
-                "/v1/enterprise/rbac/permissions"
-            )
-
-            assert permissions_response.status_code == 200, f"Expected 200, got {permissions_response.status_code}: {permissions_response.text}"
-            permissions_data = permissions_response.json()
-
-            required_fields = ["user_id", "effective_permissions", "roles", "scope"]
-            for field in required_fields:
-                assert field in permissions_data, f"Missing required field: {field}"
-
-            print(f"   ✅ RBAC operations successful: Roles listed, custom role created, permissions assigned")
-            self.test_results["rbac_operations"] = "PASS"
-
-        except Exception as e:
-            print(f"   ❌ RBAC operations test error: {e}")
-            self.test_results["rbac_operations"] = f"ERROR: {e}"
 
     async def test_tenant_management(self):
         """Test tenant management operations"""
@@ -534,69 +350,6 @@ class EnterpriseRouterTestSuite(BaseTestSuite):
             print(f"   ❌ Compliance operations test error: {e}")
             self.test_results["compliance_operations"] = f"ERROR: {e}"
 
-    async def test_enterprise_integrations(self):
-        """Test enterprise integrations management"""
-        print("\n🧪 Testing Enterprise Integrations...")
-
-        try:
-            # 1. List available integrations
-            list_response = await self.make_authenticated_request(
-                "GET",
-                "/v1/enterprise/integrations"
-            )
-
-            assert list_response.status_code == 200, f"Expected 200, got {list_response.status_code}: {list_response.text}"
-            list_data = list_response.json()
-
-            required_fields = ["configured_integrations", "available_integrations", "total_configured", "enabled_count"]
-            for field in required_fields:
-                assert field in list_data, f"Missing required field: {field}"
-
-            # 2. Configure Slack integration
-            slack_config = {
-                "name": f"Test Slack Integration {self.test_id}",
-                "webhook_url": "https://hooks.slack.com/services/test/webhook",
-                "channel": "#alerts",
-                "bot_token": "xoxb-test-token",
-                "enabled": True,
-                "notification_types": ["alerts", "incidents"]
-            }
-
-            config_response = await self.make_authenticated_request(
-                "POST",
-                "/v1/enterprise/integrations/slack/configure",
-                json=slack_config
-            )
-
-            assert config_response.status_code == 200, f"Expected 200, got {config_response.status_code}: {config_response.text}"
-            config_data = config_response.json()
-
-            required_fields = ["integration_id", "status", "message", "health_check"]
-            for field in required_fields:
-                assert field in config_data, f"Missing required field: {field}"
-
-            assert config_data["status"] == "configured"
-
-            # 3. Check integration health
-            health_response = await self.make_authenticated_request(
-                "GET",
-                "/v1/enterprise/integrations/slack/status"
-            )
-
-            assert health_response.status_code == 200, f"Expected 200, got {health_response.status_code}: {health_response.text}"
-            health_data = health_response.json()
-
-            required_fields = ["integration_type", "health_status", "last_check", "check_details", "configuration_valid"]
-            for field in required_fields:
-                assert field in health_data, f"Missing required field: {field}"
-
-            print(f"   ✅ Enterprise integrations successful: Listed, configured Slack, checked health")
-            self.test_results["enterprise_integrations"] = "PASS"
-
-        except Exception as e:
-            print(f"   ❌ Enterprise integrations test error: {e}")
-            self.test_results["enterprise_integrations"] = f"ERROR: {e}"
-
     async def test_usage_billing(self):
         """Test usage and billing analytics"""
         print("\n🧪 Testing Usage & Billing Analytics...")
@@ -706,6 +459,25 @@ class EnterpriseRouterTestSuite(BaseTestSuite):
             print(f"   ❌ System health & administration test error: {e}")
             self.test_results["system_health_administration"] = f"ERROR: {e}"
 
+    async def test_retired_routes(self):
+        """The legacy RBAC, OIDC-config, MFA-setup and integrations routes answer 410 with their successor."""
+        print("\n🧪 Testing retired enterprise routes...")
+        retired = [("POST", "/v1/enterprise/auth/oidc/configure", "/v1/sso/providers"),
+                   ("POST", "/v1/enterprise/auth/mfa/setup", "/v1/auth/mfa"),
+                   ("GET", "/v1/enterprise/rbac/roles", "/v1/roles/custom"),
+                   ("GET", "/v1/enterprise/integrations", "/v1/integrations")]
+        try:
+            for method, path, successor in retired:
+                kwargs = {"json": {}} if method == "POST" else {}
+                response = await self.make_authenticated_request(method, path, **kwargs)
+                assert response.status_code == 410, f"{path}: expected 410, got {response.status_code}: {response.text}"
+                assert successor in response.json()["detail"], f"{path}: {response.text}"
+            self.test_results["retired_routes"] = "PASS"
+        except Exception as e:
+            print(f"   ❌ Retired routes test error: {e}")
+            self.test_results["retired_routes"] = f"ERROR: {e}"
+            raise
+
     async def test_enterprise_health_endpoint(self):
         """Test GET /v1/enterprise/health - Enterprise module health check"""
         print("\n🧪 Testing Enterprise Health Endpoint...")
@@ -723,7 +495,7 @@ class EnterpriseRouterTestSuite(BaseTestSuite):
 
             assert health_data["status"] == "healthy", "Enterprise module should be healthy"
             assert health_data["module"] == "enterprise", "Module should be enterprise"
-            assert health_data["endpoints_count"] == 22, "Should have 22 enterprise endpoints"
+            assert health_data["endpoints_count"] == 16, "Should have 16 enterprise endpoints (legacy ones retired)"
             assert isinstance(health_data["features"], list), "Features should be a list"
 
             print(f"   ✅ Enterprise health endpoint successful: {health_data['status']} with {health_data['endpoints_count']} endpoints")
@@ -818,20 +590,6 @@ class EnterpriseRouterTestSuite(BaseTestSuite):
         print("\n🧪 Testing Error Handling...")
 
         try:
-            # Test invalid OIDC configuration (missing required fields)
-            invalid_oidc = {
-                "provider_name": "Test Provider",
-                # Missing client_id and domain
-                "enabled": True
-            }
-
-            oidc_response = await self.make_authenticated_request(
-                "POST",
-                "/v1/enterprise/auth/oidc/configure",
-                json=invalid_oidc
-            )
-            assert oidc_response.status_code in [400, 422, 500], "Invalid OIDC config should return error"
-
             # Test invalid API key permissions
             invalid_api_key = {
                 "name": "Invalid Key",
@@ -858,14 +616,6 @@ class EnterpriseRouterTestSuite(BaseTestSuite):
                 json=invalid_tenant
             )
             # Note: Service might accept any tier value, so this might not fail
-
-            # Test non-existent integration type
-            invalid_integration_response = await self.make_authenticated_request(
-                "POST",
-                "/v1/enterprise/integrations/invalid_type/configure",
-                json={"config": "test"}
-            )
-            assert invalid_integration_response.status_code in [400, 422, 500], "Invalid integration type should return error"
 
             # Test invalid compliance framework
             invalid_compliance_response = await self.make_authenticated_request(
@@ -918,17 +668,13 @@ class EnterpriseRouterTestSuite(BaseTestSuite):
 
         # Run all tests
         test_methods = [
-            self.test_auth_oidc_configuration,
-            self.test_auth_providers_list,
             self.test_api_key_management,
-            self.test_mfa_setup,
-            self.test_rbac_operations,
             self.test_tenant_management,
             self.test_compliance_operations,
-            self.test_enterprise_integrations,
             self.test_usage_billing,
             self.test_system_health_administration,
             self.test_enterprise_health_endpoint,
+            self.test_retired_routes,
             self.test_multi_tenant_isolation,
             self.test_error_handling
         ]

@@ -100,9 +100,9 @@ markers).
     ([self-monitoring](./deployment.md#self-monitoring)).
   - **Run the release workflow** on the first tag, and check `cosign verify`.
   - **Admin UI** billing, features and support pages.
-  - **Retire the Enterprise RBAC and OIDC-config routes**
-    (`/v1/enterprise/rbac/*`, `/v1/enterprise/auth/oidc/configure`) in favour
-    of `/v1/roles/custom` and `/v1/sso/providers`.
+  - ~~**Retire the Enterprise RBAC and OIDC-config routes**~~: done. They,
+    `/v1/enterprise/auth/providers` and `/v1/enterprise/auth/mfa/setup` answer
+    410 Gone naming `/v1/roles/custom`, `/v1/sso/providers` or `/v1/auth/mfa`.
 - **Response follow-ups from Phase 13** ([response automation](./response.md)):
   - **Compliance reports** (the Phase 13 deliverable not done): evidence
     for SOC 2 and ISO 27001 controls from the audit log, retention and
@@ -116,9 +116,10 @@ markers).
   - **Branches and parallel steps in playbooks**, and a run history kept
     longer than 180 days for audits.
   - **A Unicode font in the PDF report** (today Latin-1 only).
-  - **Retire the older `/v1/enterprise/integrations` API** and its tables
-    (`integrations_mt` in `init_simple.sql`, `enterprise_integrations_mt`).
-    The Settings → Integrations page no longer uses them.
+  - ~~**Retire the older `/v1/enterprise/integrations` API**~~: done; it answers
+    410 Gone naming `/v1/integrations`. Its tables (`integrations_mt`,
+    `enterprise_integrations_mt`) are kept: dropping them deletes data, so it
+    is left to an explicit migration once deployments have checked them.
 - **Storage and scale follow-ups from Phase 12** ([storage](./storage.md), [deployment](./deployment.md)):
   - **Ingest throughput, for the cost target:**
     - measure per-replica throughput on dedicated nodes;
