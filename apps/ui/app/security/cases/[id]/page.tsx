@@ -177,7 +177,7 @@ export default function CaseDetailPage() {
             <h2 className="text-sm font-semibold text-white flex items-center gap-2"><MessageSquare className="w-4 h-4" /> Timeline</h2>
             <div className="space-y-2">
               <textarea data-testid="comment-input" value={comment} onChange={e => setComment(e.target.value)} rows={3}
-                placeholder="Add a note. @name mentions are recorded."
+                placeholder="Add a note. @name notifies that person."
                 className="w-full px-3 py-2 bg-slate-900 border border-white/10 rounded-lg text-white text-sm" />
               <button data-testid="comment-post" disabled={busy || !comment.trim()}
                 onClick={() => run(() => caseAction(id, 'comments', { text: comment.trim() }), () => setComment(''))}
@@ -279,7 +279,7 @@ export default function CaseDetailPage() {
                 <h2 className="text-sm font-semibold text-white">Merge another case into this one</h2>
                 <div className="flex gap-2">
                   <select value={mergeId} onChange={e => setMergeId(e.target.value)} data-testid="merge-pick"
-                    className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm text-white">
+                    className="flex-1 min-w-0 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm text-white">
                     <option value="">Choose an open case…</option>
                     {others.map(o => <option key={o.id} value={o.id}>{o.title} ({o.severity}, {o.alert_ids.length} alerts)</option>)}
                   </select>

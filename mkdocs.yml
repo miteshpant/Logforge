@@ -55,6 +55,7 @@ nav:
   - Deployment and backups: deployment.md
   - Response automation: response.md
   - Enterprise access: enterprise.md
+  - Platform administration: admin.md
   - Security: security.md
   # Static Redoc page (docs/api/index.html); nav entries must be pages or URLs.
   - API reference: https://miteshpant.github.io/Logforge/api/

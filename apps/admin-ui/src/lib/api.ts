@@ -62,53 +62,6 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
   }
 }
 
-/**
- * Rate card -- the single source of truth for pricing (LF-257).
- *
- * Pricing is base fee + metered usage (per GB ingested, per GB/month stored,
- * per 1000 queries and API calls). The console previously carried four hardcoded
- * price tables that disagreed with each other and with the server, and rendered
- * a flat per-tier figure as "Monthly Cost" -- which misstates the model as well
- * as the number.
- */
-export interface RateCardTier {
-  base_fee: number
-  description?: string
-  discount_percent?: number
-}
-
-export interface RateCard {
-  pricing_version: string
-  currency: string
-  last_updated?: string
-  tiers: Record<string, RateCardTier>
-  feature_pricing?: Record<string, { unit: string; base_price: number; description?: string }>
-  minimum_charge?: number
-}
-
-export async function fetchRateCard(): Promise<RateCard> {
-  return apiRequest('/v1/billing/rate-card')
-}
-
-/**
- * Format a tier's base fee for display.
- *
- * Returns null when the rate card is unavailable or the tier is unknown, so
- * callers render an explicit "Unavailable" rather than inventing a number.
- * Never fall back to a literal price: a wrong price reaches a customer.
- */
-export function formatBaseFee(rateCard: RateCard | null, tier: string | undefined): string | null {
-  if (!rateCard || !tier) return null
-  const entry = rateCard.tiers?.[tier.toLowerCase()]
-  if (!entry || typeof entry.base_fee !== 'number') return null
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: rateCard.currency || 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(entry.base_fee)
-}
-
 export async function fetchTenants() {
   return apiRequest('/v1/tenants')
 }
@@ -150,90 +103,99 @@ export async function fetchCurrentUsage(tenantId: string) {
 }
 
 
+/** Bill one tenant for a month (YYYY-MM, default the current one); idempotent. */
 export async function generateInvoice(tenantId: string, month?: string) {
-  const queryParam = month ? `?month=${month}` : ''
-  return apiRequest(`/v1/billing/generate/${tenantId}${queryParam}`, {
+  return apiRequest(`/v1/tenants/${tenantId}/billing/generate`, {
     method: 'POST',
+    body: JSON.stringify({ billing_period: month || 'current', include_usage_details: false }),
   })
 }
 
-/**
- * Billing runs (LF-258).
- *
- * "Generate All Bills" used to be a `Promise.all` in the browser over whatever
- * tenants were on the page -- 50 of them, because `fetchTenants()` passed no
- * pagination argument and the API defaults to `page_size=50`. The month-end run
- * billed the first 50 and reported "Generated 50/50 bills successfully!".
- *
- * The browser now STARTS a run and watches it. Enumeration, concurrency and the
- * per-tenant record all live server-side, so closing the tab no longer aborts
- * month-end close.
- */
-
-export interface BillingRun {
-  run_id: string
-  billing_period: string
-  status: 'running' | 'completed' | 'completed_with_failures' | 'failed'
-  total_tenants: number
-  succeeded: number
-  already_existed: number
-  failed: number
-  actor_email?: string
-  reason?: string
-  started_at: string
-  finished_at: string | null
-  error_message?: string
-  /** True when a run with this idempotency key already existed. */
-  reused?: boolean
-}
-
-export interface BillingRunItem {
+/** Bills across tenants (newest first) and their totals per currency. */
+export interface AdminBill {
+  id: string
   tenant_id: string
   tenant_name: string
-  outcome: 'succeeded' | 'already_existed' | 'failed'
-  bill_id: string
+  billing_period: string
+  subscription_tier: string
   total_amount: number
   currency: string
-  error_message: string
+  status: string
+  generated_at: string
+  due_date: string | null
+  paid_at: string | null
 }
 
-export interface BillingRunDetail {
-  run: BillingRun
-  items?: BillingRunItem[]
-  /** Stated by the server so under-coverage is arithmetic, not observation. */
-  coverage: {
-    total_tenants: number
-    accounted_for: number
-    unaccounted: number
-    complete: boolean
-  }
+export async function fetchBills(period?: string): Promise<{ bills: AdminBill[]; totals: Record<string, number> }> {
+  return apiRequest(`/v1/admin/billing/bills?limit=2000${period ? `&period=${period}` : ''}`)
 }
 
-export async function startBillingRun(params: {
+/** Bill every active tenant for a month, server-side; tenants already billed keep their bill. */
+export interface BillingRunResult {
   billing_period: string
-  reason: string
-  idempotency_key?: string
-}): Promise<BillingRun> {
-  return apiRequest('/v1/admin/billing/runs', {
-    method: 'POST',
-    body: JSON.stringify(params),
+  tenants: number
+  generated: number
+  already_billed: number
+  failed: { tenant_id: string; tenant_name: string; error: string }[]
+}
+
+export async function runBilling(billingPeriod: string): Promise<BillingRunResult> {
+  return apiRequest('/v1/admin/billing/generate', { method: 'POST', body: JSON.stringify({ billing_period: billingPeriod }) })
+}
+
+export interface FeatureRate {
+  feature_name: string
+  pricing_model: string
+  base_rate: number
+  tier_rates: Record<string, number>
+  currency: string
+  effective_date: string
+  description: string
+}
+
+export async function fetchRates(): Promise<{ rates: FeatureRate[] }> {
+  return apiRequest('/v1/admin/rates')
+}
+
+export async function updateRate(featureName: string, baseRate: number) {
+  return apiRequest(`/v1/admin/rates/${encodeURIComponent(featureName)}`, {
+    method: 'PUT', body: JSON.stringify({ base_rate: baseRate }),
   })
 }
 
-export async function fetchBillingRun(
-  runId: string,
-  outcome?: 'succeeded' | 'already_existed' | 'failed'
-): Promise<BillingRunDetail> {
-  const query = outcome ? `?outcome=${encodeURIComponent(outcome)}` : ''
-  return apiRequest(`/v1/admin/billing/runs/${runId}${query}`)
+export interface FeatureMatrix {
+  tiers: string[]
+  bundles: Record<string, string[]>
+  categories: { name: string; features: { name: string; tiers: Record<string, boolean> }[] }[]
 }
 
-export async function fetchBillingRuns(limit = 20): Promise<{ runs: BillingRun[] }> {
-  return apiRequest(`/v1/admin/billing/runs?limit=${limit}`)
+export async function fetchFeatureMatrix(): Promise<FeatureMatrix> {
+  return apiRequest('/v1/admin/features/matrix')
 }
 
-export async function getBillingEstimate(tenantId: string) {
-  return apiRequest(`/v1/billing/estimate/${tenantId}`)
+export interface SupportTicket {
+  id: string
+  tenant_id: string
+  tenant_name?: string
+  subject: string
+  status: 'open' | 'answered' | 'closed'
+  priority: 'low' | 'normal' | 'high' | 'urgent'
+  created_by: string
+  created_at: string
+  updated_at: string
+  messages: { author: string; from: 'customer' | 'support'; text: string; at: string }[]
+}
+
+export async function fetchTickets(status?: string): Promise<{ tickets: SupportTicket[]; counts: Record<string, number> }> {
+  return apiRequest(`/v1/admin/support/tickets${status ? `?status=${status}` : ''}`)
+}
+
+export async function replyTicket(id: string, text: string): Promise<SupportTicket> {
+  return apiRequest(`/v1/admin/support/tickets/${id}/messages`, { method: 'POST', body: JSON.stringify({ text }) })
+}
+
+export async function updateTicket(id: string, change: { status?: string; priority?: string }): Promise<SupportTicket> {
+  return apiRequest(`/v1/admin/support/tickets/${id}`, { method: 'PUT', body: JSON.stringify(change) })
 }
 
 export async function exportUsageData(tenantId: string, format: string = 'csv') {
@@ -242,9 +204,21 @@ export async function exportUsageData(tenantId: string, format: string = 'csv') 
 
 
 
-export async function downloadBillPDF(billId: string) {
-  // This returns a blob, handled differently in the component
-  return fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7080'}/v1/billing/bills/${billId}/pdf`)
+/** Save a bill as PDF (GET /v1/admin/billing/bills/{id}/pdf). */
+export async function downloadBill(billId: string, filename?: string): Promise<void> {
+  const token = authService.getToken()
+  const response = await fetch(`${API_BASE_URL}/v1/admin/billing/bills/${encodeURIComponent(billId)}/pdf`, {
+    headers: { 'X-Customer-ID': 'platform', ...(token && { Authorization: `Bearer ${token}` }) },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`)
+  const url = window.URL.createObjectURL(await response.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename || `bill-${billId}.pdf`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  window.URL.revokeObjectURL(url)
 }
 
 // Admin Activity Log API Functions

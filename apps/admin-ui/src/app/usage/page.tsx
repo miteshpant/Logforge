@@ -13,6 +13,7 @@ import {
   fetchPlatformUsageStats,
   fetchCurrentUsage,
   generateInvoice,
+  runBilling,
   exportUsageData
 } from '@/lib/api'
 
@@ -258,34 +259,20 @@ export default function UsageAnalyticsPage() {
     }
   }
 
+  // One server-side run bills every active tenant (the page only lists the
+  // first page of tenants); tenants already billed this month keep their bill.
   const handleGenerateAllBills = async () => {
     try {
-      console.log('Generate all bills clicked, tenants count:', tenants.length)
-      setExportStatus('Generating bills for all tenants...')
-      
-      const billPromises = tenants.map(async (tenant) => {
-        try {
-          const invoice = await generateInvoice(tenant.tenant_id)
-          return { success: true, tenant: tenant.name, invoice }
-        } catch (error) {
-          console.error(`Failed to generate bill for ${tenant.name}:`, error)
-          return { success: false, tenant: tenant.name, error }
-        }
-      })
-      
-      const results = await Promise.all(billPromises)
-      const successful = results.filter(r => r.success).length
-      const failed = results.filter(r => !r.success).length
-      
-      if (failed > 0) {
-        setApiError(`Generated ${successful} bills successfully, ${failed} failed. Check individual tenant billing.`)
+      setExportStatus('Billing every active tenant for this month...')
+      const now = new Date()
+      const result = await runBilling(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+      if (result.failed.length > 0) {
+        setApiError(`${result.failed.length} tenants weren't billed (for example ${result.failed[0].tenant_name || result.failed[0].tenant_id}: ${result.failed[0].error}). See Billing.`)
       }
-      
-      setExportStatus(`Generated ${successful}/${tenants.length} bills successfully!`)
-      setTimeout(() => setExportStatus(null), 4000)
+      setExportStatus(`${result.generated} bills generated, ${result.already_billed} already billed, of ${result.tenants} active tenants.`)
+      setTimeout(() => setExportStatus(null), 6000)
     } catch (error) {
-      console.error('Failed to generate bills:', error)
-      setApiError(`Failed to generate bills: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      setApiError(`Failed to run billing: ${error instanceof Error ? error.message : 'Unknown error'}`)
       setExportStatus(null)
     }
   }

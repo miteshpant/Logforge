@@ -73,3 +73,17 @@ def test_centrum_reads_need_read_permissions():
     assert perm("/v1/stream/logs", "GET") == "observability:read:tenant"
     for role in (UserRole.VIEWER, UserRole.SECURITY_ANALYST, UserRole.DEVOPS_ENGINEER, UserRole.COMPLIANCE_OFFICER):
         assert check_permission([{"tenant_id": "t", "role": role.value}], perm("/v1/query/advanced", "POST"), "t")
+
+
+def test_support_is_for_every_member_and_its_queue_for_platform_admins():
+    from authn_authz_middleware import UserRole, check_permission, get_endpoint_permission as perm
+
+    member = perm("/v1/support/tickets", "POST")
+    assert all(check_permission([{"tenant_id": "t", "role": r.value}], member, "t")
+               for r in (UserRole.VIEWER, UserRole.SECURITY_ANALYST, UserRole.COMPLIANCE_OFFICER))
+    for path, method in [("/v1/admin/support/tickets", "GET"), ("/v1/admin/support/tickets/x/messages", "POST"),
+                         ("/v1/admin/billing/generate", "POST"), ("/v1/admin/billing/bills/x/pdf", "GET"),
+                         ("/v1/admin/features/matrix", "GET")]:
+        need = perm(path, method)
+        assert need == "platform:admin:platform"
+        assert not check_permission([{"tenant_id": "t", "role": UserRole.TENANT_ADMIN.value}], need, "t")

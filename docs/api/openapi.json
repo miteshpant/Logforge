@@ -2864,6 +2864,20 @@
         "title": "Merge",
         "type": "object"
       },
+      "Message": {
+        "properties": {
+          "text": {
+            "maxLength": 10000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "Message",
+        "type": "object"
+      },
       "MetricQueryRequest": {
         "description": "Metric query request",
         "properties": {
@@ -3226,6 +3240,32 @@
           "question"
         ],
         "title": "NLQueryRequest",
+        "type": "object"
+      },
+      "NewTicket": {
+        "properties": {
+          "priority": {
+            "default": "normal",
+            "description": "low | normal | high | urgent",
+            "title": "Priority",
+            "type": "string"
+          },
+          "subject": {
+            "maxLength": 200,
+            "title": "Subject",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 10000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "text"
+        ],
+        "title": "NewTicket",
         "type": "object"
       },
       "NormalizerStatsResponse": {
@@ -4480,34 +4520,6 @@
           "yaml"
         ],
         "title": "RuleSyncRequest",
-        "type": "object"
-      },
-      "RunBody": {
-        "properties": {
-          "alert_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Alert Id"
-          },
-          "case_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Case Id"
-          }
-        },
-        "title": "RunBody",
         "type": "object"
       },
       "ScheduleBody": {
@@ -7154,6 +7166,35 @@
         "title": "ThresholdUpdateRequest",
         "type": "object"
       },
+      "TicketUpdate": {
+        "properties": {
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "open | answered | closed",
+            "title": "Status"
+          }
+        },
+        "title": "TicketUpdate",
+        "type": "object"
+      },
       "TimeBucket": {
         "properties": {
           "by_severity": {
@@ -8215,6 +8256,48 @@
         ],
         "title": "LegalHoldRequest",
         "type": "object"
+      },
+      "routers__platform_admin_api__RunBody": {
+        "properties": {
+          "billing_period": {
+            "description": "YYYY-MM",
+            "title": "Billing Period",
+            "type": "string"
+          }
+        },
+        "required": [
+          "billing_period"
+        ],
+        "title": "RunBody",
+        "type": "object"
+      },
+      "routers__playbooks_api__RunBody": {
+        "properties": {
+          "alert_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alert Id"
+          },
+          "case_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Case Id"
+          }
+        },
+        "title": "RunBody",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -8781,6 +8864,156 @@
         ]
       }
     },
+    "/v1/admin/billing/bills": {
+      "get": {
+        "description": "Bills across tenants, newest first, with each tenant's name.",
+        "operationId": "list_bills_v1_admin_billing_bills_get",
+        "parameters": [
+          {
+            "description": "YYYY-MM",
+            "in": "query",
+            "name": "period",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "YYYY-MM",
+              "title": "Period"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 2000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Bills V1 Admin Billing Bills Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Bills",
+        "tags": [
+          "Platform admin"
+        ]
+      }
+    },
+    "/v1/admin/billing/bills/{bill_id}/pdf": {
+      "get": {
+        "operationId": "bill_pdf_v1_admin_billing_bills__bill_id__pdf_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "bill_id",
+            "required": true,
+            "schema": {
+              "title": "Bill Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bill Pdf",
+        "tags": [
+          "Platform admin"
+        ]
+      }
+    },
+    "/v1/admin/billing/generate": {
+      "post": {
+        "description": "Bill every active tenant for a month. Idempotent: tenants already billed\nfor that month keep their bill, so a run can be repeated after a failure.",
+        "operationId": "generate_all_v1_admin_billing_generate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/routers__platform_admin_api__RunBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Generate All V1 Admin Billing Generate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate All",
+        "tags": [
+          "Platform admin"
+        ]
+      }
+    },
     "/v1/admin/compliance/reports": {
       "post": {
         "description": "Generate compliance report",
@@ -8893,6 +9126,30 @@
         "summary": "Get Database Partitions",
         "tags": [
           "Usage Analytics & Billing"
+        ]
+      }
+    },
+    "/v1/admin/features/matrix": {
+      "get": {
+        "description": "Which features each subscription tier includes (wildcards resolved).",
+        "operationId": "feature_matrix_v1_admin_features_matrix_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Feature Matrix V1 Admin Features Matrix Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Feature Matrix",
+        "tags": [
+          "Platform admin"
         ]
       }
     },
@@ -9408,6 +9665,169 @@
         "summary": "Get Rate History",
         "tags": [
           "subscription"
+        ]
+      }
+    },
+    "/v1/admin/support/tickets": {
+      "get": {
+        "description": "Every tenant's tickets, most recently updated first, with the tenant's name.",
+        "operationId": "all_tickets_v1_admin_support_tickets_get",
+        "parameters": [
+          {
+            "description": "open | answered | closed",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "open | answered | closed",
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response All Tickets V1 Admin Support Tickets Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "All Tickets",
+        "tags": [
+          "Support"
+        ]
+      }
+    },
+    "/v1/admin/support/tickets/{ticket_id}": {
+      "put": {
+        "operationId": "update_ticket_v1_admin_support_tickets__ticket_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticket_id",
+            "required": true,
+            "schema": {
+              "title": "Ticket Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TicketUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Ticket V1 Admin Support Tickets  Ticket Id  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Ticket",
+        "tags": [
+          "Support"
+        ]
+      }
+    },
+    "/v1/admin/support/tickets/{ticket_id}/messages": {
+      "post": {
+        "description": "Answer a ticket; the requester is notified (bell, and email with SMTP).",
+        "operationId": "support_reply_v1_admin_support_tickets__ticket_id__messages_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticket_id",
+            "required": true,
+            "schema": {
+              "title": "Ticket Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Message"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Support Reply V1 Admin Support Tickets  Ticket Id  Messages Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Support Reply",
+        "tags": [
+          "Support"
         ]
       }
     },
@@ -21376,7 +21796,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RunBody"
+                "$ref": "#/components/schemas/routers__playbooks_api__RunBody"
               }
             }
           },
@@ -29457,6 +29877,229 @@
         "summary": "Set Traces Streaming Config",
         "tags": [
           "streaming-config"
+        ]
+      }
+    },
+    "/v1/support/tickets": {
+      "get": {
+        "description": "This tenant's tickets, most recently updated first.",
+        "operationId": "my_tickets_v1_support_tickets_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response My Tickets V1 Support Tickets Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "My Tickets",
+        "tags": [
+          "Support"
+        ]
+      },
+      "post": {
+        "operationId": "open_ticket_v1_support_tickets_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewTicket"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Open Ticket V1 Support Tickets Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Open Ticket",
+        "tags": [
+          "Support"
+        ]
+      }
+    },
+    "/v1/support/tickets/{ticket_id}/close": {
+      "post": {
+        "operationId": "customer_close_v1_support_tickets__ticket_id__close_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticket_id",
+            "required": true,
+            "schema": {
+              "title": "Ticket Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Customer Close V1 Support Tickets  Ticket Id  Close Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Customer Close",
+        "tags": [
+          "Support"
+        ]
+      }
+    },
+    "/v1/support/tickets/{ticket_id}/messages": {
+      "post": {
+        "operationId": "customer_reply_v1_support_tickets__ticket_id__messages_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticket_id",
+            "required": true,
+            "schema": {
+              "title": "Ticket Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Customer-ID",
+            "required": true,
+            "schema": {
+              "title": "X-Customer-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Message"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Customer Reply V1 Support Tickets  Ticket Id  Messages Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Customer Reply",
+        "tags": [
+          "Support"
         ]
       }
     },

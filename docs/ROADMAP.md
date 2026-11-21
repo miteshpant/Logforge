@@ -16,9 +16,27 @@ enhancement log are in
 of those tickets are already fixed in the code (look for `LF-0xx` / `ENH-0xx`
 markers).
 
+## Blocked: needs something from outside the repository
+
+These can't be finished by changing code alone. Each is also tagged
+**Blocked** where it appears below.
+
+| Item | What it needs |
+|---|---|
+| Record real model answers for the AI evaluations (Phases 8, 9, 10), so the CI gates start enforcing | An LLM provider API key, and someone to pay for the runs |
+| Enable AI in production | A human sign-off of the [AI security review](./security.md) by someone other than its author |
+| Live URLhaus and ThreatFox feeds | An abuse.ch Auth-Key (anonymous downloads return 410) |
+| Independent risk scenarios, copilot scenarios, analysts' own NL2Query questions, an analyst-rated triage set, held-out sample formats | People other than the authors of the scoring, signals and drafter: evaluations written by the author grade their own homework |
+| Ingest throughput and cost on dedicated nodes | Dedicated hardware: every figure so far is from one shared 4-vCPU host |
+| ServiceNow and Linear ticket sync; Slack and Teams interactive approvals; Okta, Entra ID and AWS containment connectors | Test instances or accounts for each service to develop and test against |
+| A 24-hour soak of the correlation engine | A host that can run for a day; the CI soak is 200k events |
+| The first release and `cosign verify` | A maintainer pushing the first version tag |
+
 ## Bugs and gaps
 
 - **Sustained ingest is slow: 277 events/s, 37 s until searchable**
+  (the measured numbers on dedicated nodes are **Blocked:** dedicated
+  hardware)
   ([benchmarks](./benchmarks/README.md)). A single 1,000-event batch takes
   60–95 ms, but under sustained load the API container is CPU-bound (~100%)
   while ClickHouse idles, and requests slow to seconds. Profile the ingest
@@ -35,7 +53,7 @@ markers).
   hour"); git sync is push-from-CI only (no server-side
   pull on a schedule or webhook); synced correlations can't reference the
   shipped library; the streaming state has a 200k-event soak test, not a
-  24 h one; correlation state is per process (lost on restart, not shared
+  24 h one (**Blocked:** a host that runs for a day); correlation state is per process (lost on restart, not shared
   between API replicas).
 - **Cases follow-ups from Phase 2**
   ([platform roadmap](./PLATFORM_ROADMAP.md)): ~~merge and split need UI~~
@@ -50,7 +68,7 @@ markers).
   should be configurable per tenant~~ (done: Cases page, `/v1/security/cases/sla`).
 - **Threat-intel follow-ups from Phase 3**
   ([guide](./threat-intel.md)): URLhaus and ThreatFox need an abuse.ch
-  Auth-Key (anonymous downloads return 410), so those feeds have only been
+  Auth-Key (anonymous downloads return 410; **Blocked:** a key), so those feeds have only been
   tested against fixtures, never live; in the reference compose setup the
   API container has no outbound DNS, so feed fetches fail until egress is
   allowed; matching is an in-memory index per API process (no ClickHouse
@@ -99,7 +117,11 @@ markers).
   - ~~**Authentication on `/metrics`**~~: done; set `LOGFORGE_METRICS_TOKEN`
     ([self-monitoring](./deployment.md#self-monitoring)).
   - **Run the release workflow** on the first tag, and check `cosign verify`.
-  - **Admin UI** billing, features and support pages.
+    **Blocked:** a maintainer pushing the first version tag.
+  - ~~**Admin UI** billing, features and support pages~~: done. Billing
+    (bills across tenants, an idempotent server-side monthly run, bill PDFs,
+    feature rates), features by plan, and support tickets that tenant
+    members open and platform admins answer ([platform administration](./admin.md)).
   - ~~**Retire the Enterprise RBAC and OIDC-config routes**~~: done. They,
     `/v1/enterprise/auth/providers` and `/v1/enterprise/auth/mfa/setup` answer
     410 Gone naming `/v1/roles/custom`, `/v1/sso/providers` or `/v1/auth/mfa`.
@@ -109,11 +131,13 @@ markers).
     review with MFA and last sign-in, API keys, audit trail, retention,
     legal holds and incident response ([reports](./response.md#reports)).
   - **More ticket systems with sync:** ServiceNow and Linear. Today they
-    can only be reached by a webhook action.
+    can only be reached by a webhook action. **Blocked:** test instances.
   - **Approve from Slack or Teams** (interactive messages), with the same
-    role check as in Logforge.
+    role check as in Logforge. **Blocked:** a Slack app and a Teams tenant
+    to test against.
   - **Built-in containment connectors** (Okta and Entra ID user disable,
-    AWS security groups), each behind an approval.
+    AWS security groups), each behind an approval. **Blocked:** test
+    tenants and an AWS account.
   - ~~**Branches and parallel steps in playbooks**, and a run history kept
     longer than 180 days~~: done (step `if`, `parallel` groups; runs kept 400
     days).
@@ -158,12 +182,14 @@ markers).
   - **Patterns at scale:** cluster in a background job per service and keep
     templates, so `| patterns` covers more than 1 M lines.
   - **Independent scenarios:** risk scenarios written by someone other than
-    the author of the scoring.
+    the author of the scoring. **Blocked:** another author.
 - **AI follow-ups from Phase 10** ([guide](./ai.md#investigation-and-authoring-phase-10)):
   - **Record the models:** `record_copilot.py` (needs ClickHouse) and
     `record_rule_draft.py`, then commit the recordings and baselines.
+    **Blocked:** an LLM API key.
   - **Unseen attacks:** add copilot scenarios and drafting behaviours written
     by someone other than the author of the signals and the drafter.
+    **Blocked:** another author.
   - **Signals beyond keywords:** use rarity (first time a process, domain or
     address is seen for a host or user) so roots with no known signal, like
     a payload download, are found.
@@ -174,13 +200,14 @@ markers).
     `record_triage.py`, `record_pipeline_draft.py` and `record_explain.py`
     with a provider (needs an API key and, for the first, ClickHouse) and
     commit the recordings and baselines. Then check plain-English queries
-    against the ≥ 85% target.
+    against the ≥ 85% target. **Blocked:** an LLM API key.
   - **Rate triage:** build an analyst-rated set (helpfulness and factual
-    accuracy) for triage summaries.
+    accuracy) for triage summaries. **Blocked:** analysts to rate them.
   - **Real questions:** add analysts' own questions to the NL2Query sets
-    beside the templated ones.
+    beside the templated ones. **Blocked:** analysts' questions.
   - **Held-out formats:** add sample files the drafter and the explain
-    reference were not developed against.
+    reference were not developed against. **Blocked:** samples from
+    someone other than their author.
   - **Replace the old services:** move `/v1/ai/query` and the AI service's
     template answers onto the Phase 9 features.
   - **Explain gaps:** epoch timestamps aren't recognised by the pipeline
@@ -189,6 +216,7 @@ markers).
   - **Record the evaluations:** record a real model's answers for `nl2query`
     and `summaries` (`tests/eval/ai/run_ai_eval.py --record`, needs an API
     key) and commit the baseline, so the CI gate starts enforcing.
+    **Blocked:** an LLM API key.
   - ~~**Share the limits.**~~ Done: the rate limit is a Redis counter per
     tenant and minute shared by all replicas (per process only while Redis
     is down). The budget check already re-reads the month's usage from the
@@ -202,7 +230,7 @@ markers).
     to `ai:read` again. Its latency question read a column that doesn't
     exist and now reads trace spans.
   - **Get a human sign-off** of the security review before enabling AI in
-    production.
+    production. **Blocked:** a reviewer other than its author.
 - **Content pack follow-ups from Phase 7** ([guide](./packs.md)): packs
   come only from the catalogue shipped with the deployment; add a registry
   (or git source) with signed packs, and per-tenant uploads. An install that
@@ -243,18 +271,17 @@ markers).
 
 ## Remove demo / fake data from the UI
 
-- The admin UI `billing`, `features` and `support` pages are "Coming soon"
-  placeholders (still so after Phase 14).
+- ~~The admin UI `billing`, `features` and `support` pages are "Coming soon"
+  placeholders~~: done ([platform administration](./admin.md)).
 
 ## Features
 
-- **Threat-intel feed clients** (for example MISP, OTX, abuse.ch) for
-  `apps/api/threat_intel.py`.
-- **Pluggable LLM backend** for the natural-language query in
-  `apps/api/services/ai_service.py`, which today uses keyword templates.
-  Define a small provider interface selected by configuration, with **no
-  provider enabled by default**: without one, the keyword templates stay the
-  behaviour, and no data leaves the deployment unless an operator opts in.
+- ~~**Threat-intel feed clients**~~: done in Phase 3 (abuse.ch, MISP and
+  STIX/TAXII exports, CSV and plain lists; [threat intel](./threat-intel.md)).
+  Still open: a live MISP API client and TAXII collection paging, and OTX.
+- ~~**Pluggable LLM backend**~~: done in Phase 8 (a provider interface chosen
+  per tenant, none enabled by default; [AI](./ai.md)). The older keyword
+  templates of `/v1/ai/query` remain (see the Phase 9 follow-ups).
 - A dead-letter queue for the event bus; OpenTelemetry self-tracing (Grafana
   dashboards for Logforge's own metrics came in Phase 14).
 

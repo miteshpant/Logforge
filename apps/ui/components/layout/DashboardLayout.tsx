@@ -21,6 +21,7 @@ import {
   Shield,
   Bell,
   Settings,
+  LifeBuoy,
   Users,
   Database,
   Activity,
@@ -152,6 +153,8 @@ const navSections: NavSection[] = [
 // Flat list for header title resolution
 const allNavItems = [
   { name: 'Centrum', href: '/centrum' },
+  { name: 'Support', href: '/support' },
+  { name: 'Account', href: '/account' },
   ...navSections.flatMap(s => s.items),
 ]
 
@@ -362,12 +365,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 >
                   <Link href="/account"><User className="w-4 h-4 mr-2" />Profile Settings</Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  data-testid="preferences"
+                <DropdownMenuItem asChild
+                  data-testid="contact-support"
                   className="flex items-center px-3 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white cursor-pointer rounded-sm"
                 >
-                  <Settings className="w-4 h-4 mr-2" />
-                  Preferences
+                  <Link href="/support"><LifeBuoy className="w-4 h-4 mr-2" />Contact support</Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="my-1 border-white/10" />
                 <DropdownMenuItem
